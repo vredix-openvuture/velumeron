@@ -4,8 +4,9 @@
 
 set -euo pipefail
 
-HYPR_DIR="$HOME/.config/vutureland/hypr"
-MODULES_DIR="$HOME/.config/vutureland/hypr/modules"
+VUTURELAND_DIR="$HOME/.config/vutureland"
+HYPR_DIR="$VUTURELAND_DIR/hypr"
+MODULES_DIR="$HYPR_DIR/modules"
 USER_SETTINGS="$HYPR_DIR/user_settings.conf"
 
 mkdir -p "$HYPR_DIR" "$MODULES_DIR"
@@ -595,6 +596,12 @@ save_and_reload() {
 # ─── Bootstrap: create skeleton user_settings.conf if missing ────────────────
 
 init_user_settings() {
+    # Symlink ~/.config/wallust → vutureland/wallust so wallust always finds its config
+    if [[ ! -e "$HOME/.config/wallust" ]]; then
+        ln -sf "$VUTURELAND_DIR/wallust" "$HOME/.config/wallust"
+        ok "Linked ~/.config/wallust → vutureland/wallust"
+    fi
+
     [[ -f "$USER_SETTINGS" ]] && return
     mkdir -p "$HYPR_DIR"
     cat > "$USER_SETTINGS" <<'EOF'

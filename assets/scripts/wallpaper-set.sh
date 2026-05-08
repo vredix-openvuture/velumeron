@@ -61,7 +61,7 @@ while IFS=';' read -r name transform width height; do
 done < <(hyprctl monitors -j | jq -r '.[] | "\(.name);\(.transform);\(.width);\(.height)"')
 
 # Generate new color scheme from wallpaper
-wallust --config-dir ~/.config/vutureland/wallust run "$chosen" -q
+wallust --config-dir ~/.config/vutureland/wallust run "$chosen"
 
 if [[ "$showcase" == "true" ]]; then
     # Wait for awww transition to finish
