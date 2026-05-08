@@ -37,9 +37,9 @@ Quick install:
 ```bash
 # Official repos
 pacman -S --needed \
-  hyprland hypridle hyprlock hyprpolkitagent hyprpicker \
-  waybar cava \
-  kitty fish tmux \
+  hyprland hypridle hyprlock hyprpolkitagent hyprpicker hyprshot \
+  waybar cava rofi localsend wallust awww \
+  kitty fish tmux librewolf \
   playerctl pipewire pipewire-pulse wireplumber pulsemixer \
   bluez bluez-utils \
   lm_sensors power-profiles-daemon gamemode \
@@ -49,14 +49,11 @@ pacman -S --needed \
   jq socat libnotify \
   openvpn wireguard-tools \
   gnome-keyring \
-  fastfetch nextcloud-client
+  fastfetch openrgb
 
 # AUR
 yay -S --needed \
-  swaynotificationcenter awww wallust \
-  rofi-wayland wlogout hyprshot \
-  mullvad-vpn-bin localsend librewolf-bin obsidian element-desktop openrgb \
-  bun-bin
+  obsidian
 ```
 
 ---
@@ -159,13 +156,11 @@ Or pick one via Rofi (mapped to a keybind in the quickstart submap).
 | `Super + K` | Cycle windows |
 | `Super + L` | Lock screen |
 | `Super + P` | Sleep |
-| `Super + O` | Session menu (wlogout) |
+| `Super + O` | Session menu (rofi) |
 | `Super + Shift + S` | Screenshot |
 | `Super + W` | Window submap (resize, move, float) |
 | `Super + N` | Navigate submap (workspaces, windows) |
 | `Super + Q` | Quickstart submap (launch apps 1–10) |
-| `Super + D` | Developer submap |
-| `Super + D, W` | Rebuild + restart Waybar |
 | `Super + Mouse` | Float / drag / resize windows |
 | `Super + Scroll` | Switch workspace |
 
