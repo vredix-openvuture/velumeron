@@ -66,7 +66,7 @@ rofi_vuture      = { src = "colors-rofi.conf",     dst = "~/.config/vutureland/r
 colors_vuture    = { src = "colors_gtk.css",       dst = "~/.config/vutureland/assets/colors_gtk.css" }
 
 [hooks]
-hyprland_hex-rgb = "fish ~/.config/vutureland/assets/scripts/wallust/hyprland_hex-rgb.fish && hyprctl reload"
+hyprland_hex-rgb = "~/.config/vutureland/assets/scripts/wallust/hyprland_hex-rgb.sh && hyprctl reload"
 pywalfox_update  = "pywalfox update"
-swaync_update    = "killall -q swaync; ~/.config/vutureland/assets/scripts/launcher.fish --swaync"
+swaync_update    = "killall -q swaync; ~/.config/vutureland/assets/scripts/launcher.sh --swaync"
 waybar_update    = "sleep 0.8 && pkill -SIGUSR2 waybar"
