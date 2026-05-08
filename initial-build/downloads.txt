@@ -1,0 +1,160 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  VUTURELAND – Package List (Arch Linux)
+#  Install official packages with pacman, AUR packages with yay.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+# ── Hyprland core ─────────────────────────────────────────────────────────────
+# pacman
+hyprland              # Wayland compositor
+hypridle              # Idle daemon (screen lock / sleep triggers)
+hyprlock              # Screen locker
+hyprpolkitagent       # Polkit authentication agent for Hyprland
+hyprpicker            # Color picker for Wayland
+
+
+# ── Status bar ────────────────────────────────────────────────────────────────
+# pacman
+waybar                # Highly customizable status bar
+cava                  # Console-based audio visualizer (waybar cava module)
+
+
+# ── Notifications ─────────────────────────────────────────────────────────────
+# yay (AUR)
+swaynotificationcenter  # swaync – notification center with do-not-disturb
+
+
+# ── Wallpaper & theming ───────────────────────────────────────────────────────
+# yay (AUR)
+awww                  # Animated wallpaper daemon (awww img)
+wallust               # Color scheme generator from wallpaper
+
+
+# ── App launcher ──────────────────────────────────────────────────────────────
+# yay (AUR)
+rofi-wayland          # Application launcher with Wayland support
+
+
+# ── Session / logout ──────────────────────────────────────────────────────────
+# yay (AUR)
+wlogout               # Wayland logout menu
+
+
+# ── Terminal ──────────────────────────────────────────────────────────────────
+# pacman
+kitty                 # GPU-accelerated terminal emulator
+fish                  # User-friendly interactive shell
+tmux                  # Terminal multiplexer
+
+
+# ── Media / audio ─────────────────────────────────────────────────────────────
+# pacman
+playerctl             # MPRIS media player controller (CLI)
+pipewire              # Audio server
+pipewire-pulse        # PulseAudio compatibility layer (pactl)
+wireplumber           # PipeWire session manager
+pulsemixer            # TUI mixer for PulseAudio / PipeWire
+
+
+# ── Bluetooth ─────────────────────────────────────────────────────────────────
+# pacman
+bluez                 # Bluetooth protocol stack
+bluez-utils           # Bluetooth utilities (bluetoothctl)
+
+
+# ── System monitoring ─────────────────────────────────────────────────────────
+# pacman
+lm_sensors            # Hardware sensor readings (CPU/GPU temperature)
+power-profiles-daemon # Power profile management (powerprofilesctl)
+gamemode              # Optimizes system for gaming (gamemoded)
+
+
+# ── Monitor control ───────────────────────────────────────────────────────────
+# pacman
+ddcutil               # DDC/CI monitor brightness control
+
+
+# ── Clipboard / screenshots ───────────────────────────────────────────────────
+# pacman
+wl-clipboard          # Wayland clipboard utilities (wl-copy / wl-paste)
+grim                  # Screenshot tool for Wayland
+slurp                 # Region selector for Wayland screenshots
+# yay (AUR)
+hyprshot              # Screenshot utility with Hyprland integration
+
+
+# ── File manager ──────────────────────────────────────────────────────────────
+# pacman
+thunar                # GTK file manager
+
+
+# ── Image processing ──────────────────────────────────────────────────────────
+# pacman
+imagemagick           # Image conversion / thumbnail generation
+
+
+# ── CLI utilities ─────────────────────────────────────────────────────────────
+# pacman
+jq                    # JSON processor
+socat                 # Socket relay (Hyprland event socket listener)
+libnotify             # notify-send desktop notifications
+
+
+# ── VPN ───────────────────────────────────────────────────────────────────────
+# pacman
+openvpn               # OpenVPN client
+wireguard-tools       # WireGuard CLI tools
+# yay (AUR)
+mullvad-vpn-bin       # Mullvad VPN client
+
+
+# ── Security / auth ───────────────────────────────────────────────────────────
+# pacman
+gnome-keyring         # Secret storage (credentials)
+
+
+# ── Apps ──────────────────────────────────────────────────────────────────────
+# pacman
+fastfetch             # System info tool (neofetch alternative)
+nextcloud-client      # Nextcloud desktop sync client
+# yay (AUR)
+localsend             # Local file sharing (LAN)
+librewolf-bin         # Privacy-focused Firefox fork
+obsidian              # Markdown knowledge base
+element-desktop       # Matrix messaging client
+openrgb               # RGB lighting control
+
+
+# ── RGB lighting ──────────────────────────────────────────────────────────────
+# (included above under Apps → openrgb)
+
+
+# ── Panel / dashboard (vutureland panel) ──────────────────────────────────────
+# yay (AUR)
+bun-bin               # JavaScript runtime (for the vutureland panel app)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  QUICK INSTALL COMMANDS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# pacman -S --needed \
+#   hyprland hypridle hyprlock hyprpolkitagent hyprpicker \
+#   waybar cava \
+#   kitty fish tmux \
+#   playerctl pipewire pipewire-pulse wireplumber pulsemixer \
+#   bluez bluez-utils \
+#   lm_sensors power-profiles-daemon gamemode \
+#   ddcutil \
+#   wl-clipboard grim slurp \
+#   thunar imagemagick \
+#   jq socat libnotify \
+#   openvpn wireguard-tools \
+#   gnome-keyring \
+#   fastfetch nextcloud-client
+
+# yay -S --needed \
+#   swaynotificationcenter awww wallust \
+#   rofi-wayland wlogout hyprshot \
+#   mullvad-vpn-bin localsend librewolf-bin obsidian element-desktop openrgb \
+#   bun-bin

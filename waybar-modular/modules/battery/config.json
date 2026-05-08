@@ -1,0 +1,13 @@
+{
+  "battery": {
+    "interval": 60,
+    "states": {
+      "normal": 100,
+      "low": 20,
+      "critical": 10
+    },
+    "format": "{capacity}% {icon}",
+    "format-icons": ["", "", "", "", ""],
+    "max-length": 25
+  }
+}

@@ -1,0 +1,6 @@
+#custom-mpris {
+    margin:  0px 1px;
+    padding: 1px 4px;
+}
+
+#custom-mpris:hover { color: @fg-hover; }

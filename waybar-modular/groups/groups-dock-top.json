@@ -1,0 +1,75 @@
+{
+  "include": [
+    "~/.config/vutureland/waybar-modular/groups/auto-includes.json"
+  ],
+
+
+
+  "group/left_pri_hor": {
+    "orientation": "horizontal",
+    "modules": ["clock"]
+  },
+
+  "group/center_pri_hor": {
+    "orientation": "horizontal",
+    "modules": ["hyprland/workspaces","hyprland/submap"]
+  },
+
+  "group/right_pri_hor": {
+    "orientation": "horizontal",
+    "modules": ["custom/notification"]
+  },
+  
+
+
+
+  "group/left_sec_hor": {
+    "orientation": "horizontal",
+    "modules": ["clock"]
+  },
+
+  "group/center_sec_hor": {
+    "orientation": "horizontal",
+    "modules": []
+  },
+
+  "group/right_sec_hor": {
+    "orientation": "horizontal",
+    "modules": ["hyprland/submap","hyprland/workspaces"]
+  },
+
+
+
+  "group/tray_drawer": {
+    "orientation": "horizontal",
+    "drawer": {
+      "transition-duration": 300,
+      "transition-left-to-right": false
+    },
+    "modules": ["custom/notification", "tray"]
+  },
+
+  "group/audio_drawer": {
+    "orientation": "horizontal",
+    "drawer": {
+      "transition-duration": 300,
+      "transition-left-to-right": false
+    },
+    "modules": ["pulseaudio/slider", "bluetooth"]
+  },
+
+  "group/performance_drawer": {
+    "orientation": "horizontal",
+    "drawer": {
+      "transition-duration": 300,
+      "transition-left-to-right": true
+    },
+    "modules": [
+      "custom/performance",
+      "temperature#gpu",
+      "memory",
+      "temperature#cpu",
+      "cpu"
+    ]
+  }
+}

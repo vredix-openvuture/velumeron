@@ -1,0 +1,7 @@
+{
+  "custom/vpn": {
+    "exec": "~/.config/vutureland/.scripts/waybar/vpn.sh",
+    "return-type": "json",
+    "interval": 5
+  }
+}

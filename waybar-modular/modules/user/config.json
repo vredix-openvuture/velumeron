@@ -1,0 +1,9 @@
+{
+  "user": {
+    "format": "{user}",
+    "avatar": "~/.face",
+    "height": 30,
+    "width": 30,
+    "icon": true
+  }
+}

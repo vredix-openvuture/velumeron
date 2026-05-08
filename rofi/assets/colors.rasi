@@ -1,0 +1,52 @@
+* {
+    bg:             #080302;
+
+    fg:             #FF6147;
+
+    cursor:         #CA452D;
+
+    color0:         #0B0403;
+    color0a90:      #0B0403e6;
+
+    color1:         #67573B;
+
+    color2:         #632927;
+
+    color3:         #7D7447;
+
+    color4:         #378368;
+
+    color5:         #AD442F;
+
+    color6:         #3FAE6D;
+
+    color7:         #FF513A;
+
+    color8:         #EB0000;
+    color8a40:      #EB000066;
+
+    color9:         #67573B;
+
+    color10:        #632927;
+    color10a40:     #63292766;
+
+    color11:        #7D7447;
+
+    color12:        #378368;
+
+    color13:        #AD442F;
+
+    color14:        #3FAE6D;
+
+    color15:        #F7A094;
+
+    /* Semantisches Mapping */
+    bg-main:        #0B0403;
+    bg-element:     #67573B;
+    bg-focus:       #EB0000;
+    bg-urgent:      #67573B;
+    bo-color:       #AD442F;
+    fg-main:        #FF6147;
+    fg-highlight:   #632927;
+    fg-placeholder: #7D7447;
+}

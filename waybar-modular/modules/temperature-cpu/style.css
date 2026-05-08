@@ -1,0 +1,6 @@
+#temperature.cpu {
+    margin:  0px 1px;
+    padding: 1px 6px;
+}
+
+#temperature.cpu:hover { color: @fg-hover; }

@@ -1,0 +1,46 @@
+[
+  {
+    "output": "DP-2",
+    "reload_style_on_change": true,
+    "layer": "top",
+    "position": "top",
+    "margin-top": 0,
+    "margin-left": 10,
+    "margin-right": 10,
+    "margin-bottom": 4,
+    "include": [
+      "~/.config/vutureland/waybar-modular/groups/groups-dock-top.json"
+    ],
+    "modules-left": [
+      "group/left_pri_hor"
+    ],
+    "modules-center": [
+      "group/center_pri_hor"
+    ],
+    "modules-right": [
+      "group/right_pri_hor"
+    ]
+  },
+  {
+    "output": "DP-3",
+    "reload_style_on_change": true,
+    "layer": "top",
+    "position": "top",
+    "margin-top": 0,
+    "margin-left": 10,
+    "margin-right": 10,
+    "margin-bottom": 4,
+    "include": [
+      "~/.config/vutureland/waybar-modular/groups/groups-dock-top.json"
+    ],
+    "modules-left": [
+      "group/left_sec_hor"
+    ],
+    "modules-center": [
+      "group/center_sec_hor"
+    ],
+    "modules-right": [
+      "group/right_sec_hor"
+    ]
+  }
+]

@@ -1,0 +1,128 @@
+/******************************************************************************
+ * CYBERFREAK Rofi Theme - App Launcher
+ ******************************************************************************/
+@import "./assets/misc/colors.rasi"
+
+
+/* Semantisches Mapping
+#    bg-main:        {{color0}};
+#    bg-element:     {{color1}};
+#    bg-focus:       {{color8}};
+#    bg-urgent:      {{color1}};
+#    bo-color:       {{color5}};
+#    fg-main:        {{foreground}};
+#    fg-highlight:   {{color10}};
+#    fg-placeholder: {{color3}};
+*/
+
+configuration {
+    show-icons:             true;
+    font-family:            "FantasqueSansM Nerd Font";
+    font-weight:            800;
+    display-drun:           " ";
+    drun-display-format:    "{name}";
+    scroll-method:          1;
+}
+
+* {
+    background-color:       transparent;
+    border-color:           @bo-color;
+    separatorcolor:         @bo-color;
+    spacing:                10;
+}
+
+/*-------------------------------------------------------------*/
+window {
+    background-color:       @color0a90;
+    border:                 1px;
+    border-color:           @bo-color;
+    border-radius:          10px 10px 0 0;
+    margin:                 0;
+    width:                  40%;
+    location:               south;
+    y-offset:               1.4px;
+}
+
+mainbox {
+    border:                 0;
+}
+
+/*-------------------------------------------------------------*/
+inputbar {
+    spacing:                2;
+    border:                 none;
+    background-color:       @color10a40;
+    border-color:           @bo-color;
+    border-radius:          10px;
+    text-color:             @color8;
+    margin:                 10px 10px 40px 10px;
+    padding:                10px;
+    children:               [ entry ];
+}
+
+prompt {
+    text-color:             @fg-main;
+}
+
+textbox-prompt-colon {
+    expand:                 false;
+    str:                    " ";
+    text-color:             @fg-highlight;
+}
+
+entry {
+    text-color:             @fg-main;
+    placeholder:            ">> Serach in Clipboard <<";
+    placeholder-color:      @color8a40;
+    horizontal-align:       0.5;
+    cursor-width:           0;
+}
+
+/*-------------------------------------------------------------*/
+listview {
+    fixed-height:           0;
+    lines:                  11;
+    border:                 0;
+    spacing:                4px;
+    scrollbar:              false;
+    padding:                0px;
+    layout:                 vertical;
+    flow:                   horizontal;
+}
+
+/*-------------------------------------------------------------*/
+element {
+    border:                 none;
+    border-radius:          10px;
+    margin:                 4px 10px;
+    padding:                1px;
+    border-color:           transparent;
+    orientation:            horizontal;
+}
+
+element-icon {
+    size:                   20px;
+    margin:                 14px;
+    vertical-align:         0.5;
+    horizontal-align:       0;
+}
+
+element-text {
+    text-color:             inherit;
+    margin:                 10px;
+    width:                  100%;
+    vertical-align:         0.5;
+    horizontal-align:       0;
+}
+
+element.normal.normal,
+element.alternate.normal {
+    background-color:       none;
+    text-color:             @color8;
+}
+
+element.selected.normal {
+    background-color:       @color10;
+    text-color:             @background;
+    border-color:           @bo-color;
+}

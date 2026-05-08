@@ -1,0 +1,7 @@
+{
+  "memory": {
+    "format": "  {percentage}%",
+    "tooltip": false,
+    "on-click": "hyprctl dispatch workspace 99"
+  }
+}

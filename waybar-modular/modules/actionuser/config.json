@@ -1,0 +1,8 @@
+{
+  "custom/actionuser": {
+    "exec": "~/.config/vutureland/waybar-modular/assets/interactive-user.sh",
+    "return-type": "json",
+    "interval": "once",
+    "on-click": "~/.config/vutureland/rofi/assets/session-menu.sh"
+  }
+}

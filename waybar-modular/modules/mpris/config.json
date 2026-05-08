@@ -1,0 +1,11 @@
+{
+  "custom/mpris": {
+    "exec": "~/.config/vutureland/waybar-modular/assets/mpris.sh",
+    "return-type": "json",
+    "interval": 1,
+    "max-length": 24,
+    "on-click": "playerctl play-pause",
+    "on-click-right": "playerctl next",
+    "on-click-middle": "playerctl previous"
+  }
+}

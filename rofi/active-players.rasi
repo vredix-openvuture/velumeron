@@ -1,0 +1,90 @@
+/******************************************************************************
+ * CYBERFREAK Rofi Theme - Session Menu
+ ******************************************************************************/
+@import "./assets/misc/colors.rasi"
+
+configuration {
+    show-icons:          true;
+    font-family:         "FantasqueSansM Nerd Font";
+    font-weight:         800;
+    scroll-method:       1;
+    kb-row-up:            "Up,Control+p,k";
+    kb-row-down:          "Down,Control+n,j";
+}
+
+* {
+    background-color:    transparent;
+    border:              0px;
+    border-color:        @bo-color;
+    text-color:          @fg-main;
+}
+
+/*-------------------------------------------------------------*/
+window {
+    background-color:    @color0a90;
+    border:              1px;
+    border-color:        @bo-color;
+    border-radius:       10px;
+    width:               1000px;
+    location:            center;
+    anchor:              center;
+    padding:             20px;
+}
+
+mainbox {
+    border:              0px;
+    border-color:        transparent;
+    spacing:             0px;
+    children:            [ listview ];
+}
+
+/*-------------------------------------------------------------*/
+listview {
+    columns:             1;
+    lines:               4;
+    spacing:             4px;
+    scrollbar:           false;
+    padding:             10px 0px;
+    border:              0px;
+    layout:              vertical;
+    flow:                horizontal;
+    orientation:         vertical;
+}
+
+/*-------------------------------------------------------------*/
+element {
+    border:              1px;
+    border-color:        transparent;
+    border-radius:       8px;
+    padding:             16px 8px;
+    orientation:         vertical;
+    cursor:              pointer;
+}
+
+element-icon {
+    enabled:             false;
+    size:                0px;
+    horizontal-align:    0;
+    vertical-align:      0.5;
+    margin:              0px 0px 10px 0px;
+}
+
+element-text {
+    text-color:          inherit;
+    horizontal-align:    0;
+    vertical-align:      0.5;
+    font-size:           13px;
+}
+
+element.normal.normal,
+element.alternate.normal {
+    background-color:    transparent;
+    text-color:          @color8;
+    border-color:        transparent;
+}
+
+element.selected.normal {
+    background-color:    @color10a40;
+    text-color:          @fg-main;
+    border-color:        @bo-color;
+}

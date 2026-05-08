@@ -1,0 +1,12 @@
+{
+  "custom/menu-user": {
+    "format": "{}",
+    "exec": "echo $USER",
+    "tooltip": false,
+    "menu": "on-click",
+    "menu-file": "~/.config/vutureland/waybar-modular/modules/menu-user/layout.xml",
+    "menu-actions": {
+      "session": "~/.config/vutureland/rofi/assets/session-menu.sh"
+    }
+  }
+}
