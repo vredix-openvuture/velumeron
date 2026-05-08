@@ -37,7 +37,7 @@ else
     # ROFI_INFO contains the original filename
     target="$wallpaper_dir/$ROFI_INFO"
     if [[ -f "$target" ]]; then
-        bash "$wallpaper_script" "$target" >/dev/null 2>&1 &
+        bash "$wallpaper_script" "$target" > /tmp/wallpaper-set.log 2>&1 &
         disown
     fi
 fi
