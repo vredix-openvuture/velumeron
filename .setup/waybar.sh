@@ -475,6 +475,7 @@ collect_required_folders() {
     declare -A seen=()
 
     for key in "${keys[@]}"; do
+        [[ -z "$key" ]] && continue
         local folder="${KEY_TO_FOLDER[$key]:-}"
         if [[ -n "$folder" ]]; then
             if [[ -z "${seen[$folder]:-}" ]]; then
@@ -530,7 +531,7 @@ build_groups_json() {
         if [[ -f "$cfg" ]]; then
             include_json=$(echo "$include_json" | jq --arg p "$cfg" '. + [$p]')
         fi
-    done < <(collect_required_folders "${all_keys[@]:-}")
+    done < <(collect_required_folders "${all_keys[@]+"${all_keys[@]}"}")
 
     # Gruppen-Arrays als JSON
     local left_json="[]" center_json="[]" right_json="[]"
@@ -628,7 +629,7 @@ build_bar() {
 
     local -a req_folders=()
     while IFS= read -r f; do req_folders+=("$f"); done \
-        < <(collect_required_folders "${all_keys[@]:-}")
+        < <(collect_required_folders "${all_keys[@]+"${all_keys[@]}"}")
 
     build_style_css "$out_dir" "$position" "$style" "${req_folders[@]:-}"
 
@@ -711,7 +712,7 @@ rebuild_all() {
             if [[ -f "$cfg" ]]; then
                 new_include=$(echo "$new_include" | jq --arg p "$cfg" '. + [$p]')
             fi
-        done < <(collect_required_folders "${all_keys[@]:-}")
+        done < <(collect_required_folders "${all_keys[@]+"${all_keys[@]}"}")
 
         # groups.json: Include aktualisieren, Inline-Container-Defs entfernen
         jq \
