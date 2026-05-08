@@ -1,0 +1,19 @@
+{
+  "include": [],
+  "group/left": {
+    "orientation": "horizontal",
+    "modules": [
+      "hyprland/workspaces"
+    ]
+  },
+  "group/center": {
+    "orientation": "horizontal",
+    "modules": []
+  },
+  "group/right": {
+    "orientation": "horizontal",
+    "modules": [
+      "clock"
+    ]
+  }
+}

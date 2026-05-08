@@ -712,12 +712,22 @@ EOF
 # ─── Main menu ──────────────────────────────────────────────────────────────
 
 main() {
+    local minimal=false
+    for arg in "$@"; do [[ "$arg" == "--minimal" ]] && minimal=true; done
+
     clear; echo ""
     echo "  ╔═══════════════════════════════════════════╗"
     echo "  ║      VUTURELAND – Hyprland Setup          ║"
     echo "  ╚═══════════════════════════════════════════╝"
 
     init_user_settings
+
+    if [[ "$minimal" == "true" ]]; then
+        configure_monitors
+        configure_workspaces
+        save_and_reload
+        return
+    fi
 
     while true; do
         echo ""; hr
@@ -739,4 +749,4 @@ main() {
     done
 }
 
-main
+main "$@"

@@ -1,0 +1,29 @@
+{
+  "include": [],
+  "group/left": {
+    "orientation": "horizontal",
+    "modules": [
+      "clock",
+      "custom/separator",
+      "group/performance_drawer",
+      "custom/separator",
+      "custom/actionuser"
+    ]
+  },
+  "group/center": {
+    "orientation": "horizontal",
+    "modules": [
+      "hyprland/workspaces",
+      "hyprland/submap"
+    ]
+  },
+  "group/right": {
+    "orientation": "horizontal",
+    "modules": [
+      "custom/cava",
+      "group/audio_drawer",
+      "custom/separator",
+      "group/tray_drawer"
+    ]
+  }
+}
