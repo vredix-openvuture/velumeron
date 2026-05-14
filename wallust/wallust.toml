@@ -51,7 +51,7 @@ saturation = 34
 
 vscode   = { src = "vscode.json",          dst = "~/.cache/wallust/colors.json" }
 vscode2  = { src = "vscode",               dst = "~/.cache/wallust/colors" }
-hyprland = { src = "colors-hyprland.conf", dst = "~/.config/vutureland/assets/colors_hyprland.conf"}
+hyprland_lua = { src = "colors.lua",          dst = "~/.config/vutureland/hypr.lua/colors.lua"}
 pywalfox = { src = "pywal-colors",         dst = "~/.cache/wal/colors" }
 pywalfox2= { src = "pywal-colors.json",    dst = "~/.cache/wal/colors.json" }
 fish     = { src = "colors.fish",          dst = "~/.cache/wallust/colors.fish"}
@@ -66,7 +66,7 @@ rofi_vuture      = { src = "colors-rofi.conf",     dst = "~/.config/vutureland/r
 colors_vuture    = { src = "colors_gtk.css",       dst = "~/.config/vutureland/assets/colors_gtk.css" }
 
 [hooks]
-hyprland_hex-rgb = "~/.config/vutureland/assets/scripts/wallust/hyprland_hex-rgb.sh && hyprctl reload"
+hyprland_lua_colors = "~/.config/vutureland/assets/scripts/wallust/hyprland_lua-colors.sh && hyprctl reload"
 pywalfox_update  = "pywalfox update"
 swaync_update    = "killall -q swaync; ~/.config/vutureland/assets/scripts/launcher.sh --swaync"
 waybar_update    = "sleep 0.8 && pkill -SIGUSR2 waybar"

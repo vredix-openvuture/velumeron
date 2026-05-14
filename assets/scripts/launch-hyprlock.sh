@@ -1,53 +1,39 @@
-#!/usr/bin/env fish
-
+#!/usr/bin/env bash
 # Locks the session via hyprlock.
 # Switches to empty lock workspaces first, then restores everything after unlock.
 
-set monitors_conf ~/.config/vutureland/hypr/monitors.conf
+USER_SETTINGS=~/.config/vutureland/hypr.lua/user_settings.lua
 
-set mon1 (grep '^\$mon1' $monitors_conf | string replace -r '^\$mon1\s*=\s*' '' | string trim)
-set mon2 (grep '^\$mon2' $monitors_conf | string replace -r '^\$mon2\s*=\s*' '' | string trim)
+mon1=$(grep -oP '^mon1\s*=\s*"\K[^"]+' "$USER_SETTINGS" 2>/dev/null | head -1 || true)
+mon2=$(grep -oP '^mon2\s*=\s*"\K[^"]+' "$USER_SETTINGS" 2>/dev/null | head -1 || true)
 
 # Remember playback state and pause
-set was_playing (playerctl status 2>/dev/null)
-if test "$was_playing" = "Playing"
-    playerctl pause
-end
+was_playing=$(playerctl status 2>/dev/null || true)
+[[ "$was_playing" == "Playing" ]] && playerctl pause
 
-# Remember current workspaces
-set ws1 (hyprctl monitors -j | jq -r '.[] | select(.name == "'$mon1'") | .activeWorkspace.id')
-
-# Switch to lock workspaces
-hyprctl dispatch focusmonitor $mon1
+# Remember current workspaces and switch to lock workspaces
+ws1=$(hyprctl monitors -j | jq -r --arg m "$mon1" '.[] | select(.name == $m) | .activeWorkspace.id')
+hyprctl dispatch focusmonitor "$mon1"
 hyprctl dispatch workspace 111
 
-# If mon2 exists
-if test -n "$mon2"
-    set ws2 (hyprctl monitors -j | jq -r '.[] | select(.name == "'$mon2'") | .activeWorkspace.id')
-    hyprctl dispatch focusmonitor $mon2
+if [[ -n "$mon2" ]]; then
+    ws2=$(hyprctl monitors -j | jq -r --arg m "$mon2" '.[] | select(.name == $m) | .activeWorkspace.id')
+    hyprctl dispatch focusmonitor "$mon2"
     hyprctl dispatch workspace 112
-end
+fi
 
 sleep 0.4
 
-
-##############
-
-hyprlock -c ~/.config/vutureland/hypr/hyprlock.conf
-
-##############
-
+hyprlock
 
 # Restore workspaces
-hyprctl dispatch focusmonitor $mon1
-hyprctl dispatch workspace $ws1
+hyprctl dispatch focusmonitor "$mon1"
+hyprctl dispatch workspace "$ws1"
 
-if test -n "$mon2"
-    hyprctl dispatch focusmonitor $mon2
-    hyprctl dispatch workspace $ws2
-end
+if [[ -n "$mon2" ]]; then
+    hyprctl dispatch focusmonitor "$mon2"
+    hyprctl dispatch workspace "$ws2"
+fi
 
 # Resume playback only if something was playing before
-if test "$was_playing" = "Playing"
-    playerctl play
-end
+[[ "$was_playing" == "Playing" ]] && playerctl play

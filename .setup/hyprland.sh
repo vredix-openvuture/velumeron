@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Hyprland interactive configurator – writes device-specific settings
-# to ~/.config/vutureland/hypr/user_settings.conf
+# to ~/.config/vutureland/hypr.lua/user_settings.lua
 
 set -euo pipefail
 
 VUTURELAND_DIR="$HOME/.config/vutureland"
 HYPR_DIR="$VUTURELAND_DIR/hypr"
 MODULES_DIR="$HYPR_DIR/modules"
-USER_SETTINGS="$HYPR_DIR/user_settings.conf"
+USER_SETTINGS="$VUTURELAND_DIR/hypr.lua/user_settings.lua"
 
-mkdir -p "$HYPR_DIR" "$MODULES_DIR"
+mkdir -p "$HYPR_DIR" "$MODULES_DIR" "$VUTURELAND_DIR/hypr.lua"
 
 # ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -33,22 +33,28 @@ ask_yn() {
     [[ "$ans" =~ ^[Yy] ]]
 }
 
-read_conf_var() {
+read_lua_var() {
     local file="$1" key="$2"
-    grep -m1 "^\$$key[[:space:]]*=" "$file" 2>/dev/null \
-        | sed 's/[^=]*=[[:space:]]*//' | sed 's/#.*//' | xargs || true
+    # Try quoted string: key = "value"
+    local val
+    val=$(grep -m1 "^${key}[[:space:]]*=" "$file" 2>/dev/null | grep -oP '=\s*"\K[^"]*' | head -1 || true)
+    if [[ -z "$val" ]]; then
+        # Try unquoted value: key = 42
+        val=$(grep -m1 "^${key}[[:space:]]*=" "$file" 2>/dev/null | sed 's/[^=]*=[[:space:]]*//' | sed 's/[[:space:]]*--.*$//' | tr -d '"' | xargs || true)
+    fi
+    echo "$val"
 }
 
-# Writes stdin content into the named section of user_settings.conf.
-# Markers: #<<<SECTIONNAME-START>>> / #<<<SECTIONNAME-END>>>
+# Writes stdin content into the named section of user_settings.lua.
+# Markers: -- <<<SECTIONNAME-START>>> / -- <<<SECTIONNAME-END>>>
 write_section() {
     local section="$1"
     local new_content; new_content="$(cat)"
-    local start="#<<<${section}-START>>>"
-    local end="#<<<${section}-END>>>"
+    local start="-- <<<${section}-START>>>"
+    local end="-- <<<${section}-END>>>"
 
     if [[ ! -f "$USER_SETTINGS" ]]; then
-        warn "user_settings.conf not found – please run a full configuration first."
+        warn "user_settings.lua not found – please run a full configuration first."
         return 1
     fi
 
@@ -69,7 +75,7 @@ write_section() {
         done < "$USER_SETTINGS" > "$tmp"
         mv "$tmp" "$USER_SETTINGS"
     else
-        warn "Section $section not found in user_settings.conf."
+        warn "Section $section not found in user_settings.lua."
         return 1
     fi
 }
@@ -77,8 +83,8 @@ write_section() {
 # Prints only the lines within a named section.
 read_section() {
     local section="$1"
-    local start="#<<<${section}-START>>>"
-    local end="#<<<${section}-END>>>"
+    local start="-- <<<${section}-START>>>"
+    local end="-- <<<${section}-END>>>"
     local in_section=0
     while IFS= read -r line; do
         [[ "$line" == "$start" ]] && in_section=1 && continue
@@ -87,15 +93,23 @@ read_section() {
     done < "$USER_SETTINGS"
 }
 
-# ─── 1) Monitore ────────────────────────────────────────────────────────────
+# ─── 1) Monitors ────────────────────────────────────────────────────────────
 
 _mon_field() {
     local output="$1" field="$2" fallback="$3"
     local val
-    val=$(read_section "MONITORS" | \
-          awk "/output[[:space:]]*=[[:space:]]*$output/,/^\}/" | \
-          grep -m1 "^[[:space:]]*$field[[:space:]]*=" | \
-          sed 's/.*=[[:space:]]*//' | tr -d '\n' | xargs)
+    val=$(awk "
+        /hl\\.monitor\\(\\{/ { in_block=1; match_block=0 }
+        in_block && /output[[:space:]]*=[[:space:]]*\"$output\"/ { match_block=1 }
+        in_block && match_block && /${field}[[:space:]]*=/ {
+            gsub(/.*=[[:space:]]*/, \"\")
+            gsub(/,.*/, \"\")
+            gsub(/[[:space:]]/, \"\")
+            gsub(/\"/, \"\")
+            print; exit
+        }
+        /^\\}\\)/ { in_block=0; match_block=0 }
+    " "$USER_SETTINGS" 2>/dev/null | head -1 || true)
     echo "${val:-$fallback}"
 }
 
@@ -129,8 +143,8 @@ configure_monitors() {
     mapfile -t detected_names < <(echo "$monitors_json" | jq -r '.[].name' 2>/dev/null || true)
 
     local cur_mon1 cur_mon2
-    cur_mon1=$(read_conf_var "$USER_SETTINGS" "mon1")
-    cur_mon2=$(read_conf_var "$USER_SETTINGS" "mon2")
+    cur_mon1=$(read_lua_var "$USER_SETTINGS" "mon1")
+    cur_mon2=$(read_lua_var "$USER_SETTINGS" "mon2")
 
     say "  Monitor 1 (primary)"
     if [[ ${#detected_names[@]} -gt 0 ]]; then
@@ -163,17 +177,21 @@ configure_monitors() {
     fi
 
     {
-        printf "\$mon1 = %s\n" "$mon1"
-        [[ -n "$mon2" ]] && printf "\$mon2 = %s\n" "$mon2"
-        printf "\nmonitorv2 {\n"
-        printf "  output        = %s\n  mode          = %s\n  transform     = %s\n" "$mon1" "$m1_mode" "$m1_transform"
-        printf "  position      = %s\n  scale         = %s\n  bitdepth      = 10\n" "$m1_pos" "$m1_scale"
-        printf "  supports_hdr  = %s\n  vrr           = %s\n  cm            = auto\n}\n" "$m1_hdr" "$m1_vrr"
+        printf 'mon1 = "%s"\n' "$mon1"
+        [[ -n "$mon2" ]] && printf 'mon2 = "%s"\n' "$mon2"
+        printf '\nhl.monitor({\n'
+        printf '    output       = "%s",\n    mode         = "%s",\n    transform    = %s,\n' "$mon1" "$m1_mode" "$m1_transform"
+        printf '    position     = "%s",\n    scale        = %s,\n    bitdepth     = 10,\n' "$m1_pos" "$m1_scale"
+        printf '    supports_hdr = %s,\n    vrr          = %s,\n    cm           = "auto",\n})\n' \
+            "$([ "$m1_hdr" = "1" ] && echo "true" || echo "false")" \
+            "$([ "$m1_vrr" = "on" ] && echo "1" || echo "0")"
         if [[ -n "$mon2" ]]; then
-            printf "\nmonitorv2 {\n"
-            printf "  output        = %s\n  mode          = %s\n  transform     = %s\n" "$mon2" "$m2_mode" "$m2_transform"
-            printf "  position      = %s\n  scale         = %s\n  bitdepth      = 10\n" "$m2_pos" "$m2_scale"
-            printf "  supports_hdr  = %s\n  vrr           = %s\n  cm            = auto\n}\n" "$m2_hdr" "$m2_vrr"
+            printf '\nhl.monitor({\n'
+            printf '    output       = "%s",\n    mode         = "%s",\n    transform    = %s,\n' "$mon2" "$m2_mode" "$m2_transform"
+            printf '    position     = "%s",\n    scale        = %s,\n    bitdepth     = 10,\n' "$m2_pos" "$m2_scale"
+            printf '    supports_hdr = %s,\n    vrr          = %s,\n    cm           = "auto",\n})\n' \
+                "$([ "$m2_hdr" = "1" ] && echo "true" || echo "false")" \
+                "$([ "$m2_vrr" = "on" ] && echo "1" || echo "0")"
         fi
     } | write_section "MONITORS"
 
@@ -221,11 +239,11 @@ _configure_one_monitor() {
     local cur_pos; cur_pos=$(_mon_field "$output" "position" "$default_pos")
     CFG_POS=$(ask "  Position (XxY)" "$cur_pos")  # e.g. 0x0 or auto
 
-    local cur_hdr; cur_hdr=$(_mon_field "$output" "supports_hdr" "0")
-    ask_yn "  Enable HDR?" "$([ "$cur_hdr" = "1" ] && echo y || echo n)" && CFG_HDR=1 || CFG_HDR=0
+    local cur_hdr; cur_hdr=$(_mon_field "$output" "supports_hdr" "false")
+    ask_yn "  Enable HDR?" "$([ "$cur_hdr" = "true" ] && echo y || echo n)" && CFG_HDR=1 || CFG_HDR=0
 
-    local cur_vrr; cur_vrr=$(_mon_field "$output" "vrr" "off")
-    ask_yn "  Enable VRR?" "$([ "$cur_vrr" = "on" ] && echo y || echo n)" && CFG_VRR=on || CFG_VRR=off
+    local cur_vrr; cur_vrr=$(_mon_field "$output" "vrr" "0")
+    ask_yn "  Enable VRR?" "$([ "$cur_vrr" = "1" ] && echo y || echo n)" && CFG_VRR=on || CFG_VRR=off
 }
 
 # ─── 2) Workspaces ──────────────────────────────────────────────────────────
@@ -235,12 +253,12 @@ g_WS_NUM=(); g_WS_MON=(); g_WS_PERSIST=(); g_WS_DEFAULT=()
 _ws_load() {
     g_WS_NUM=(); g_WS_MON=(); g_WS_PERSIST=(); g_WS_DEFAULT=()
     while IFS= read -r line; do
-        [[ "$line" =~ ^workspace[[:space:]]*= ]] || continue
+        [[ "$line" =~ hl\.workspace_rule ]] || continue
         local num mon persist def
-        num=$(echo "$line"     | sed 's/workspace *= *\([0-9]*\).*/\1/')
-        mon=$(echo "$line"     | grep -o 'monitor:[^,]*' | sed 's/monitor://' | tr -d ' ')
-        persist=$(echo "$line" | grep -o 'persistent:[^,]*' | sed 's/persistent://' | tr -d ' ')
-        echo "$line" | grep -q 'default:true' && def="true" || def="false"
+        num=$(echo "$line"     | grep -oP 'workspace\s*=\s*"\K[^"]*')
+        mon=$(echo "$line"     | grep -oP 'monitor\s*=\s*\K[^,}]+' | tr -d ' ')
+        persist=$(echo "$line" | grep -oP 'persistent\s*=\s*\K(true|false)')
+        echo "$line" | grep -q 'default\s*=\s*true' && def="true" || def="false"
         [[ -z "$num" || -z "$mon" ]] && continue
         g_WS_NUM+=("$num"); g_WS_MON+=("$mon")
         g_WS_PERSIST+=("${persist:-false}"); g_WS_DEFAULT+=("$def")
@@ -334,10 +352,12 @@ _ws_write() {
             local mon="${g_WS_MON[$i]}"
             if [[ "$mon" != "$prev_mon" ]]; then
                 [[ -n "$prev_mon" ]] && echo ""
-                echo "# $mon"; prev_mon="$mon"
+                echo "-- $mon"; prev_mon="$mon"
             fi
-            local line="workspace = ${g_WS_NUM[$i]},  monitor:${g_WS_MON[$i]}, persistent:${g_WS_PERSIST[$i]}"
-            [[ "${g_WS_DEFAULT[$i]}" == "true" ]] && line+=", default:true"
+            local line="hl.workspace_rule({ workspace = \"${g_WS_NUM[$i]}\","
+            line+=" monitor = ${g_WS_MON[$i]}, persistent = ${g_WS_PERSIST[$i]}"
+            [[ "${g_WS_DEFAULT[$i]}" == "true" ]] && line+=", default = true"
+            line+=" })"
             echo "$line"
         done
     } | write_section "WORKSPACES"
@@ -347,9 +367,9 @@ configure_workspaces() {
     say "── WORKSPACES ────────────────────────────────────────────────"
     local -a MON_VARS=() MON_NAMES=()
     while IFS= read -r line; do
-        if [[ "$line" =~ ^\$mon([0-9]+)[[:space:]]*=[[:space:]]*(.+) ]]; then
-            MON_VARS+=("\$mon${BASH_REMATCH[1]}")
-            MON_NAMES+=("$(echo "${BASH_REMATCH[2]}" | xargs)")
+        if [[ "$line" =~ ^mon([0-9]+)[[:space:]]*=[[:space:]]*\"([^\"]+)\" ]]; then
+            MON_VARS+=("mon${BASH_REMATCH[1]}")
+            MON_NAMES+=("${BASH_REMATCH[2]}")
         fi
     done < <(read_section "MONITORS") 2>/dev/null || true
 
@@ -385,16 +405,35 @@ configure_workspaces() {
 
 configure_autostart() {
     say "── AUTOSTART ─────────────────────────────────────────────────"
-    local daemons=() scripts=() start_apps=() start_ws=()
+    local -a daemons=() start_apps=() start_ws=()
 
+    # Read exec_once_daemons table
+    local in_daemons=0
     while IFS= read -r line; do
-        if [[ "$line" =~ ^exec-once\ =\ (.+) ]]; then
-            local cmd="${BASH_REMATCH[1]}"
-            [[ "$cmd" =~ sleep.*\&\& ]] && scripts+=("$cmd") || daemons+=("$cmd")
-        elif [[ "$line" =~ ^\$start_app([0-9]+)[[:space:]]*=[[:space:]]*(.*) ]]; then
-            start_apps[$((${BASH_REMATCH[1]}-1))]="${BASH_REMATCH[2]}"
-        elif [[ "$line" =~ ^\$start_app([0-9]+)_ws[[:space:]]*=[[:space:]]*(.*) ]]; then
-            start_ws[$((${BASH_REMATCH[1]}-1))]="${BASH_REMATCH[2]}"
+        if [[ "$line" =~ exec_once_daemons[[:space:]]*= ]]; then
+            in_daemons=1; continue
+        fi
+        if [[ $in_daemons -eq 1 ]]; then
+            [[ "$line" =~ ^[[:space:]]*\} ]] && break
+            if [[ "$line" =~ \"([^\"]+)\" ]]; then
+                daemons+=("${BASH_REMATCH[1]}")
+            fi
+        fi
+    done < <(read_section "AUTOSTART")
+
+    # Read start_apps table
+    local in_apps=0
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^start_apps[[:space:]]*= ]]; then
+            in_apps=1; continue
+        fi
+        if [[ $in_apps -eq 1 ]]; then
+            [[ "$line" =~ ^\} ]] && break
+            if [[ "$line" =~ \{[[:space:]]*app[[:space:]]*=[[:space:]]*\"([^\"]*)\".*ws[[:space:]]*=[[:space:]]*([0-9]+) ]]; then
+                local idx="${#start_apps[@]}"
+                start_apps[$idx]="${BASH_REMATCH[1]}"
+                start_ws[$idx]="${BASH_REMATCH[2]}"
+            fi
         fi
     done < <(read_section "AUTOSTART")
 
@@ -405,32 +444,31 @@ configure_autostart() {
 
     while true; do
         echo ""; hr
-        echo "  a) Manage daemons"
-        echo "  b) Manage scripts"
-        echo "  c) Manage workspace apps"
+        echo "  a) Manage autostart commands"
+        echo "  b) Manage workspace startup apps"
         echo "  q) Back"; hr
         read -rp "  Selection: " choice
         case "$choice" in
             a) manage_daemon_list daemons ;;
-            b) manage_daemon_list scripts ;;
-            c) manage_workspace_apps start_apps start_ws ;;
+            b) manage_workspace_apps start_apps start_ws ;;
             q) break ;;
+            *) warn "Invalid selection." ;;
         esac
     done
 
     {
-        echo "# Daemons"
-        for d in "${daemons[@]}"; do echo "exec-once = $d"; done
-        echo ""
-        echo "# Scripts"
-        for s in "${scripts[@]}"; do echo "exec-once = $s"; done
-        echo ""
-        echo "# Workspace apps"
-        for i in "${!start_apps[@]}"; do
-            local n=$((i+1))
-            echo "\$start_app${n}    = ${start_apps[$i]}"
-            echo "\$start_app${n}_ws = ${start_ws[$i]:-$n}"
+        echo "exec_once_daemons = {"
+        for d in "${daemons[@]}"; do
+            printf '    "%s",\n' "$d"
         done
+        echo "}"
+        echo ""
+        echo "-- { app = command, ws = workspace_number }"
+        echo "start_apps = {"
+        for i in "${!start_apps[@]}"; do
+            printf '    { app = "%s", ws = %s },\n' "${start_apps[$i]}" "${start_ws[$i]:-$((i+1))}"
+        done
+        echo "}"
     } | write_section "AUTOSTART"
 
     ok "Autostart saved."
@@ -478,19 +516,34 @@ configure_quickaccess() {
     say "── QUICK ACCESS ──────────────────────────────────────────────"
     echo ""; echo "  Define up to 10 apps for the quickstart submap."; echo ""
 
-    local apps=()
-    for i in $(seq 1 10); do
-        apps+=("$(read_conf_var "$USER_SETTINGS" "quick_app${i}")")
-    done
+    local -a apps=()
+    for i in $(seq 1 10); do apps+=(""); done
+
+    # Read quick_app table
+    local in_qa=0
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^quick_app[[:space:]]*= ]]; then
+            in_qa=1; continue
+        fi
+        if [[ $in_qa -eq 1 ]]; then
+            [[ "$line" =~ ^\} ]] && break
+            if [[ "$line" =~ \[([0-9]+)\][[:space:]]*=[[:space:]]*\"([^\"]*)\" ]]; then
+                local idx=$((${BASH_REMATCH[1]}-1))
+                apps[$idx]="${BASH_REMATCH[2]}"
+            fi
+        fi
+    done < <(read_section "QUICKACCESS")
 
     for i in "${!apps[@]}"; do
         apps[$i]=$(ask "  App $((i+1))" "${apps[$i]:-}")
     done
 
     {
+        echo "quick_app = {"
         for i in "${!apps[@]}"; do
-            printf "\$quick_app%-2d = %s\n" "$((i+1))" "${apps[$i]}"
+            printf '    [%-2d] = "%s",\n' "$((i+1))" "${apps[$i]}"
         done
+        echo "}"
     } | write_section "QUICKACCESS"
 
     ok "Quick Access saved."
@@ -502,8 +555,8 @@ configure_peripherals() {
     say "── PERIPHERALS ───────────────────────────────────────────────"
 
     local cur_theme cur_size
-    cur_theme=$(read_conf_var "$USER_SETTINGS" "cur_theme")
-    cur_size=$(read_conf_var  "$USER_SETTINGS" "cur_size")
+    cur_theme=$(read_lua_var "$USER_SETTINGS" "cur_theme")
+    cur_size=$(read_lua_var  "$USER_SETTINGS" "cur_size")
 
     echo ""; echo "  Available cursor themes:"
     local themes=()
@@ -512,27 +565,27 @@ configure_peripherals() {
 
     if [[ ${#themes[@]} -gt 0 ]]; then
         for i in "${!themes[@]}"; do printf "    %2d) %s\n" "$((i+1))" "${themes[$i]}"; done
-        echo ""; read -rp "  Number or custom name [${cur_theme:-oxygen}]: " sel
+        echo ""; read -rp "  Number or custom name [${cur_theme:-Oxygen}]: " sel
         if [[ "$sel" =~ ^[0-9]+$ ]] && (( sel >= 1 && sel <= ${#themes[@]} )); then
             cur_theme="${themes[$((sel-1))]}"
         else
-            cur_theme="${sel:-${cur_theme:-oxygen}}"
+            cur_theme="${sel:-${cur_theme:-Oxygen}}"
         fi
     else
-        cur_theme=$(ask "  Cursor theme" "${cur_theme:-oxygen}")
+        cur_theme=$(ask "  Cursor theme" "${cur_theme:-Oxygen}")
     fi
-    cur_size=$(ask "  Cursor size" "${cur_size:-20}")
+    cur_size=$(ask "  Cursor size" "${cur_size:-24}")
 
     echo ""; say "  FN keys:"
     local fn_bup fn_bdn fn_play fn_next fn_prev fn_vup fn_vdn fn_mute
-    fn_bup=$(read_conf_var  "$USER_SETTINGS" "fn_brightness_up")
-    fn_bdn=$(read_conf_var  "$USER_SETTINGS" "fn_brighness_down")
-    fn_play=$(read_conf_var "$USER_SETTINGS" "fn_play_stop_play")
-    fn_next=$(read_conf_var "$USER_SETTINGS" "fn_play_next")
-    fn_prev=$(read_conf_var "$USER_SETTINGS" "fn_play_prev")
-    fn_vup=$(read_conf_var  "$USER_SETTINGS" "fn_volume_up")
-    fn_vdn=$(read_conf_var  "$USER_SETTINGS" "fn_volume_down")
-    fn_mute=$(read_conf_var "$USER_SETTINGS" "fn_volume_mute")
+    fn_bup=$(read_lua_var  "$USER_SETTINGS" "fn_brightness_up")
+    fn_bdn=$(read_lua_var  "$USER_SETTINGS" "fn_brightness_down")
+    fn_play=$(read_lua_var "$USER_SETTINGS" "fn_play_stop_play")
+    fn_next=$(read_lua_var "$USER_SETTINGS" "fn_play_next")
+    fn_prev=$(read_lua_var "$USER_SETTINGS" "fn_play_prev")
+    fn_vup=$(read_lua_var  "$USER_SETTINGS" "fn_volume_up")
+    fn_vdn=$(read_lua_var  "$USER_SETTINGS" "fn_volume_down")
+    fn_mute=$(read_lua_var "$USER_SETTINGS" "fn_volume_mute")
 
     fn_bup=$(ask  "  Brightness up    " "${fn_bup:-F2}")
     fn_bdn=$(ask  "  Brightness down  " "${fn_bdn:-F1}")
@@ -544,17 +597,17 @@ configure_peripherals() {
     fn_mute=$(ask "  Mute             " "${fn_mute:-F10}")
 
     {
-        echo "\$cur_theme = $cur_theme"
-        echo "\$cur_size  = $cur_size"
+        echo "cur_theme = \"$cur_theme\""
+        echo "cur_size  = $cur_size"
         echo ""
-        echo "\$fn_brightness_up  = $fn_bup"
-        echo "\$fn_brighness_down = $fn_bdn"
-        echo "\$fn_play_stop_play = $fn_play"
-        echo "\$fn_play_next      = $fn_next"
-        echo "\$fn_play_prev      = $fn_prev"
-        echo "\$fn_volume_up      = $fn_vup"
-        echo "\$fn_volume_down    = $fn_vdn"
-        echo "\$fn_volume_mute    = $fn_mute"
+        echo "fn_brightness_up   = \"$fn_bup\""
+        echo "fn_brightness_down = \"$fn_bdn\""
+        echo "fn_play_stop_play  = \"$fn_play\""
+        echo "fn_play_next       = \"$fn_next\""
+        echo "fn_play_prev       = \"$fn_prev\""
+        echo "fn_volume_up       = \"$fn_vup\""
+        echo "fn_volume_down     = \"$fn_vdn\""
+        echo "fn_volume_mute     = \"$fn_mute\""
     } | write_section "PERIPHERALS"
 
     ok "Peripherals saved."
@@ -566,16 +619,16 @@ configure_windowrules() {
     say "── WINDOW RULES ──────────────────────────────────────────────"
 
     local float_rule opacity_rule
-    float_rule=$(read_conf_var  "$USER_SETTINGS" "floating_window")
-    opacity_rule=$(read_conf_var "$USER_SETTINGS" "opacity_window")
+    float_rule=$(read_lua_var  "$USER_SETTINGS" "floating_window")
+    opacity_rule=$(read_lua_var "$USER_SETTINGS" "opacity_window")
 
     echo ""; echo "  Regex patterns (separate multiple with |: .*kitty.*|.*ark.*)"; echo ""
-    float_rule=$(ask   "  \$floating_window" "${float_rule:-(.*kitty.*|.*ark.*|.*bitwarden.*)}")
-    opacity_rule=$(ask "\$opacity_window " "${opacity_rule:-(.*obsidian.*)}")
+    float_rule=$(ask   "  floating_window" "${float_rule:-(.*kitty.*|.*ark.*|.*bitwarden.*)}")
+    opacity_rule=$(ask "  opacity_window " "${opacity_rule:-(.*obsidian.*)}")
 
     {
-        echo "\$floating_window = $float_rule"
-        echo "\$opacity_window  = $opacity_rule"
+        echo "floating_window = \"$float_rule\""
+        echo "opacity_window  = \"$opacity_rule\""
     } | write_section "WINDOWRULES"
 
     ok "Window rules saved."
@@ -593,7 +646,7 @@ save_and_reload() {
     fi
 }
 
-# ─── Bootstrap: create skeleton user_settings.conf if missing ────────────────
+# ─── Bootstrap: create skeleton user_settings.lua if missing ────────────────
 
 init_user_settings() {
     # Symlink ~/.config/wallust → vutureland/wallust so wallust always finds its config
@@ -602,111 +655,139 @@ init_user_settings() {
         ok "Linked ~/.config/wallust → vutureland/wallust"
     fi
 
-    [[ -f "$USER_SETTINGS" ]] && return
-    mkdir -p "$HYPR_DIR"
+    if [[ -f "$USER_SETTINGS" ]]; then
+        # Check for section markers — required for write_section to work
+        if ! grep -qF '-- <<<MONITORS-START>>>' "$USER_SETTINGS"; then
+            warn "user_settings.lua exists but has no section markers."
+            warn "hyprland.sh cannot manage it without -- <<<SECTION-START>>> / -- <<<SECTION-END>>> markers."
+            echo ""
+            echo "  Options:"
+            echo "    r) Regenerate from scratch (current values will be lost)"
+            echo "    q) Exit and add markers manually"
+            echo ""
+            read -rp "  Selection [q]: " sel
+            case "${sel:-q}" in
+                r)
+                    rm -f "$USER_SETTINGS"
+                    ok "Removed old file. Generating new skeleton…"
+                    ;;
+                *)
+                    echo ""
+                    echo "  Add these markers around each section in $USER_SETTINGS:"
+                    echo "    -- <<<MONITORS-START>>>   / -- <<<MONITORS-END>>>"
+                    echo "    -- <<<WORKSPACES-START>>> / -- <<<WORKSPACES-END>>>"
+                    echo "    -- <<<PERIPHERALS-START>>>/ -- <<<PERIPHERALS-END>>>"
+                    echo "    -- <<<QUICKACCESS-START>>>/ -- <<<QUICKACCESS-END>>>"
+                    echo "    -- <<<AUTOSTART-START>>>  / -- <<<AUTOSTART-END>>>"
+                    echo "    -- <<<WINDOWRULES-START>>>/ -- <<<WINDOWRULES-END>>>"
+                    echo ""
+                    exit 0
+                    ;;
+            esac
+        else
+            return
+        fi
+    fi
+
+    mkdir -p "$VUTURELAND_DIR/hypr.lua"
     cat > "$USER_SETTINGS" <<'EOF'
-##################################################################
-##  USER SETTINGS – generated by hyprland.sh
-##  Do not edit manually.
-##################################################################
+-- ════════════════════════════════════════════════════════════════════════
+--
+--  USER SETTINGS — Device-specific settings.
+--  Generated by hyprland.sh. Not in git. Do not edit manually.
+--
+-- ════════════════════════════════════════════════════════════════════════
 
 
-## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-##   MONITORS
-## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--  MONITORS
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-#<<<MONITORS-START>>>
-#<<<MONITORS-END>>>
-
-
-## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-##   WORKSPACES
-## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-#<<<WORKSPACES-START>>>
-#<<<WORKSPACES-END>>>
+-- <<<MONITORS-START>>>
+-- <<<MONITORS-END>>>
 
 
-## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-##   PERIPHERALS
-## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--  WORKSPACES
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-#<<<PERIPHERALS-START>>>
-$cur_theme = Oxygen
-$cur_size  = 24
-
-$fn_brightness_up  = F2
-$fn_brighness_down = F1
-$fn_play_stop_play = F8
-$fn_play_next      = F9
-$fn_play_prev      = F7
-$fn_volume_up      = F12
-$fn_volume_down    = F11
-$fn_volume_mute    = F10
-#<<<PERIPHERALS-END>>>
+-- <<<WORKSPACES-START>>>
+-- <<<WORKSPACES-END>>>
 
 
-## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-##   QUICKACCESS
-## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--  PERIPHERALS
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-#<<<QUICKACCESS-START>>>
-$quick_app1  =
-$quick_app2  =
-$quick_app3  =
-$quick_app4  =
-$quick_app5  =
-$quick_app6  =
-$quick_app7  =
-$quick_app8  =
-$quick_app9  =
-$quick_app10 =
-#<<<QUICKACCESS-END>>>
+-- <<<PERIPHERALS-START>>>
+cur_theme = "Oxygen"
+cur_size  = 24
 
-
-## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-##   AUTOSTART  (device-specific daemons + app variables)
-## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-#<<<AUTOSTART-START>>>
-# Daemons
-
-# Scripts
-
-# Workspace apps
-$start_app1    =
-$start_app1_ws = 1
-$start_app2    =
-$start_app2_ws = 2
-$start_app3    =
-$start_app3_ws = 3
-$start_app4    =
-$start_app4_ws = 4
-$start_app5    =
-$start_app5_ws = 5
-$start_app6    =
-$start_app6_ws = 6
-$start_app7    =
-$start_app7_ws = 7
-$start_app8    =
-$start_app8_ws = 8
-$start_app9    =
-$start_app9_ws = 9
-$start_app10    =
-$start_app10_ws = 10
-#<<<AUTOSTART-END>>>
+fn_brightness_up   = "F2"
+fn_brightness_down = "F1"
+fn_play_stop_play  = "F8"
+fn_play_next       = "F9"
+fn_play_prev       = "F7"
+fn_volume_up       = "F12"
+fn_volume_down     = "F11"
+fn_volume_mute     = "F10"
+-- <<<PERIPHERALS-END>>>
 
 
-## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-##   WINDOW RULES  (device-specific variables)
-## ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--  QUICK ACCESS APPS  (index = key number)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-#<<<WINDOWRULES-START>>>
-$floating_window = (.*kitty.*|.*ark.*|.*bitwarden.*)
-$opacity_window  = (.*obsidian.*)
-#<<<WINDOWRULES-END>>>
+-- <<<QUICKACCESS-START>>>
+quick_app = {
+    [1]  = "",
+    [2]  = "",
+    [3]  = "",
+    [4]  = "",
+    [5]  = "",
+    [6]  = "",
+    [7]  = "",
+    [8]  = "",
+    [9]  = "",
+    [10] = "",
+}
+-- <<<QUICKACCESS-END>>>
+
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--  AUTOSTART — Device daemons & workspace startup apps
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- <<<AUTOSTART-START>>>
+exec_once_daemons = {
+}
+
+-- { app = command, ws = workspace_number }
+start_apps = {
+    { app = "", ws = 1 },
+    { app = "", ws = 2 },
+    { app = "", ws = 3 },
+    { app = "", ws = 4 },
+    { app = "", ws = 5 },
+    { app = "", ws = 6 },
+    { app = "", ws = 7 },
+    { app = "", ws = 8 },
+    { app = "", ws = 9 },
+    { app = "", ws = 10 },
+}
+-- <<<AUTOSTART-END>>>
+
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--  WINDOW RULE VARIABLES
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- <<<WINDOWRULES-START>>>
+floating_window = "(.*kitty.*|.*ark.*|.*bitwarden.*)"
+opacity_window  = "(.*obsidian.*)"
+-- <<<WINDOWRULES-END>>>
 EOF
-    ok "Created new user_settings.conf"
+    ok "Created new user_settings.lua"
 }
 
 # ─── Main menu ──────────────────────────────────────────────────────────────

@@ -70,7 +70,7 @@ fi
 ok "awww-daemon"
 
 killall -q hypridle 2>/dev/null || true
-hypridle -c "$VUTURELAND_DIR/hypr/hypridle.conf" &
+hypridle -c "$VUTURELAND_DIR/hypr.lua/hypridle.conf" &
 disown
 ok "hypridle"
 
@@ -88,7 +88,7 @@ fi
 
 mkdir -p "$HYPR_CONFIG"
 if [[ ! -f "$HYPR_CONFIG/hyprland.conf" ]]; then
-    printf 'source = ~/.config/vutureland/hypr/hyprland.conf\n' \
+    printf 'source = ~/.config/vutureland/hypr.lua/hyprland.lua\n' \
         > "$HYPR_CONFIG/hyprland.conf"
     ok "Created ~/.config/hypr/hyprland.conf"
 else
