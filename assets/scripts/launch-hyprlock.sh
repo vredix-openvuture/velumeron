@@ -7,12 +7,12 @@ USER_SETTINGS=~/.config/vutureland/hypr.lua/user_settings.lua
 mon1=$(grep -oP '^mon1\s*=\s*"\K[^"]+' "$USER_SETTINGS" 2>/dev/null | head -1 || true)
 mon2=$(grep -oP '^mon2\s*=\s*"\K[^"]+' "$USER_SETTINGS" 2>/dev/null | head -1 || true)
 
-# In Hyprland Lua mode, dispatch args must be valid Lua expressions:
-#   focusmonitor("DP-2")  →  hl.dispatch(focusmonitor("DP-2"))  ✓
-#   workspace(111)        →  hl.dispatch(workspace(111))        ✓
-dispatch() { hyprctl dispatch "$@"; }
-focusmon() { dispatch "focusmonitor(\"$1\")"; }
-ws()       { dispatch "workspace($1)"; }
+# In Hyprland Lua mode, dispatch args are evaluated as Lua inside hl.dispatch().
+# The correct form uses hl.dsp actions — same API as in keybinds.lua:
+#   hl.dsp.focus({ monitor = "DP-2" })   →  focusmonitor
+#   hl.dsp.focus({ workspace = 111 })    →  switch workspace
+focusmon() { hyprctl dispatch "hl.dsp.focus({monitor=\"${1}\"})"; }
+ws()       { hyprctl dispatch "hl.dsp.focus({workspace=${1}})"; }
 
 # Remember playback state and pause
 was_playing=$(playerctl status 2>/dev/null || true)

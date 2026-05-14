@@ -3,7 +3,6 @@
 chosen=""
 showcase=true
 
-# Parse arguments
 for arg in "$@"; do
     if [[ "$arg" == "--no-showcase" ]]; then
         showcase=false
@@ -22,8 +21,12 @@ filename=$(basename "$chosen")
 base="${filename%.*}"
 base="${base%_hor}"
 
+# In Hyprland Lua mode, dispatch args are evaluated as Lua inside hl.dispatch().
+# Use hl.dsp.focus() — the same API as in keybinds.lua.
+focusmon() { hyprctl dispatch "hl.dsp.focus({monitor=\"${1}\"})"; }
+focusws()  { hyprctl dispatch "hl.dsp.focus({workspace=${1}})"; }
+
 if [[ "$showcase" == "true" ]]; then
-    # Remember original workspaces and focused monitor
     focused_monitor=$(hyprctl monitors -j | jq -r '.[] | select(.focused == true) | .name')
     mapfile -t monitors < <(hyprctl monitors -j | jq -r '.[].name')
     original_workspaces=()
@@ -36,9 +39,8 @@ if [[ "$showcase" == "true" ]]; then
     i=0
     for mon in "${monitors[@]}"; do
         tmp_ws=$((111 + i))
-        hyprctl dispatch moveworkspacetomonitor "$tmp_ws $mon"
-        hyprctl dispatch focusmonitor "$mon"
-        hyprctl dispatch workspace "$tmp_ws"
+        focusmon "$mon"
+        focusws "$tmp_ws"
         i=$((i + 1))
     done
 fi
@@ -64,25 +66,23 @@ done < <(hyprctl monitors -j | jq -r '.[] | "\(.name);\(.transform);\(.width);\(
 wallust --config-dir ~/.config/vutureland/wallust run "$chosen"
 
 if [[ "$showcase" == "true" ]]; then
-    # Wait for awww transition to finish
     sleep 2
-
     ~/.config/vutureland/assets/scripts/launch-waybar.sh
 
     # Restore original workspaces
     i=0
     for mon in "${monitors[@]}"; do
-        hyprctl dispatch focusmonitor "$mon"
-        hyprctl dispatch workspace "${original_workspaces[$i]}"
+        focusmon "$mon"
+        focusws "${original_workspaces[$i]}"
         i=$((i + 1))
     done
 
     i=$(( ${#monitors[@]} - 1 ))
     while (( i >= 0 )); do
-        hyprctl dispatch focusmonitor "${monitors[$i]}"
-        hyprctl dispatch workspace "${original_workspaces[$i]}"
+        focusmon "${monitors[$i]}"
+        focusws "${original_workspaces[$i]}"
         i=$((i - 1))
     done
 
-    hyprctl dispatch focusmonitor "$focused_monitor"
+    focusmon "$focused_monitor"
 fi
