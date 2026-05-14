@@ -4,8 +4,8 @@
     "format-icons": {},
     "disable-scroll": false,
     "format": "{icon}",
-    "on-click": "bash -c 'n=\"{name}\"; [[ \"$n\" =~ ^[0-9]+$ ]] && hyprctl dispatch workspace \"$n\"'",
-    "on-scroll-up": "hyprctl dispatch workspace e-1",
-    "on-scroll-down": "hyprctl dispatch workspace e+1"
+    "on-click": "bash -c 'n=\"{name}\"; [[ \"$n\" =~ ^[0-9]+$ ]] && hyprctl dispatch \"hl.dsp.focus({workspace=$n})\"'",
+    "on-scroll-up": "hyprctl dispatch 'hl.dsp.focus({workspace=\"e-1\"})'",
+    "on-scroll-down": "hyprctl dispatch 'hl.dsp.focus({workspace=\"e+1\"})'"
   }
 }
