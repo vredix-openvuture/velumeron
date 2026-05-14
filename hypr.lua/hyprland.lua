@@ -4,7 +4,7 @@
 -- ═══════════════════════════════════════════════════════
 
 -- Colors (defines global color variables)
-require("colors")
+require(".colors")
 
 -- Device-specific settings (monitors, workspaces, peripherals)
 -- Not in git — generated per device.
@@ -22,7 +22,10 @@ require("modules.windowrules")
 require("modules.layerrules")
 require("modules.keybinds")
 
+
+
 -- ═══════════════════════════════════════════════════════
 -- MANUAL OVERRIDES
 -- Add device-specific overrides below this line
 -- ═══════════════════════════════════════════════════════
+ 
