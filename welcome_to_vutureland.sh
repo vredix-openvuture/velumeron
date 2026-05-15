@@ -5,7 +5,7 @@
 set -euo pipefail
 
 VUTURELAND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-USER_SETTINGS="$VUTURELAND_DIR/hypr/user_settings.conf"
+USER_SETTINGS="$VUTURELAND_DIR/hypr.lua/user_settings.lua"
 
 BOLD=$'\033[1m'; CYAN=$'\033[0;36m'; GREEN=$'\033[0;32m'
 YELLOW=$'\033[0;33m'; RED=$'\033[0;31m'; RST=$'\033[0m'; DIM=$'\033[2m'
@@ -34,6 +34,61 @@ echo "  It will start services, configure Hyprland, apply"
 echo "  a default Waybar layout, and set the initial wallpaper."
 echo ""
 hr; echo ""
+
+# ─── 0) Package installation ──────────────────────────────────────────────────
+say "Package installation"
+
+REQUIRED_PKGS=(
+    hypridle hyprlock hyprpolkitagent
+    waybar rofi-wayland kitty
+    sway-notification-center cava
+    awww wallust
+    playerctl jq socat fastfetch tmux
+    network-manager-applet gnome-keyring
+    nextcloud-client localsend
+    openrgb ddcutil grim hyprshot python
+)
+
+if ask_yn "Check and install missing packages?" "y"; then
+    missing_pacman=()
+    missing_aur=()
+
+    for pkg in "${REQUIRED_PKGS[@]}"; do
+        if pacman -Q "$pkg" &>/dev/null; then
+            continue
+        fi
+        if pacman -Si "$pkg" &>/dev/null 2>&1; then
+            missing_pacman+=("$pkg")
+        else
+            missing_aur+=("$pkg")
+        fi
+    done
+
+    if [[ ${#missing_pacman[@]} -eq 0 && ${#missing_aur[@]} -eq 0 ]]; then
+        ok "All packages already installed."
+    else
+        if [[ ${#missing_pacman[@]} -gt 0 ]]; then
+            echo "  Installing from pacman: ${missing_pacman[*]}"
+            sudo pacman -S --noconfirm "${missing_pacman[@]}" \
+                && ok "pacman packages installed." \
+                || warn "Some pacman packages failed — check output above."
+        fi
+
+        if [[ ${#missing_aur[@]} -gt 0 ]]; then
+            if ! command -v yay &>/dev/null; then
+                warn "yay not found. Cannot install AUR packages: ${missing_aur[*]}"
+                warn "Install yay first, then re-run this wizard."
+            else
+                echo "  Installing from AUR (yay): ${missing_aur[*]}"
+                yay -S --noconfirm "${missing_aur[@]}" \
+                    && ok "AUR packages installed." \
+                    || warn "Some AUR packages failed — check output above."
+            fi
+        fi
+    fi
+else
+    ok "Skipping package installation."
+fi
 
 # ─── 1) User avatar check ─────────────────────────────────────────────────────
 say "User Avatar (~/.face)"
@@ -87,12 +142,18 @@ elif [[ -d "$HOME/.config/hypr.bak" ]]; then
 fi
 
 mkdir -p "$HYPR_CONFIG"
-if [[ ! -f "$HYPR_CONFIG/hyprland.conf" ]]; then
-    printf 'source = ~/.config/vutureland/hypr.lua/hyprland.lua\n' \
-        > "$HYPR_CONFIG/hyprland.conf"
-    ok "Created ~/.config/hypr/hyprland.conf"
+if [[ ! -f "$HYPR_CONFIG/hyprland.lua" ]]; then
+    cat > "$HYPR_CONFIG/hyprland.lua" <<'EOF'
+local base = os.getenv("HOME") .. "/.config/vutureland/hypr.lua/"
+package.path = base .. "?.lua;"
+            .. base .. "modules/?.lua;"
+            .. base .. "modules/?/init.lua;"
+            .. package.path
+dofile(base .. "hyprland.lua")
+EOF
+    ok "Created ~/.config/hypr/hyprland.lua"
 else
-    ok "~/.config/hypr/hyprland.conf already exists — skipping."
+    ok "~/.config/hypr/hyprland.lua already exists — skipping."
 fi
 
 # wallust symlink
@@ -113,8 +174,8 @@ bash "$VUTURELAND_DIR/.setup/hyprland.sh" --minimal
 mon1=""
 mon2=""
 if [[ -f "$USER_SETTINGS" ]]; then
-    mon1=$(grep -oP '^\$mon1\s*=\s*\K\S+' "$USER_SETTINGS" 2>/dev/null | head -1 || true)
-    mon2=$(grep -oP '^\$mon2\s*=\s*\K\S+' "$USER_SETTINGS" 2>/dev/null | head -1 || true)
+    mon1=$(grep -oP '^mon1\s*=\s*"\K[^"]+' "$USER_SETTINGS" 2>/dev/null | head -1 || true)
+    mon2=$(grep -oP '^mon2\s*=\s*"\K[^"]+' "$USER_SETTINGS" 2>/dev/null | head -1 || true)
 fi
 
 if [[ -z "$mon1" ]]; then
