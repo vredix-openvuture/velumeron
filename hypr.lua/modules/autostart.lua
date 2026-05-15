@@ -14,10 +14,11 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("nm-applet")
     hl.exec_cmd("systemctl --user start hyprpolkitagent")
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
-    hl.exec_cmd("nextcloud --background")
-    hl.exec_cmd("localsend --hidden")
     hl.exec_cmd("swaync -c ~/.config/vutureland/swaync/config.json -s ~/.config/vutureland/swaync/style.css")
     hl.exec_cmd("~/.config/vutureland/assets/scripts/float-cascade.sh")
+
+    hl.exec_cmd("[workspace 99 silent] kitty --class no_float -e btop")
+
 
     -- ── Device-specific daemons (from user_settings) ──
     for _, cmd in ipairs(exec_once_daemons) do

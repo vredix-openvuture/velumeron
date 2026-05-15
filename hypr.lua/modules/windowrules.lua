@@ -18,8 +18,8 @@ hl.window_rule({
 
 hl.window_rule({
     name    = "float_clamp",
-    match   = { floating = true },
-    maxsize = { "(monitor_w*0.9)", "(monitor_h*0.9)" },
+    match   = { float = true },
+    size    = { "(monitor_w*0.9)", "(monitor_h*0.9)" },
 })
 
 hl.window_rule({
@@ -90,11 +90,12 @@ hl.window_rule({
 
 -- System monitoring screen (workspace 99)
 hl.window_rule({
-    name    = "dedicated_system_screen",
+    name    = "dedicated_system_screen1",
     match   = { workspace = "99" },
+    match   = { class = "no_float" },
     float   = false,
     tile    = true,
-    no_blur = true,
+
 })
 
 
@@ -106,4 +107,17 @@ hl.window_rule({
     opacity = 1,
     opaque  = true,
     no_blur = true,
+})
+
+
+
+
+
+-- Special Workspace
+
+hl.workspace_rule({ 
+    workspace     = "99",  
+    border_size   = 4,
+    gaps_out      = 44,
+    gaps_in       = 44,
 })

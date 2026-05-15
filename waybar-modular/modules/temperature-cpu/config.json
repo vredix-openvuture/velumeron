@@ -3,6 +3,6 @@
     "hwmon-path": "/sys/class/hwmon/hwmon8/temp1_input",
     "format": "  {temperatureC}ºC",
     "tooltip": false,
-    "on-click": "hyprctl dispatch workspace 99"
+    "on-click": "hyprctl dispatch 'hl.dsp.focus({workspace=99})'"
   }
 }
