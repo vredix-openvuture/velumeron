@@ -58,7 +58,7 @@ write_section() {
         return 1
     fi
 
-    if grep -qF "$start" "$USER_SETTINGS"; then
+    if grep -qF -- "$start" "$USER_SETTINGS"; then
         local tmp; tmp=$(mktemp)
         local skip=0
         while IFS= read -r line; do
@@ -657,7 +657,7 @@ init_user_settings() {
 
     if [[ -f "$USER_SETTINGS" ]]; then
         # Check for section markers — required for write_section to work
-        if ! grep -qF '-- <<<MONITORS-START>>>' "$USER_SETTINGS"; then
+        if ! grep -qF -- '-- <<<MONITORS-START>>>' "$USER_SETTINGS"; then
             warn "user_settings.lua exists but has no section markers."
             warn "hyprland.sh cannot manage it without -- <<<SECTION-START>>> / -- <<<SECTION-END>>> markers."
             echo ""
