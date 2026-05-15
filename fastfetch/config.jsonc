@@ -1,0 +1,135 @@
+{
+
+    "logo": {
+        "source": "~/.config/vutureland/assets/icons/fastfetch_logo.png",
+        "height": 20,
+        "width":  40,
+        "color": {
+            "1": "red"
+        },
+        "padding": {
+            "top": 10,
+            "left": 5,
+            "right": 5
+        }
+    },
+
+    "display": 
+    {
+        "separator": ": ",     // Separator between keys and values
+        "color": 
+        {
+            "keys": "red"    // Key color
+        }
+    },
+
+    "modules": [
+        "break",
+        "break",
+
+        {
+            "type":     "custom",
+            "format":   "  HARDWARE"
+        },
+        "break",
+        {
+            "type":         "cpu",
+            "key":          "CPU       "
+        },
+        {
+            "type": "gpu",
+            "key": "GPU       "
+        },
+        {
+            "type": "memory",
+            "key": "MEMORY    "
+        },
+        {
+            "type": "swap",
+            "key": "SWAP      "
+        },
+        {
+            "type": "disk",
+            "key": "DISK      "
+        },
+
+        "break",
+        "break",
+
+        {
+            "type": "custom",
+            "format": "󰣇  SYSTEM"
+        },
+        "break",
+        {
+            "type": "bios",
+            "key": "BIOS      "
+        },
+        {
+            "type": "bootmgr",
+            "key": "BOOT      "
+        },
+        {
+            "type": "os",
+            "key": "OS        "
+        },
+        {
+            "type": "kernel",
+            "key": "KERNEL    "
+        },
+        {
+            "type": "packages",
+            "key": "PACKAGES  "
+        },
+        {
+            "type": "shell",
+            "key": "SHELL     "
+        },
+
+        "break",
+        "break",
+
+        {
+            "type": "custom",
+            "format": "  SESSION"
+        },
+        "break",
+        {
+            "type": "wm",
+            "key": "WM        "
+        },
+        {
+            "type": "terminal",
+            "key": "TERMINAL  "
+        },
+
+        "break",
+        "break",
+
+        {
+            "type": "custom",
+            "format": "  TIME"
+        },
+        "break",
+        {
+            "type": "uptime",
+            "key": "UPTIME    "
+        },
+        {
+            "type": "command",
+            "key": "AGE       ",
+            "text": "birth=$(stat -c %W /); now=$(date +%s); echo $(((now - birth) / 86400)) days"
+        },
+        {
+            "type": "datetime",
+            "key": "NOW       "
+        },
+
+        "break",
+        "break",
+
+        "colors",
+
+
+    ]
+}
