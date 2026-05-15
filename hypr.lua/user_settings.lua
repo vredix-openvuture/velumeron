@@ -113,7 +113,7 @@ quick_app = {
 
 -- <<<AUTOSTART-START>>>
 exec_once_daemons = {
-    "openrgb -p `/.config/OpenRGB/purple-blizzard.orp; sleep 30 && openrgb -p ~/.config/OpenRGB/purple-blizzard.orp",
+    "openrgb -p ~/.config/OpenRGB/purple-blizzard.orp; sleep 30 && openrgb -p ~/.config/OpenRGB/purple-blizzard.orp",
     "tmux new-session -d -s trcc 'trcc theme-load Custom_hi_corgi'",
 }
 
