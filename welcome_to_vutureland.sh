@@ -111,23 +111,86 @@ fi
 # ─── 2) Background services ───────────────────────────────────────────────────
 say "Starting background services"
 
-killall -q swaync 2>/dev/null || true
-swaync -c "$VUTURELAND_DIR/swaync/config.json" \
-       -s "$VUTURELAND_DIR/swaync/style.css" &
-disown
-ok "swaync"
+AUTOSTART_LUA="$VUTURELAND_DIR/hypr.lua/modules/autostart.lua"
 
-if ! pgrep -x awww-daemon &>/dev/null; then
-    awww-daemon &
-    disown
-    sleep 0.5
+# Kill existing instance and restart as background daemon.
+_start_daemon() {
+    local cmd_raw="$1"
+    local cmd="${cmd_raw//\~/$HOME}"
+    local first_word binary
+
+    first_word=$(printf '%s' "$cmd" | awk '{print $1}')
+    binary=$(basename "$first_word")
+
+    if [[ "$first_word" == "systemctl" ]]; then
+        if eval "$cmd" 2>/dev/null; then
+            ok "$binary"
+        else
+            warn "Failed: $binary"
+            notify-send -a "Vutureland" "⚠ Autostart failed" "$binary" 2>/dev/null || true
+        fi
+        return
+    fi
+
+    pkill -f "$binary" 2>/dev/null || true
+    sleep 0.1
+
+    eval "$cmd" &>/dev/null &
+    local pid=$!
+    disown "$pid" 2>/dev/null
+    sleep 0.3
+    if kill -0 "$pid" 2>/dev/null; then
+        ok "$binary"
+    else
+        warn "Failed: $binary"
+        notify-send -a "Vutureland" "⚠ Autostart failed" "$binary" 2>/dev/null || true
+    fi
+}
+
+# Fire-and-forget (exec_once_daemons): run without killing existing instances.
+_run_once() {
+    local cmd_raw="$1"
+    local cmd="${cmd_raw//\~/$HOME}"
+    local binary
+    binary=$(basename "$(printf '%s' "$cmd" | awk '{print $1}')")
+    eval "$cmd" &>/dev/null &
+    disown "$!" 2>/dev/null
+    ok "$binary"
+}
+
+# ── System daemons from autostart.lua ──────────────────
+while IFS= read -r cmd; do
+    [[ -z "$cmd" ]] && continue
+    _start_daemon "$cmd"
+done < <(awk '
+    /System daemons/ { in_s=1; next }
+    /Device-specific|Cursor and shell/ { in_s=0 }
+    in_s && /hl\.exec_cmd\(/ {
+        s = $0
+        sub(/.*hl\.exec_cmd\("/, "", s)
+        sub(/".*$/, "", s)
+        print s
+    }
+' "$AUTOSTART_LUA")
+
+# ── exec_once_daemons from user_settings.lua ───────────
+if [[ -f "$USER_SETTINGS" ]]; then
+    while IFS= read -r cmd; do
+        [[ -z "$cmd" ]] && continue
+        _run_once "$cmd"
+    done < <(awk '
+        /<<<AUTOSTART-START>>>/ { in_s=1; next }
+        /<<<AUTOSTART-END>>>/ { in_s=0 }
+        in_s && /exec_once_daemons/ { in_list=1; next }
+        in_s && in_list && /^\s*\}/ { in_list=0 }
+        in_s && in_list {
+            s = $0
+            sub(/^[^"]*"/, "", s)
+            sub(/".*$/, "", s)
+            if (s != "") print s
+        }
+    ' "$USER_SETTINGS")
 fi
-ok "awww-daemon"
-
-killall -q hypridle 2>/dev/null || true
-hypridle -c "$VUTURELAND_DIR/hypr.lua/hypridle.conf" &
-disown
-ok "hypridle"
 
 # ─── 3) Hyprland config ───────────────────────────────────────────────────────
 say "Hyprland configuration"
