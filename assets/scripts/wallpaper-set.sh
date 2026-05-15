@@ -22,9 +22,9 @@ ext="${filename##*.}"
 stem="${filename%.*}"
 base="${stem%_hor}"
 base="${base%_ver}"
-# Strip wp_/vwp_ prefix to get the shared ID for matching vertical counterparts
-id="${base#vwp_}"
-id="${id#wp_}"
+base="${base%_vid}"
+# Strip wp_ prefix to get the shared ID for matching vertical/video counterparts
+id="${base#wp_}"
 
 is_video=false
 case "${ext,,}" in

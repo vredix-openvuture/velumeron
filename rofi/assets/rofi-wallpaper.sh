@@ -13,9 +13,9 @@ if [[ "$ROFI_RETV" == "0" || -z "$ROFI_RETV" ]]; then
         filename=$(basename "$f")
         stem="${filename%.*}"
         base="${stem%_hor}"
-        # Strip wp_/vwp_ prefix for theme name lookup
-        id="${base#vwp_}"
-        id="${id#wp_}"
+        base="${base%_vid}"
+        # Strip wp_ prefix for theme name lookup
+        id="${base#wp_}"
         thumb="$cache_dir/$stem.png"
 
         # Display name from themes.txt, fall back to base filename
