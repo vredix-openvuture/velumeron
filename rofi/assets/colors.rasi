@@ -1,52 +1,52 @@
 * {
-    bg:             #080302;
+    bg:             #030308;
 
-    fg:             #FF6147;
+    fg:             #FFE057;
 
-    cursor:         #CA452D;
+    cursor:         #A2D3A1;
 
-    color0:         #0B0403;
-    color0a90:      #0B0403e6;
+    color0:         #06050C;
+    color0a90:      #06050Ce6;
 
-    color1:         #67573B;
+    color1:         #91534B;
 
-    color2:         #632927;
+    color2:         #4B5792;
 
-    color3:         #7D7447;
+    color3:         #15888E;
 
-    color4:         #378368;
+    color4:         #CC574B;
 
-    color5:         #AD442F;
+    color5:         #2EC1EB;
 
-    color6:         #3FAE6D;
+    color6:         #FFBF28;
 
-    color7:         #FF513A;
+    color7:         #FFDA50;
 
-    color8:         #EB0000;
-    color8a40:      #EB000066;
+    color8:         #BD8B00;
+    color8a40:      #BD8B0066;
 
-    color9:         #67573B;
+    color9:         #91534B;
 
-    color10:        #632927;
-    color10a40:     #63292766;
+    color10:        #4B5792;
+    color10a40:     #4B579266;
 
-    color11:        #7D7447;
+    color11:        #15888E;
 
-    color12:        #378368;
+    color12:        #CC574B;
 
-    color13:        #AD442F;
+    color13:        #2EC1EB;
 
-    color14:        #3FAE6D;
+    color14:        #FFBF28;
 
-    color15:        #F7A094;
+    color15:        #F7E49F;
 
     /* Semantisches Mapping */
-    bg-main:        #0B0403;
-    bg-element:     #67573B;
-    bg-focus:       #EB0000;
-    bg-urgent:      #67573B;
-    bo-color:       #AD442F;
-    fg-main:        #FF6147;
-    fg-highlight:   #632927;
-    fg-placeholder: #7D7447;
+    bg-main:        #06050C;
+    bg-element:     #91534B;
+    bg-focus:       #BD8B00;
+    bg-urgent:      #91534B;
+    bo-color:       #2EC1EB;
+    fg-main:        #FFE057;
+    fg-highlight:   #4B5792;
+    fg-placeholder: #15888E;
 }

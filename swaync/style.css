@@ -118,10 +118,9 @@ list row:focus,
 /* ── MPRIS ───────────────────────────────── */
 
 .widget-mpris {
-  background: transparent;
+  background: @bg-secondary;
   border: 1px solid;
-  padding: 0px;
-  margin: 40px 20px 40px 20px;
+  padding: 1px;
 }
 
 .widget-mpris-player {
@@ -160,6 +159,39 @@ list row:focus,
   background: @bg-hover;
   color: @fg-hover;
   transition: 120ms ease;
+}
+
+
+
+.widget-buttons-grid {
+  font-size: 16px;
+  background: @bg-secondary;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid;
+
+}
+
+.widget-buttons-grid button {
+  background: @bg-primary;
+  min-width: 20px;
+  border-radius: 10px;
+  padding: 2px;
+}
+
+.widget-buttons-grid button:focus,
+.widget-buttons-grid button:focus-within,
+.widget-buttons-grid button:hover,
+.widget-buttons-grid button:active {
+  background: @bg-hover;
+  border-radius: 10px;
+}
+
+
+.widget-volume {
+  background: @bg-secondary;
+  border-radius: 10px;
+  border: 1px solid;
 }
 
 

@@ -47,6 +47,7 @@
     "title",
     "notifications",
     "buttons-grid",
+    "volume",
     "mpris"
   ],
   "widget-config": {
@@ -79,8 +80,15 @@
       "image-radius": 500
     },
     "buttons-grid": {
-      "buttons-per-row": 5,
+      "buttons-per-row": 4,
       "actions": [
+        {
+          "label": "  ",
+          "type": "toggle",
+          "active": true,
+          "command": "~/.config/vutureland/rofi/assets/session-menu.sh",
+          "update-command": ""
+        },
         {
           "label": "1",
           "type": "toggle",
@@ -89,17 +97,10 @@
           "update-command": ""
         },
         {
-          "label": "2",
+          "label": " 󰂯 ",
           "type": "toggle",
           "active": true,
-          "command": "",
-          "update-command": ""
-        },
-        {
-          "label": "  ",
-          "type": "toggle",
-          "active": true,
-          "command": "~/.config/vutureland/assets/scripts/launcher.sh --wlogout",
+          "command": "~/.config/vutureland/rofi/assets/bluetooth.sh",
           "update-command": ""
         },
         {
@@ -108,15 +109,14 @@
           "active": true,
           "command": "",
           "update-command": ""
-        },
-        {
-          "label": "5",
-          "type": "toggle",
-          "active": true,
-          "command": "",
-          "update-command": ""
         }
       ]
+    },
+    "volume": {
+      "label": "",
+        "show-per-app": true,
+        "show-per-app-icon": true,
+        "show-per-app-label":true
     }
   }
 }
