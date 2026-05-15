@@ -5,7 +5,7 @@
 desktop_shell  = "~/.config/vutureland/assets/scripts/launch-waybar.sh"
 notify_service = "swaync"
 
-launcher       = "rofi -show drun -config /home/vredix/.config/vutureland/rofi/launcher.rasi"
+launcher       = "rofi -show drun -config ~/.config/vutureland/rofi/launcher.rasi"
 theme_switch   = "rofi -show wallpaper -config ~/.config/vutureland/rofi/wallpaper-switcher.rasi"
 terminal       = "kitty -c ~/.config/vutureland/kitty/kitty.conf"
 notifications  = "swaync-client -R -rs -t"

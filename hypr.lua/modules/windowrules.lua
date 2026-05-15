@@ -47,7 +47,7 @@ hl.window_rule({
     tag    = "+floating_app",
     float  = true,
     center = true,
-    size   = { 1000 },
+    size   = { 1000, 800 },
 })
 
 

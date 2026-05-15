@@ -9,12 +9,14 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("echo 'normal' > /tmp/hypr-submap")
 
     -- ── System daemons ────────────────────────────────
-    hl.exec_cmd("hypridle")
+    hl.exec_cmd("hypridle -c ~/.config/vutureland/hypr.lua/hypridle.conf")
+    hl.exec_cmd("awww-daemon")
+    hl.exec_cmd("nm-applet")
     hl.exec_cmd("systemctl --user start hyprpolkitagent")
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
     hl.exec_cmd("nextcloud --background")
     hl.exec_cmd("localsend --hidden")
-    hl.exec_cmd("swaync")
+    hl.exec_cmd("swaync -c ~/.config/vutureland/swaync/config.json -s ~/.config/vutureland/swaync/style.css")
     hl.exec_cmd("~/.config/vutureland/assets/scripts/float-cascade.sh")
 
     -- ── Device-specific daemons (from user_settings) ──

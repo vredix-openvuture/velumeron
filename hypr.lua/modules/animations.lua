@@ -18,7 +18,7 @@ hl.curve("quick",          { type = "bezier", points = { {0.15, 0},    {0.1, 1} 
 hl.animation({ leaf = "global",        enabled = true,  speed = 10,   bezier = "default"      })
 hl.animation({ leaf = "border",        enabled = true,  speed = 5.39, bezier = "easeOutQuint" })
 
-hl.animation({ leaf = "windows",       enabled = true,  speed = 4.79, bezier = "easeOutQuint"                  })
+hl.animation({ leaf = "windows",       enabled = true,  speed = 4.79, bezier = "easeOutQuint" })
 hl.animation({ leaf = "windowsIn",     enabled = true,  speed = 4.1,  bezier = "easeOutQuint", style = "slide top 90%" })
 hl.animation({ leaf = "windowsOut",    enabled = true,  speed = 1.4,  bezier = "linear",       style = "slide top 90%" })
 
@@ -29,6 +29,6 @@ hl.animation({ leaf = "fadeLayersOut", enabled = true,  speed = 1.39, bezier = "
 
 hl.animation({ leaf = "workspaces",    enabled = true,  speed = 1.94, bezier = "almostLinear", style = "slidevert"          })
 hl.animation({ leaf = "workspacesIn",  enabled = true,  speed = 2.2,  bezier = "almostLinear", style = "slidefade left 80%" })
-hl.animation({ leaf = "workspacesOut", enabled = true,  speed = 2.2,  bezier = "almostLinear", style = "slidefade top 80%"  })
+hl.animation({ leaf = "workspacesOut", enabled = true,  speed = 2.8,  bezier = "almostLinear", style = "slidefade top 80%"  })
 
 hl.animation({ leaf = "zoomFactor",    enabled = true,  speed = 7,    bezier = "quick"         })

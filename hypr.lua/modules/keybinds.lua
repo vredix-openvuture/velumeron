@@ -12,6 +12,8 @@ for i = 1, 9 do
     hl.bind(MOD .. " + " .. i, hl.dsp.focus({ workspace = i }))
 end
 
+hl.bind(MOD .. " + 0", hl.dsp.focus({ workspace = 10 }))
+
 
 -- ── Session management ───────────────────────────────
 
@@ -35,17 +37,25 @@ hl.bind(MOD .. " + S",           hl.dsp.exec_cmd(notifications))
 hl.bind(MOD .. " + C",         hl.dsp.window.close())
 hl.bind(MOD .. " + F",         hl.dsp.window.float({ action = "toggle" }))
 hl.bind(MOD .. " + V",         hl.dsp.window.fullscreen({ mode = "maximized" }))
-hl.bind(MOD .. " + M",         hl.dsp.focus({ monitor = "+1" }))
-hl.bind(MOD .. " + K",         hl.dsp.window.cycle_next())
+hl.bind(MOD .. " + N",         hl.dsp.window.cycle_next())                              -- Activate next window on current monitor
+hl.bind(MOD .. " + ALT + M",   hl.dsp.window.move({ monitor = "+1", follow = true }))   -- Move window to the next monitor
+hl.bind(MOD .. " + ALT + V",   hl.dsp.window.fullscreen({ mode = "fullscreen" }))       -- Fullscreen active window
 
 -- Click to float, hold to drag/resize
-hl.bind(MOD .. " + mouse:272", hl.dsp.window.float({ action = "toggle" }))
 hl.bind(MOD .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })
 hl.bind(MOD .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
+hl.bind(MOD .. " + mouse:274", hl.dsp.window.float({ action = "toggle" }))
 
--- Scroll through workspaces
+
+-- ── Workspaces and Monitors ─────────────────────────
+
 hl.bind(MOD .. " + mouse_up",   hl.dsp.focus({ workspace = "e+1" }))
 hl.bind(MOD .. " + mouse_down", hl.dsp.focus({ workspace = "e-1" }))
+
+hl.bind(MOD .. " + LEFT",       hl.dsp.focus({ workspace = "e-1" })) 
+hl.bind(MOD .. " + RIGHT",      hl.dsp.focus({ workspace = "e+1" })) 
+
+hl.bind(MOD .. " + M",          hl.dsp.focus({ monitor = "+1" }))       -- Switch to next monitor
 
 
 -- ── Function keys: Monitor brightness ────────────────
@@ -112,7 +122,7 @@ end)
 
 -- ── Navigate submap (workspace / window focus) ────────
 
-hl.bind(MOD .. " + N", function()
+hl.bind(MOD .. " + CONTROL + N", function()
     hl.dispatch(hl.dsp.exec_cmd("echo 'navigate' > /tmp/hypr-submap"))
     hl.dispatch(hl.dsp.submap("navigate"))
 end)
