@@ -17,12 +17,18 @@ hl.window_rule({
 -- ── Floating windows ──────────────────────────────────
 
 hl.window_rule({
+    name    = "float_clamp",
+    match   = { floating = true },
+    maxsize = { "(monitor_w*0.9)", "(monitor_h*0.9)" },
+})
+
+hl.window_rule({
     name   = "floating_windows",
     match  = { title = floating_window },   -- from user_settings
     tag    = "+floating_app",
     float  = true,
     center = true,
-    size   = { 1100, 1000 },
+    size   = {"(monitor_w*0.5)", "(monitor_h*0.6)"},
 })
 
 hl.window_rule({
@@ -47,7 +53,7 @@ hl.window_rule({
     tag    = "+floating_app",
     float  = true,
     center = true,
-    size   = { 1000, 800 },
+    size   = {"(monitor_w*0.5)", "(monitor_h*0.6)"},
 })
 
 
