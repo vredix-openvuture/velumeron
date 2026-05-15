@@ -41,7 +41,7 @@ say "Package installation"
 REQUIRED_PKGS=(
     hypridle hyprlock hyprpolkitagent
     waybar rofi-wayland kitty
-    sway-notification-center cava
+    swaync cava
     awww wallust
     playerctl jq socat fastfetch tmux
     network-manager-applet gnome-keyring
