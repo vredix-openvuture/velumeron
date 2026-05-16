@@ -1,0 +1,85 @@
+@import "./assets/misc/colors.rasi"
+
+configuration {
+    modi: "hyprlock:~/.config/vutureland/rofi/assets/rofi-hyprlock.sh";
+    show-icons: true;
+    font-family: "FantasqueSansM Nerd Font";
+    font-weight: 800;
+}
+
+* {
+    background-color:       transparent;
+    border-color:           @bo-color;
+    separatorcolor:         @bo-color;
+    spacing:                10;
+}
+
+/*-------------------------------------------------------------*/
+window {
+    background-color:       @color0a90;
+    border:                 1px;
+    border-color:           @bo-color;
+    border-radius:          5px 5px 0 0;
+    margin:                 0;
+    width:                  80%;
+    location:               center;
+    y-offset:               0px;
+}
+
+mainbox {
+    border:                 0;
+}
+
+/*-------------------------------------------------------------*/
+inputbar {
+    enabled: false;
+}
+
+/*-------------------------------------------------------------*/
+listview {
+    lines:                  1;
+    columns:                4;
+    border:                 0;
+    spacing:                4px;
+    scrollbar:              false;
+    padding:                10px;
+    fixed-columns:          true;
+}
+
+/*-------------------------------------------------------------*/
+element {
+    horizontal-align:       0.5;
+    vertical-align:         0.5;
+    border:                 none;
+    border-radius:          5px;
+    margin:                 4px;
+    padding:                0px;
+    border-color:           transparent;
+    orientation:            vertical;
+}
+
+element-icon {
+    size:                   400px;
+    margin:                 10px 4px 0 4px;
+    vertical-align:         0.5;
+    horizontal-align:       0.5;
+}
+
+element-text {
+    text-color:             inherit;
+    margin:                 0 4px 40px 4px;
+    horizontal-align:       0.5;
+    vertical-align:         0.5;
+}
+
+element.normal.normal,
+element.alternate.normal {
+    background-color:       none;
+    text-color:             @color8;
+}
+
+element.selected.normal {
+    background-color:       @color10;
+    text-color:             @background;
+    border-color:           @bo-color;
+}
