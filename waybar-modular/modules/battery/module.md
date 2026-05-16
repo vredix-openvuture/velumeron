@@ -1,5 +1,5 @@
 name = "battery"
 description = "Akku"
-alias = "Akku"
+alias = "Battery"
 requires = ""
 system-specific = false

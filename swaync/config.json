@@ -43,11 +43,11 @@
   },
 
   "widgets": [
+    "buttons-grid",
+    "volume",
     "inhibitors",
     "title",
     "notifications",
-    "buttons-grid",
-    "volume",
     "mpris"
   ],
   "widget-config": {

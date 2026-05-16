@@ -1,5 +1,5 @@
 name = "clock"
 description = "Clock / Datum"
-alias = "Uhr"
+alias = "Clock"
 requires = ""
 system-specific = false

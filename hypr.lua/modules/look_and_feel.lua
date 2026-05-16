@@ -47,7 +47,6 @@ hl.config({
         force_split           = 0,
         preserve_split        = false,
         smart_resizing        = true,
-        smart_split           = true,
         use_active_for_splits = false,
     },
 

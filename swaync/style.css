@@ -34,7 +34,7 @@ list row:focus,
 /* ── Control Center Panel ────────────────── */
 
 .control-center {
-  background: alpha(@bg-primary, 0.9);
+  background: alpha(@bg-primary, 0.8);
   color: @fg-primary;
   border-radius: 10px 0 0 0;
   border: 1.4px solid @bo-normal;
@@ -118,7 +118,7 @@ list row:focus,
 /* ── MPRIS ───────────────────────────────── */
 
 .widget-mpris {
-  background: @bg-secondary;
+  background-color: @bg-secondary;
   border: 1px solid;
   padding: 1px;
 }
@@ -126,7 +126,7 @@ list row:focus,
 .widget-mpris-player {
   background: transparent;
   padding: 0px;
-  margin: 0px;
+  margin: 10px;
 }
 
 .widget-mpris-title {
@@ -173,7 +173,7 @@ list row:focus,
 }
 
 .widget-buttons-grid button {
-  background: @bg-primary;
+  background: @bg-active;
   min-width: 20px;
   border-radius: 10px;
   padding: 2px;
@@ -194,11 +194,28 @@ list row:focus,
   border: 1px solid;
 }
 
+.widget-inhibitor,
+.widget-title {
+  background: @bg-secondary;
+  margin-top: 20px;
+  margin-bottom: 0px;
+  border-radius: 10px 10px 0px 0px;
+  border: 1px solid;
+  border-bottom: none;
+}
+.widget-notifications {
+  background: @bg-secondary;
+  margin-top: 0px;
+  margin-bottom: 20px;
+  border-radius: 0px 0px 10px 10px;
+  border: 1px solid;
+  border-top: none;
+}
 
 /* ── Close Button ────────────────────────── */
 
 .close-button {
-  background: @bg-secondary;
+  background: @bg-active;
   color: @fg-primary;
   border: 1px solid @bo-normal;
   border-radius: 10px;

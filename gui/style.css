@@ -1,0 +1,19 @@
+.wp-frame {
+    border-radius: 8px;
+}
+
+flowboxchild:selected > box .wp-frame {
+    outline: 3px solid @accent_color;
+    outline-offset: -2px;
+}
+
+.wp-name {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.wp-add-btn {
+    padding: 0px 2px;
+    min-height: 0;
+    min-width: 0;
+}

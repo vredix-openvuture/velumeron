@@ -1,0 +1,160 @@
+import re
+from dataclasses import dataclass
+from constants import USER_SETTINGS
+
+
+@dataclass
+class MonitorConfig:
+    output: str
+    mode: str
+    transform: int = 0
+    position: str = "auto"
+    scale: float = 1.0
+    bitdepth: int = 10
+    supports_hdr: bool = False
+    vrr: int = 0
+    cm: str = "auto"
+
+
+def _lua_val(v) -> str:
+    if isinstance(v, bool):
+        return 'true' if v else 'false'
+    if isinstance(v, str):
+        return f'"{v}"'
+    if isinstance(v, float) and v == int(v):
+        return str(int(v))
+    return str(v)
+
+
+def _read_section(content: str, name: str) -> str:
+    m = re.search(rf'<<<{name}-START>>>(.*?)<<<{name}-END>>>', content, re.DOTALL)
+    return m.group(1) if m else ''
+
+
+def _write_section(content: str, name: str, new_body: str) -> str:
+    return re.sub(
+        rf'(<<<{name}-START>>>)(.*?)(<<<{name}-END>>>)',
+        lambda mo: mo.group(1) + new_body + mo.group(3),
+        content, flags=re.DOTALL
+    )
+
+
+def _parse_kv(text: str) -> dict:
+    result = {}
+    for m in re.finditer(r'(\w+)\s*=\s*("(?:[^"\\]|\\.)*"|\d+(?:\.\d+)?|true|false)', text):
+        k, v = m.group(1), m.group(2)
+        if v.startswith('"'):
+            result[k] = v[1:-1]
+        elif v == 'true':
+            result[k] = True
+        elif v == 'false':
+            result[k] = False
+        elif '.' in v:
+            result[k] = float(v)
+        else:
+            result[k] = int(v)
+    return result
+
+
+def parse_monitors(content: str) -> list:
+    section = _read_section(content, 'MONITORS')
+    monitors = []
+    for m in re.finditer(r'hl\.monitor\(\{(.*?)\}\)', section, re.DOTALL):
+        kv = _parse_kv(m.group(1))
+        monitors.append(MonitorConfig(
+            output       = kv.get('output', ''),
+            mode         = kv.get('mode', ''),
+            transform    = kv.get('transform', 0),
+            position     = kv.get('position', 'auto'),
+            scale        = float(kv.get('scale', 1)),
+            bitdepth     = kv.get('bitdepth', 10),
+            supports_hdr = kv.get('supports_hdr', False),
+            vrr          = kv.get('vrr', 0),
+            cm           = kv.get('cm', 'auto'),
+        ))
+    return monitors
+
+
+def generate_monitors_section(monitors: list) -> str:
+    vars_ = '\n'.join(f'mon{i+1} = "{m.output}"' for i, m in enumerate(monitors))
+    blocks = '\n\n'.join(
+        f'hl.monitor({{\n'
+        f'    output       = "{m.output}",\n'
+        f'    mode         = "{m.mode}",\n'
+        f'    transform    = {m.transform},\n'
+        f'    position     = "{m.position}",\n'
+        f'    scale        = {_lua_val(m.scale)},\n'
+        f'    bitdepth     = {m.bitdepth},\n'
+        f'    supports_hdr = {_lua_val(m.supports_hdr)},\n'
+        f'    vrr          = {m.vrr},\n'
+        f'    cm           = "{m.cm}",\n'
+        f'}})'
+        for m in monitors
+    )
+    return f'\n{vars_}\n\n{blocks}\n'
+
+
+def parse_peripherals(content: str) -> dict:
+    return _parse_kv(_read_section(content, 'PERIPHERALS'))
+
+
+def generate_peripherals_section(p: dict) -> str:
+    lines = [
+        f'cur_theme = "{p.get("cur_theme", "breeze_cursors")}"',
+        f'cur_size  = {p.get("cur_size", 20)}',
+        '',
+        f'fn_brightness_up   = "{p.get("fn_brightness_up",   "F2")}"',
+        f'fn_brightness_down = "{p.get("fn_brightness_down", "F1")}"',
+        f'fn_play_stop_play  = "{p.get("fn_play_stop_play",  "F8")}"',
+        f'fn_play_next       = "{p.get("fn_play_next",       "F9")}"',
+        f'fn_play_prev       = "{p.get("fn_play_prev",       "F7")}"',
+        f'fn_volume_up       = "{p.get("fn_volume_up",       "F12")}"',
+        f'fn_volume_down     = "{p.get("fn_volume_down",     "F11")}"',
+        f'fn_volume_mute     = "{p.get("fn_volume_mute",     "F10")}"',
+    ]
+    return '\n' + '\n'.join(lines) + '\n'
+
+
+def parse_autostart(content: str):
+    section = _read_section(content, 'AUTOSTART')
+    daemons = []
+    m = re.search(r'exec_once_daemons\s*=\s*\{([^}]+)\}', section, re.DOTALL)
+    if m:
+        daemons = re.findall(r'"((?:[^"\\]|\\.)*)"', m.group(1))
+    apps = []
+    m = re.search(r'start_apps\s*=\s*\{(.*)\}\s*$', section, re.DOTALL)
+    if m:
+        for am in re.finditer(
+                r'\{\s*app\s*=\s*"((?:[^"\\]|\\.)*)",\s*ws\s*=\s*(\d+)\s*\}',
+                m.group(1)):
+            apps.append({'app': am.group(1), 'ws': int(am.group(2))})
+    return daemons, apps
+
+
+def generate_autostart_section(daemons: list, apps: list) -> str:
+    d = ',\n'.join(f'    "{d}"' for d in daemons)
+    a = ',\n'.join(f'    {{ app = "{e["app"]}", ws = {e["ws"]} }}' for e in apps)
+    return (
+        f'\nexec_once_daemons = {{\n{d}\n}}\n\n'
+        f'-- {{ app = command, ws = workspace_number }}\n'
+        f'start_apps = {{\n{a}\n}}\n'
+    )
+
+
+def parse_windowrules(content: str):
+    kv = _parse_kv(_read_section(content, 'WINDOWRULES'))
+    return kv.get('floating_window', ''), kv.get('opacity_window', '')
+
+
+def generate_windowrules_section(floating: str, opacity: str) -> str:
+    return f'\nfloating_window = "{floating}"\nopacity_window  = "{opacity}"\n'
+
+
+def read_user_settings() -> str:
+    with open(USER_SETTINGS) as f:
+        return f.read()
+
+
+def write_user_settings(content: str):
+    with open(USER_SETTINGS, 'w') as f:
+        f.write(content)

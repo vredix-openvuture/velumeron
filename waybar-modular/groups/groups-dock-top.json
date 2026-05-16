@@ -2,62 +2,65 @@
   "include": [
     "~/.config/vutureland/waybar-modular/groups/auto-includes.json"
   ],
-
-
-
   "group/left_pri_hor": {
     "orientation": "horizontal",
-    "modules": ["clock"]
+    "modules": [
+      "clock"
+    ]
   },
-
   "group/center_pri_hor": {
     "orientation": "horizontal",
-    "modules": ["hyprland/workspaces","hyprland/submap"]
+    "modules": [
+      "hyprland/workspaces",
+      "hyprland/submap"
+    ]
   },
-
   "group/right_pri_hor": {
     "orientation": "horizontal",
-    "modules": ["custom/notification"]
+    "modules": [
+      "custom/notification",
+      "user"
+    ]
   },
-  
-
-
-
   "group/left_sec_hor": {
     "orientation": "horizontal",
-    "modules": ["clock"]
+    "modules": [
+      "clock"
+    ]
   },
-
   "group/center_sec_hor": {
     "orientation": "horizontal",
     "modules": []
   },
-
   "group/right_sec_hor": {
     "orientation": "horizontal",
-    "modules": ["hyprland/submap","hyprland/workspaces"]
+    "modules": [
+      "hyprland/submap",
+      "hyprland/workspaces"
+    ]
   },
-
-
-
   "group/tray_drawer": {
     "orientation": "horizontal",
     "drawer": {
       "transition-duration": 300,
       "transition-left-to-right": false
     },
-    "modules": ["custom/notification", "tray"]
+    "modules": [
+      "custom/notification",
+      "tray"
+    ]
   },
-
   "group/audio_drawer": {
     "orientation": "horizontal",
     "drawer": {
       "transition-duration": 300,
       "transition-left-to-right": false
     },
-    "modules": ["pulseaudio/slider", "bluetooth"]
+    "modules": [
+      "pulseaudio/slider",
+      "bluetooth"
+    ]
   },
-
   "group/performance_drawer": {
     "orientation": "horizontal",
     "drawer": {

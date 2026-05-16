@@ -31,7 +31,7 @@ fi
 
 sleep 0.4
 
-hyprlock
+hyprlock --config ~/.config/vutureland/hypr.lua/hyprlock.conf
 
 # Restore workspaces
 focusmon "$mon1"

@@ -1,5 +1,5 @@
 name = "custom/cava"
 description = "Music Visualizer"
-alias = "Visualizer"
+alias = "Audio Visualizer"
 requires = "cava"
 system-specific = false
