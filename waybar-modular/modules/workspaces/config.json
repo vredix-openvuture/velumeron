@@ -1,10 +1,18 @@
 {
   "hyprland/workspaces": {
+    "workspace-taskbar": {
+        "enable": true,
+        "update-active-window": true,
+        "format": "{icon}",
+        "icon-size": 16,
+        "icon-theme": "Fluent-dark",
+        "orientation": "horizontal"
+    },
     "ignore-workspaces": ["99","111","112"],
     "format-icons": {},
     "disable-scroll": false,
     "format": "{icon}",
-    "on-scroll-up": "hyprctl dispatch 'hl.dsp.focus({workspace=\"r-1\"})'",
-    "on-scroll-down": "hyprctl dispatch 'hl.dsp.focus({workspace=\"r+1\"})'"
+    "on-scroll-up": "hyprctl dispatch workspace r-1",
+    "on-scroll-down": "hyprctl dispatch workspace r+1"
   }
 }

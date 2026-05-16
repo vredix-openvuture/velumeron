@@ -27,3 +27,9 @@
     border-radius:    4px;
     color:            @fg-hover;
 }
+
+#workspaces button .taskbar-window {
+    min-width:  16px;
+    min-height: 16px;
+    margin:     0 1px;
+}
