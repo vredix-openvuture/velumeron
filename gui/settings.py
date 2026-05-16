@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Vutureland Settings — lightweight GTK4/Adwaita control panel"""
+"""Vutureland Settings — GTK4/Adwaita control panel"""
 
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 
-from gi.repository import Gtk, Adw, GLib, Gio, Gdk
-import os
-import subprocess
-import threading
-import shutil
+from gi.repository import Gtk, Adw, Gdk, GLib, Gio
+import os, re, json, shutil, subprocess, threading, random, string
+from dataclasses import dataclass
+from typing import Optional
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
+# ── Constants ──────────────────────────────────────────────────────────────────
 
 VTL          = os.path.expanduser("~/.config/vutureland")
 WALLPAPER_H  = f"{VTL}/assets/wallpaper/horizontal"
+WALLPAPER_V  = f"{VTL}/assets/wallpaper/vertical"
 THUMB_DIR    = os.path.expanduser("~/.cache/vutureland/wallpaper-thumbs")
 SET_WP       = f"{VTL}/assets/scripts/wallpaper-set.sh"
 GEN_THUMBS   = f"{VTL}/rofi/assets/generate-thumbnail.sh"
@@ -24,48 +24,421 @@ TERMINAL     = "kitty"
 
 VIDEO_EXTS = {'.mp4', '.webm', '.mkv', '.avi', '.mov'}
 IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.webp'}
+ALL_EXTS   = IMAGE_EXTS | VIDEO_EXTS
 
+ID_RE = re.compile(r'^wp_([a-zA-Z0-9]{6})_(vid_hor|hor|ver)$')
 
-# ── Wallpaper thumbnail item ───────────────────────────────────────────────────
+# ── Helpers ────────────────────────────────────────────────────────────────────
 
-class WallpaperItem(Gtk.Box):
-    def __init__(self, filepath, thumb_path, display_name, is_video):
+def gen_id() -> str:
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
+
+def extract_id(stem: str) -> Optional[str]:
+    m = ID_RE.match(stem)
+    return m.group(1) if m else None
+
+def get_dims(path: str):
+    ext = os.path.splitext(path)[1].lower()
+    try:
+        if ext in VIDEO_EXTS:
+            r = subprocess.run(
+                ['ffprobe', '-v', 'quiet', '-print_format', 'json',
+                 '-show_streams', path],
+                capture_output=True, text=True)
+            for s in json.loads(r.stdout).get('streams', []):
+                if s.get('codec_type') == 'video':
+                    return int(s['width']), int(s['height'])
+        else:
+            r = subprocess.run(['identify', '-format', '%w %h', path],
+                               capture_output=True, text=True)
+            parts = r.stdout.strip().split()
+            if len(parts) >= 2:
+                return int(parts[0]), int(parts[1])
+    except Exception:
+        pass
+    return None, None
+
+def is_horizontal_file(path: str) -> bool:
+    w, h = get_dims(path)
+    return (w >= h) if w else True
+
+# ── Data model ─────────────────────────────────────────────────────────────────
+
+@dataclass
+class WallpaperEntry:
+    id: str
+    hor_file: Optional[str] = None
+    ver_file: Optional[str] = None
+    hor_thumb: Optional[str] = None
+    ver_thumb: Optional[str] = None
+
+    @property
+    def category(self) -> str:
+        if self.hor_file and self.ver_file:
+            return 'set'
+        return 'hor' if self.hor_file else 'ver'
+
+def scan_wallpapers() -> list:
+    entries: dict[str, WallpaperEntry] = {}
+
+    def _scan(directory, is_hor):
+        if not os.path.isdir(directory):
+            return
+        for fname in sorted(os.listdir(directory)):
+            ext = os.path.splitext(fname)[1].lower()
+            if ext not in ALL_EXTS:
+                continue
+            stem = os.path.splitext(fname)[0]
+            wp_id = extract_id(stem)
+            if not wp_id:
+                continue
+            e = entries.setdefault(wp_id, WallpaperEntry(id=wp_id))
+            thumb = os.path.join(THUMB_DIR, stem + '.png')
+            if is_hor:
+                e.hor_file  = os.path.join(directory, fname)
+                e.hor_thumb = thumb
+            else:
+                e.ver_file  = os.path.join(directory, fname)
+                e.ver_thumb = thumb
+
+    _scan(WALLPAPER_H, True)
+    _scan(WALLPAPER_V, False)
+    return sorted(entries.values(), key=lambda e: e.id)
+
+# ── Card widgets ───────────────────────────────────────────────────────────────
+
+CARD_H = 108  # fixed card image height
+
+def _make_pic(thumb: Optional[str], w: int, h: int) -> Gtk.Widget:
+    if thumb and os.path.exists(thumb):
+        pic = Gtk.Picture.new_for_filename(thumb)
+        pic.set_content_fit(Gtk.ContentFit.COVER)
+        pic.set_can_shrink(True)
+    else:
+        pic = Gtk.Image.new_from_icon_name('image-x-generic')
+    pic.set_size_request(w, h)
+    return pic
+
+def _framed(child: Gtk.Widget) -> Gtk.Frame:
+    f = Gtk.Frame()
+    f.add_css_class('wp-frame')
+    f.set_child(child)
+    return f
+
+class WallpaperCard(Gtk.Box):
+    def __init__(self, entry: WallpaperEntry, on_add_counterpart=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        self.filepath = filepath
+        self.entry = entry
+        self._on_add_cb = on_add_counterpart
+        self._build()
 
-        frame = Gtk.Frame()
-        frame.add_css_class("wallpaper-frame")
+        lbl = Gtk.Label(label=entry.id)
+        lbl.add_css_class('caption')
+        lbl.set_ellipsize(3)
+        self.append(lbl)
 
-        if thumb_path and os.path.exists(thumb_path):
-            pic = Gtk.Picture.new_for_filename(thumb_path)
-            pic.set_content_fit(Gtk.ContentFit.COVER)
-            pic.set_can_shrink(True)
+        if on_add_counterpart:
+            gc = Gtk.GestureClick(button=3)
+            gc.connect('pressed', self._right_click)
+            self.add_controller(gc)
+
+    def _build(self):
+        raise NotImplementedError
+
+    def _right_click(self, gesture, n, x, y):
+        menu   = Gio.Menu()
+        ag     = Gio.SimpleActionGroup()
+
+        if not self.entry.hor_file:
+            menu.append('Horizontales Bild hinzufügen …', 'wp.add-hor')
+            a = Gio.SimpleAction.new('add-hor', None)
+            a.connect('activate', lambda *_: self._on_add_cb(self.entry, 'hor'))
+            ag.add_action(a)
+
+        if not self.entry.ver_file:
+            menu.append('Vertikales Bild hinzufügen …', 'wp.add-ver')
+            a = Gio.SimpleAction.new('add-ver', None)
+            a.connect('activate', lambda *_: self._on_add_cb(self.entry, 'ver'))
+            ag.add_action(a)
+
+        if not menu.get_n_items():
+            return
+
+        self.insert_action_group('wp', ag)
+        pop = Gtk.PopoverMenu.new_from_model(menu)
+        pop.set_parent(self)
+        r = Gdk.Rectangle()
+        r.x, r.y, r.width, r.height = int(x), int(y), 1, 1
+        pop.set_pointing_to(r)
+        pop.popup()
+
+
+class HorCard(WallpaperCard):
+    W = 210
+
+    def _build(self):
+        self.prepend(_framed(_make_pic(self.entry.hor_thumb, self.W, CARD_H)))
+
+
+class VerCard(WallpaperCard):
+    W = 65   # portrait ~9:16 at CARD_H=108
+
+    def _build(self):
+        self.prepend(_framed(_make_pic(self.entry.ver_thumb, self.W, CARD_H)))
+
+
+class SetCard(WallpaperCard):
+    TOTAL_W = 285
+    HOR_W   = int(285 * 2 / 3)      # ~190
+    VER_W   = 285 - int(285 * 2 / 3) - 2  # ~93
+
+    def _build(self):
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+        row.set_size_request(self.TOTAL_W, CARD_H)
+
+        hor_frame = _framed(_make_pic(self.entry.hor_thumb, self.HOR_W, CARD_H))
+        hor_frame.set_size_request(self.HOR_W, CARD_H)
+        row.append(hor_frame)
+
+        ver_frame = _framed(_make_pic(self.entry.ver_thumb, self.VER_W, CARD_H))
+        ver_frame.set_size_request(self.VER_W, CARD_H)
+        row.append(ver_frame)
+
+        self.prepend(row)
+
+# ── Wallpaper page ─────────────────────────────────────────────────────────────
+
+class WallpaperPage(Gtk.Box):
+
+    TABS = [
+        ('set', 'Sets'),
+        ('hor', 'Horizontal'),
+        ('ver', 'Vertikal'),
+    ]
+
+    def __init__(self):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL)
+
+        inner = Adw.ViewStack()
+        self._inner = inner
+        self._flows: dict[str, Gtk.FlowBox] = {}
+
+        for key, label in self.TABS:
+            flow, scroll = self._make_flow(key)
+            self._flows[key] = flow
+            inner.add_titled(scroll, key, label)
+
+        switcher = Adw.ViewSwitcherBar()
+        switcher.set_stack(inner)
+        switcher.set_reveal(True)
+
+        inner.set_vexpand(True)
+        self.append(inner)
+        self.append(switcher)
+
+        bar = Gtk.ActionBar()
+        self._spinner = Gtk.Spinner()
+        bar.pack_start(self._spinner)
+        self._status = Gtk.Label(label='')
+        self._status.add_css_class('caption')
+        bar.pack_start(self._status)
+
+        btn_refresh = Gtk.Button(label='Aktualisieren')
+        btn_refresh.connect('clicked', lambda _: self._reload())
+        bar.pack_end(btn_refresh)
+
+        btn_add = Gtk.Button(label='Hinzufügen …')
+        btn_add.add_css_class('suggested-action')
+        btn_add.connect('clicked', self._on_add)
+        bar.pack_end(btn_add)
+
+        self.append(bar)
+        self._reload()
+
+    def _make_flow(self, key: str):
+        flow = Gtk.FlowBox()
+        flow.set_valign(Gtk.Align.START)
+        flow.set_max_children_per_line(4)
+        flow.set_min_children_per_line(1)
+        flow.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        flow.set_row_spacing(10)
+        flow.set_column_spacing(10)
+        flow.set_margin_top(14)
+        flow.set_margin_bottom(14)
+        flow.set_margin_start(14)
+        flow.set_margin_end(14)
+        flow.connect('child-activated',
+                     lambda fb, child, k=key: self._on_activated(child, k))
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_child(flow)
+        return flow, scroll
+
+    def _clear(self):
+        for flow in self._flows.values():
+            child = flow.get_first_child()
+            while child:
+                nxt = child.get_next_sibling()
+                flow.remove(child)
+                child = nxt
+
+    def _reload(self):
+        self._clear()
+        self._spinner.start()
+        self._status.set_text('Lade …')
+
+        def _work():
+            subprocess.run(['bash', GEN_THUMBS], capture_output=True)
+            entries = scan_wallpapers()
+            GLib.idle_add(self._populate, entries)
+
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _populate(self, entries: list):
+        self._spinner.stop()
+        counts = {'set': 0, 'hor': 0, 'ver': 0}
+        for e in entries:
+            cat = e.category
+            if cat == 'set':
+                card = SetCard(e)
+            elif cat == 'hor':
+                card = HorCard(e, self._add_counterpart)
+            else:
+                card = VerCard(e, self._add_counterpart)
+            self._flows[cat].append(card)
+            counts[cat] += 1
+
+        self._status.set_text(
+            f'{counts["set"]} Sets · {counts["hor"]} Horizontal · {counts["ver"]} Vertikal')
+        return False
+
+    def _on_activated(self, child, category: str):
+        card = child.get_child()
+        if not isinstance(card, WallpaperCard):
+            return
+        e = card.entry
+        self._spinner.start()
+        self._status.set_text(f'Setze {e.id} …')
+
+        def _apply():
+            cmd = ['bash', SET_WP]
+            if e.hor_file:
+                cmd += ['--hor', e.hor_file]
+            if e.ver_file:
+                cmd += ['--ver', e.ver_file]
+            subprocess.run(cmd)
+            GLib.idle_add(lambda: (
+                self._spinner.stop(),
+                self._status.set_text('Wallpaper gesetzt.')
+            ) and False)
+
+        threading.Thread(target=_apply, daemon=True).start()
+
+    # ── Import: single file or pair ──────────────────────────────────────────
+
+    def _on_add(self, _):
+        d = Gtk.FileDialog(title='Wallpaper hinzufügen')
+        f = Gtk.FileFilter()
+        f.set_name('Bilder & Videos')
+        for p in ['*.jpg', '*.jpeg', '*.png', '*.webp', '*.mp4', '*.webm', '*.mkv']:
+            f.add_pattern(p)
+        s = Gio.ListStore.new(Gtk.FileFilter)
+        s.append(f)
+        d.set_filters(s)
+        d.open_multiple(self.get_root(), None, self._files_chosen)
+
+    def _files_chosen(self, dialog, result):
+        try:
+            files = dialog.open_multiple_finish(result)
+            paths = [files.get_item(i).get_path()
+                     for i in range(files.get_n_items())]
+        except Exception:
+            return
+        if paths:
+            threading.Thread(target=self._import, args=(paths,), daemon=True).start()
+
+    def _import(self, paths: list):
+        os.makedirs(WALLPAPER_H, exist_ok=True)
+        os.makedirs(WALLPAPER_V, exist_ok=True)
+
+        info = [(p, is_horizontal_file(p),
+                 os.path.splitext(p)[1].lower() in VIDEO_EXTS)
+                for p in paths]
+
+        # Exactly 2 files with different orientations → natural set
+        if len(info) == 2 and info[0][1] != info[1][1]:
+            wp_id = gen_id()
+            for path, is_hor, is_vid in info:
+                self._copy_file(path, is_hor, is_vid, wp_id)
         else:
-            pic = Gtk.Image.new_from_icon_name("image-x-generic")
+            for path, is_hor, is_vid in info:
+                self._copy_file(path, is_hor, is_vid, gen_id())
 
-        pic.set_size_request(190, 108)  # 16:9
-        frame.set_child(pic)
+        GLib.idle_add(self._reload)
 
-        if is_video:
-            overlay = Gtk.Overlay()
-            overlay.set_child(frame)
-            badge = Gtk.Label(label=" ▶ ")
-            badge.add_css_class("video-badge")
-            badge.set_halign(Gtk.Align.END)
-            badge.set_valign(Gtk.Align.END)
-            badge.set_margin_end(6)
-            badge.set_margin_bottom(6)
-            overlay.add_overlay(badge)
-            self.append(overlay)
+    def _copy_file(self, path: str, is_hor: bool, is_vid: bool, wp_id: str):
+        ext = os.path.splitext(path)[1].lower()
+        if is_hor:
+            stem = f'wp_{wp_id}_vid_hor' if is_vid else f'wp_{wp_id}_hor'
+            dst  = os.path.join(WALLPAPER_H, stem + ext)
         else:
-            self.append(frame)
+            dst = os.path.join(WALLPAPER_V, f'wp_{wp_id}_ver{ext}')
+        shutil.copy2(path, dst)
 
-        label = Gtk.Label(label=display_name)
-        label.set_max_width_chars(22)
-        label.set_ellipsize(3)  # PANGO_ELLIPSIZE_END
-        label.add_css_class("caption")
-        label.set_xalign(0.5)
-        self.append(label)
+    # ── Add counterpart (right-click) ────────────────────────────────────────
+
+    def _add_counterpart(self, entry: WallpaperEntry, orientation: str):
+        label = 'Horizontales Bild' if orientation == 'hor' else 'Vertikales Bild'
+        d = Gtk.FileDialog(title=f'{label} für {entry.id} hinzufügen')
+        f = Gtk.FileFilter()
+        f.set_name('Bilder & Videos')
+        for p in ['*.jpg', '*.jpeg', '*.png', '*.webp', '*.mp4', '*.webm', '*.mkv']:
+            f.add_pattern(p)
+        s = Gio.ListStore.new(Gtk.FileFilter)
+        s.append(f)
+        d.set_filters(s)
+        d.open(self.get_root(), None,
+               lambda dlg, res, e=entry, o=orientation:
+               self._counterpart_chosen(dlg, res, e, o))
+
+    def _counterpart_chosen(self, dialog, result,
+                            entry: WallpaperEntry, orientation: str):
+        try:
+            file = dialog.open_finish(result)
+            if not file:
+                return
+            path = file.get_path()
+            ext  = os.path.splitext(path)[1].lower()
+            is_vid = ext in VIDEO_EXTS
+
+            if orientation == 'hor':
+                stem = f'wp_{entry.id}_vid_hor' if is_vid else f'wp_{entry.id}_hor'
+                dst  = os.path.join(WALLPAPER_H, stem + ext)
+            else:
+                dst = os.path.join(WALLPAPER_V, f'wp_{entry.id}_ver{ext}')
+
+            shutil.copy2(path, dst)
+            self._reload()
+        except Exception:
+            pass
+
+
+# ── Setup pages ────────────────────────────────────────────────────────────────
+
+def build_setup_page(icon: str, title: str, desc: str, script: str, btn: str):
+    page = Adw.StatusPage()
+    page.set_icon_name(icon)
+    page.set_title(title)
+    page.set_description(desc)
+    page.set_vexpand(True)
+    b = Gtk.Button(label=btn)
+    b.add_css_class('pill')
+    b.add_css_class('suggested-action')
+    b.connect('clicked', lambda _: subprocess.Popen([TERMINAL, '-e', script]))
+    page.set_child(b)
+    return page
 
 
 # ── Main window ────────────────────────────────────────────────────────────────
@@ -73,15 +446,28 @@ class WallpaperItem(Gtk.Box):
 class MainWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.set_title("Vutureland Settings")
-        self.set_default_size(960, 680)
+        self.set_title('Vutureland Settings')
+        self.set_default_size(1050, 720)
 
         stack = Adw.ViewStack()
-        self.stack = stack
 
-        self._build_hyprland_page()
-        self._build_waybar_page()
-        self._build_wallpaper_page()
+        hypr_page = build_setup_page(
+            'preferences-desktop-display-symbolic', 'Hyprland',
+            'Monitore, Workspaces, Peripherals,\nAutostart und Window Rules.',
+            SETUP_HYPR, 'Hyprland Setup öffnen')
+        stack.add_titled_with_icon(hypr_page, 'hyprland', 'Hyprland',
+                                   'preferences-desktop-display-symbolic')
+
+        waybar_page = build_setup_page(
+            'view-grid-symbolic', 'Waybar',
+            'Module auswählen, anordnen\nund die Leiste neu aufbauen.',
+            SETUP_WAYBAR, 'Waybar Setup öffnen')
+        stack.add_titled_with_icon(waybar_page, 'waybar', 'Waybar',
+                                   'view-grid-symbolic')
+
+        wp_page = WallpaperPage()
+        stack.add_titled_with_icon(wp_page, 'wallpaper', 'Wallpaper',
+                                   'image-x-generic-symbolic')
 
         header = Adw.HeaderBar()
         switcher = Adw.ViewSwitcher()
@@ -94,183 +480,16 @@ class MainWindow(Adw.ApplicationWindow):
         tv.set_content(stack)
         self.set_content(tv)
 
-    # ── Setup pages ──────────────────────────────────────────────────────────
-
-    def _setup_page(self, icon, title, desc, script, btn_label):
-        status = Adw.StatusPage()
-        status.set_icon_name(icon)
-        status.set_title(title)
-        status.set_description(desc)
-        status.set_vexpand(True)
-
-        btn = Gtk.Button(label=btn_label)
-        btn.add_css_class("pill")
-        btn.add_css_class("suggested-action")
-        btn.connect("clicked", lambda _: subprocess.Popen([TERMINAL, "-e", script]))
-        status.set_child(btn)
-        return status
-
-    def _build_hyprland_page(self):
-        page = self._setup_page(
-            "preferences-desktop-display-symbolic",
-            "Hyprland",
-            "Monitore, Workspaces, Peripherals,\nAutostart und Window Rules konfigurieren.",
-            SETUP_HYPR,
-            "Hyprland Setup öffnen",
-        )
-        self.stack.add_titled_with_icon(
-            page, "hyprland", "Hyprland", "preferences-desktop-display-symbolic")
-
-    def _build_waybar_page(self):
-        page = self._setup_page(
-            "view-grid-symbolic",
-            "Waybar",
-            "Module auswählen, anordnen\nund die Leiste neu aufbauen.",
-            SETUP_WAYBAR,
-            "Waybar Setup öffnen",
-        )
-        self.stack.add_titled_with_icon(
-            page, "waybar", "Waybar", "view-grid-symbolic")
-
-    # ── Wallpaper page ───────────────────────────────────────────────────────
-
-    def _build_wallpaper_page(self):
-        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-
-        scroll = Gtk.ScrolledWindow()
-        scroll.set_vexpand(True)
-        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-
-        self.flow = Gtk.FlowBox()
-        self.flow.set_valign(Gtk.Align.START)
-        self.flow.set_max_children_per_line(5)
-        self.flow.set_min_children_per_line(2)
-        self.flow.set_selection_mode(Gtk.SelectionMode.SINGLE)
-        self.flow.set_row_spacing(8)
-        self.flow.set_column_spacing(8)
-        self.flow.set_margin_top(16)
-        self.flow.set_margin_bottom(16)
-        self.flow.set_margin_start(16)
-        self.flow.set_margin_end(16)
-        self.flow.connect("child-activated", self._on_wp_activated)
-        scroll.set_child(self.flow)
-        root.append(scroll)
-
-        # Action bar
-        bar = Gtk.ActionBar()
-
-        self.spinner = Gtk.Spinner()
-        bar.pack_start(self.spinner)
-        self.status = Gtk.Label(label="")
-        self.status.add_css_class("caption")
-        bar.pack_start(self.status)
-
-        refresh = Gtk.Button(label="Aktualisieren")
-        refresh.connect("clicked", lambda _: self._reload())
-        bar.pack_end(refresh)
-
-        add = Gtk.Button(label="Hinzufügen …")
-        add.add_css_class("suggested-action")
-        add.connect("clicked", self._on_add)
-        bar.pack_end(add)
-
-        root.append(bar)
-
-        self.stack.add_titled_with_icon(
-            root, "wallpaper", "Wallpaper", "image-x-generic-symbolic")
-
-        self._reload()
-
-    def _clear_flow(self):
-        child = self.flow.get_first_child()
-        while child:
-            nxt = child.get_next_sibling()
-            self.flow.remove(child)
-            child = nxt
-
-    def _reload(self):
-        self._clear_flow()
-        self.spinner.start()
-        self.status.set_text("Lade Thumbnails …")
-
-        def _work():
-            subprocess.run(["bash", GEN_THUMBS], capture_output=True)
-            items = []
-            if os.path.isdir(WALLPAPER_H):
-                for fname in sorted(os.listdir(WALLPAPER_H)):
-                    ext = os.path.splitext(fname)[1].lower()
-                    if ext not in IMAGE_EXTS | VIDEO_EXTS:
-                        continue
-                    stem     = os.path.splitext(fname)[0]
-                    base     = stem.removesuffix("_hor").removesuffix("_vid")
-                    display  = base.removeprefix("wp_")
-                    thumb    = os.path.join(THUMB_DIR, stem + ".png")
-                    filepath = os.path.join(WALLPAPER_H, fname)
-                    items.append((filepath, thumb, display, ext in VIDEO_EXTS))
-            GLib.idle_add(self._populate, items)
-
-        threading.Thread(target=_work, daemon=True).start()
-
-    def _populate(self, items):
-        self.spinner.stop()
-        self.status.set_text(f"{len(items)} Wallpaper")
-        for filepath, thumb, display, is_video in items:
-            self.flow.append(WallpaperItem(filepath, thumb, display, is_video))
-        return False
-
-    def _on_wp_activated(self, _, child):
-        item = child.get_child()
-        if not isinstance(item, WallpaperItem):
-            return
-        self.status.set_text(f"Setze: {os.path.basename(item.filepath)} …")
-        self.spinner.start()
-        def _apply():
-            subprocess.run(["bash", SET_WP, item.filepath])
-            GLib.idle_add(lambda: (
-                self.spinner.stop(),
-                self.status.set_text("Wallpaper gesetzt."),
-            ) and False)
-        threading.Thread(target=_apply, daemon=True).start()
-
-    def _on_add(self, _):
-        dialog = Gtk.FileDialog(title="Wallpaper hinzufügen")
-        f = Gtk.FileFilter()
-        f.set_name("Bilder & Videos")
-        for p in ["*.jpg", "*.jpeg", "*.png", "*.webp", "*.mp4", "*.webm", "*.mkv"]:
-            f.add_pattern(p)
-        store = Gio.ListStore.new(Gtk.FileFilter)
-        store.append(f)
-        dialog.set_filters(store)
-        dialog.open(self, None, self._on_file_chosen)
-
-    def _on_file_chosen(self, dialog, result):
-        try:
-            file = dialog.open_finish(result)
-            if file:
-                shutil.copy2(file.get_path(), WALLPAPER_H)
-                self._reload()
-        except Exception:
-            pass
-
 
 # ── CSS ────────────────────────────────────────────────────────────────────────
 
 CSS = b"""
-.wallpaper-frame {
+.wp-frame {
     border-radius: 8px;
-    overflow: hidden;
 }
-.video-badge {
-    background: rgba(0,0,0,0.65);
-    color: white;
-    border-radius: 4px;
-    font-size: 0.75em;
-    padding: 1px 4px;
-}
-flowboxchild:selected > box > frame,
-flowboxchild:selected > box > overlay > frame {
+flowboxchild:selected > box .wp-frame {
     outline: 3px solid @accent_color;
-    outline-offset: -3px;
+    outline-offset: -2px;
 }
 """
 
@@ -279,20 +498,18 @@ flowboxchild:selected > box > overlay > frame {
 
 class VuturelandSettings(Adw.Application):
     def __init__(self):
-        super().__init__(application_id="com.vutureland.settings",
+        super().__init__(application_id='com.vutureland.settings',
                          flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
-        self.connect("activate", self._on_activate)
+        self.connect('activate', self._activate)
 
-    def _on_activate(self, _):
-        provider = Gtk.CssProvider()
-        provider.load_from_data(CSS)
+    def _activate(self, _):
+        p = Gtk.CssProvider()
+        p.load_from_data(CSS)
         Gtk.StyleContext.add_provider_for_display(
-            Gdk.Display.get_default(), provider,
+            Gdk.Display.get_default(), p,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-
-        win = MainWindow(application=self)
-        win.present()
+        MainWindow(application=self).present()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     VuturelandSettings().run()

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-wallpaper_dir=~/.config/vutureland/assets/wallpaper/horizontal
+WALLPAPER_H=~/.config/vutureland/assets/wallpaper/horizontal
+WALLPAPER_V=~/.config/vutureland/assets/wallpaper/vertical
 cache_dir=~/.cache/vutureland/wallpaper-thumbs
 thumb_size=400
 radius=10
@@ -16,25 +17,35 @@ _make_thumb() {
         PNG32:"$thumb"
 }
 
-while IFS= read -r f; do
-    name=$(basename "$f")
-    stem="${name%.*}"
-    ext="${name##*.}"
-    thumb="$cache_dir/$stem.png"
+_process_dir() {
+    local dir="$1"
+    [[ -d "$dir" ]] || return
 
-    [[ -f "$thumb" && ! "$f" -nt "$thumb" ]] && continue
+    while IFS= read -r f; do
+        local name stem ext thumb
+        name=$(basename "$f")
+        stem="${name%.*}"
+        ext="${name##*.}"
+        thumb="$cache_dir/$stem.png"
 
-    case "${ext,,}" in
-        mp4|webm|mkv|avi|mov)
-            tmp_frame=$(mktemp /tmp/thumb-frame-XXXXXX.jpg)
-            ffmpeg -y -i "$f" -vframes 1 -q:v 2 "$tmp_frame" &>/dev/null && \
-                _make_thumb "$tmp_frame" "$thumb"
-            rm -f "$tmp_frame"
-            ;;
-        *)
-            _make_thumb "$f" "$thumb"
-            ;;
-    esac
-done < <(find "$wallpaper_dir" -maxdepth 1 -type f \( \
-    -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' \
-    -o -iname '*.mp4' -o -iname '*.webm' -o -iname '*.mkv' \) | sort)
+        [[ -f "$thumb" && ! "$f" -nt "$thumb" ]] && continue
+
+        case "${ext,,}" in
+            mp4|webm|mkv|avi|mov)
+                local tmp
+                tmp=$(mktemp /tmp/thumb-frame-XXXXXX.jpg)
+                ffmpeg -y -i "$f" -vframes 1 -q:v 2 "$tmp" &>/dev/null && \
+                    _make_thumb "$tmp" "$thumb"
+                rm -f "$tmp"
+                ;;
+            *)
+                _make_thumb "$f" "$thumb"
+                ;;
+        esac
+    done < <(find "$dir" -maxdepth 1 -type f \( \
+        -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' \
+        -o -iname '*.mp4' -o -iname '*.webm' -o -iname '*.mkv' \) | sort)
+}
+
+_process_dir "$WALLPAPER_H"
+_process_dir "$WALLPAPER_V"
