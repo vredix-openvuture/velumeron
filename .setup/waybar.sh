@@ -977,7 +977,7 @@ run_example() {
     build_bar "$monitor" "top" "dock" \
         clock custom/separator group/performance_drawer custom/separator custom/actionuser \
         --center hyprland/workspaces hyprland/submap \
-        --right  custom/cava group/audio_drawer custom/separator tray
+        --right  custom/cava group/audio_drawer custom/separator group/tray_drawer
 
     echo ""
     kill_and_start
