@@ -1,11 +1,11 @@
 #audio_drawer {
-    margin:  0px 1px;
+    margin:  2px 1px;
     padding: 1px 4px;
 }
 
 #audio_drawer:hover {
     border: 0px solid alpha(@bo-normal, 0.6);
-    background: alpha(@bg-secondary, 0.04)
+    background: alpha(@bg-secondary, 0.2)
 }
 
 #audio_drawer #pulseaudio,
