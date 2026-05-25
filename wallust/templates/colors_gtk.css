@@ -17,3 +17,27 @@
 @define-color color13 {{color13}};
 @define-color color14 {{color14}};
 @define-color color15 {{color15}};
+
+/* ── Semantic aliases ─────────────────────────────────────────────────── */
+/* color0  = bg-primary    (main background)                               */
+/* color1  = bg-element    (cards, chips, panels)                          */
+/* color2  = bg-secondary  (secondary panels)                              */
+/* color3  = bg-active     (selected / active state)                       */
+/* color4  = bg-hover      (hover state)                                   */
+/* color5  = bo-normal     (default border)                                */
+/* color6  = bo-active     (active / focused border)                       */
+/* color7  = fg-primary    (body text — soft, not too harsh)               */
+/* color8  = fg-muted      (placeholders, disabled, secondary)             */
+/* color13 = fg-urgent     (warnings, alerts)                              */
+/* color15 = fg-bright     (headings, focused / high-importance text)      */
+@define-color bg-primary    @color0;
+@define-color bg-element    @color1;
+@define-color bg-secondary  @color2;
+@define-color bg-active     @color3;
+@define-color bg-hover      @color4;
+@define-color bo-normal     @color5;
+@define-color bo-active     @color6;
+@define-color fg-primary    @color7;
+@define-color fg-muted      @color8;
+@define-color fg-urgent     @color13;
+@define-color fg-bright     @color15;

@@ -1,14 +1,7 @@
 @import url("../assets/colors_gtk.css");
 
-@define-color bg-primary        @color0;
-@define-color bg-primary-blur   rgba(23, 10, 19, 0.70);
-@define-color bg-secondary      @color2;
-@define-color fg-primary        @foreground;
-@define-color fg-hover          @color7;
-@define-color bg-hover          @color3;
-@define-color bg-active         @color4;
-@define-color bo-normal         @color5;
-@define-color bo-hover          @color5;
+/* Semantic aliases (bg-primary, bg-active, bo-normal, fg-primary, …) come from colors_gtk.css */
+@define-color bg-primary-blur   alpha(@bg-primary, 0.7);
 
 
 /* ── Global ──────────────────────────────── */
