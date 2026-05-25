@@ -26,7 +26,7 @@
 }
 
 .docktop {
-    background:     alpha(@color0, 0.9);
+    background:     alpha(@color0, 1);
     border:         1px solid @color5;
     border-top:     none;
     border-radius:  0px 0px 8px 8px;
@@ -43,31 +43,8 @@
     font-size:         14px;
     color:             darker(@color8);
     font-family:       "FantasqueSansM Nerd Font";
-    margin:            2px 6px 6px 6px;
+    margin:            4px 4px;
     border:            none;
     border-radius:     0;
 }
 
-/* =========================
- * Popup-Menu-Basis
- * ========================= */
-
-menu {
-  background: alpha(@color0, 0.9);
-  border: 1px solid @color5;
-  border-top: none;
-  border-radius: 0px 0px 8px 8px;
-  padding: 4px 0;
-  margin-top: 80px;
-}
-
-menuitem {
-  margin: 4px; 
-  padding: 6px;
-  color: darker(@color8);
-  border-radius: 8px;
-}
-
-menuitem:hover {
-  background: #313244;
-}

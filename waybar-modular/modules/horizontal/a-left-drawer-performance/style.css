@@ -1,0 +1,24 @@
+#performance_drawer {
+    margin:  0px 1px;
+    padding: 1px 1px;
+}
+
+#performance_drawer:hover {
+    border: 0px solid alpha(@bo-normal, 0.6);
+    background: alpha(@bg-secondary, 0.04)
+}
+
+#performance_drawer #custom-performance,
+#performance_drawer #temperature,
+#performance_drawer #memory,
+#performance_drawer #cpu {
+    margin-left:  6px;
+    margin-right: 6px;
+}
+
+#performance_drawer #custom-performance:hover,
+#performance_drawer #temperature:hover,
+#performance_drawer #memory:hover,
+#performance_drawer #cpu:hover {
+    color: @fg-hover;
+}

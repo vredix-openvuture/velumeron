@@ -1,7 +1,7 @@
 /******************************************************************************
  * CYBERFREAK Rofi Theme - Session Menu
  ******************************************************************************/
-@import "./assets/misc/colors.rasi"
+@import "./assets/colors.rasi"
 
 configuration {
     show-icons:          true;
@@ -43,7 +43,7 @@ mainbox {
 /*-------------------------------------------------------------*/
 listview {
     columns:             1;
-    lines:               10;
+    lines:               6;
     spacing:             4px;
     scrollbar:           false;
     padding:             10px 0px;

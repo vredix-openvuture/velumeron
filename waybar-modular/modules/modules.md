@@ -1,9 +1,9 @@
-# Zeit & Navigation
+# Time & Navigation
 clock
 submap
 workspaces
 
-# Medien
+# Media
 cava
 mpris
 pulseaudio
@@ -23,6 +23,6 @@ temperature-cpu
 temperature-gpu
 battery
 
-# Sonstiges
+# Other
 separator
 tray

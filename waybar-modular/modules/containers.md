@@ -4,5 +4,5 @@ a-right-drawer-audio
 # Performance
 a-left-drawer-performance
 
-# Sonstiges
+# Other
 a-right-drawer-tray

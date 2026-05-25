@@ -1,7 +1,7 @@
 /******************************************************************************
  * CYBERFREAK Rofi Theme - App Launcher
  ******************************************************************************/
-@import "./assets/misc/colors.rasi"
+@import "./assets/colors.rasi"
 
 
 /* Semantisches Mapping
@@ -26,8 +26,8 @@ configuration {
 
 * {
     background-color:       transparent;
-    border-color:           @bo-color;
-    separatorcolor:         @bo-color;
+    border-color:           @color5;
+    separatorcolor:         @color5;
     spacing:                10;
 }
 
@@ -35,7 +35,7 @@ configuration {
 window {
     background-color:       @color0a90;
     border:                 1px;
-    border-color:           @bo-color;
+    border-color:           @color5;
     border-radius:          10px 10px 0 0;
     margin:                 0;
     width:                  40%;
@@ -52,7 +52,7 @@ inputbar {
     spacing:                2;
     border:                 none;
     background-color:       @color10a40;
-    border-color:           @bo-color;
+    border-color:           @color5;
     border-radius:          10px;
     text-color:             @color8;
     margin:                 10px 10px 40px 10px;
@@ -81,7 +81,7 @@ entry {
 /*-------------------------------------------------------------*/
 listview {
     fixed-height:           0;
-    lines:                  11;
+    lines:                  6;
     border:                 0;
     spacing:                4px;
     scrollbar:              false;
@@ -124,5 +124,5 @@ element.alternate.normal {
 element.selected.normal {
     background-color:       @color10;
     text-color:             @background;
-    border-color:           @bo-color;
+    border-color:           @color5;
 }

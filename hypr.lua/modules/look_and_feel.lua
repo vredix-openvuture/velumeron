@@ -32,6 +32,7 @@ hl.config({
             vibrancy          = 0.04,
             vibrancy_darkness = 0.08,
             xray              = true,
+            popups            = false,
         },
 
         shadow = {

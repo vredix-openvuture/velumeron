@@ -1,52 +1,52 @@
 * {
-    bg:             #080301;
+    bg:             #020502;
 
-    fg:             #FFD4C3;
+    fg:             #AEEDAC;
 
-    cursor:         #8EB0AC;
+    cursor:         #9E926C;
 
-    color0:         #0C0402;
-    color0a90:      #0C0402e6;
+    color0:         #030703;
+    color0a90:      #030703e6;
 
-    color1:         #2C214E;
+    color1:         #56433C;
 
-    color2:         #823658;
+    color2:         #4B3956;
 
-    color3:         #A7412B;
+    color3:         #78424D;
 
-    color4:         #206B8C;
+    color4:         #70416A;
 
-    color5:         #0E8B95;
+    color5:         #A75449;
 
-    color6:         #D66F48;
+    color6:         #68BC66;
 
-    color7:         #F7CAB9;
+    color7:         #A3E1A1;
 
-    color8:         #A88273;
-    color8a40:      #A8827366;
+    color8:         #5F985F;
+    color8a40:      #5F985F66;
 
-    color9:         #2C214E;
+    color9:         #56433C;
 
-    color10:        #823658;
-    color10a40:     #82365866;
+    color10:        #4B3956;
+    color10a40:     #4B395666;
 
-    color11:        #A7412B;
+    color11:        #78424D;
 
-    color12:        #206B8C;
+    color12:        #70416A;
 
-    color13:        #0E8B95;
+    color13:        #A75449;
 
-    color14:        #D66F48;
+    color14:        #68BC66;
 
-    color15:        #F2DCD4;
+    color15:        #C9E7C8;
 
     /* Semantisches Mapping */
-    bg-main:        #0C0402;
-    bg-element:     #2C214E;
-    bg-focus:       #A88273;
-    bg-urgent:      #2C214E;
-    bo-color:       #0E8B95;
-    fg-main:        #FFD4C3;
-    fg-highlight:   #823658;
-    fg-placeholder: #A7412B;
+    bg-main:        #030703;
+    bg-element:     #56433C;
+    bg-focus:       #5F985F;
+    bg-urgent:      #56433C;
+    bo-color:       #A75449;
+    fg-main:        #AEEDAC;
+    fg-highlight:   #4B3956;
+    fg-placeholder: #78424D;
 }

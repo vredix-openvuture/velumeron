@@ -7,8 +7,8 @@
 @define-color fg-hover          @color7;
 @define-color bg-hover          @color3;
 @define-color bg-active         @color4;
-@define-color bo-normal         @color1;
-@define-color bo-hover          @color8;
+@define-color bo-normal         @color5;
+@define-color bo-hover          @color5;
 
 
 /* ── Global ──────────────────────────────── */
@@ -166,9 +166,11 @@ list row:focus,
 .widget-buttons-grid {
   font-size: 16px;
   background: @bg-secondary;
-  padding: 8px;
-  border-radius: 10px;
+  padding: 4px;
+  border-radius: 10px 10px 0px 0px;
   border: 1px solid;
+  border-bottom: none;
+  margin-bottom: 0px;
 
 }
 
@@ -190,8 +192,10 @@ list row:focus,
 
 .widget-volume {
   background: @bg-secondary;
-  border-radius: 10px;
+  border-radius: 0px 0px 10px 10px;
   border: 1px solid;
+  border-top: none;
+  margin-top: 0px;
 }
 
 .widget-inhibitor,

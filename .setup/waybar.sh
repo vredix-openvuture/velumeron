@@ -41,60 +41,81 @@ print_step() {
 ask() { printf "  ${YELLOW}▶${RST}  $1 "; }
 
 # ─── Module / Container laden ─────────────────────────────────────────────────
-declare -a MOD_FOLDERS=() MOD_KEYS=() MOD_ALIASES=() MOD_SECTIONS=() MOD_IS_CON=() MOD_SPECIFICS=()
-declare -A KEY_TO_FOLDER=() FOLDER_TO_KEY=()
+declare -a MOD_FOLDERS=() MOD_KEYS=() MOD_ALIASES=() MOD_SECTIONS=() MOD_IS_CON=() MOD_SPECIFICS=() MOD_ORIENTATIONS=()
+declare -A KEY_TO_FOLDER=() FOLDER_TO_KEY=() FOLDER_TO_ORIENT=()
+
+# Full filesystem path of a module folder
+module_path() { echo "$MODULES_DIR/${FOLDER_TO_ORIENT[$1]:-horizontal}/$1"; }
+
+# Bar position → expected module orientation
+get_orientation_for_position() {
+    case "$1" in
+        top|bottom) echo "horizontal" ;;
+        left|right) echo "vertical"   ;;
+        *)          echo "horizontal" ;;
+    esac
+}
 
 load_all_modules() {
-    MOD_FOLDERS=(); MOD_KEYS=(); MOD_ALIASES=(); MOD_SECTIONS=(); MOD_IS_CON=(); MOD_SPECIFICS=()
-    KEY_TO_FOLDER=(); FOLDER_TO_KEY=()
+    MOD_FOLDERS=(); MOD_KEYS=(); MOD_ALIASES=(); MOD_SECTIONS=()
+    MOD_IS_CON=(); MOD_SPECIFICS=(); MOD_ORIENTATIONS=()
+    KEY_TO_FOLDER=(); FOLDER_TO_KEY=(); FOLDER_TO_ORIENT=()
 
-    declare -A mod_data=() con_data=() folder_specific=()
+    declare -A mod_data=() con_data=() folder_specific=() folder_orient=()
 
-    # Metadaten aller Ordner einlesen (key|alias)
-    for dir in "$MODULES_DIR"/*/; do
-        [[ -d "$dir" ]] || continue
-        local folder; folder="$(basename "$dir")"
-        if [[ -f "$dir/module.md" ]]; then
-            local key alias_val specific_val
-            key=$(grep '^name'  "$dir/module.md" | sed 's/name *= *"\(.*\)"/\1/'  | head -1)
-            alias_val=$(grep '^alias' "$dir/module.md" | sed 's/alias *= *"\(.*\)"/\1/' | head -1)
-            specific_val=$(grep '^specific ' "$dir/module.md" 2>/dev/null | sed 's/specific *= *"\(.*\)"/\1/' | head -1 || true)
-            [[ -z "$key"       ]] && key="$folder"
-            [[ -z "$alias_val" ]] && alias_val="$folder"
-            mod_data["$folder"]="$key|$alias_val"
-            folder_specific["$folder"]="$specific_val"
-        elif [[ -f "$dir/container.md" ]]; then
-            local key alias_val specific_val
-            key=$(grep '^name'  "$dir/container.md" | sed 's/name *= *"\(.*\)"/\1/'  | head -1)
-            alias_val=$(grep '^alias' "$dir/container.md" | sed 's/alias *= *"\(.*\)"/\1/' | head -1)
-            specific_val=$(grep '^specific ' "$dir/container.md" 2>/dev/null | sed 's/specific *= *"\(.*\)"/\1/' | head -1 || true)
-            [[ -z "$key"       ]] && key="group/$folder"
-            [[ -z "$alias_val" ]] && alias_val="$folder"
-            con_data["$folder"]="$key|$alias_val"
-            folder_specific["$folder"]="$specific_val"
-        fi
+    # Scan modules/horizontal/ and modules/vertical/
+    for orient in horizontal vertical; do
+        local orient_dir="$MODULES_DIR/$orient"
+        [[ -d "$orient_dir" ]] || continue
+        for dir in "$orient_dir"/*/; do
+            [[ -d "$dir" ]] || continue
+            local folder; folder="$(basename "$dir")"
+            if [[ -f "$dir/module.md" ]]; then
+                local key alias_val specific_val
+                key=$(grep '^name'  "$dir/module.md" | sed 's/name *= *"\(.*\)"/\1/'  | head -1)
+                alias_val=$(grep '^alias' "$dir/module.md" | sed 's/alias *= *"\(.*\)"/\1/' | head -1)
+                specific_val=$(grep '^specific ' "$dir/module.md" 2>/dev/null | sed 's/specific *= *"\(.*\)"/\1/' | head -1 || true)
+                [[ -z "$key"       ]] && key="$folder"
+                [[ -z "$alias_val" ]] && alias_val="$folder"
+                mod_data["$folder"]="$key|$alias_val"
+                folder_specific["$folder"]="$specific_val"
+                folder_orient["$folder"]="$orient"
+            elif [[ -f "$dir/container.md" ]]; then
+                local key alias_val specific_val
+                key=$(grep '^name'  "$dir/container.md" | sed 's/name *= *"\(.*\)"/\1/'  | head -1)
+                alias_val=$(grep '^alias' "$dir/container.md" | sed 's/alias *= *"\(.*\)"/\1/' | head -1)
+                specific_val=$(grep '^specific ' "$dir/container.md" 2>/dev/null | sed 's/specific *= *"\(.*\)"/\1/' | head -1 || true)
+                [[ -z "$key"       ]] && key="group/$folder"
+                [[ -z "$alias_val" ]] && alias_val="$folder"
+                con_data["$folder"]="$key|$alias_val"
+                folder_specific["$folder"]="$specific_val"
+                folder_orient["$folder"]="$orient"
+            fi
+        done
     done
 
-    # Module in Reihenfolge aus modules.md, mit Section-Erkennung
+    # Modules in order from modules.md, with section detection
     local -a mod_processed=()
-    local current_section="" pending_section=""
+    local pending_section=""
     while IFS= read -r line; do
         if [[ "$line" =~ ^#[[:space:]]*(.*) ]]; then
-            pending_section="${BASH_REMATCH[1]}"
-            continue
+            pending_section="${BASH_REMATCH[1]}"; continue
         fi
         [[ "$line" =~ ^[[:space:]]*$ ]] && continue
         local folder="$line"
         [[ -z "${mod_data[$folder]:-}" ]] && continue
         local key="${mod_data[$folder]%%|*}" alias_val="${mod_data[$folder]##*|}"
         MOD_FOLDERS+=("$folder"); MOD_KEYS+=("$key"); MOD_ALIASES+=("$alias_val")
-        MOD_SECTIONS+=("$pending_section"); MOD_IS_CON+=("false"); MOD_SPECIFICS+=("${folder_specific[$folder]:-}")
+        MOD_SECTIONS+=("$pending_section"); MOD_IS_CON+=("false")
+        MOD_SPECIFICS+=("${folder_specific[$folder]:-}")
+        MOD_ORIENTATIONS+=("${folder_orient[$folder]:-horizontal}")
         KEY_TO_FOLDER["$key"]="$folder"; FOLDER_TO_KEY["$folder"]="$key"
+        FOLDER_TO_ORIENT["$folder"]="${folder_orient[$folder]:-horizontal}"
         mod_processed+=("$folder")
         pending_section=""
     done < "$MODULES_DIR/modules.md"
 
-    # Verbleibende Module (nicht in modules.md) unter eigener Section
+    # Remaining modules not listed in modules.md
     local first_extra=true
     for folder in $(echo "${!mod_data[@]}" | tr ' ' '\n' | sort); do
         local found=false
@@ -108,10 +129,12 @@ load_all_modules() {
             MOD_SECTIONS+=("")
         fi
         MOD_IS_CON+=("false"); MOD_SPECIFICS+=("${folder_specific[$folder]:-}")
+        MOD_ORIENTATIONS+=("${folder_orient[$folder]:-horizontal}")
         KEY_TO_FOLDER["$key"]="$folder"; FOLDER_TO_KEY["$folder"]="$key"
+        FOLDER_TO_ORIENT["$folder"]="${folder_orient[$folder]:-horizontal}"
     done
 
-    # Container in Reihenfolge aus containers.md, mit Section-Erkennung
+    # Containers in order from containers.md, with section detection
     local containers_md="$MODULES_DIR/containers.md"
     local -a con_ordered=() con_sections=()
     if [[ -f "$containers_md" ]]; then
@@ -139,8 +162,11 @@ load_all_modules() {
         [[ -z "${con_data[$folder]:-}" ]] && continue
         local key="${con_data[$folder]%%|*}" alias_val="${con_data[$folder]##*|}"
         MOD_FOLDERS+=("$folder"); MOD_KEYS+=("$key"); MOD_ALIASES+=("$alias_val")
-        MOD_SECTIONS+=("${con_sections[$i]:-}"); MOD_IS_CON+=("true"); MOD_SPECIFICS+=("${folder_specific[$folder]:-}")
+        MOD_SECTIONS+=("${con_sections[$i]:-}"); MOD_IS_CON+=("true")
+        MOD_SPECIFICS+=("${folder_specific[$folder]:-}")
+        MOD_ORIENTATIONS+=("${folder_orient[$folder]:-horizontal}")
         KEY_TO_FOLDER["$key"]="$folder"; FOLDER_TO_KEY["$folder"]="$key"
+        FOLDER_TO_ORIENT["$folder"]="${folder_orient[$folder]:-horizontal}"
     done
 
     dbg "Geladen: ${#MOD_FOLDERS[@]} Module/Container"
@@ -154,16 +180,34 @@ detect_monitors() {
 # ─── Interaktiver State ───────────────────────────────────────────────────────
 STATE="monitor"
 MONITOR="" POSITION="" STYLE="" SLOT=""
+CALLING_STATE="slot"
 declare -a CUR_LEFT=() CUR_CENTER=() CUR_RIGHT=()
 LAST_LOADED=""
 
-# Breadcrumb-Zeile
+# Frame state
+FRAME_NAME=""
+declare -a FRAME_BARS=()
+FRAME_BAR_IDX=0
+declare -a FRAME_LEFT_ENC=()
+declare -a FRAME_CENTER_ENC=()
+declare -a FRAME_RIGHT_ENC=()
+
+# Breadcrumb line
 breadcrumb() {
     local out="  "
-    [[ -n "$MONITOR"  ]] && out+="${BOLD}$MONITOR${RST}"
-    [[ -n "$POSITION" ]] && out+=" ${DIM}→${RST} $POSITION"
-    [[ -n "$STYLE"    ]] && out+=" ${DIM}→${RST} $STYLE"
-    [[ -n "$SLOT"     ]] && out+=" ${DIM}→${RST} ${CYAN}$SLOT${RST}"
+    [[ -n "$MONITOR" ]] && out+="${BOLD}$MONITOR${RST}"
+    if [[ -n "$FRAME_NAME" && "$STATE" =~ ^frame ]]; then
+        out+=" ${DIM}→${RST} frame:$FRAME_NAME"
+        if [[ "$STATE" != "frame_select" && ${#FRAME_BARS[@]} -gt 0 ]]; then
+            local bar_num=$((FRAME_BAR_IDX+1))
+            local total=${#FRAME_BARS[@]}
+            out+=" ${DIM}→${RST} Bar ${bar_num}/${total}  (${POSITION}/${STYLE})"
+        fi
+    else
+        [[ -n "$POSITION" ]] && out+=" ${DIM}→${RST} $POSITION"
+        [[ -n "$STYLE"    ]] && out+=" ${DIM}→${RST} $STYLE"
+    fi
+    [[ -n "$SLOT" ]] && out+=" ${DIM}→${RST} ${CYAN}$SLOT${RST}"
     echo "$out"
     echo ""
 }
@@ -199,13 +243,40 @@ load_existing_slots() {
         < <(jq -r '."group/right".modules[]?  // empty' "$groups_file" 2>/dev/null || true)
 }
 
-# Bar bauen + Waybar starten
+# Save current frame bar slots to ENC arrays
+_save_frame_slots() {
+    FRAME_LEFT_ENC[$FRAME_BAR_IDX]="${CUR_LEFT[*]:-}"
+    FRAME_CENTER_ENC[$FRAME_BAR_IDX]="${CUR_CENTER[*]:-}"
+    FRAME_RIGHT_ENC[$FRAME_BAR_IDX]="${CUR_RIGHT[*]:-}"
+}
+
+# Build single bar + start Waybar
 do_build() {
     clear
     print_header
     echo ""
     build_bar "$MONITOR" "$POSITION" "$STYLE" \
         "${CUR_LEFT[@]:-}" "--center" "${CUR_CENTER[@]:-}" "--right" "${CUR_RIGHT[@]:-}"
+    echo ""
+    kill_and_start
+}
+
+# Build all frame bars + start Waybar
+do_build_frame() {
+    clear
+    print_header
+    echo ""
+    for (( i=0; i<${#FRAME_BARS[@]}; i++ )); do
+        local bar_def="${FRAME_BARS[$i]}"
+        local pos="${bar_def%%:*}"
+        local sty="${bar_def##*:}"
+        local -a left_keys=() center_keys=() right_keys=()
+        [[ -n "${FRAME_LEFT_ENC[$i]:-}"   ]] && IFS=' ' read -ra left_keys   <<< "${FRAME_LEFT_ENC[$i]}"
+        [[ -n "${FRAME_CENTER_ENC[$i]:-}" ]] && IFS=' ' read -ra center_keys <<< "${FRAME_CENTER_ENC[$i]}"
+        [[ -n "${FRAME_RIGHT_ENC[$i]:-}"  ]] && IFS=' ' read -ra right_keys  <<< "${FRAME_RIGHT_ENC[$i]}"
+        build_bar "$MONITOR" "$pos" "$sty" \
+            "${left_keys[@]:-}" "--center" "${center_keys[@]:-}" "--right" "${right_keys[@]:-}"
+    done
     echo ""
     kill_and_start
 }
@@ -228,7 +299,7 @@ screen_monitor() {
             case "$input" in
                 B|b) exit 0 ;;
                 '')  continue ;;
-                *)   MONITOR="$input"; STATE="position"; return ;;
+                *)   MONITOR="$input"; FRAME_NAME=""; STATE="position"; return ;;
             esac
         fi
 
@@ -250,6 +321,7 @@ screen_monitor() {
                 local idx=$((input - 1))
                 if (( idx >= 0 && idx < ${#monitors[@]} )); then
                     MONITOR="${monitors[$idx]}"
+                    FRAME_NAME=""
                     STATE="position"
                     return
                 fi ;;
@@ -264,6 +336,9 @@ screen_position() {
         [[ -d "$BASE_DIR/base-${p}" ]] && avail+=("$p")
     done
 
+    local frame_count=0
+    frame_count=$(find "$BASE_DIR/base-frame" -maxdepth 1 -name "*.frame.json" 2>/dev/null | wc -l)
+
     while true; do
         print_header
         breadcrumb
@@ -274,6 +349,9 @@ screen_position() {
             printf "  ${CYAN}%2d)${RST}  %s\n" "$i" "$p"
             i=$((i+1))
         done
+        if (( frame_count > 0 )); then
+            printf "  ${CYAN}%2d)${RST}  ${BOLD}frame${RST}  ${DIM}(multiple bars)${RST}\n" "$i"
+        fi
         echo ""
         echo "  ${DIM}B) Back${RST}"
         echo ""
@@ -286,9 +364,9 @@ screen_position() {
             *)
                 local idx=$((input - 1))
                 if (( idx >= 0 && idx < ${#avail[@]} )); then
-                    POSITION="${avail[$idx]}"
-                    STATE="style"
-                    return
+                    POSITION="${avail[$idx]}"; FRAME_NAME=""; STATE="style"; return
+                elif (( frame_count > 0 && idx == ${#avail[@]} )); then
+                    POSITION="frame"; STATE="frame_select"; return
                 fi ;;
         esac
     done
@@ -336,7 +414,7 @@ screen_style() {
     done
 }
 
-# ─── Screen 4: Slot-Auswahl ───────────────────────────────────────────────────
+# ─── Screen 4: Slot-Auswahl (single bar) ─────────────────────────────────────
 screen_slot() {
     local combo="$MONITOR|$POSITION|$STYLE"
     if [[ "$LAST_LOADED" != "$combo" ]]; then
@@ -364,9 +442,140 @@ screen_slot() {
         case "$input" in
             B|b) STYLE=""; SLOT=""; STATE="style"; return ;;
             S|s) do_build; exit 0 ;;
-            1)   SLOT="left";   STATE="modules"; return ;;
-            2)   SLOT="center"; STATE="modules"; return ;;
-            3)   SLOT="right";  STATE="modules"; return ;;
+            1) CALLING_STATE="slot"; SLOT="left";   STATE="modules"; return ;;
+            2) CALLING_STATE="slot"; SLOT="center"; STATE="modules"; return ;;
+            3) CALLING_STATE="slot"; SLOT="right";  STATE="modules"; return ;;
+        esac
+    done
+}
+
+# ─── Screen 4b: Select Frame Template ────────────────────────────────────────
+screen_frame_select() {
+    local frame_dir="$BASE_DIR/base-frame"
+    local -a frames=()
+    while IFS= read -r f; do
+        [[ -n "$f" ]] && frames+=("$(basename "$f" .frame.json)")
+    done < <(find "$frame_dir" -maxdepth 1 -name "*.frame.json" 2>/dev/null | sort)
+
+    while true; do
+        print_header
+        breadcrumb
+        print_step "Frame Template"
+
+        if [[ ${#frames[@]} -eq 0 ]]; then
+            err "Keine .frame.json in $frame_dir"
+            sleep 2; POSITION=""; STATE="position"; return
+        fi
+
+        local i=1
+        for f in "${frames[@]}"; do
+            local bars_summary desc
+            bars_summary=$(jq -r '.bars | map("\(.position)/\(.style)") | join("  +  ")' \
+                "$frame_dir/$f.frame.json" 2>/dev/null || true)
+            desc=$(jq -r '.description // ""' "$frame_dir/$f.frame.json" 2>/dev/null || true)
+            printf "  ${CYAN}%2d)${RST}  ${BOLD}%-24s${RST}  ${DIM}%s${RST}\n" "$i" "$f" "$bars_summary"
+            [[ -n "$desc" ]] && printf "         ${DIM}%s${RST}\n" "$desc"
+            i=$((i+1))
+        done
+        echo ""
+        echo "  ${DIM}B) Back${RST}"
+        echo ""
+        ask "Frame: "
+        local input; read -r input
+
+        case "$input" in
+            B|b) POSITION=""; STATE="position"; return ;;
+            ''|*[!0-9]*) continue ;;
+            *)
+                local idx=$((input-1))
+                if (( idx >= 0 && idx < ${#frames[@]} )); then
+                    FRAME_NAME="${frames[$idx]}"
+                    FRAME_BARS=()
+                    while IFS= read -r bar_def; do
+                        [[ -n "$bar_def" ]] && FRAME_BARS+=("$bar_def")
+                    done < <(jq -r '.bars[] | "\(.position):\(.style)"' \
+                        "$frame_dir/$FRAME_NAME.frame.json" 2>/dev/null || true)
+
+                    if [[ ${#FRAME_BARS[@]} -eq 0 ]]; then
+                        err "Frame '$FRAME_NAME' hat keine Bars definiert"
+                        sleep 2; continue
+                    fi
+
+                    FRAME_BAR_IDX=0
+                    FRAME_LEFT_ENC=(); FRAME_CENTER_ENC=(); FRAME_RIGHT_ENC=()
+                    for (( i=0; i<${#FRAME_BARS[@]}; i++ )); do
+                        FRAME_LEFT_ENC+=(""); FRAME_CENTER_ENC+=(""); FRAME_RIGHT_ENC+=("")
+                    done
+
+                    LAST_LOADED=""; STATE="frame_bar"; return
+                fi ;;
+        esac
+    done
+}
+
+# ─── Screen 4c: Frame-Bar konfigurieren ───────────────────────────────────────
+screen_frame_bar() {
+    local bar_def="${FRAME_BARS[$FRAME_BAR_IDX]}"
+    POSITION="${bar_def%%:*}"
+    STYLE="${bar_def##*:}"
+
+    local combo="frame:$FRAME_NAME:$FRAME_BAR_IDX"
+    if [[ "$LAST_LOADED" != "$combo" ]]; then
+        # Prefer in-memory ENC if already edited; otherwise load from disk
+        if [[ -n "${FRAME_LEFT_ENC[$FRAME_BAR_IDX]:-}" || \
+              -n "${FRAME_CENTER_ENC[$FRAME_BAR_IDX]:-}" || \
+              -n "${FRAME_RIGHT_ENC[$FRAME_BAR_IDX]:-}" ]]; then
+            CUR_LEFT=(); CUR_CENTER=(); CUR_RIGHT=()
+            [[ -n "${FRAME_LEFT_ENC[$FRAME_BAR_IDX]:-}"   ]] && IFS=' ' read -ra CUR_LEFT   <<< "${FRAME_LEFT_ENC[$FRAME_BAR_IDX]}"
+            [[ -n "${FRAME_CENTER_ENC[$FRAME_BAR_IDX]:-}" ]] && IFS=' ' read -ra CUR_CENTER <<< "${FRAME_CENTER_ENC[$FRAME_BAR_IDX]}"
+            [[ -n "${FRAME_RIGHT_ENC[$FRAME_BAR_IDX]:-}"  ]] && IFS=' ' read -ra CUR_RIGHT  <<< "${FRAME_RIGHT_ENC[$FRAME_BAR_IDX]}"
+        else
+            load_existing_slots
+        fi
+        LAST_LOADED="$combo"
+    fi
+
+    local total=${#FRAME_BARS[@]}
+
+    while true; do
+        local bar_num=$((FRAME_BAR_IDX+1))
+        local is_last=$(( FRAME_BAR_IDX+1 == total ? 1 : 0 ))
+        print_header
+        breadcrumb
+
+        print_step "Slots — Bar ${bar_num}/${total}"
+        printf "  ${CYAN} 1)${RST}  Left    "; fmt_slot CUR_LEFT;   echo ""
+        printf "  ${CYAN} 2)${RST}  Center  "; fmt_slot CUR_CENTER; echo ""
+        printf "  ${CYAN} 3)${RST}  Right   "; fmt_slot CUR_RIGHT;  echo ""
+        echo ""
+        if (( is_last )); then
+            echo "  ${DIM}B) Back  |  S) Build all bars${RST}"
+        else
+            echo "  ${DIM}B) Back  |  N) Next bar  |  S) Build all bars${RST}"
+        fi
+        echo ""
+        ask "Slot (1/2/3) oder N/S/B: "
+        local input; read -r input
+
+        case "$input" in
+            B|b)
+                _save_frame_slots
+                if (( FRAME_BAR_IDX > 0 )); then
+                    FRAME_BAR_IDX=$((FRAME_BAR_IDX-1)); LAST_LOADED=""
+                else
+                    STATE="frame_select"
+                fi
+                return ;;
+            N|n)
+                (( FRAME_BAR_IDX+1 < total )) || continue
+                _save_frame_slots
+                FRAME_BAR_IDX=$((FRAME_BAR_IDX+1)); LAST_LOADED=""; return ;;
+            S|s)
+                _save_frame_slots
+                do_build_frame; exit 0 ;;
+            1) _save_frame_slots; CALLING_STATE="frame_bar"; SLOT="left";   STATE="modules"; return ;;
+            2) _save_frame_slots; CALLING_STATE="frame_bar"; SLOT="center"; STATE="modules"; return ;;
+            3) _save_frame_slots; CALLING_STATE="frame_bar"; SLOT="right";  STATE="modules"; return ;;
         esac
     done
 }
@@ -380,11 +589,12 @@ screen_modules() {
         right)  editing=("${CUR_RIGHT[@]:-}") ;;
     esac
 
+    local bar_orient; bar_orient="$(get_orientation_for_position "$POSITION")"
+
     while true; do
         print_header
         breadcrumb
 
-        # Current selection as a horizontal list
         echo "  ${BOLD}Selection:${RST}"
         if [[ ${#editing[@]} -eq 0 ]]; then
             echo "  ${DIM}(empty)${RST}"
@@ -397,7 +607,7 @@ screen_modules() {
         fi
         echo ""
 
-        # Module list with section separators, filtered by slot
+        # Module list filtered by orientation, with section separators and slot filter
         local -a visible_indices=()
         local i=1
         local last_section=""
@@ -406,13 +616,16 @@ screen_modules() {
             local alias_val="${MOD_ALIASES[$idx]}"
             local is_con="${MOD_IS_CON[$idx]}"
             local specific="${MOD_SPECIFICS[$idx]}"
+            local mod_orient="${MOD_ORIENTATIONS[$idx]}"
+
+            # Orientation filter: only show modules matching this bar's orientation
+            [[ "$mod_orient" != "$bar_orient" ]] && continue
 
             # Slot filter: if specific is set, only show in the matching slot
             if [[ -n "$specific" && "$specific" != "$SLOT" ]]; then
                 continue
             fi
 
-            # Print section header only if at least one module follows
             if [[ -n "$section" && "$section" != "$last_section" ]]; then
                 echo ""
                 printf "  ${BOLD}${DIM}── %s ${RST}\n" "$section"
@@ -430,7 +643,11 @@ screen_modules() {
 
         echo ""
         echo "  ${DIM}Number → add  |  r → remove last  |  R → reset all  |  + key → custom${RST}"
-        echo "  ${DIM}B) Back  |  S) Save + build Waybar${RST}"
+        if [[ "$CALLING_STATE" == "frame_bar" ]]; then
+            echo "  ${DIM}B) Back  |  S) Slot speichern${RST}"
+        else
+            echo "  ${DIM}B) Back  |  S) Save + build Waybar${RST}"
+        fi
         echo ""
         ask "[$SLOT]: "
         local input; read -r input
@@ -442,14 +659,18 @@ screen_modules() {
                     center) CUR_CENTER=("${editing[@]:-}") ;;
                     right)  CUR_RIGHT=("${editing[@]:-}") ;;
                 esac
-                SLOT=""; STATE="slot"; return ;;
+                SLOT=""; STATE="$CALLING_STATE"; return ;;
             S|s)
                 case "$SLOT" in
                     left)   CUR_LEFT=("${editing[@]:-}") ;;
                     center) CUR_CENTER=("${editing[@]:-}") ;;
                     right)  CUR_RIGHT=("${editing[@]:-}") ;;
                 esac
-                do_build; exit 0 ;;
+                if [[ "$CALLING_STATE" == "frame_bar" ]]; then
+                    SLOT=""; STATE="frame_bar"; return
+                else
+                    do_build; exit 0
+                fi ;;
             r)
                 [[ ${#editing[@]} -gt 0 ]] && editing=("${editing[@]:0:$((${#editing[@]}-1))}") ;;
             R)
@@ -483,15 +704,14 @@ collect_required_folders() {
                 seen["$folder"]="1"
             fi
             # Container: also collect sub-modules
-            local con_dir="$MODULES_DIR/$folder"
+            local con_dir; con_dir="$(module_path "$folder")"
             if [[ -f "$con_dir/container.md" ]]; then
                 local sub_mods
                 sub_mods=$(grep '^modules' "$con_dir/container.md" \
                     | sed 's/modules *= *"\(.*\)"/\1/' | head -1)
                 for sub in $sub_mods; do
-                    # sub ist Ordnername
-                    if [[ -n "${seen[$sub]:-}" ]]; then continue; fi  # skip already-seen
-                    if [[ -d "$MODULES_DIR/$sub" ]]; then
+                    if [[ -n "${seen[$sub]:-}" ]]; then continue; fi
+                    if [[ -d "$(module_path "$sub")" ]]; then
                         echo "$sub"
                         seen["$sub"]="1"
                     fi
@@ -503,11 +723,10 @@ collect_required_folders() {
 
 # ─── Build groups.json ────────────────────────────────────────────────────────
 build_groups_json() {
-    local out_dir="$1"
-    shift
+    local out_dir="$1" bar_orient="${2:-horizontal}"
+    shift 2
     local -a left_keys=() center_keys=() right_keys=()
 
-    # Read left / center / right from arguments (separated by "--")
     local section="left"
     for arg in "$@"; do
         case "$arg" in
@@ -521,36 +740,33 @@ build_groups_json() {
         esac
     done
 
-    # Alle Keys zusammen
     local -a all_keys=("${left_keys[@]:-}" "${center_keys[@]:-}" "${right_keys[@]:-}")
 
-    # Include-Liste (nur verwendete Modul-Configs)
     local include_json="[]"
     while IFS= read -r folder; do
-        local cfg="$MODULES_DIR/$folder/config.json"
+        local cfg; cfg="$(module_path "$folder")/config.json"
         if [[ -f "$cfg" ]]; then
             include_json=$(echo "$include_json" | jq --arg p "$cfg" '. + [$p]')
         fi
     done < <(collect_required_folders "${all_keys[@]+"${all_keys[@]}"}")
 
-    # Gruppen-Arrays als JSON
     local left_json="[]" center_json="[]" right_json="[]"
     for k in "${left_keys[@]:-}";   do left_json=$(echo   "$left_json"   | jq --arg k "$k" '. + [$k]'); done
     for k in "${center_keys[@]:-}"; do center_json=$(echo "$center_json" | jq --arg k "$k" '. + [$k]'); done
     for k in "${right_keys[@]:-}";  do right_json=$(echo  "$right_json"  | jq --arg k "$k" '. + [$k]'); done
 
-    # Basis-Objekt
     local result
     result=$(jq -n \
-        --argjson inc  "$include_json" \
-        --argjson left "$left_json" \
-        --argjson ctr  "$center_json" \
-        --argjson rgt  "$right_json" \
+        --argjson inc    "$include_json" \
+        --arg     orient "$bar_orient" \
+        --argjson left   "$left_json" \
+        --argjson ctr    "$center_json" \
+        --argjson rgt    "$right_json" \
         '{
             "include": $inc,
-            "group/left":   { "orientation": "horizontal", "modules": $left },
-            "group/center": { "orientation": "horizontal", "modules": $ctr  },
-            "group/right":  { "orientation": "horizontal", "modules": $rgt  }
+            "group/left":   { "orientation": $orient, "modules": $left },
+            "group/center": { "orientation": $orient, "modules": $ctr  },
+            "group/right":  { "orientation": $orient, "modules": $rgt  }
         }')
 
     mkdir -p "$out_dir"
@@ -598,7 +814,7 @@ build_style_css() {
         fi
         echo ""
         for folder in "${req_folders[@]:-}"; do
-            local mod_css="$MODULES_DIR/$folder/style.css"
+            local mod_css; mod_css="$(module_path "$folder")/style.css"
             if [[ -f "$mod_css" ]]; then
                 echo "@import url(\"${mod_css}\");"
             fi
@@ -612,15 +828,14 @@ build_style_css() {
 build_bar() {
     local monitor="$1" position="$2" style="$3"
     shift 3
-    # Restliche Args: left_keys... "--center" center_keys... "--right" right_keys...
+    # Remaining args: left_keys... "--center" center_keys... "--right" right_keys...
 
     local out_dir="$OUTPUT_DIR/$style/$position/$monitor"
+    local orient; orient="$(get_orientation_for_position "$position")"
 
-    # Build groups.json and config.json
-    build_groups_json "$out_dir" "$@"
+    build_groups_json "$out_dir" "$orient" "$@"
     build_config_json "$out_dir" "$monitor" "$position" "$style"
 
-    # Required folders for style.css
     local -a all_keys=()
     for arg in "$@"; do
         [[ "$arg" == "--center" || "$arg" == "--right" ]] && continue
@@ -641,11 +856,13 @@ main() {
     load_all_modules
     while true; do
         case "$STATE" in
-            monitor)  screen_monitor ;;
-            position) screen_position ;;
-            style)    screen_style ;;
-            slot)     screen_slot ;;
-            modules)  screen_modules ;;
+            monitor)      screen_monitor ;;
+            position)     screen_position ;;
+            style)        screen_style ;;
+            slot)         screen_slot ;;
+            modules)      screen_modules ;;
+            frame_select) screen_frame_select ;;
+            frame_bar)    screen_frame_bar ;;
         esac
     done
 }
@@ -703,25 +920,28 @@ rebuild_all() {
             .["group/right"].modules[]?
         ' "$groups_file" 2>/dev/null || true)
 
-        # Include-Liste neu bauen (Container-Configs jetzt automatisch dabei)
+        local orient; orient="$(get_orientation_for_position "$position")"
+
+        # Rebuild include list and required folders
         local new_include="[]"
         local -a req_folders=()
         while IFS= read -r folder; do
             req_folders+=("$folder")
-            local cfg="$MODULES_DIR/$folder/config.json"
+            local cfg; cfg="$(module_path "$folder")/config.json"
             if [[ -f "$cfg" ]]; then
                 new_include=$(echo "$new_include" | jq --arg p "$cfg" '. + [$p]')
             fi
         done < <(collect_required_folders "${all_keys[@]+"${all_keys[@]}"}")
 
-        # groups.json: Include aktualisieren, Inline-Container-Defs entfernen
+        # Update groups.json: refresh includes + group orientation
         jq \
-            --argjson inc "$new_include" \
+            --argjson inc    "$new_include" \
+            --arg     orient "$orient" \
             '{
                 "include":      $inc,
-                "group/left":   .["group/left"],
-                "group/center": .["group/center"],
-                "group/right":  .["group/right"]
+                "group/left":   (.["group/left"]   | .orientation = $orient),
+                "group/center": (.["group/center"] | .orientation = $orient),
+                "group/right":  (.["group/right"]  | .orientation = $orient)
             }' "$groups_file" | jq '.' > "$groups_file.tmp" \
             && mv "$groups_file.tmp" "$groups_file"
 

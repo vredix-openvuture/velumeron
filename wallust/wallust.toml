@@ -35,7 +35,7 @@ check_contrast = true
 # Color saturation, between [1% and 100%] (OPTIONAL, disabled by default)
 # usually something higher than 50 increases the saturation and below
 # decreases it (on a scheme with strong and vivid colors)
-saturation = 54
+saturation = 20
 
 # Alpha value for templating, by default 100 (no other use whatsoever)
 #alpha = 100
@@ -49,14 +49,14 @@ saturation = 54
 # ¡ If either one is a directory, then both SHOULD be one. !
 # zathura = { template = 'zathura', target = '~/.config/zathura/zathurarc' }
 
-vscode   = { src = "vscode.json",          dst = "~/.cache/wallust/colors.json" }
-vscode2  = { src = "vscode",               dst = "~/.cache/wallust/colors" }
-hyprland_lua = { src = "colors.lua",          dst = "~/.config/vutureland/hypr.lua/colors.lua"}
-pywalfox = { src = "pywal-colors",         dst = "~/.cache/wal/colors" }
-pywalfox2= { src = "pywal-colors.json",    dst = "~/.cache/wal/colors.json" }
-fish     = { src = "colors.fish",          dst = "~/.cache/wallust/colors.fish"}
-starship = { src = "starship-palette.toml",dst = "~/.cache/wallust/starship-palette.toml"}
-
+vscode       = { src = "vscode.json",            dst = "~/.cache/wallust/colors.json" }
+vscode2      = { src = "vscode",                 dst = "~/.cache/wallust/colors" }
+hyprland_lua = { src = "colors.lua",             dst = "~/.config/vutureland/hypr.lua/colors.lua"}
+pywalfox     = { src = "pywal-colors",           dst = "~/.cache/wal/colors" }
+pywalfox2    = { src = "pywal-colors.json",      dst = "~/.cache/wal/colors.json" }
+fish         = { src = "colors.fish",            dst = "~/.cache/wallust/colors.fish"}
+starship     = { src = "starship-palette.toml",  dst = "~/.cache/wallust/starship-palette.toml"}
+   
 
 kitty_config     = { src = "colors-kitty.conf",    dst = "~/.config/kitty/colors.conf"}
 gtk3             = { src = "gtk3.css",             dst = "~/.config/gtk-3.0/wallust.css"}
@@ -67,6 +67,6 @@ colors_vuture    = { src = "colors_gtk.css",       dst = "~/.config/vutureland/a
 
 [hooks]
 hyprland_lua_colors = "~/.config/vutureland/assets/scripts/wallust/hyprland_lua-colors.sh && hyprctl reload"
-pywalfox_update  = "pywalfox update"
-swaync_update    = "killall -q swaync; ~/.config/vutureland/assets/scripts/launcher.sh --swaync"
-waybar_update    = "sleep 0.8 && pkill -SIGUSR2 waybar"
+pywalfox_update     = "pywalfox update"
+swaync_update       = "killall -q swaync; ~/.config/vutureland/assets/scripts/launcher.sh --swaync"
+waybar_update       = "sleep 0.8 && pkill -SIGUSR2 waybar"

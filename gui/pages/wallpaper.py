@@ -57,8 +57,8 @@ class WallpaperCard(Gtk.Box):
             add_btn.add_css_class('wp-add-btn')
             add_btn.set_halign(Gtk.Align.CENTER)
             add_btn.set_tooltip_text(
-                'Vertikales Bild hinzufügen' if entry.hor_file and not entry.ver_file
-                else 'Horizontales Bild hinzufügen')
+                'Add vertical image' if entry.hor_file and not entry.ver_file
+                else 'Add horizontal image')
             add_btn.connect('clicked', self._on_add_clicked)
             self.append(add_btn)
 
@@ -105,7 +105,7 @@ class SetCard(WallpaperCard):
 
 class WallpaperPage(Gtk.Box):
 
-    TABS = [('set', 'Sets'), ('hor', 'Horizontal'), ('ver', 'Vertikal')]
+    TABS = [('set', 'Sets'), ('hor', 'Horizontal'), ('ver', 'Vertical')]
 
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
@@ -132,11 +132,11 @@ class WallpaperPage(Gtk.Box):
         self._status.add_css_class('caption')
         bar.pack_start(self._status)
 
-        btn_refresh = Gtk.Button(label='Aktualisieren')
+        btn_refresh = Gtk.Button(label='Refresh')
         btn_refresh.connect('clicked', lambda _: self._reload())
         bar.pack_end(btn_refresh)
 
-        btn_add = Gtk.Button(label='Hinzufügen …')
+        btn_add = Gtk.Button(label='Add …')
         btn_add.add_css_class('suggested-action')
         btn_add.connect('clicked', self._on_add)
         bar.pack_end(btn_add)
@@ -176,7 +176,7 @@ class WallpaperPage(Gtk.Box):
     def _reload(self):
         self._clear()
         self._spinner.start()
-        self._status.set_text('Lade …')
+        self._status.set_text('Loading…')
 
         def _work():
             global _THEME_NAMES
@@ -204,7 +204,7 @@ class WallpaperPage(Gtk.Box):
                 self._flows['ver'].append(VerCard(e, cb))
                 counts['ver'] += 1
         self._status.set_text(
-            f'{counts["set"]} Sets · {counts["hor"]} Horizontal · {counts["ver"]} Vertikal')
+            f'{counts["set"]} Sets · {counts["hor"]} Horizontal · {counts["ver"]} Vertical')
         return False
 
     def _on_activated(self, child, tab_key: str):
@@ -213,7 +213,7 @@ class WallpaperPage(Gtk.Box):
             return
         e = card.entry
         self._spinner.start()
-        self._status.set_text(f'Setze {e.id} …')
+        self._status.set_text(f'Applying {e.id}…')
 
         def _apply():
             cmd = ['bash', SET_WP]
@@ -224,15 +224,15 @@ class WallpaperPage(Gtk.Box):
             subprocess.run(cmd)
             GLib.idle_add(lambda: (
                 self._spinner.stop(),
-                self._status.set_text('Wallpaper gesetzt.')
+                self._status.set_text('Wallpaper applied.')
             ) and False)
 
         threading.Thread(target=_apply, daemon=True).start()
 
     def _on_add(self, _):
-        d = Gtk.FileDialog(title='Wallpaper hinzufügen')
+        d = Gtk.FileDialog(title='Add wallpaper')
         f = Gtk.FileFilter()
-        f.set_name('Bilder & Videos')
+        f.set_name('Images & Videos')
         for p in ['*.jpg', '*.jpeg', '*.png', '*.webp', '*.mp4', '*.webm', '*.mkv']:
             f.add_pattern(p)
         s = Gio.ListStore.new(Gtk.FileFilter)
@@ -273,10 +273,10 @@ class WallpaperPage(Gtk.Box):
         shutil.copy2(path, dst)
 
     def _add_counterpart(self, entry: WallpaperEntry, orientation: str):
-        label = 'Horizontales Bild' if orientation == 'hor' else 'Vertikales Bild'
-        d = Gtk.FileDialog(title=f'{label} für {entry.id} hinzufügen')
+        label = 'Horizontal image' if orientation == 'hor' else 'Vertical image'
+        d = Gtk.FileDialog(title=f'Add {label} for {entry.id}')
         f = Gtk.FileFilter()
-        f.set_name('Bilder & Videos')
+        f.set_name('Images & Videos')
         for p in ['*.jpg', '*.jpeg', '*.png', '*.webp', '*.mp4', '*.webm', '*.mkv']:
             f.add_pattern(p)
         s = Gio.ListStore.new(Gtk.FileFilter)

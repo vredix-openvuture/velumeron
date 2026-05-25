@@ -1,4 +1,4 @@
-@import "./assets/misc/colors.rasi"
+@import "./assets/colors.rasi"
 
 configuration {
     modi: "wallpaper:~/.config/vutureland/rofi/assets/rofi-wallpaper.sh";

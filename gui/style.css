@@ -17,3 +17,31 @@ flowboxchild:selected > box .wp-frame {
     min-height: 0;
     min-width: 0;
 }
+
+/* Waybar editor */
+.bar-zone {
+    border: 1px solid alpha(@borders, 0.6);
+    border-radius: 8px;
+    padding: 8px;
+    min-height: 120px;
+}
+
+.bar-zone-hover {
+    border-color: @accent_color;
+    background-color: alpha(@accent_color, 0.08);
+}
+
+.module-chip {
+    border: 1px solid alpha(@borders, 0.8);
+    border-radius: 4px;
+    padding: 2px 6px;
+    background-color: @card_bg_color;
+    font-size: 12px;
+}
+
+.palette-chip {
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 12px;
+    min-height: 0;
+}

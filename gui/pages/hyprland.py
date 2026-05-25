@@ -22,7 +22,7 @@ class MonitorRow(Adw.ExpanderRow):
         self._build()
 
     def _build(self):
-        mode_row = Adw.EntryRow(title='Modus')
+        mode_row = Adw.EntryRow(title='Mode')
         mode_row.set_text(self.mon.mode)
         def on_mode(r):
             self.mon.mode = r.get_text()
@@ -48,13 +48,13 @@ class MonitorRow(Adw.ExpanderRow):
         self.add_row(tf_row)
 
         vrr_row = Adw.ComboRow(title='VRR (FreeSync/G-Sync)',
-                               model=Gtk.StringList.new(['Aus (0)', 'An (1)', 'Force (2)']))
+                               model=Gtk.StringList.new(['Off (0)', 'On (1)', 'Force (2)']))
         vrr_row.set_selected(self.mon.vrr)
         vrr_row.connect('notify::selected',
                         lambda r, _: setattr(self.mon, 'vrr', r.get_selected()))
         self.add_row(vrr_row)
 
-        bd_row = Adw.ComboRow(title='Farbtiefe',
+        bd_row = Adw.ComboRow(title='Bit Depth',
                               model=Gtk.StringList.new(['8 Bit', '10 Bit']))
         bd_row.set_selected(0 if self.mon.bitdepth == 8 else 1)
         bd_row.connect('notify::selected',
@@ -79,22 +79,22 @@ class HyprlandPage(Adw.PreferencesPage):
 
     def _build(self):
         # ── Monitors ──────────────────────────────────────────────────────────
-        mon_group = Adw.PreferencesGroup(title='Monitore')
+        mon_group = Adw.PreferencesGroup(title='Monitors')
         for mon in self._monitors:
             mon_group.add(MonitorRow(mon))
         self.add(mon_group)
 
         # ── Peripherals ───────────────────────────────────────────────────────
-        per_group = Adw.PreferencesGroup(title='Tasten & Cursor')
+        per_group = Adw.PreferencesGroup(title='Keys and Cursor')
         for var, label in [
-            ('fn_brightness_up',   'Helligkeit +'),
-            ('fn_brightness_down', 'Helligkeit −'),
-            ('fn_volume_up',       'Lautstärke +'),
-            ('fn_volume_down',     'Lautstärke −'),
-            ('fn_volume_mute',     'Stummschalten'),
+            ('fn_brightness_up',   'Brightness +'),
+            ('fn_brightness_down', 'Brightness −'),
+            ('fn_volume_up',       'Volume +'),
+            ('fn_volume_down',     'Volume −'),
+            ('fn_volume_mute',     'Mute'),
             ('fn_play_stop_play',  'Play / Pause'),
-            ('fn_play_next',       'Nächster Titel'),
-            ('fn_play_prev',       'Vorheriger Titel'),
+            ('fn_play_next',       'Next Track'),
+            ('fn_play_prev',       'Previous Track'),
         ]:
             row = Adw.EntryRow(title=label)
             row.set_text(str(self._periph.get(var, '')))
@@ -113,7 +113,7 @@ class HyprlandPage(Adw.PreferencesPage):
         cur_size_spin.set_valign(Gtk.Align.CENTER)
         cur_size_spin.connect('value-changed',
                               lambda w: self._periph.__setitem__('cur_size', int(w.get_value())))
-        cur_size_row = Adw.ActionRow(title='Cursor-Größe')
+        cur_size_row = Adw.ActionRow(title='Cursor Size')
         cur_size_row.add_suffix(cur_size_spin)
         per_group.add(cur_size_row)
         self.add(per_group)
@@ -142,7 +142,7 @@ class HyprlandPage(Adw.PreferencesPage):
 
         # ── Apply ─────────────────────────────────────────────────────────────
         apply_group = Adw.PreferencesGroup()
-        apply_btn = Gtk.Button(label='Änderungen übernehmen & Hyprland neu laden')
+        apply_btn = Gtk.Button(label='Apply & Reload Hyprland')
         apply_btn.add_css_class('suggested-action')
         apply_btn.add_css_class('pill')
         apply_btn.connect('clicked', self._apply)

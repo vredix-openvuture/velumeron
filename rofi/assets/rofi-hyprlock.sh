@@ -3,7 +3,7 @@
 # Lists .conf files from hyprlock-themes/, shows preview, applies monitor substitution
 
 THEMES_DIR=~/.config/vutureland/hypr.lua/hyprlock-themes
-ACTIVE_CONF=~/.config/vutureland/hypr.lua/active-hyprlock.conf
+ACTIVE_CONF=~/.config/vutureland/hypr.lua/hyprlock.conf
 BLACK_WP=~/.config/vutureland/assets/wallpaper/pure-black.jpg
 CACHE_DIR=~/.cache/vutureland/hyprlock-thumbs
 THUMB_W=400

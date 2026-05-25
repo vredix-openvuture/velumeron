@@ -1,7 +1,7 @@
 /******************************************************************************
  * CYBERFREAK Rofi Theme - App Launcher
  ******************************************************************************/
-@import "./assets/misc/colors.rasi"
+@import "./assets/colors.rasi"
 
 
 /* Semantisches Mapping
@@ -81,7 +81,7 @@ entry {
 /*-------------------------------------------------------------*/
 listview {
     fixed-height:           0;
-    lines:                  11;
+    lines:                  6;
     border:                 0;
     spacing:                4px;
     scrollbar:              false;

@@ -1,5 +1,0 @@
-name = "group/performance_drawer"
-description = "Performance Drawer  (Modus → Temp → RAM → CPU)"
-alias = "Performance Drawer"
-modules = "performance temperature-gpu memory temperature-cpu cpu"
-specific = "left"

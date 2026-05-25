@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from pages.wallpaper import WallpaperPage
 from pages.hyprland import HyprlandPage
 from pages.waybar import WaybarPage
+from pages.wallust import WallustPage
 
 _CSS = os.path.join(os.path.dirname(__file__), 'style.css')
 
@@ -37,6 +38,10 @@ class MainWindow(Adw.ApplicationWindow):
         stack.add_titled_with_icon(
             WallpaperPage(), 'wallpaper', 'Wallpaper',
             'image-x-generic-symbolic')
+
+        stack.add_titled_with_icon(
+            WallustPage(), 'wallust', 'Colors',
+            'preferences-color-symbolic')
 
         header = Adw.HeaderBar()
         switcher = Adw.ViewSwitcher()

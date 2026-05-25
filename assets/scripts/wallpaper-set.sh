@@ -87,20 +87,38 @@ while IFS=';' read -r name transform width height; do
     fi
 done < <(hyprctl monitors -j | jq -r '.[] | "\(.name);\(.transform);\(.width);\(.height)"')
 
+# Run wallust post-processing hooks (mirrors [hooks] in wallust.toml)
+_run_wallust_hooks() {
+    ~/.config/vutureland/assets/scripts/wallust/hyprland_lua-colors.sh && hyprctl reload
+    pywalfox update &>/dev/null &
+    { killall -q swaync; ~/.config/vutureland/assets/scripts/launcher.sh --swaync; } &
+    { sleep 0.8 && pkill -SIGUSR2 waybar; } &
+}
+
 # Wallust: prefer horizontal source; extract frame for videos
 wallust_src="${hor_file:-$ver_file}"
-ext="${wallust_src##*.}"
-case "${ext,,}" in
-    mp4|webm|mkv|avi|mov)
-        tmp=$(mktemp /tmp/wp-frame-XXXXXX.jpg)
-        ffmpeg -y -i "$wallust_src" -vframes 1 -q:v 2 "$tmp" &>/dev/null
-        wallust --config-dir ~/.config/vutureland/wallust run "$tmp"
-        rm -f "$tmp"
-        ;;
-    *)
-        wallust --config-dir ~/.config/vutureland/wallust run "$wallust_src"
-        ;;
-esac
+_color_mode=$(cat ~/.config/vutureland/wallust/color-mode 2>/dev/null || echo "auto")
+
+if [[ "$_color_mode" == "auto" ]]; then
+    ext="${wallust_src##*.}"
+    case "${ext,,}" in
+        mp4|webm|mkv|avi|mov)
+            tmp=$(mktemp /tmp/wp-frame-XXXXXX.jpg)
+            ffmpeg -y -i "$wallust_src" -vframes 1 -q:v 2 "$tmp" &>/dev/null
+            wallust --config-dir ~/.config/vutureland/wallust run "$tmp"
+            rm -f "$tmp"
+            ;;
+        *)
+            wallust --config-dir ~/.config/vutureland/wallust run "$wallust_src"
+            ;;
+    esac
+elif [[ "$_color_mode" == fixed:* ]]; then
+    _scheme_file=~/.config/vutureland/wallust/fixed_colors/"${_color_mode#fixed:}"
+    if [[ -f "$_scheme_file" ]]; then
+        wallust --config-dir ~/.config/vutureland/wallust cs "$_scheme_file"
+        _run_wallust_hooks
+    fi
+fi
 
 if [[ "$showcase" == "true" ]]; then
     sleep 2
