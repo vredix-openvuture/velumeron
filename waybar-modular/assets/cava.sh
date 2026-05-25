@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 
 ICONS=("▁" "▂" "▃" "▄" "▅" "▆" "▇" "█")
-IDLE_TEXT="we love music"
+IDLE_TEXT=""
 IDLE_TIMEOUT=2
 
 CONFIG=$(mktemp /tmp/waybar-cava-XXXXXX.ini)
 cat > "$CONFIG" << 'EOF'
 [general]
 framerate = 60
-bars = 40
+bars = 14
 
 [output]
 method = raw
