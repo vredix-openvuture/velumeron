@@ -32,7 +32,7 @@ cava -p "$CONFIG" | while true; do
     # re-check playerctl once per second
     if (( now > last_check )); then
         last_check=$now
-        if playerctl status 2>/dev/null | grep -q "^Playing"; then
+        if playerctl -i firefox status 2>/dev/null | grep -q "^Playing"; then
             playing=true
         else
             playing=false
@@ -49,10 +49,14 @@ cava -p "$CONFIG" | while true; do
         [[ -z "$out" ]] && continue
 
         if $playing; then
+            # music playing — reset idle timer, show bars
             last_active=$now
             idle_shown=false
             echo "$out"
-        elif (( now - last_active >= IDLE_TIMEOUT )) && ! $idle_shown; then
+        elif (( now - last_active < IDLE_TIMEOUT )); then
+            # grace period — still show bars (they'll fade naturally)
+            echo "$out"
+        elif ! $idle_shown; then
             echo "$IDLE_TEXT"
             idle_shown=true
         fi
