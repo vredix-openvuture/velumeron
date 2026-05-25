@@ -21,37 +21,45 @@ EOF
 cleanup() { rm -f "$CONFIG"; kill 0 2>/dev/null; }
 trap cleanup EXIT INT TERM
 
-last_activity=$(date +%s)
+playing=false
+last_check=0
+last_active=$(date +%s)
 idle_shown=false
 
 cava -p "$CONFIG" | while true; do
+    now=$(date +%s)
+
+    # re-check playerctl once per second
+    if (( now > last_check )); then
+        last_check=$now
+        if playerctl status 2>/dev/null | grep -q "^Playing"; then
+            playing=true
+        else
+            playing=false
+        fi
+    fi
+
     if IFS=';' read -t 1 -ra vals; then
         out=""
-        all_zero=true
         for v in "${vals[@]}"; do
             v="${v//[$'\r\n']/}"
             [[ -z "$v" ]] && continue
-            [[ "$v" != "0" ]] && all_zero=false
             out+="${ICONS[$v]:-▁}"
         done
         [[ -z "$out" ]] && continue
 
-        if ! $all_zero; then
-            last_activity=$(date +%s)
+        if $playing; then
+            last_active=$now
             idle_shown=false
             echo "$out"
-        else
-            now=$(date +%s)
-            if (( now - last_activity >= IDLE_TIMEOUT )) && ! $idle_shown; then
-                echo "$IDLE_TEXT"
-                idle_shown=true
-            fi
+        elif (( now - last_active >= IDLE_TIMEOUT )) && ! $idle_shown; then
+            echo "$IDLE_TEXT"
+            idle_shown=true
         fi
     else
         rc=$?
-        (( rc > 128 )) || break  # EOF → exit loop; timeout → check idle
-        now=$(date +%s)
-        if (( now - last_activity >= IDLE_TIMEOUT )) && ! $idle_shown; then
+        (( rc > 128 )) || break  # EOF → exit; timeout → continue
+        if ! $playing && (( now - last_active >= IDLE_TIMEOUT )) && ! $idle_shown; then
             echo "$IDLE_TEXT"
             idle_shown=true
         fi
