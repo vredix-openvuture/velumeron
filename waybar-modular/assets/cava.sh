@@ -2,7 +2,7 @@
 
 ICONS=("▁" "▂" "▃" "▄" "▅" "▆" "▇" "█")
 IDLE_TEXT="we love music"
-IDLE_TIMEOUT=10
+IDLE_TIMEOUT=2
 
 CONFIG=$(mktemp /tmp/waybar-cava-XXXXXX.ini)
 cat > "$CONFIG" << 'EOF'
@@ -26,7 +26,9 @@ last_check=0
 last_active=$(date +%s)
 idle_shown=false
 
-cava -p "$CONFIG" | while true; do
+# Process substitution keeps the while loop in the current shell —
+# variables (playing, last_active, idle_shown) update correctly.
+while true; do
     now=$(date +%s)
 
     # re-check playerctl once per second
@@ -49,12 +51,10 @@ cava -p "$CONFIG" | while true; do
         [[ -z "$out" ]] && continue
 
         if $playing; then
-            # music playing — reset idle timer, show bars
             last_active=$now
             idle_shown=false
             echo "$out"
         elif (( now - last_active < IDLE_TIMEOUT )); then
-            # grace period — still show bars (they'll fade naturally)
             echo "$out"
         elif ! $idle_shown; then
             echo "$IDLE_TEXT"
@@ -68,4 +68,4 @@ cava -p "$CONFIG" | while true; do
             idle_shown=true
         fi
     fi
-done
+done < <(cava -p "$CONFIG")
