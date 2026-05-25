@@ -955,9 +955,39 @@ rebuild_all() {
     kill_and_start
 }
 
+# ─── Example bar (--example) ─────────────────────────────────────────────────
+run_example() {
+    load_all_modules
+
+    # Primary monitor: focused one, or first detected
+    local monitor
+    monitor=$(hyprctl monitors -j 2>/dev/null \
+        | jq -r 'first(.[] | select(.focused==true) | .name) // .[0].name' 2>/dev/null || true)
+
+    if [[ -z "$monitor" ]]; then
+        err "No monitors detected."
+        exit 1
+    fi
+
+    echo "── Waybar Example ──────────────────────────────────"
+    echo "  Monitor : $monitor"
+    echo "  Style   : dock / top"
+    echo ""
+
+    build_bar "$monitor" "top" "dock" \
+        clock custom/separator group/performance_drawer custom/separator custom/actionuser \
+        --center hyprland/workspaces hyprland/submap \
+        --right  custom/cava group/audio_drawer custom/separator tray
+
+    echo ""
+    kill_and_start
+}
+
 # ─── Entry Point ──────────────────────────────────────────────────────────────
 if [[ "${1:-}" == "--rebuild" ]]; then
     rebuild_all
+elif [[ "${1:-}" == "--example" ]]; then
+    run_example
 else
     main "$@"
 fi

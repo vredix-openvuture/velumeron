@@ -790,6 +790,100 @@ EOF
     ok "Created new user_settings.lua"
 }
 
+# ─── Non-interactive autostart configuration (--autostart) ──────────────────
+
+autostart_config() {
+    echo ""
+    echo "  ╔═══════════════════════════════════════════╗"
+    echo "  ║   VUTURELAND – Autostart Configuration    ║"
+    echo "  ╚═══════════════════════════════════════════╝"
+    echo ""
+
+    init_user_settings
+
+    # ── 1) Monitors ──────────────────────────────────────────────────────────
+    say "── MONITORS ──"
+
+    local monitors_json
+    monitors_json=$(hyprctl monitors -j 2>/dev/null || echo "[]")
+
+    # Primary: focused monitor, else first detected
+    local mon1
+    mon1=$(echo "$monitors_json" | jq -r \
+        'first(.[] | select(.focused==true) | .name) // .[0].name' 2>/dev/null || true)
+
+    if [[ -z "$mon1" ]]; then
+        warn "No monitors detected via hyprctl. Cannot continue."
+        exit 1
+    fi
+
+    # Best mode: sort by pixel count (w×h) desc, then by refresh rate desc
+    local best_mode
+    best_mode=$(echo "$monitors_json" | \
+        jq -r --arg n "$mon1" '.[] | select(.name==$n) | .availableModes[]' 2>/dev/null | \
+        sed 's/Hz$//' | \
+        awk -F'[@x]' '{ printf "%012.0f %010.3f %s\n", $1*$2, $3+0, $0 }' | \
+        sort -rn | head -1 | awk '{print $3}' || true)
+
+    # Fallback: use current active mode
+    if [[ -z "$best_mode" ]]; then
+        best_mode=$(echo "$monitors_json" | \
+            jq -r --arg n "$mon1" \
+            '.[] | select(.name==$n) | "\(.width)x\(.height)@\(.refreshRate | floor)"' \
+            2>/dev/null || true)
+        best_mode="${best_mode:-2560x1440@60}"
+    fi
+
+    ok "Monitor : $mon1"
+    ok "Mode    : $best_mode"
+
+    {
+        printf 'mon1 = "%s"\n\n' "$mon1"
+        printf 'hl.monitor({\n'
+        printf '    output       = "%s",\n' "$mon1"
+        printf '    mode         = "%s",\n' "$best_mode"
+        printf '    transform    = 0,\n'
+        printf '    position     = "0x0",\n'
+        printf '    scale        = 1,\n'
+        printf '    bitdepth     = 10,\n'
+        printf '    supports_hdr = false,\n'
+        printf '    vrr          = 0,\n'
+        printf '    cm           = "auto",\n'
+        printf '})\n'
+    } | write_section "MONITORS"
+
+    # ── 2) Workspaces: 1–5 on primary monitor, persistent ────────────────────
+    say "── WORKSPACES ──"
+
+    {
+        echo "-- mon1"
+        for ws in 1 2 3 4 5; do
+            echo "hl.workspace_rule({ workspace = \"$ws\", monitor = mon1, persistent = true })"
+        done
+    } | write_section "WORKSPACES"
+
+    ok "Workspaces 1–5 → mon1 ($mon1), persistent"
+
+    # ── 3) Autostart: empty ───────────────────────────────────────────────────
+    say "── AUTOSTART ──"
+
+    {
+        echo "exec_once_daemons = {"
+        echo "}"
+        echo ""
+        echo "-- { app = command, ws = workspace_number }"
+        echo "start_apps = {"
+        for i in $(seq 1 10); do
+            printf '    { app = "", ws = %d },\n' "$i"
+        done
+        echo "}"
+    } | write_section "AUTOSTART"
+
+    ok "Autostart: empty"
+    echo ""
+    save_and_reload
+}
+
 # ─── Main menu ──────────────────────────────────────────────────────────────
 
 main() {
@@ -830,4 +924,8 @@ main() {
     done
 }
 
-main "$@"
+if [[ "${1:-}" == "--autostart" ]]; then
+    autostart_config
+else
+    main "$@"
+fi
