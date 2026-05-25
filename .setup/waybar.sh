@@ -977,7 +977,7 @@ run_example() {
     # Append battery module only when a battery is present
     local right_modules="custom/cava group/audio_drawer custom/separator group/tray_drawer"
     if grep -qs "^Battery$" /sys/class/power_supply/*/type 2>/dev/null; then
-        right_modules="$right_modules custom/separator battery"
+        right_modules="$right_modules battery"
     fi
 
     # shellcheck disable=SC2086
