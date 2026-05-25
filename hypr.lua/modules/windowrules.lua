@@ -3,7 +3,7 @@
 -- ═══════════════════════════════════════════════════════
 
 local file_dialogs = table.concat({
-    ".*umbenennen.*", ".*[Rr]ename.*",
+    ".*[Uu]mbenennen.*", ".*[Rr]ename.*",
     ".*[Ll]öschen.*", ".*[Dd]elete.*",
     ".*[Ee]igenschaften.*", ".*[Pp]roperties.*",
     ".*[Bb]estätigen.*", ".*[Cc]onfirm.*",
@@ -12,6 +12,7 @@ local file_dialogs = table.concat({
     ".*[Ff]ortschritt.*", ".*[Pp]rogress.*",
     ".*[Ff]ehler.*", ".*[Ee]rror.*",
     ".*[Ww]arnung.*", ".*[Ww]arning.*",
+    ".*[Kk]alender.*", ".*[Cc]alendar.*", -- // Calendar same as popups
 }, "|")
 file_dialogs = "(" .. file_dialogs .. ")"
 
@@ -52,26 +53,36 @@ hl.window_rule({
 })
 
 -- ── Floating ──────────────────────────────────────────
+
+float_size = { "(monitor_w*0.5)", "(monitor_h*0.6)" }
+
 hl.window_rule({
     name   = "modals",
     match  = { modal = true },
     float  = true,
     center = true,
-    size   = { "(monitor_w*0.4)", "(monitor_h*0.45)" },
+    size   = float_size,
 })
 hl.window_rule({
     name   = "portals",
     match  = { class = "(xdg-desktop-portal.*)" },
     float  = true,
     center = true,
-    size   = { "(monitor_w*0.4)", "(monitor_h*0.45)" },
+    size   = float_size,
 })
 hl.window_rule({
     name   = "file_dialogs",
     match  = { title = file_dialogs },
     float  = true,
     center = true,
-    size   = { "(monitor_w*0.4)", "(monitor_h*0.45)" },
+    size   = float_size,
+})
+hl.window_rule({
+    name   = "file_dialogs",
+    match  = { class = file_dialogs },
+    float  = true,
+    center = true,
+    size   = float_size,
 })
 hl.window_rule({
     name   = "user_popups",
@@ -94,6 +105,14 @@ hl.window_rule({
     opaque  = true,
     no_blur = true,
 })
+hl.window_rule({
+    name    = "fullscreen_opaque",
+    match   = { fullscreen = true },
+    opacity = 1,
+    opaque  = true,
+    no_blur = true,
+})
+
 hl.window_rule({
     name    = "user_opaque",
     match   = { initial_class = opacity_window },
