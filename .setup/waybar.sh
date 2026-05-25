@@ -974,10 +974,17 @@ run_example() {
     echo "  Style   : dock / top"
     echo ""
 
+    # Append battery module only when a battery is present
+    local right_modules="custom/cava group/audio_drawer custom/separator group/tray_drawer"
+    if grep -qs "^Battery$" /sys/class/power_supply/*/type 2>/dev/null; then
+        right_modules="$right_modules custom/separator battery"
+    fi
+
+    # shellcheck disable=SC2086
     build_bar "$monitor" "top" "dock" \
         clock custom/separator group/performance_drawer custom/separator custom/actionuser \
         --center hyprland/workspaces hyprland/submap \
-        --right  custom/cava group/audio_drawer custom/separator group/tray_drawer
+        --right  $right_modules
 
     echo ""
     kill_and_start
