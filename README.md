@@ -2,7 +2,8 @@
 
 A modular Hyprland desktop configuration for Arch Linux.
 
-![[./assets/icons/vuturland.png]]
+<img width="289" height="124" alt="image" src="https://github.com/user-attachments/assets/dd525eae-2464-41fc-87cc-b6cfd35eb1f3" />
+
 
 ---
 
