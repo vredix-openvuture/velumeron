@@ -1,0 +1,15 @@
+window.topbar #custom-notification {
+    margin:  0px 1px;
+    padding: 1px 1px;
+}
+
+window.topbar #custom-notification:hover { color: @fg-hover; }
+
+
+window.bottombar #custom-notification {
+    margin:  0px 1px;
+    padding: 1px 1px;
+}
+
+window.bottombar #custom-notification:hover { color: @fg-hover; }
+

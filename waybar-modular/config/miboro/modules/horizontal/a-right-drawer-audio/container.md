@@ -1,0 +1,5 @@
+name = "group/audio_drawer"
+description = "Audio Drawer  (Volume → Bluetooth)"
+alias = "Drawer Audio // right/bottom"
+modules = "pulseaudio bluetooth mpris"
+specific = "right"

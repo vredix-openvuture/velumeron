@@ -11,7 +11,7 @@ OUTPUT_DIR="$VUTURELAND_DIR/waybar-modular/output"
 # Alle per-Monitor config.json finden (output/{style}/{position}/{monitor}/config.json)
 declare -a CONFIG_FILES=()
 while IFS= read -r f; do CONFIG_FILES+=("$f"); done \
-    < <(find "$OUTPUT_DIR" -mindepth 4 -maxdepth 4 -name "config.json" 2>/dev/null | sort)
+    < <(find "$OUTPUT_DIR" -mindepth 4 -maxdepth 5 -name "config.json" 2>/dev/null | sort)
 
 if [[ ${#CONFIG_FILES[@]} -eq 0 ]]; then
     echo "No Waybar configs found in $OUTPUT_DIR"

@@ -1,6 +1,0 @@
-#custom-performance {
-    margin:  0px 1px;
-    padding: 1px 1px;
-}
-
-#custom-performance:hover { color: @fg-hover; }

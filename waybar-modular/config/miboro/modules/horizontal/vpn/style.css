@@ -1,0 +1,17 @@
+window.topbar #custom-vpn {
+    color:   @fg-active;
+    margin:  0 3px;
+    padding: 2px 6px;
+}
+
+window.topbar #custom-vpn:hover { color: @fg-hover; }
+
+
+window.bottombar #custom-vpn {
+    color:   @fg-active;
+    margin:  0 3px;
+    padding: 2px 6px;
+}
+
+window.bottombar #custom-vpn:hover { color: @fg-hover; }
+

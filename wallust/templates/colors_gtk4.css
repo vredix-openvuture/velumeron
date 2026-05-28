@@ -1,0 +1,132 @@
+/* Wallust-generated GTK4 colors — auto-generated, do not edit manually.
+   Template: wallust/templates/colors_gtk4.css
+   Output:   ~/.config/gtk-4.0/wallust.css */
+
+/* ── Base palette ──────────────────────────────────────────────── */
+@define-color foreground {{foreground}};
+@define-color background {{background}};
+@define-color color0  {{color0}};
+@define-color color1  {{color1}};
+@define-color color2  {{color2}};
+@define-color color3  {{color3}};
+@define-color color4  {{color4}};
+@define-color color5  {{color5}};
+@define-color color6  {{color6}};
+@define-color color7  {{color7}};
+@define-color color8  {{color8}};
+@define-color color9  {{color9}};
+@define-color color10 {{color10}};
+@define-color color11 {{color11}};
+@define-color color12 {{color12}};
+@define-color color13 {{color13}};
+@define-color color14 {{color14}};
+@define-color color15 {{color15}};
+
+/* ── Semantic aliases ──────────────────────────────────────────── */
+@define-color bg-primary   @color0;
+@define-color bg-element   @color1;
+@define-color bg-secondary @color2;
+@define-color bg-active    @color3;
+@define-color bg-hover     @color4;
+@define-color bo-normal    @color5;
+@define-color bo-active    @color6;
+@define-color fg-primary   @color7;
+@define-color fg-muted     @color8;
+@define-color fg-urgent    @color13;
+@define-color fg-bright    @color15;
+
+/* ── Libadwaita overrides ──────────────────────────────────────── */
+
+/* Window */
+@define-color window_bg_color        @bg-primary;
+@define-color window_fg_color        @fg-primary;
+@define-color view_bg_color          @bg-primary;
+@define-color view_fg_color          @fg-primary;
+
+/* Header bar */
+@define-color headerbar_bg_color     @bg-element;
+@define-color headerbar_fg_color     @fg-bright;
+@define-color headerbar_border_color @bg-element;
+@define-color headerbar_backdrop_color @bg-primary;
+@define-color headerbar_shade_color  alpha(@bg-primary, 0.36);
+
+/* Cards & popovers */
+@define-color card_bg_color          @bg-element;
+@define-color card_fg_color          @fg-primary;
+@define-color card_shade_color       alpha(@bg-primary, 0.36);
+@define-color popover_bg_color       @bg-element;
+@define-color popover_fg_color       @fg-primary;
+@define-color popover_shade_color    alpha(@bg-primary, 0.36);
+@define-color dialog_bg_color        @bg-element;
+@define-color dialog_fg_color        @fg-primary;
+@define-color thumbnail_bg_color     @bg-primary;
+@define-color thumbnail_fg_color     @fg-primary;
+
+/* Sidebar */
+@define-color sidebar_bg_color       @bg-element;
+@define-color sidebar_fg_color       @fg-primary;
+@define-color sidebar_backdrop_color @bg-primary;
+@define-color sidebar_border_color   @bo-normal;
+@define-color sidebar_shade_color    alpha(@bg-primary, 0.36);
+
+/* Accent */
+@define-color accent_bg_color        @bg-active;
+@define-color accent_fg_color        @fg-bright;
+@define-color accent_color           @bo-active;
+
+/* Borders & misc */
+@define-color borders                @bo-normal;
+@define-color shade_color            alpha(@bg-primary, 0.36);
+@define-color scrollbar_outline_color alpha(@bg-primary, 0.5);
+
+/* Status colors */
+@define-color success_bg_color       @bg-active;
+@define-color success_fg_color       @fg-bright;
+@define-color success_color          @bo-normal;
+@define-color warning_bg_color       @bg-hover;
+@define-color warning_fg_color       @fg-bright;
+@define-color warning_color          @fg-urgent;
+@define-color error_bg_color         @bg-hover;
+@define-color error_fg_color         @fg-bright;
+@define-color error_color            @bg-hover;
+
+/* ── Direct overrides — @define-color allein reicht nicht aus    ──
+   da bei gleicher Priorität die erste Definition gewinnt (noctalia).
+   CSS-Properties cascaden korrekt: letzte Regel gewinnt.          */
+
+window,
+.background {
+    background-color: {{color0}};
+    color: {{color7}};
+}
+
+headerbar {
+    background-color: {{color1}};
+    color: {{color15}};
+    border-bottom-color: {{color5}};
+    box-shadow: none;
+}
+
+button.suggested-action {
+    background-color: {{color3}};
+    color: {{color15}};
+}
+
+button.suggested-action:hover {
+    background-color: {{color6}};
+    color: {{color15}};
+}
+
+button.destructive-action {
+    background-color: {{color9}};
+    color: {{color15}};
+}
+
+.card, popover > contents {
+    background-color: {{color1}};
+    color: {{color7}};
+}
+
+.sidebar {
+    background-color: {{color1}};
+}

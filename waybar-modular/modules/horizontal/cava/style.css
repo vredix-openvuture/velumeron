@@ -1,7 +1,0 @@
-#custom-cava {
-    margin:  0px 1px;
-    padding: 1px 4px;
-    font-family: monospace;
-}
-
-#custom-cava:hover { color: @fg-hover; }

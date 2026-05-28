@@ -60,6 +60,7 @@ starship     = { src = "starship-palette.toml",  dst = "~/.cache/wallust/starshi
 
 kitty_config     = { src = "colors-kitty.conf",    dst = "~/.config/kitty/colors.conf"}
 gtk3             = { src = "gtk3.css",             dst = "~/.config/gtk-3.0/wallust.css"}
+gtk4             = { src = "colors_gtk4.css",      dst = "~/.config/gtk-4.0/wallust.css"}
 
 kitty_vuture     = { src = "colors-kitty.conf",    dst = "~/.config/vutureland/kitty/colors.conf"}
 rofi_vuture      = { src = "colors-rofi.conf",     dst = "~/.config/vutureland/rofi/assets/colors.rasi"}

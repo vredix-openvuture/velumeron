@@ -1,0 +1,5 @@
+name = "group/tray_drawer"
+description = "Tray Drawer  (Notification → Tray)"
+alias = "Drawer Tray // right/bottom"
+modules = "notification tray"
+specific = "right"

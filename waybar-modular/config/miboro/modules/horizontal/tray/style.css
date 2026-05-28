@@ -1,0 +1,17 @@
+window.topbar #tray {
+    margin:  0 3px;
+    padding: 2px 6px;
+}
+
+window.topbar #tray > .passive,
+window.topbar #tray > .active { color: @fg-primary; }
+
+
+window.bottombar #tray {
+    margin:  0 3px;
+    padding: 2px 6px;
+}
+
+window.bottombar #tray > .passive,
+window.bottombar #tray > .active { color: @fg-primary; }
+

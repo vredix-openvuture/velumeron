@@ -1,58 +1,58 @@
 * {
-    bg:             #080301;
+    bg:             #010100;
 
-    fg:             #FFD4C3;
+    fg:             #E3E9DD;
 
-    cursor:         #8EB0AC;
+    cursor:         #AEC2C1;
 
-    color0:         #0C0402;
-    color0a90:      #0C0402e6;
+    color0:         #010200;
+    color0a90:      #010200e6;
 
-    color1:         #3E394E;
+    color1:         #534B3B;
 
-    color2:         #825E6E;
+    color2:         #786B50;
 
-    color3:         #A75C4B;
+    color3:         #497A89;
 
-    color4:         #37728C;
+    color4:         #8E6955;
 
-    color5:         #188C95;
+    color5:         #6098A4;
 
-    color6:         #D6957D;
+    color6:         #B2C897;
 
-    color7:         #F7CAB9;
+    color7:         #DCE1D5;
 
-    color8:         #A88273;
-    color8a40:      #A8827366;
+    color8:         #8E9389;
+    color8a40:      #8E938966;
 
-    color9:         #3E394E;
+    color9:         #534B3B;
 
-    color10:        #825E6E;
-    color10a40:     #825E6E66;
+    color10:        #786B50;
+    color10a40:     #786B5066;
 
-    color11:        #A75C4B;
+    color11:        #497A89;
 
-    color12:        #37728C;
+    color12:        #8E6955;
 
-    color13:        #188C95;
+    color13:        #6098A4;
 
-    color14:        #D6957D;
+    color14:        #B2C897;
 
-    color15:        #F2DCD4;
+    color15:        #E5E7E2;
 
     /* Semantic mapping */
-    bg-main:        #0C0402;
-    bg-element:     #3E394E;
-    bg-secondary:   #825E6E;
-    bg-active:      #A75C4B;
-    bg-hover:       #37728C;
-    bg-focus:       #A75C4B;
-    bg-urgent:      #188C95;
-    bo-color:       #188C95;
-    bo-active:      #D6957D;
-    fg-main:        #F7CAB9;
-    fg-highlight:   #F2DCD4;
-    fg-muted:       #A88273;
-    fg-placeholder: #A88273;
-    fg-urgent:      #188C95;
+    bg-main:        #010200;
+    bg-element:     #534B3B;
+    bg-secondary:   #786B50;
+    bg-active:      #497A89;
+    bg-hover:       #8E6955;
+    bg-focus:       #497A89;
+    bg-urgent:      #6098A4;
+    bo-color:       #6098A4;
+    bo-active:      #B2C897;
+    fg-main:        #DCE1D5;
+    fg-highlight:   #E5E7E2;
+    fg-muted:       #8E9389;
+    fg-placeholder: #8E9389;
+    fg-urgent:      #6098A4;
 }

@@ -51,3 +51,4 @@ The palette only shows modules matching the bar's orientation (horizontal module
 - `python-gobject`
 - `gtk4`
 - `libadwaita`
+- `breeze-icons`

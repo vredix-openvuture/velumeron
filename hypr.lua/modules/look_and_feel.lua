@@ -8,7 +8,7 @@ hl.config({
     general = {
         gaps_in                 = 8,
         gaps_out                = 14,
-        border_size             = 1,
+        border_size             = 2,
         col = {
             active_border   = color5,      -- from colors.lua
             inactive_border = background,
@@ -37,10 +37,10 @@ hl.config({
 
         shadow = {
             enabled      = true,
-            range        = 8,
+            range        = 2,
             render_power = 2,
-            color        = color5,
-            scale        = 0.5,
+            color        = color1,
+            scale        = 8,
         },
     },
 

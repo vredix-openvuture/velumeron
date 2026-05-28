@@ -11,6 +11,14 @@ USER_SETTINGS = f"{VTL}/hypr.lua/user_settings.lua"
 WALLUST_FIXED_DIR = f"{VTL}/wallust/fixed_colors"
 WALLUST_MODE_FILE = f"{VTL}/wallust/color-mode"
 LAUNCH_WAYBAR     = f"{VTL}/assets/scripts/launch-waybar.sh"
+WALLPAPER_OLD     = f"{VTL}/assets/wallpaper/old_wallpaper"
+SETS_JSON         = f"{VTL}/assets/wallpaper/sets.json"
+HYPRLOCK_THEMES   = f"{VTL}/hypr.lua/hyprlock-themes"
+HYPRLOCK_CONF     = f"{VTL}/hypr.lua/hyprlock.conf"
+HYPRLOCK_THUMB    = os.path.expanduser("~/.cache/vutureland/hyprlock-thumbs")
+HYPRLOCK_BLACK_WP = f"{VTL}/assets/wallpaper/pure-black.jpg"
+HYPRIDLE_CONF     = f"{VTL}/hypr.lua/hypridle.conf"
+POWERMODE_SH      = f"{VTL}/assets/scripts/powermode.sh"
 
 VIDEO_EXTS = {'.mp4', '.webm', '.mkv', '.avi', '.mov'}
 IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.webp'}

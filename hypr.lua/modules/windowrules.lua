@@ -8,7 +8,7 @@ local file_dialogs = table.concat({
     ".*[Ee]igenschaften.*", ".*[Pp]roperties.*",
     ".*[Bb]estätigen.*", ".*[Cc]onfirm.*",
     ".*[Ss]peichern unter.*", ".*[Ss]ave [Aa]s.*",
-    ".*[Öö]ffnen.*", ".*[Oo]pen.*",
+    ".*öffnen.*", ".*Öffnen.*", ".*[Oo]pen.*",
     ".*[Ff]ortschritt.*", ".*[Pp]rogress.*",
     ".*[Ff]ehler.*", ".*[Ee]rror.*",
     ".*[Ww]arnung.*", ".*[Ww]arning.*",
@@ -30,6 +30,7 @@ hl.window_rule({ name="messaging",   match={class="(Element|discord|telegram|sla
 hl.window_rule({ name="media",       match={class="(mpv|vlc|celluloid|totem|clapper)"},              tag="+media"       })
 hl.window_rule({ name="steam",       match={class="(steam|Steam|steamwebhelper)"},                   tag="+steam"       })
 hl.window_rule({ name="tiled_apps",  match={class="no_float"},                                       tag="+tiled"       })
+hl.window_rule({ name="vuture",      match={class=".*[Vv]uture.*"},                                  tag="+vuture"       })
 
 
 -- ══════════════════════════════════════════════════════
@@ -92,9 +93,25 @@ hl.window_rule({
     size   = { "(monitor_w*0.5)", "(monitor_h*0.6)" },
 })
 hl.window_rule({
-    name  = "float_cap",
-    match = { float = true },
-    size  = { "(monitor_w*0.9)", "(monitor_h*0.9)" },
+    name   = "user_popups",
+    match  = { class = floating_window },
+    float  = true,
+    center = true,
+    size   = { "(monitor_w*0.5)", "(monitor_h*0.6)" },
+})
+hl.window_rule({
+    name   = "vuture",
+    match  = { title = "(.*[Vv]utureland.*)" },
+    float  = true,
+    center = true,
+    size   = { "(monitor_w*0.7)", "(monitor_h*0.8)" },
+})
+hl.window_rule({
+    name   = "float_cap",
+    match  = { float = true },
+    float  = true,
+    center = true,
+    size   = { "(monitor_w*0.5)", "(monitor_h*0.6)" },
 })
 
 -- ── Full opacity (no transparency) ────────────────────
@@ -112,10 +129,16 @@ hl.window_rule({
     opaque  = true,
     no_blur = true,
 })
-
 hl.window_rule({
     name    = "user_opaque",
-    match   = { initial_class = opacity_window },
+    match   = { class = opacity_window },
+    opacity = 1,
+    opaque  = true,
+    no_blur = true,
+})
+hl.window_rule({
+    name    = "user_opaque",
+    match   = { title = opacity_window },
     opacity = 1,
     opaque  = true,
     no_blur = true,

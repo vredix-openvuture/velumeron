@@ -1,0 +1,77 @@
+window.topbar #pulseaudio {
+    margin:  0px 1px;
+    padding: 1px 1px;
+}
+
+window.topbar #pulseaudio:hover { color: @fg-hover; }
+
+window.topbar #pulseaudio-slider {
+    margin:  0 2px;
+    padding: 2px 0;
+}
+
+window.topbar #pulseaudio-slider slider {
+    background-color: transparent;
+    opacity:          0;
+    background-image: none;
+    border:           none;
+    box-shadow:       none;
+}
+
+window.topbar #pulseaudio-slider trough {
+    min-height:    14px;
+    min-width:     80px;
+    border-radius: 50px;
+    background:    @fg-secondary;
+}
+
+window.topbar #pulseaudio-slider highlight {
+    min-width:     10px;
+    border-radius: 50px;
+    background:    @fg-active;
+}
+
+window.topbar #pulseaudio-slider trough:hover {
+    border:        2px solid @bo-normal;
+    border-radius: 10px;
+}
+
+
+window.bottombar #pulseaudio {
+    margin:  0px 1px;
+    padding: 1px 1px;
+}
+
+window.bottombar #pulseaudio:hover { color: @fg-hover; }
+
+window.bottombar #pulseaudio-slider {
+    margin:  0 2px;
+    padding: 2px 0;
+}
+
+window.bottombar #pulseaudio-slider slider {
+    background-color: transparent;
+    opacity:          0;
+    background-image: none;
+    border:           none;
+    box-shadow:       none;
+}
+
+window.bottombar #pulseaudio-slider trough {
+    min-height:    14px;
+    min-width:     80px;
+    border-radius: 50px;
+    background:    @fg-secondary;
+}
+
+window.bottombar #pulseaudio-slider highlight {
+    min-width:     10px;
+    border-radius: 50px;
+    background:    @fg-active;
+}
+
+window.bottombar #pulseaudio-slider trough:hover {
+    border:        2px solid @bo-normal;
+    border-radius: 10px;
+}
+

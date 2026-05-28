@@ -45,7 +45,7 @@ mainbox {
 
 /*-------------------------------------------------------------*/
 listview {
-    columns:             4;
+    columns:             5;
     lines:               1;
     spacing:             44px;
     scrollbar:           false;

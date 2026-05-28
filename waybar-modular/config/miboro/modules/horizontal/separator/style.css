@@ -1,0 +1,13 @@
+window.topbar #custom-separator {
+    color:   @color1;
+    margin:  0px 1px;
+    padding: 1px 4px;
+}
+
+
+window.bottombar #custom-separator {
+    color:   @color1;
+    margin:  0px 1px;
+    padding: 1px 4px;
+}
+

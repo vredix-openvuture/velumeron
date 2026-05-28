@@ -17,7 +17,7 @@ hl.bind(MOD .. " + 0", hl.dsp.focus({ workspace = 10 }))
 
 -- ── Session management ───────────────────────────────
 
-hl.bind(MOD .. " + ESCAPE", hl.dsp.exit())
+hl.bind(MOD .. " + RETURN", hl.dsp.exit())
 hl.bind(MOD .. " + P",      hl.dsp.exec_cmd(on_sleep))
 hl.bind(MOD .. " + L",      hl.dsp.exec_cmd(on_lock))
 hl.bind(MOD .. " + O",      hl.dsp.exec_cmd(session_menu))
@@ -30,13 +30,14 @@ hl.bind(MOD .. " + SPACE",       hl.dsp.exec_cmd(launcher))
 hl.bind(MOD .. " + ALT + SPACE", hl.dsp.exec_cmd(theme_switch))
 hl.bind(MOD .. " + T",           hl.dsp.exec_cmd(terminal))
 hl.bind(MOD .. " + S",           hl.dsp.exec_cmd(notifications))
+hl.bind(MOD .. " + V",           hl.dsp.exec_cmd(clipboard))
 
 
 -- ── Window management ────────────────────────────────
 
 hl.bind(MOD .. " + C",         hl.dsp.window.close())
 hl.bind(MOD .. " + F",         hl.dsp.window.float({ action = "toggle" }))
-hl.bind(MOD .. " + V",         hl.dsp.window.fullscreen({ mode = "maximized" }))
+hl.bind(MOD .. " + B",         hl.dsp.window.fullscreen({ mode = "maximized" }))
 hl.bind(MOD .. " + N",         hl.dsp.window.cycle_next())                              -- Activate next window on current monitor
 hl.bind(MOD .. " + ALT + M",   hl.dsp.window.move({ monitor = "+1", follow = true }))   -- Move window to the next monitor
 hl.bind(MOD .. " + ALT + V",   hl.dsp.window.fullscreen({ mode = "fullscreen" }))       -- Fullscreen active window

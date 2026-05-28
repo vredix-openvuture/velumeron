@@ -1,0 +1,45 @@
+window.topbar #audio_drawer {
+    margin:  2px 1px;
+    padding: 1px 4px;
+}
+
+window.topbar #audio_drawer:hover {
+    border: 0px solid alpha(@bo-normal, 0.6);
+    background: alpha(@bg-secondary, 0.2)
+}
+
+window.topbar #audio_drawer #pulseaudio,
+window.topbar #audio_drawer #custom-mpris,
+window.topbar #audio_drawer #bluetooth {
+    margin-left:  10px;
+    margin-right: 10px;
+}
+
+window.topbar #audio_drawer #pulseaudio:hover,
+window.topbar #audio_drawer #custom-mpris:hover,
+window.topbar #audio_drawer #bluetooth:hover {
+    color: @fg-hover;
+}
+
+window.bottombar #audio_drawer {
+    margin:  2px 1px;
+    padding: 1px 4px;
+}
+
+window.bottombar #audio_drawer:hover {
+    border: 0px solid alpha(@bo-normal, 0.6);
+    background: alpha(@bg-secondary, 0.2)
+}
+
+window.bottombar #audio_drawer #pulseaudio,
+window.bottombar #audio_drawer #custom-mpris,
+window.bottombar #audio_drawer #bluetooth {
+    margin-left:  10px;
+    margin-right: 10px;
+}
+
+window.bottombar #audio_drawer #pulseaudio:hover,
+window.bottombar #audio_drawer #custom-mpris:hover,
+window.bottombar #audio_drawer #bluetooth:hover {
+    color: @fg-hover;
+}

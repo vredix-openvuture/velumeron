@@ -8,15 +8,21 @@ import subprocess
 
 from constants import LAUNCH_WAYBAR
 from models.waybar import (
-    scan_bars, read_bar_slots, write_bar_slots,
-    scan_modules_by_section, BarConfig,
+    scan_bar_styles, scan_config_styles, read_bar_slots, write_bar_slots,
+    scan_modules_by_section, BarConfig, BarStyle, init_groups_json,
+    build_bar_config, refresh_groups_includes, remove_other_bar_configs,
+    _known_monitors,
 )
 
 _INVALID = Gtk.INVALID_LIST_POSITION
 
 
 def _build_key_map(sections: list) -> dict[str, str]:
-    return {key: display for _, mods in sections for key, display in mods}
+    return {key: display for _, mods in sections for key, display, *_ in mods}
+
+
+def _build_desc_map(sections: list) -> dict[str, str]:
+    return {key: desc for _, mods in sections for key, _, desc, *_ in mods}
 
 
 class BarZone(Gtk.Box):
@@ -34,16 +40,16 @@ class BarZone(Gtk.Box):
         self.set_hexpand(True)
         self.add_css_class('bar-zone')
 
-        hdr = Gtk.Label(label=label)
-        hdr.add_css_class('heading')
-        hdr.set_margin_bottom(4)
+        hdr = Gtk.Label(label=label.upper())
+        hdr.add_css_class('zone-label')
+        hdr.set_margin_bottom(6)
         self.append(hdr)
 
-        self._chips_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        self._chips_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
         self._chips_box.set_vexpand(True)
         self.append(self._chips_box)
 
-        self._hint = Gtk.Label(label='Drop here')
+        self._hint = Gtk.Label(label='Drag a module …')
         self._hint.add_css_class('dim-label')
         self._hint.add_css_class('caption')
         self.append(self._hint)
@@ -99,15 +105,26 @@ class BarZone(Gtk.Box):
 
         return chip
 
+    def get_drop_index(self, y: float) -> int:
+        idx = 0
+        child = self._chips_box.get_first_child()
+        while child:
+            ok, bounds = child.compute_bounds(self)
+            if ok and y < bounds.origin.y + bounds.size.height / 2:
+                return idx
+            idx += 1
+            child = child.get_next_sibling()
+        return idx
+
     def _on_drop_cb(self, _tgt, value: str, x, y) -> bool:
         self.remove_css_class('bar-zone-hover')
         if value.startswith('palette:'):
-            self._on_drop(None, self._zone_id, value[8:])
+            self._on_drop(None, self._zone_id, value[8:], y)
             return True
         if value.startswith('zone:'):
             parts = value.split(':', 2)
-            if len(parts) == 3 and parts[1] != self._zone_id:
-                self._on_drop(parts[1], self._zone_id, parts[2])
+            if len(parts) == 3:
+                self._on_drop(parts[1], self._zone_id, parts[2], y)
                 return True
         return False
 
@@ -122,38 +139,109 @@ class BarZone(Gtk.Box):
 class WaybarPage(Gtk.Box):
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
-        self._bars: list[BarConfig] = scan_bars()
-        self._monitors: list[str] = self._collect_monitors()
+        self._design_styles: list[str] = scan_config_styles()
+        _initial_design = self._design_styles[0] if self._design_styles else ""
+        self._bar_styles: list[BarStyle] = scan_bar_styles(_initial_design)
+        self._monitors: list[str] = _known_monitors()
         self._cur_bar: BarConfig | None = None
         self._left: list[str] = []
         self._center: list[str] = []
         self._right: list[str] = []
-        self._sections_h = scan_modules_by_section('horizontal')
-        self._sections_v = scan_modules_by_section('vertical')
-        self._map_h = _build_key_map(self._sections_h)
-        self._map_v = _build_key_map(self._sections_v)
+        self._sections_h  = scan_modules_by_section('horizontal',      _initial_design)
+        self._sections_vl = scan_modules_by_section('vertical-left',   _initial_design)
+        self._sections_vr = scan_modules_by_section('vertical-right',  _initial_design)
+        self._map_h   = _build_key_map(self._sections_h)
+        self._map_vl  = _build_key_map(self._sections_vl)
+        self._map_vr  = _build_key_map(self._sections_vr)
+        self._desc_h  = _build_desc_map(self._sections_h)
+        self._desc_vl = _build_desc_map(self._sections_vl)
+        self._desc_vr = _build_desc_map(self._sections_vr)
         self._zones: dict[str, BarZone] = {}
+        self._updating_bars = False
 
         self._build_ui()
         self._populate_monitors()
 
     # ── data helpers ────────────────────────────────────────────────────────
 
-    def _collect_monitors(self) -> list[str]:
-        seen: list[str] = []
-        for b in self._bars:
-            if b.monitor not in seen:
-                seen.append(b.monitor)
-        return seen
+    def _cur_design(self) -> str:
+        if not self._design_styles:
+            return ""
+        idx = self._design_combo.get_selected()
+        if idx == _INVALID or idx >= len(self._design_styles):
+            return self._design_styles[0]
+        return self._design_styles[idx]
 
-    def _bars_for(self, monitor: str) -> list[BarConfig]:
-        return [b for b in self._bars if b.monitor == monitor]
+    def _type_names(self) -> list[str]:
+        seen, result = set(), []
+        for s in self._bar_styles:
+            if not s.is_frame and s.name not in seen:
+                seen.add(s.name)
+                result.append(s.name)
+        if any(s.is_frame for s in self._bar_styles):
+            result.append('frame')
+        return result
+
+    def _frame_variants(self) -> list[str]:
+        return [s.name for s in self._bar_styles if s.is_frame]
+
+    def _cur_type(self) -> str | None:
+        names = self._type_names()
+        idx = self._style_combo.get_selected()
+        if idx == _INVALID or idx >= len(names):
+            return None
+        return names[idx]
+
+    def _cur_variant(self) -> str | None:
+        variants = self._frame_variants()
+        idx = self._variant_combo.get_selected()
+        if idx == _INVALID or idx >= len(variants):
+            return None
+        return variants[idx]
+
+    def _positions_for_current(self) -> list[str]:
+        type_name = self._cur_type()
+        if type_name == 'frame':
+            variant = self._cur_variant()
+            if variant is None:
+                return []
+            for s in self._bar_styles:
+                if s.name == variant and s.is_frame:
+                    return list(s.sub_positions)
+            return []
+        return [s.position for s in self._bar_styles if s.name == type_name]
+
+    def _cur_position(self) -> str | None:
+        positions = self._positions_for_current()
+        idx = self._subbar_combo.get_selected()
+        if idx == _INVALID or idx >= len(positions):
+            return None
+        return positions[idx]
+
+    def _cur_bar_style(self) -> BarStyle | None:
+        type_name = self._cur_type()
+        if type_name == 'frame':
+            variant = self._cur_variant()
+            for s in self._bar_styles:
+                if s.name == variant and s.is_frame:
+                    return s
+            return None
+        for s in self._bar_styles:
+            if s.name == type_name:
+                return s
+        return None
 
     def _active_key_map(self) -> dict[str, str]:
-        return self._map_v if self._cur_bar and self._cur_bar.orientation() == 'vertical' else self._map_h
+        mo = self._cur_bar.modules_orientation() if self._cur_bar else 'horizontal'
+        return {'vertical-left': self._map_vl, 'vertical-right': self._map_vr}.get(mo, self._map_h)
+
+    def _active_desc_map(self) -> dict[str, str]:
+        mo = self._cur_bar.modules_orientation() if self._cur_bar else 'horizontal'
+        return {'vertical-left': self._desc_vl, 'vertical-right': self._desc_vr}.get(mo, self._desc_h)
 
     def _active_sections(self) -> list:
-        return self._sections_v if self._cur_bar and self._cur_bar.orientation() == 'vertical' else self._sections_h
+        mo = self._cur_bar.modules_orientation() if self._cur_bar else 'horizontal'
+        return {'vertical-left': self._sections_vl, 'vertical-right': self._sections_vr}.get(mo, self._sections_h)
 
     def _slot_list(self, zone_id: str) -> list[str]:
         return {'left': self._left, 'center': self._center, 'right': self._right}[zone_id]
@@ -161,24 +249,62 @@ class WaybarPage(Gtk.Box):
     # ── UI construction ──────────────────────────────────────────────────────
 
     def _build_ui(self):
-        # Selector bar
-        sel = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
-                      margin_start=12, margin_end=12,
-                      margin_top=8, margin_bottom=8)
+        # SizeGroup ensures all labels share the same width → combos align perfectly
+        lbl_grp = Gtk.SizeGroup(mode=Gtk.SizeGroupMode.HORIZONTAL)
 
-        sel.append(Gtk.Label(label='Monitor:'))
+        def _sel_row(text, margin_top=6, visible=True):
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10,
+                          margin_start=16, margin_end=16, margin_top=margin_top)
+            lbl = Gtk.Label(label=text)
+            lbl.add_css_class('dim-label')
+            lbl.set_halign(Gtk.Align.END)
+            lbl_grp.add_widget(lbl)
+            row.append(lbl)
+            row.set_visible(visible)
+            return row
+
+        # ── Design-Zeile ─────────────────────────────────────────────────
+        self._design_row = _sel_row('Design', margin_top=12,
+                                    visible=bool(self._design_styles))
+        self._design_combo = Gtk.DropDown.new_from_strings(self._design_styles)
+        self._design_combo.set_hexpand(True)
+        self._design_combo.connect('notify::selected', self._on_design_changed)
+        self._design_row.append(self._design_combo)
+        self.append(self._design_row)
+
+        # ── Monitor-Zeile ─────────────────────────────────────────────────
+        mon_row = _sel_row('Monitor')
         self._mon_combo = Gtk.DropDown.new_from_strings([])
         self._mon_combo.set_hexpand(True)
         self._mon_combo.connect('notify::selected', self._on_monitor_changed)
-        sel.append(self._mon_combo)
+        mon_row.append(self._mon_combo)
+        self.append(mon_row)
 
-        sel.append(Gtk.Label(label='Bar:'))
-        self._bar_combo = Gtk.DropDown.new_from_strings([])
-        self._bar_combo.set_hexpand(True)
-        self._bar_combo.connect('notify::selected', self._on_bar_changed)
-        sel.append(self._bar_combo)
+        # ── Style-Zeile ───────────────────────────────────────────────────
+        bar_row = _sel_row('Style')
+        self._style_combo = Gtk.DropDown.new_from_strings([])
+        self._style_combo.set_hexpand(True)
+        self._style_combo.connect('notify::selected', self._on_style_changed)
+        bar_row.append(self._style_combo)
+        self.append(bar_row)
 
-        self.append(sel)
+        # ── Variant-Zeile: nur sichtbar wenn frame gewählt ────────────────
+        self._variant_row = _sel_row('Variant', visible=False)
+        self._variant_combo = Gtk.DropDown.new_from_strings([])
+        self._variant_combo.set_hexpand(True)
+        self._variant_combo.connect('notify::selected', self._on_variant_changed)
+        self._variant_row.append(self._variant_combo)
+        self.append(self._variant_row)
+
+        # ── Position-Zeile ────────────────────────────────────────────────
+        self._subbar_row = _sel_row('Position')
+        self._subbar_row.set_margin_bottom(6)
+        self._subbar_combo = Gtk.DropDown.new_from_strings([])
+        self._subbar_combo.set_hexpand(True)
+        self._subbar_combo.connect('notify::selected', self._on_subbar_changed)
+        self._subbar_row.append(self._subbar_combo)
+        self.append(self._subbar_row)
+
         self.append(Gtk.Separator())
 
         # Main split: zones (left) | palette (right)
@@ -187,13 +313,14 @@ class WaybarPage(Gtk.Box):
 
         # -- Zones panel --
         zones_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
-                               margin_start=12, margin_end=12,
-                               margin_top=12, margin_bottom=12)
+                               margin_start=16, margin_end=12,
+                               margin_top=14, margin_bottom=14)
         zones_panel.set_size_request(360, -1)
 
         hdr = Gtk.Label(label='Bar Layout')
         hdr.add_css_class('title-4')
         hdr.set_halign(Gtk.Align.START)
+        hdr.set_margin_bottom(2)
         zones_panel.append(hdr)
 
         zones_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -226,9 +353,9 @@ class WaybarPage(Gtk.Box):
         pal_hdr = Gtk.Label(label='Module Palette')
         pal_hdr.add_css_class('title-4')
         pal_hdr.set_halign(Gtk.Align.START)
-        pal_hdr.set_margin_start(12)
-        pal_hdr.set_margin_top(12)
-        pal_hdr.set_margin_bottom(8)
+        pal_hdr.set_margin_start(14)
+        pal_hdr.set_margin_top(14)
+        pal_hdr.set_margin_bottom(6)
         pal_panel.append(pal_hdr)
 
         sc = Gtk.ScrolledWindow()
@@ -268,26 +395,89 @@ class WaybarPage(Gtk.Box):
             strings.append(m)
         self._mon_combo.set_model(strings)
 
-    def _on_monitor_changed(self, combo, _):
-        idx = combo.get_selected()
-        if idx == _INVALID or not self._monitors:
-            return
-        bars = self._bars_for(self._monitors[idx])
+    def _populate_styles(self):
         strings = Gtk.StringList()
-        for b in bars:
-            strings.append(b.label)
-        self._bar_combo.set_model(strings)
+        for n in self._type_names():
+            strings.append(n)
+        self._updating_bars = True
+        self._style_combo.set_model(strings)
+        self._updating_bars = False
+        self._populate_variants()
 
-    def _on_bar_changed(self, combo, _):
+    def _populate_variants(self):
+        is_frame = self._cur_type() == 'frame'
+        self._variant_row.set_visible(is_frame)
+        if is_frame:
+            strings = Gtk.StringList()
+            for v in self._frame_variants():
+                strings.append(v)
+            self._updating_bars = True
+            self._variant_combo.set_model(strings)
+            self._updating_bars = False
+        self._populate_positions()
+
+    def _populate_positions(self):
+        strings = Gtk.StringList()
+        for p in self._positions_for_current():
+            strings.append(p)
+        self._updating_bars = True
+        self._subbar_combo.set_model(strings)
+        self._updating_bars = False
+        self._resolve_bar()
+
+    def _on_design_changed(self, combo, _):
+        design = self._cur_design()
+        self._bar_styles = scan_bar_styles(design)
+        self._sections_h  = scan_modules_by_section('horizontal',     design)
+        self._sections_vl = scan_modules_by_section('vertical-left',  design)
+        self._sections_vr = scan_modules_by_section('vertical-right', design)
+        self._map_h   = _build_key_map(self._sections_h)
+        self._map_vl  = _build_key_map(self._sections_vl)
+        self._map_vr  = _build_key_map(self._sections_vr)
+        self._desc_h  = _build_desc_map(self._sections_h)
+        self._desc_vl = _build_desc_map(self._sections_vl)
+        self._desc_vr = _build_desc_map(self._sections_vr)
+        self._cur_bar = None
+        self._left, self._center, self._right = [], [], []
+        self._populate_styles()
+
+    def _on_monitor_changed(self, combo, _):
+        self._populate_styles()
+
+    def _on_style_changed(self, combo, _):
+        if self._updating_bars:
+            return
+        self._populate_variants()
+
+    def _on_variant_changed(self, combo, _):
+        if self._updating_bars:
+            return
+        self._populate_positions()
+
+    def _on_subbar_changed(self, combo, _):
+        if self._updating_bars:
+            return
+        self._resolve_bar()
+
+    def _resolve_bar(self):
         mon_idx = self._mon_combo.get_selected()
-        bar_idx = combo.get_selected()
-        if mon_idx == _INVALID or bar_idx == _INVALID or not self._monitors:
+        type_name = self._cur_type()
+        position = self._cur_position()
+        if mon_idx == _INVALID or not self._monitors or type_name is None or position is None:
+            self._cur_bar = None
+            self._stack.set_visible_child_name('empty')
             return
-        bars = self._bars_for(self._monitors[mon_idx])
-        if bar_idx >= len(bars):
+        monitor = self._monitors[mon_idx]
+        style_name = self._cur_variant() if type_name == 'frame' else type_name
+        if style_name is None:
+            self._cur_bar = None
+            self._stack.set_visible_child_name('empty')
             return
-        self._cur_bar = bars[bar_idx]
-        left, center, right = read_bar_slots(self._cur_bar)
+        bar = BarConfig(style=style_name, position=position, monitor=monitor,
+                        design=self._cur_design())
+        init_groups_json(bar)
+        left, center, right = read_bar_slots(bar)
+        self._cur_bar = bar
         self._left, self._center, self._right = list(left), list(center), list(right)
         self._status.set_text('')
         self._refresh_zones()
@@ -311,10 +501,10 @@ class WaybarPage(Gtk.Box):
         for section, mods in self._active_sections():
             if not mods:
                 continue
-            hdr = Gtk.Label(label=section)
-            hdr.add_css_class('heading')
+            hdr = Gtk.Label(label=section.upper())
+            hdr.add_css_class('palette-section-label')
             hdr.set_halign(Gtk.Align.START)
-            hdr.set_margin_top(8)
+            hdr.set_margin_top(10)
             hdr.set_margin_bottom(4)
             self._palette_box.append(hdr)
 
@@ -322,18 +512,22 @@ class WaybarPage(Gtk.Box):
             flow.set_selection_mode(Gtk.SelectionMode.NONE)
             flow.set_column_spacing(4)
             flow.set_row_spacing(4)
-            flow.set_max_children_per_line(10)
-            for key, display in mods:
-                flow.append(self._make_palette_chip(key, display))
+            flow.set_min_children_per_line(3)
+            flow.set_max_children_per_line(3)
+            flow.set_homogeneous(True)
+            desc_map = self._active_desc_map()
+            for key, display, *_ in mods:
+                flow.append(self._make_palette_chip(key, display, desc_map.get(key, "")))
             self._palette_box.append(flow)
 
-    def _make_palette_chip(self, key: str, display: str) -> Gtk.FlowBoxChild:
+    def _make_palette_chip(self, key: str, display: str, description: str = "") -> Gtk.FlowBoxChild:
         child = Gtk.FlowBoxChild()
         child.set_focusable(False)
 
         btn = Gtk.Button(label=display)
         btn.add_css_class('palette-chip')
-        btn.set_tooltip_text(key)
+        btn.set_hexpand(True)
+        btn.set_tooltip_text(description if description else key)
         child.set_child(btn)
 
         src = Gtk.DragSource.new()
@@ -355,31 +549,79 @@ class WaybarPage(Gtk.Box):
         self._zones[zone_id].refresh()
         self._status.set_text('Unsaved changes')
 
-    def _on_zone_drop(self, src_zone: str | None, dst_zone: str, key: str):
+    def _on_zone_drop(self, src_zone: str | None, dst_zone: str, key: str, y: float = 0):
+        dst_list = self._slot_list(dst_zone)
+        insert_idx = self._zones[dst_zone].get_drop_index(y)
         if src_zone is not None:
             src = self._slot_list(src_zone)
             if key in src:
-                src.remove(key)
-            self._zones[src_zone].refresh()
-        self._slot_list(dst_zone).append(key)
+                if src_zone == dst_zone:
+                    old_idx = src.index(key)
+                    src.remove(key)
+                    if old_idx < insert_idx:
+                        insert_idx -= 1
+                else:
+                    src.remove(key)
+                    self._zones[src_zone].refresh()
+        insert_idx = max(0, min(insert_idx, len(dst_list)))
+        dst_list.insert(insert_idx, key)
         self._zones[dst_zone].refresh()
         self._status.set_text('Unsaved changes')
 
     # ── actions ──────────────────────────────────────────────────────────────
 
     def _on_reload(self, _):
-        self._bars = scan_bars()
-        self._monitors = self._collect_monitors()
+        new_designs = scan_config_styles()
+        if new_designs != self._design_styles:
+            self._design_styles = new_designs
+            strings = Gtk.StringList()
+            for ds in new_designs:
+                strings.append(ds)
+            self._design_combo.set_model(strings)
+            self._design_row.set_visible(bool(new_designs))
+        design = self._cur_design()
+        self._bar_styles = scan_bar_styles(design)
+        self._sections_h  = scan_modules_by_section('horizontal',     design)
+        self._sections_vl = scan_modules_by_section('vertical-left',  design)
+        self._sections_vr = scan_modules_by_section('vertical-right', design)
+        self._map_h   = _build_key_map(self._sections_h)
+        self._map_vl  = _build_key_map(self._sections_vl)
+        self._map_vr  = _build_key_map(self._sections_vr)
+        self._desc_h  = _build_desc_map(self._sections_h)
+        self._desc_vl = _build_desc_map(self._sections_vl)
+        self._desc_vr = _build_desc_map(self._sections_vr)
+        self._monitors = _known_monitors()
         self._cur_bar = None
-        self._left = self._center = self._right = []
-        self._stack.set_visible_child_name('empty')
+        self._left, self._center, self._right = [], [], []
         self._status.set_text('')
         self._populate_monitors()
+        self._populate_styles()
 
     def _on_apply(self, _):
         if self._cur_bar is None:
             return
+        monitor = self._cur_bar.monitor
+        style = self._cur_bar_style()
+
+        # Remove config.json files from other styles/designs on this monitor
+        remove_other_bar_configs(monitor, self._cur_bar.style, self._cur_bar.design)
+
+        # Update includes + save slots for the current bar
+        refresh_groups_includes(self._cur_bar)
         write_bar_slots(self._cur_bar, self._left, self._center, self._right)
+        build_bar_config(self._cur_bar)
+
+        # For frame styles, also ensure all sibling sub-bars have config.json
+        if style and style.is_frame:
+            for pos in style.sub_positions:
+                if pos == self._cur_bar.position:
+                    continue
+                sibling = BarConfig(style=self._cur_bar.style, position=pos, monitor=monitor,
+                                   design=self._cur_bar.design)
+                init_groups_json(sibling)
+                refresh_groups_includes(sibling)
+                build_bar_config(sibling)
+
         self._status.set_text('Saved — restarting Waybar…')
         subprocess.Popen(['bash', LAUNCH_WAYBAR])
         GLib.timeout_add(2500, lambda: self._status.set_text('') or False)

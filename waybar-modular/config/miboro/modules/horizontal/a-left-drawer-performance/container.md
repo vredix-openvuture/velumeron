@@ -1,0 +1,5 @@
+name = "group/performance_drawer"
+description = "Performance Drawer  (Mode → Temp → RAM → CPU)"
+alias = "Drawer Performance // left/top"
+modules = "performance temperature-gpu memory temperature-cpu cpu"
+specific = "left"

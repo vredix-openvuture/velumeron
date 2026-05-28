@@ -1,9 +1,0 @@
-#battery {
-    margin:  0 3px;
-    padding: 2px 6px;
-}
-
-#battery:hover        { color: @fg-hover; }
-#battery.normal       { color: @fg-primary; }
-#battery.low          { color: orange; }
-#battery.critical     { color: red; }

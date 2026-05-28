@@ -1,47 +1,289 @@
-.wp-frame {
-    border-radius: 8px;
+/* ═══════════════════════════════════════════════════════════════
+   Vutureland GUI – Style
+   Farben kommen von wallust (@bg-element, @bo-normal, @fg-primary,
+   @bo-active, @bg-active …  siehe assets/colors_gtk.css).
+   Jeder Abschnitt ist unabhängig — einfach die Werte direkt ändern.
+   ═══════════════════════════════════════════════════════════════ */
+
+
+/* ───────────────────────────────────────────────────────────────
+   SCROLLBARS — global ausblenden
+   ─────────────────────────────────────────────────────────────── */
+
+scrollbar,
+scrollbar slider {
+    min-width:  0px;
+    min-height: 0px;
+    opacity:    0;
 }
 
-flowboxchild:selected > box .wp-frame {
-    outline: 3px solid @accent_color;
-    outline-offset: -2px;
+
+/* ───────────────────────────────────────────────────────────────
+   FLOWBOX — GTK-eigenen Hover/Selektions-Hintergrund entfernen
+   ─────────────────────────────────────────────────────────────── */
+
+flowboxchild:hover,
+flowboxchild:selected {
+    background-color: transparent;
 }
+
+
+/* ───────────────────────────────────────────────────────────────
+   WALLPAPER — Thumbnail-Rahmen
+   ─────────────────────────────────────────────────────────────── */
+
+.wp-frame {
+    border-radius: 5px;
+    border: 2px solid transparent;
+    transition: border-color 150ms ease;
+}
+
+.wp-card {
+    transition: transform 150ms ease;
+}
+
+flowboxchild:hover > .wp-card .wp-frame,
+flowboxchild:selected > .wp-card .wp-frame {
+    border-color: @bo-active;
+}
+
+flowboxchild:hover > .wp-card,
+flowboxchild:selected > .wp-card {
+    transform: scale(1.04);
+}
+
+
+/* ───────────────────────────────────────────────────────────────
+   WALLPAPER — Name-Label unterhalb des Thumbnails
+   ─────────────────────────────────────────────────────────────── */
 
 .wp-name {
-    font-size: 13px;
-    font-weight: 600;
+    font-size:      14px;
+    font-weight:    600;
+    color:          @fg-primary;
+    margin-top:     2px;
+    margin-bottom:  0px;
 }
+
+
+/* ───────────────────────────────────────────────────────────────
+   WALLPAPER — „+"-Schaltfläche (fehlendes Gegenstück hinzufügen)
+   ─────────────────────────────────────────────────────────────── */
 
 .wp-add-btn {
-    padding: 0px 2px;
-    min-height: 0;
-    min-width: 0;
+    padding:        0px 2px;
+    min-height:     0px;
+    min-width:      0px;
+    margin-top:     0px;
 }
 
-/* Waybar editor */
+
+/* ───────────────────────────────────────────────────────────────
+   WAYBAR-EDITOR — Drop-Zonen (Links / Mitte / Rechts)
+   ─────────────────────────────────────────────────────────────── */
+
 .bar-zone {
-    border: 1px solid alpha(@borders, 0.6);
-    border-radius: 8px;
-    padding: 8px;
-    min-height: 120px;
+    background-color: alpha(@bg-element, 0.18);
+    border-width:     1px;
+    border-style:     solid;
+    border-color:     alpha(@bo-normal, 0.35);
+    border-radius:    10px;
+    padding:          10px 8px 8px;
+    min-height:       110px;
+    transition:       border-color 120ms ease, background-color 120ms ease;
 }
 
+/* Zone wenn ein Modul darüber gezogen wird */
 .bar-zone-hover {
-    border-color: @accent_color;
-    background-color: alpha(@accent_color, 0.08);
+    border-color:     @bo-active;
+    background-color: alpha(@bg-active, 0.15);
 }
+
+/* Zonen-Überschrift (Links / Mitte / Rechts) */
+.zone-label {
+    font-size:    11px;
+    font-weight:  700;
+    color:        @fg-muted;
+    letter-spacing: 0.06em;
+}
+
+
+/* ───────────────────────────────────────────────────────────────
+   WAYBAR-EDITOR — Chips in den Drop-Zonen (platzierte Module)
+   ─────────────────────────────────────────────────────────────── */
 
 .module-chip {
-    border: 1px solid alpha(@borders, 0.8);
-    border-radius: 4px;
-    padding: 2px 6px;
-    background-color: @card_bg_color;
-    font-size: 12px;
+    background-color: @bg-element;
+    border-width:     1px;
+    border-style:     solid;
+    border-color:     alpha(@bo-normal, 0.55);
+    border-radius:    6px;
+    padding:          5px 4px 5px 8px;
+    font-size:        12px;
+    color:            @fg-primary;
+    transition:       border-color 100ms ease, background-color 100ms ease;
 }
 
+.module-chip:hover {
+    border-color:     @bo-active;
+    background-color: alpha(@bg-active, 0.18);
+}
+
+
+/* ───────────────────────────────────────────────────────────────
+   WAYBAR-EDITOR — Modul-Palette (Drag-Quelle rechts)
+   ─────────────────────────────────────────────────────────────── */
+
 .palette-chip {
-    border-radius: 4px;
-    padding: 3px 8px;
-    font-size: 12px;
-    min-height: 0;
+    background-color: @bg-element;
+    border-width:     1px;
+    border-style:     solid;
+    border-color:     alpha(@bo-normal, 0.45);
+    border-radius:    6px;
+    padding:          6px 10px;
+    font-size:        12px;
+    min-height:       0px;
+    transition:       border-color 100ms ease, background-color 100ms ease;
+}
+
+.palette-chip:hover {
+    border-color:     @bo-active;
+    background-color: alpha(@bg-active, 0.2);
+}
+
+/* Palette-Sektions-Überschrift */
+.palette-section-label {
+    font-size:    11px;
+    font-weight:  700;
+    color:        @fg-muted;
+    letter-spacing: 0.06em;
+}
+
+
+/* ───────────────────────────────────────────────────────────────
+   LOCKSCREEN — Theme-Karte (Vorschaubild + Name)
+   ─────────────────────────────────────────────────────────────── */
+
+
+
+/* ───────────────────────────────────────────────────────────────
+   LOCKSCREEN — Theme-Name unter dem Vorschaubild
+   ─────────────────────────────────────────────────────────────── */
+
+.lock-name {
+    font-size:   14px;
+    font-weight: 600;
+    color:       @fg-primary;
+    margin-top:  2px;
+}
+
+
+/* ───────────────────────────────────────────────────────────────
+   RECHTSKLICK-MENÜ — Popover-Container
+   ─────────────────────────────────────────────────────────────── */
+
+.ctx-menu {
+    padding:   4px;
+    min-width: 140px;
+}
+
+/* Schaltflächen im Rechtsklick-Menü */
+.ctx-menu button {
+    border-radius: 6px;
+    padding:       6px 12px;
+    min-height:    0px;
+    font-size:     13px;
+}
+
+
+/* ───────────────────────────────────────────────────────────────
+   ROOT & BODY — gemeinsame Hintergrundfarbe für Banner + Sidebar
+   ─────────────────────────────────────────────────────────────── */
+
+/* Hintergrund hinter allem — Fensterfarbe */
+.root-area {
+    background-color: @bg-primary;
+}
+
+/* Body-Box trägt bg-element — damit der Innenradius sichtbar wird */
+.body-area {
+    background-color: @bg-element;
+}
+
+
+/* ───────────────────────────────────────────────────────────────
+   LOGO-BANNER — kompakte Leiste, 20px Padding um das Logo
+   ─────────────────────────────────────────────────────────────── */
+
+.logo-bar {
+    background-color: @bg-element;
+    padding:          20px 20px;
+}
+
+
+/* ───────────────────────────────────────────────────────────────
+   CONTENT-AREA — Innenradius oben-links (Banner ↔ Sidebar Übergang)
+   ─────────────────────────────────────────────────────────────── */
+
+.content-area {
+    background-color: @bg-primary;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    padding: 32px;
+}
+
+
+/* ───────────────────────────────────────────────────────────────
+   NAVIGATION — Linke Sidebar
+   ─────────────────────────────────────────────────────────────── */
+
+.nav-sidebar {
+    background-color: @bg-element;
+    min-width:        56px;
+    padding-top:      12px;
+    padding-bottom:   12px;
+    padding-left:     8px;
+    padding-right:    8px;
+}
+
+
+/* ───────────────────────────────────────────────────────────────
+   NAVIGATION — Icon-Buttons
+   ─────────────────────────────────────────────────────────────── */
+
+.nav-btn {
+    min-width:        36px;
+    min-height:       36px;
+    border-radius:    8px;
+    padding:          2px;
+    border-width:     0px;
+    background:       transparent;
+    color:            @fg-muted;
+    transition:       background-color 120ms ease, color 120ms ease;
+}
+
+.nav-btn:hover {
+    background-color: alpha(@bg-active, 0.25);
+    color:            @fg-primary;
+}
+
+.nav-btn:checked {
+    background-color: @bg-active;
+    color:            @fg-bright;
+}
+
+
+/* ───────────────────────────────────────────────────────────────
+   WAYBAR-EDITOR — ActionBar (Apply / Reload)
+   ─────────────────────────────────────────────────────────────── */
+
+actionbar {
+    background-color:   transparent;
+    box-shadow:         none;
+}
+
+actionbar > revealer > box {
+    background-color:   transparent;
+    border-top:         1px solid alpha(@bo-normal, 0.18);
+    padding:            4px 8px;
 }

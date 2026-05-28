@@ -1,0 +1,25 @@
+window.topbar #submap {
+    background-color: alpha(@bg-hover, 0.2);
+    margin:  2px 1px;
+    padding: 1px 1px;
+}
+
+window.topbar #submap.navigate,
+window.topbar #submap.window,
+window.topbar #submap.quickstart {
+    color: @color2; 
+}
+
+
+window.bottombar #submap {
+    background-color: alpha(@bg-hover, 0.2);
+    margin:  2px 1px;
+    padding: 1px 1px;
+}
+
+window.bottombar #submap.navigate,
+window.bottombar #submap.window,
+window.bottombar #submap.quickstart {
+    color: @color2; 
+}
+

@@ -41,7 +41,18 @@ else
     # ROFI_INFO contains the original filename
     target="$wallpaper_dir/$ROFI_INFO"
     if [[ -f "$target" ]]; then
-        bash "$wallpaper_script" "$target" > /tmp/wallpaper-set.log 2>&1 &
+        sets_json=~/.config/vutureland/assets/wallpaper/sets.json
+        set_id=""
+        if [[ -f "$sets_json" ]]; then
+            set_id=$(jq -r --arg f "$ROFI_INFO" \
+                'to_entries[] | select(.value.images[]?.file == $f) | .key' \
+                "$sets_json" 2>/dev/null | head -1)
+        fi
+        if [[ -n "$set_id" ]]; then
+            bash "$wallpaper_script" --set "$set_id" > /tmp/wallpaper-set.log 2>&1 &
+        else
+            bash "$wallpaper_script" --hor "$target" > /tmp/wallpaper-set.log 2>&1 &
+        fi
         disown
     fi
 fi

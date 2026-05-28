@@ -1,0 +1,15 @@
+window.topbar #custom-performance {
+    margin:  0px 1px;
+    padding: 1px 1px;
+}
+
+window.topbar #custom-performance:hover { color: @fg-hover; }
+
+
+window.bottombar #custom-performance {
+    margin:  0px 1px;
+    padding: 1px 1px;
+}
+
+window.bottombar #custom-performance:hover { color: @fg-hover; }
+

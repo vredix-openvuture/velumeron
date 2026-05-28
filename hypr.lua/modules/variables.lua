@@ -4,6 +4,7 @@
 
 desktop_shell  = "~/.config/vutureland/assets/scripts/launch-waybar.sh"
 notify_service = "swaync"
+clipboard      = "~/.config/vutureland/rofi/assets/clipvault.sh"
 
 launcher       = "rofi -show drun -config ~/.config/vutureland/rofi/launcher.rasi"
 theme_switch   = "rofi -show wallpaper -config ~/.config/vutureland/rofi/wallpaper-switcher.rasi"

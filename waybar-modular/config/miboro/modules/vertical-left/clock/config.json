@@ -1,0 +1,11 @@
+{
+  "clock": {
+    "rotate": 90,
+    "interval": 10,
+    "tooltip": true,
+    "format": "{:%H:%M   %a %d}",
+    "tooltip-format": "{:%Y-%m-%d}",
+    "on-click": "gnome-calendar",
+    "on-click-right": "echo hello"
+  }
+}

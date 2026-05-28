@@ -1,5 +1,0 @@
-name = "group/audio_drawer"
-description = "Audio Drawer  (Volume → Bluetooth)"
-alias = "Audio Drawer"
-modules = "pulseaudio bluetooth mpris"
-specific = "right"

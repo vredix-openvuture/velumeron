@@ -1,47 +1,46 @@
 #!/usr/bin/env bash
-# wallpaper-set.sh [--no-showcase] [--hor FILE] [--ver FILE]
-# Legacy: wallpaper-set.sh [--no-showcase] FILE  (auto-detects, finds counterpart)
+# wallpaper-set.sh [--no-showcase] (--set SET_ID | [--hor FILE] [--ver FILE])
 
 showcase=true
+set_id=""
 hor_file=""
 ver_file=""
 WP_H=~/.config/vutureland/assets/wallpaper/horizontal
 WP_V=~/.config/vutureland/assets/wallpaper/vertical
+SETS_JSON=~/.config/vutureland/assets/wallpaper/sets.json
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --no-showcase) showcase=false; shift ;;
+        --set)         set_id="$2"; shift 2 ;;
         --hor)         hor_file="$2"; shift 2 ;;
         --ver)         ver_file="$2"; shift 2 ;;
         *)
             file="$1"; shift
             stem=$(basename "${file%.*}")
-            if [[ "$stem" == *"_ver" ]]; then
-                ver_file="$file"
-                # Look for horizontal counterpart
-                id=$(echo "$stem" | sed -E 's/^wp_([a-zA-Z0-9]{6})_ver$/\1/')
-                match=$(find "$WP_H" -maxdepth 1 -name "wp_${id}_hor*" \
-                                                 -o -name "wp_${id}_vid_hor*" 2>/dev/null | head -1)
-                [[ -n "$match" ]] && hor_file="$match"
-            else
-                hor_file="$file"
-                # Look for vertical counterpart
-                id=$(echo "$stem" | sed -E 's/^wp_([a-zA-Z0-9]{6})_(vid_hor|hor)$/\1/')
-                match=$(find "$WP_V" -maxdepth 1 -name "wp_${id}_ver*" 2>/dev/null | head -1)
-                [[ -n "$match" ]] && ver_file="$match"
-            fi
+            if [[ "$stem" == *"_ver"* ]]; then ver_file="$file"
+            else hor_file="$file"; fi
             ;;
     esac
 done
 
-if [[ -z "$hor_file" && -z "$ver_file" ]]; then
-    echo "Usage: wallpaper-set.sh [--no-showcase] [--hor FILE] [--ver FILE]"
+if [[ -z "$set_id" && -z "$hor_file" && -z "$ver_file" ]]; then
+    echo "Usage: wallpaper-set.sh [--no-showcase] (--set SET_ID | [--hor FILE] [--ver FILE])"
     exit 1
 fi
 
-focusmon() { hyprctl dispatch "hl.dsp.focus({monitor=\"${1}\"})"; }
-focusws()  { hyprctl dispatch "hl.dsp.focus({workspace=${1}})"; }
+# ── Wallust source (prefer hor for color extraction) ──────────────────────
+if [[ -n "$set_id" && -f "$SETS_JSON" ]]; then
+    wf=$(jq -r --arg sid "$set_id" \
+        '.[$sid].images[] | select(.file | contains("_hor")) | .file' \
+        "$SETS_JSON" 2>/dev/null | head -1)
+    [[ -z "$wf" ]] && wf=$(jq -r --arg sid "$set_id" '.[$sid].images[0].file' "$SETS_JSON" 2>/dev/null)
+    [[ -n "$wf" ]] && wallust_src=$(find "$WP_H" "$WP_V" -maxdepth 1 -name "$wf" 2>/dev/null | head -1)
+else
+    wallust_src="${hor_file:-$ver_file}"
+fi
 
+# ── Showcase: save workspaces ─────────────────────────────────────────────
 if [[ "$showcase" == "true" ]]; then
     focused_monitor=$(hyprctl monitors -j | jq -r '.[] | select(.focused == true) | .name')
     mapfile -t monitors < <(hyprctl monitors -j | jq -r '.[].name')
@@ -52,42 +51,57 @@ if [[ "$showcase" == "true" ]]; then
     done
     i=0
     for mon in "${monitors[@]}"; do
-        focusmon "$mon"; focusws "$((111 + i))"; i=$((i + 1))
+        hyprctl dispatch "hl.dsp.focus({monitor=\"${mon}\"})"
+        hyprctl dispatch "hl.dsp.focus({workspace=$((111 + i))})"
+        i=$((i + 1))
     done
 fi
 
-killall waybar
+killall waybar 2>/dev/null || true
+pkill -f mpvpaper 2>/dev/null || true
 
-# Determine if horizontal file is video
-hor_is_video=false
-if [[ -n "$hor_file" ]]; then
-    ext="${hor_file##*.}"
-    case "${ext,,}" in mp4|webm|mkv|avi|mov) hor_is_video=true ;; esac
-    pkill -f mpvpaper 2>/dev/null || true
-    "$hor_is_video" || sleep 0.1
-fi
-
-while IFS=';' read -r name transform width height; do
+# ── Apply wallpaper per monitor ───────────────────────────────────────────
+while IFS=';' read -r mon_name transform width height; do
     is_vertical=false
     if [[ "$transform" == "1" || "$transform" == "3" ]] || (( height > width )); then
         is_vertical=true
     fi
 
-    if "$is_vertical"; then
-        [[ -z "$ver_file" ]] && continue
-        awww img -o "$name" "$ver_file"
-    else
-        [[ -z "$hor_file" ]] && continue
-        if "$hor_is_video"; then
-            mpvpaper -o "no-audio loop" "$name" "$hor_file" & disown
-        else
-            awww img -o "$name" --transition-type wipe --transition-angle 120 \
-                --transition-step 200 --transition-fps 200 --transition-duration 2 "$hor_file"
+    if [[ -n "$set_id" && -f "$SETS_JSON" ]]; then
+        # 1. Explicit monitor assignment in set
+        file=$(jq -r --arg sid "$set_id" --arg mon "$mon_name" \
+            '.[$sid].images[] | select(.monitor == $mon) | .file' \
+            "$SETS_JSON" 2>/dev/null | head -1)
+        # 2. Orientation fallback
+        if [[ -z "$file" ]]; then
+            if "$is_vertical"; then orient="_ver"; else orient="_hor"; fi
+            file=$(jq -r --arg sid "$set_id" --arg o "$orient" \
+                '.[$sid].images[] | select(.monitor == null and (.file | contains($o))) | .file' \
+                "$SETS_JSON" 2>/dev/null | head -1)
         fi
+        [[ -n "$file" ]] \
+            && filepath=$(find "$WP_H" "$WP_V" -maxdepth 1 -name "$file" 2>/dev/null | head -1) \
+            || filepath=""
+    else
+        # Legacy --hor / --ver mode
+        if "$is_vertical"; then filepath="$ver_file"; else filepath="$hor_file"; fi
     fi
+
+    [[ -z "$filepath" || ! -f "$filepath" ]] && continue
+
+    ext="${filepath##*.}"
+    case "${ext,,}" in
+        mp4|webm|mkv|avi|mov)
+            mpvpaper -o "no-audio loop" "$mon_name" "$filepath" & disown ;;
+        *)
+            awww img -o "$mon_name" \
+                --transition-type wipe --transition-angle 120 \
+                --transition-step 200 --transition-fps 200 --transition-duration 2 \
+                "$filepath" ;;
+    esac
 done < <(hyprctl monitors -j | jq -r '.[] | "\(.name);\(.transform);\(.width);\(.height)"')
 
-# Run wallust post-processing hooks (mirrors [hooks] in wallust.toml)
+# ── Wallust ───────────────────────────────────────────────────────────────
 _run_wallust_hooks() {
     ~/.config/vutureland/assets/scripts/wallust/hyprland_lua-colors.sh && hyprctl reload
     pywalfox update &>/dev/null &
@@ -95,22 +109,18 @@ _run_wallust_hooks() {
     { sleep 0.8 && pkill -SIGUSR2 waybar; } &
 }
 
-# Wallust: prefer horizontal source; extract frame for videos
-wallust_src="${hor_file:-$ver_file}"
 _color_mode=$(cat ~/.config/vutureland/wallust/color-mode 2>/dev/null || echo "auto")
 
-if [[ "$_color_mode" == "auto" ]]; then
+if [[ -n "$wallust_src" && "$_color_mode" == "auto" ]]; then
     ext="${wallust_src##*.}"
     case "${ext,,}" in
         mp4|webm|mkv|avi|mov)
             tmp=$(mktemp /tmp/wp-frame-XXXXXX.jpg)
             ffmpeg -y -i "$wallust_src" -vframes 1 -q:v 2 "$tmp" &>/dev/null
             wallust --config-dir ~/.config/vutureland/wallust run "$tmp"
-            rm -f "$tmp"
-            ;;
+            rm -f "$tmp" ;;
         *)
-            wallust --config-dir ~/.config/vutureland/wallust run "$wallust_src"
-            ;;
+            wallust --config-dir ~/.config/vutureland/wallust run "$wallust_src" ;;
     esac
 elif [[ "$_color_mode" == fixed:* ]]; then
     _scheme_file=~/.config/vutureland/wallust/fixed_colors/"${_color_mode#fixed:}"
@@ -120,16 +130,21 @@ elif [[ "$_color_mode" == fixed:* ]]; then
     fi
 fi
 
+# ── Restore workspaces ────────────────────────────────────────────────────
 if [[ "$showcase" == "true" ]]; then
     sleep 2
     ~/.config/vutureland/assets/scripts/launch-waybar.sh
     i=0
     for mon in "${monitors[@]}"; do
-        focusmon "$mon"; focusws "${original_workspaces[$i]}"; i=$((i + 1))
+        hyprctl dispatch "hl.dsp.focus({monitor=\"${mon}\"})"
+        hyprctl dispatch "hl.dsp.focus({workspace=${original_workspaces[$i]}})"
+        i=$((i + 1))
     done
     i=$(( ${#monitors[@]} - 1 ))
     while (( i >= 0 )); do
-        focusmon "${monitors[$i]}"; focusws "${original_workspaces[$i]}"; i=$((i - 1))
+        hyprctl dispatch "hl.dsp.focus({monitor=\"${monitors[$i]}\"})"
+        hyprctl dispatch "hl.dsp.focus({workspace=${original_workspaces[$i]}})"
+        i=$((i - 1))
     done
-    focusmon "$focused_monitor"
+    hyprctl dispatch "hl.dsp.focus({monitor=\"${focused_monitor}\"})"
 fi

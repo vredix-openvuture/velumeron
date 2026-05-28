@@ -1,0 +1,15 @@
+window.topbar #temperature.gpu {
+    margin:  0 3px;
+    padding: 2px 6px;
+}
+
+window.topbar #temperature.gpu:hover { color: @fg-hover; }
+
+
+window.bottombar #temperature.gpu {
+    margin:  0 3px;
+    padding: 2px 6px;
+}
+
+window.bottombar #temperature.gpu:hover { color: @fg-hover; }
+

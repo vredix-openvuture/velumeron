@@ -1,6 +1,0 @@
-#memory {
-    margin:  0 3px;
-    padding: 2px 6px;
-}
-
-#memory:hover { color: @fg-hover; }

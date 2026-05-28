@@ -1,0 +1,17 @@
+window.topbar #custom-cava {
+    margin:  0px 1px;
+    padding: 1px 4px;
+    font-family: monospace;
+}
+
+window.topbar #custom-cava:hover { color: @fg-hover; }
+
+
+window.bottombar #custom-cava {
+    margin:  0px 1px;
+    padding: 1px 4px;
+    font-family: monospace;
+}
+
+window.bottombar #custom-cava:hover { color: @fg-hover; }
+
