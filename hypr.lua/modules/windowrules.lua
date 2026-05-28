@@ -158,11 +158,6 @@ hl.window_rule({
     no_blur = true,
     center  = true,
 })
-hl.window_rule({
-    name      = "steam_ws",
-    match     = { title = "(.*Steam.*)" },
-    workspace = "10",
-})
 
 -- OpenGL-viewport apps: compositor must NOT blend alpha from the GL framebuffer.
 -- animation=fade avoids popin scaling which corrupts EGL surfaces.

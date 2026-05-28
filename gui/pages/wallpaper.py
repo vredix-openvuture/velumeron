@@ -5,6 +5,11 @@ gi.require_version('GdkPixbuf', '2.0')
 
 from gi.repository import Gtk, Adw, Gdk, GdkPixbuf, Gio, GLib
 import os, re, subprocess, threading, shutil
+
+def _clean_env() -> dict:
+    env = dict(os.environ)
+    env.pop('LD_PRELOAD', None)
+    return env
 from constants import (
     WALLPAPER_H, WALLPAPER_V, VIDEO_EXTS, SET_WP, GEN_THUMBS,
     WALLPAPER_OLD, THEME_NAMES,
@@ -595,6 +600,7 @@ class WallpaperPage(Gtk.Box):
         self._inner = inner
         self._flows: dict = {}
         self._filter: dict = {k: 'all' for k, _ in self.TABS}
+        self._apply_cb = None
 
         _icons = {
             'set': 'flower-shape-symbolic',
@@ -637,6 +643,9 @@ class WallpaperPage(Gtk.Box):
         self.append(bar)
         self._reload()
 
+    def set_apply_callback(self, cb):
+        self._apply_cb = cb
+
     def _make_tab(self, key: str) -> Gtk.Box:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
@@ -648,11 +657,11 @@ class WallpaperPage(Gtk.Box):
             btn.connect('toggled', self._on_filter_toggled, key, fkey, btns)
             fbar.append(btn)
             btns[fkey] = btn
-        btns['all'].set_active(True)
-
         flow, scroll = self._make_flow(key)
         self._flows[key] = flow
         flow.set_filter_func(self._make_filter_func(key))
+
+        btns['all'].set_active(True)
 
         box.append(fbar)
         box.append(scroll)
@@ -758,33 +767,35 @@ class WallpaperPage(Gtk.Box):
     def _on_activated(self, child, tab_key: str):
         card = child.get_child()
         self._spinner.start()
+        if self._apply_cb:
+            GLib.idle_add(self._apply_cb)
 
         if tab_key == 'set' and isinstance(card, NewSetCard):
             sid = card.ws.set_id
             self._status.set_text(f'Applying set {card.ws.name}…')
             def _apply_set():
-                subprocess.run(['bash', SET_WP, '--set', sid])
+                subprocess.run(['bash', SET_WP, '--set', sid], env=_clean_env())
                 GLib.idle_add(lambda: (self._spinner.stop(),
                     self._status.set_text('Wallpaper applied.')) and False)
-            threading.Thread(target=_apply_set, daemon=True).start()
+            threading.Thread(target=_apply_set, daemon=False).start()
 
         elif tab_key == 'hor' and isinstance(card, HorCard):
             fp = card.entry.hor_file
             self._status.set_text(f'Applying {card.entry.id}…')
             def _apply_hor():
-                subprocess.run(['bash', SET_WP, '--hor', fp])
+                subprocess.run(['bash', SET_WP, '--hor', fp], env=_clean_env())
                 GLib.idle_add(lambda: (self._spinner.stop(),
                     self._status.set_text('Wallpaper applied.')) and False)
-            threading.Thread(target=_apply_hor, daemon=True).start()
+            threading.Thread(target=_apply_hor, daemon=False).start()
 
         elif tab_key == 'ver' and isinstance(card, VerCard):
             fp = card.entry.ver_file
             self._status.set_text(f'Applying {card.entry.id}…')
             def _apply_ver():
-                subprocess.run(['bash', SET_WP, '--ver', fp])
+                subprocess.run(['bash', SET_WP, '--ver', fp], env=_clean_env())
                 GLib.idle_add(lambda: (self._spinner.stop(),
                     self._status.set_text('Wallpaper applied.')) and False)
-            threading.Thread(target=_apply_ver, daemon=True).start()
+            threading.Thread(target=_apply_ver, daemon=False).start()
 
         else:
             self._spinner.stop()

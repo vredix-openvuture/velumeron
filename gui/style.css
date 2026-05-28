@@ -200,9 +200,19 @@ flowboxchild:selected > .wp-card {
    ROOT & BODY — gemeinsame Hintergrundfarbe für Banner + Sidebar
    ─────────────────────────────────────────────────────────────── */
 
+/* Transparenter Fenster-Hintergrund — notwendig für border-radius ohne Ghost */
+window,
+window.background {
+    background: none;
+    box-shadow: none;
+}
+
 /* Hintergrund hinter allem — Fensterfarbe */
 .root-area {
     background-color: @bg-primary;
+    border-top-right-radius: 12px;
+    border-top:   1px solid alpha(@bo-normal, 0.35);
+    border-right: 1px solid alpha(@bo-normal, 0.35);
 }
 
 /* Body-Box trägt bg-element — damit der Innenradius sichtbar wird */
@@ -217,18 +227,17 @@ flowboxchild:selected > .wp-card {
 
 .logo-bar {
     background-color: @bg-element;
-    padding:          20px 20px;
+    padding:             20px 20px;
+    border-top-right-radius: 12px;
 }
 
 
 /* ───────────────────────────────────────────────────────────────
-   CONTENT-AREA — Innenradius oben-links (Banner ↔ Sidebar Übergang)
+   CONTENT-AREA
    ─────────────────────────────────────────────────────────────── */
 
 .content-area {
     background-color: @bg-primary;
-    border-top-left-radius: 12px;
-    border-top-right-radius: 12px;
     padding: 32px;
 }
 

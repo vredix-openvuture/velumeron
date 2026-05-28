@@ -1,7 +1,20 @@
 #!/usr/bin/env python3
 """Vutureland Settings — GTK4/Adwaita layer-shell panel"""
 
-import os, sys
+import os, sys, signal, json
+
+# ── Toggle: kill running instance, or start if not running ───────────────────
+_PID_FILE = '/tmp/vutureland-settings.pid'
+
+if '-t' in sys.argv or '--toggle' in sys.argv:
+    sys.argv = [a for a in sys.argv if a not in ('-t', '--toggle')]
+    if os.path.exists(_PID_FILE):
+        try:
+            pid = int(open(_PID_FILE).read().strip())
+            os.kill(pid, signal.SIGTERM)
+            sys.exit(0)           # running → killed, nothing else to do
+        except (ProcessLookupError, ValueError, OSError):
+            pass                  # stale PID file → fall through and start
 
 _LIB = '/usr/lib/libgtk4-layer-shell.so'
 if 'libgtk4-layer-shell' not in os.environ.get('LD_PRELOAD', ''):
@@ -19,14 +32,17 @@ from gi.repository import Gtk, Adw, Gdk, Gio, GdkPixbuf, GLib, Gtk4LayerShell
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from pages.wallpaper import WallpaperPage
-from pages.hyprland import HyprlandPage
-from pages.waybar import WaybarPage
+from pages.wallpaper  import WallpaperPage
+from pages.hyprland   import HyprlandPage
+from pages.waybar     import WaybarPage
 from pages.lockscreen import LockscreenPage
+from pages.settings   import SettingsPage
 
-_CSS    = os.path.join(os.path.dirname(__file__), 'style.css')
-_BANNER = os.path.expanduser('~/.config/vutureland/assets/icons/vutureland.png')
-_PANEL_WIDTH = 900
+_CSS           = os.path.join(os.path.dirname(__file__), 'style.css')
+_BANNER        = os.path.expanduser('~/.config/vutureland/assets/icons/vuturland.png')
+_SETTINGS_FILE = os.path.expanduser('~/.config/vutureland/gui/settings.json')
+_PANEL_WIDTH   = 900
+_OPACITY_DIM   = 0.88          # opacity when transparency is enabled
 
 _PAGES = [
     ('hyprland',   HyprlandPage,   'preferences-desktop-display-symbolic', 'Hyprland'),
@@ -34,6 +50,26 @@ _PAGES = [
     ('wallpaper',  WallpaperPage,  'image-x-generic-symbolic',             'Wallpaper'),
     ('lockscreen', LockscreenPage, 'system-lock-screen-symbolic',          'Lockscreen'),
 ]
+_BOTTOM_PAGES = [
+    ('settings',   SettingsPage,   'preferences-system-symbolic',          'Settings'),
+]
+
+
+def _load_settings() -> dict:
+    try:
+        with open(_SETTINGS_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_settings(data: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(_SETTINGS_FILE), exist_ok=True)
+        with open(_SETTINGS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
 
 
 def _load_logo(height: int) -> GdkPixbuf.Pixbuf | None:
@@ -78,11 +114,20 @@ class MainWindow(Gtk.ApplicationWindow):
         super().__init__(**kwargs)
         self.set_title('Vutureland Settings')
         self.set_decorated(False)
+        self._settings = _load_settings()
 
         # ── Content stack ─────────────────────────────────────────────
         stack = Adw.ViewStack()
-        for name, cls, _, _ in _PAGES:
-            stack.add_named(cls(), name)
+        for name, cls, _, _ in _PAGES + _BOTTOM_PAGES:
+            page = cls()
+            if hasattr(page, 'set_apply_callback'):
+                page.set_apply_callback(self.close_animated)
+            if isinstance(page, SettingsPage):
+                page.set_opacity_callback(
+                    self._apply_opacity,
+                    initial=self._settings.get('opacity_enabled', False),
+                )
+            stack.add_named(page, name)
         stack.set_hexpand(True)
         stack.set_vexpand(True)
 
@@ -97,7 +142,8 @@ class MainWindow(Gtk.ApplicationWindow):
         sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         sidebar.add_css_class('nav-sidebar')
 
-        nav_btns = []
+        nav_btns: list[Gtk.ToggleButton] = []
+
         for name, _, icon, tooltip in _PAGES:
             btn = Gtk.ToggleButton()
             btn.set_icon_name(icon)
@@ -106,6 +152,25 @@ class MainWindow(Gtk.ApplicationWindow):
             btn.connect('toggled', self._on_nav_toggled, name, stack, nav_btns)
             sidebar.append(btn)
             nav_btns.append(btn)
+
+        # Spacer + separator push the settings button to the bottom
+        spacer = Gtk.Box()
+        spacer.set_vexpand(True)
+        sidebar.append(spacer)
+        sep = Gtk.Separator()
+        sep.set_margin_top(4)
+        sep.set_margin_bottom(4)
+        sidebar.append(sep)
+
+        for name, _, icon, tooltip in _BOTTOM_PAGES:
+            btn = Gtk.ToggleButton()
+            btn.set_icon_name(icon)
+            btn.set_tooltip_text(tooltip)
+            btn.add_css_class('nav-btn')
+            btn.connect('toggled', self._on_nav_toggled, name, stack, nav_btns)
+            sidebar.append(btn)
+            nav_btns.append(btn)
+
         nav_btns[0].set_active(True)
         sidebar.set_size_request(56, -1)
 
@@ -118,20 +183,16 @@ class MainWindow(Gtk.ApplicationWindow):
         body.append(content_wrap)
 
         # ── Root ──────────────────────────────────────────────────────
-        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        root.add_css_class('root-area')
-        root.set_size_request(_PANEL_WIDTH, -1)
-        root.append(self._build_banner())
-        root.append(body)
+        self._root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self._root.add_css_class('root-area')
+        self._root.set_size_request(_PANEL_WIDTH, -1)
+        self._root.append(self._build_banner())
+        self._root.append(body)
+        self.set_child(self._root)
 
-        # ── Revealer for slide-in animation ───────────────────────────
-        self._revealer = Gtk.Revealer()
-        self._revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_UP)
-        self._revealer.set_transition_duration(280)
-        self._revealer.set_reveal_child(False)
-        self._revealer.set_child(root)
-
-        self.set_child(self._revealer)
+        # Apply saved opacity (must come after self._root is assigned)
+        if self._settings.get('opacity_enabled', False):
+            self._root.set_opacity(_OPACITY_DIM)
 
         # ── Escape key closes the panel ───────────────────────────────
         key_ctrl = Gtk.EventControllerKey()
@@ -139,12 +200,15 @@ class MainWindow(Gtk.ApplicationWindow):
         self.add_controller(key_ctrl)
 
     def slide_in(self):
-        self._revealer.set_reveal_child(True)
         return False
 
     def close_animated(self):
-        self._revealer.set_reveal_child(False)
-        GLib.timeout_add(290, self.close)
+        self.close()
+
+    def _apply_opacity(self, enabled: bool):
+        self._root.set_opacity(_OPACITY_DIM if enabled else 1.0)
+        self._settings['opacity_enabled'] = enabled
+        _save_settings(self._settings)
 
     def _on_key_pressed(self, ctrl, keyval, keycode, state):
         if keyval == Gdk.KEY_Escape:
@@ -188,26 +252,40 @@ class VuturelandSettings(Adw.Application):
         super().__init__(application_id='com.vutureland.settings',
                          flags=Gio.ApplicationFlags.NON_UNIQUE)
         self.connect('activate', self._activate)
+        self.connect('shutdown', self._on_shutdown)
+        try:
+            with open(_PID_FILE, 'w') as f:
+                f.write(str(os.getpid()))
+        except OSError:
+            pass
+
+    def _on_shutdown(self, _):
+        try:
+            os.remove(_PID_FILE)
+        except OSError:
+            pass
 
     def _activate(self, _):
         p = Gtk.CssProvider()
         p.load_from_path(_CSS)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), p,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+            Gtk.STYLE_PROVIDER_PRIORITY_USER)
 
         win = MainWindow(application=self)
 
         # ── Layer shell setup (must happen before present()) ──────────
-        print(f"[layer-shell] supported: {Gtk4LayerShell.is_supported()}")
         Gtk4LayerShell.init_for_window(win)
-        print(f"[layer-shell] is_layer_window: {Gtk4LayerShell.is_layer_window(win)}")
         Gtk4LayerShell.set_namespace(win, 'vutureland-settings')
         Gtk4LayerShell.set_layer(win, Gtk4LayerShell.Layer.TOP)
         Gtk4LayerShell.set_anchor(win, Gtk4LayerShell.Edge.LEFT,   True)
         Gtk4LayerShell.set_anchor(win, Gtk4LayerShell.Edge.BOTTOM, True)
         Gtk4LayerShell.set_exclusive_zone(win, -1)
-        Gtk4LayerShell.set_keyboard_mode(win, Gtk4LayerShell.KeyboardMode.EXCLUSIVE)
+        Gtk4LayerShell.set_keyboard_mode(win, Gtk4LayerShell.KeyboardMode.ON_DEMAND)
+
+        # SIGTERM handler — used by --toggle to cleanly close the panel
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM,
+                             lambda: (self.quit(), GLib.SOURCE_REMOVE)[1])
 
         win.present()
         GLib.idle_add(win.slide_in)

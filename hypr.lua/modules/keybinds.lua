@@ -31,6 +31,7 @@ hl.bind(MOD .. " + ALT + SPACE", hl.dsp.exec_cmd(theme_switch))
 hl.bind(MOD .. " + T",           hl.dsp.exec_cmd(terminal))
 hl.bind(MOD .. " + S",           hl.dsp.exec_cmd(notifications))
 hl.bind(MOD .. " + V",           hl.dsp.exec_cmd(clipboard))
+hl.bind(MOD .. " + X",           hl.dsp.exec_cmd("python ~/.config/vutureland/gui/main.py -t"))
 
 
 -- ── Window management ────────────────────────────────
@@ -38,9 +39,10 @@ hl.bind(MOD .. " + V",           hl.dsp.exec_cmd(clipboard))
 hl.bind(MOD .. " + C",         hl.dsp.window.close())
 hl.bind(MOD .. " + F",         hl.dsp.window.float({ action = "toggle" }))
 hl.bind(MOD .. " + B",         hl.dsp.window.fullscreen({ mode = "maximized" }))
+hl.bind(MOD .. " + ALT + B",   hl.dsp.window.fullscreen({ mode = "fullscreen" }))       -- Fullscreen active window
 hl.bind(MOD .. " + N",         hl.dsp.window.cycle_next())                              -- Activate next window on current monitor
 hl.bind(MOD .. " + ALT + M",   hl.dsp.window.move({ monitor = "+1", follow = true }))   -- Move window to the next monitor
-hl.bind(MOD .. " + ALT + V",   hl.dsp.window.fullscreen({ mode = "fullscreen" }))       -- Fullscreen active window
+
 
 -- Click to float, hold to drag/resize
 hl.bind(MOD .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })

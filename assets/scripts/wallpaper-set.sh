@@ -131,6 +131,10 @@ elif [[ "$_color_mode" == fixed:* ]]; then
 fi
 
 # ── Restore workspaces ────────────────────────────────────────────────────
+if [[ "$showcase" != "true" ]]; then
+    ~/.config/vutureland/assets/scripts/launch-waybar.sh &
+fi
+
 if [[ "$showcase" == "true" ]]; then
     sleep 2
     ~/.config/vutureland/assets/scripts/launch-waybar.sh

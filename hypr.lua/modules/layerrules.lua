@@ -59,13 +59,13 @@ hl.layer_rule({
     xray         = true,
 })
 
--- Noctalia shell
+-- Vutureland settings panel
 hl.layer_rule({
-    name         = "noctalia-shell",
-    match        = { namespace = "(.*noctalia.*)" },
-    blur         = false,
-    blur_popups  = false,
+    name         = "vutureland-settings",
+    match        = { namespace = "(.*vutureland-settings.*)" },
+    blur         = true,
+    blur_popups  = true,
     ignore_alpha = 0.1,
-    no_anim      = true,
+    animation    = "slidefade bottom 80%",
     xray         = true,
 })

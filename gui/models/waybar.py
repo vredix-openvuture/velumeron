@@ -153,8 +153,14 @@ def refresh_groups_includes(bar: BarConfig) -> None:
         json.dump(data, f, indent=2)
 
 
-def remove_other_bar_configs(monitor: str, keep_style: str, keep_design: str = "") -> None:
-    """Delete config.json for all style/design combos except the kept one on the given monitor."""
+def _is_frame_style(style: str, design: str) -> bool:
+    base_dir = _effective_base_dir(design)
+    frame_cfg = os.path.join(base_dir, "base-frame", f"{style}.config.json")
+    return os.path.exists(frame_cfg) and os.path.getsize(frame_cfg) > 0
+
+
+def remove_other_bar_configs(monitor: str, keep_style: str, keep_design: str = "", keep_position: str = "") -> None:
+    """Delete config.json for all style/design/position combos except the kept one on the given monitor."""
     out = _output_dir()
     if not os.path.isdir(out):
         return
@@ -169,20 +175,30 @@ def remove_other_bar_configs(monitor: str, keep_style: str, keep_design: str = "
             if d2 in _POSITIONS:
                 # Legacy structure: d1=style, d2=position
                 if d1 == keep_style and keep_design == "":
-                    continue
+                    if _is_frame_style(keep_style, "") or d2 == keep_position:
+                        continue
                 cfg = os.path.join(p2, monitor, "config.json")
                 if os.path.exists(cfg):
                     os.remove(cfg)
             else:
                 # Design structure: d1=design, d2=style
                 if d1 == keep_design and d2 == keep_style:
-                    continue
-                for pos in os.listdir(p2):
-                    p3 = os.path.join(p2, pos)
-                    if os.path.isdir(p3):
-                        cfg = os.path.join(p3, monitor, "config.json")
-                        if os.path.exists(cfg):
-                            os.remove(cfg)
+                    if _is_frame_style(keep_style, keep_design):
+                        continue  # frame: keep all positions (built explicitly in _on_apply)
+                    # Non-frame: only keep the selected position
+                    for pos in os.listdir(p2):
+                        p3 = os.path.join(p2, pos)
+                        if os.path.isdir(p3) and pos != keep_position:
+                            cfg = os.path.join(p3, monitor, "config.json")
+                            if os.path.exists(cfg):
+                                os.remove(cfg)
+                else:
+                    for pos in os.listdir(p2):
+                        p3 = os.path.join(p2, pos)
+                        if os.path.isdir(p3):
+                            cfg = os.path.join(p3, monitor, "config.json")
+                            if os.path.exists(cfg):
+                                os.remove(cfg)
 
 
 def build_bar_config(bar: BarConfig) -> None:

@@ -4,7 +4,12 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 
 from gi.repository import Gtk, Adw, Gdk, GLib, Pango
-import subprocess
+import os, subprocess
+
+def _clean_env() -> dict:
+    env = dict(os.environ)
+    env.pop('LD_PRELOAD', None)
+    return env
 
 from constants import LAUNCH_WAYBAR
 from models.waybar import (
@@ -599,29 +604,35 @@ class WaybarPage(Gtk.Box):
 
     def _on_apply(self, _):
         if self._cur_bar is None:
+            self._status.set_text('Error: no bar selected')
             return
-        monitor = self._cur_bar.monitor
-        style = self._cur_bar_style()
+        try:
+            monitor = self._cur_bar.monitor
+            style = self._cur_bar_style()
 
-        # Remove config.json files from other styles/designs on this monitor
-        remove_other_bar_configs(monitor, self._cur_bar.style, self._cur_bar.design)
+            remove_other_bar_configs(monitor, self._cur_bar.style, self._cur_bar.design, self._cur_bar.position)
+            refresh_groups_includes(self._cur_bar)
+            write_bar_slots(self._cur_bar, self._left, self._center, self._right)
+            build_bar_config(self._cur_bar)
 
-        # Update includes + save slots for the current bar
-        refresh_groups_includes(self._cur_bar)
-        write_bar_slots(self._cur_bar, self._left, self._center, self._right)
-        build_bar_config(self._cur_bar)
+            if style and style.is_frame:
+                for pos in style.sub_positions:
+                    if pos == self._cur_bar.position:
+                        continue
+                    sibling = BarConfig(style=self._cur_bar.style, position=pos, monitor=monitor,
+                                       design=self._cur_bar.design)
+                    init_groups_json(sibling)
+                    refresh_groups_includes(sibling)
+                    build_bar_config(sibling)
 
-        # For frame styles, also ensure all sibling sub-bars have config.json
-        if style and style.is_frame:
-            for pos in style.sub_positions:
-                if pos == self._cur_bar.position:
-                    continue
-                sibling = BarConfig(style=self._cur_bar.style, position=pos, monitor=monitor,
-                                   design=self._cur_bar.design)
-                init_groups_json(sibling)
-                refresh_groups_includes(sibling)
-                build_bar_config(sibling)
+            cfg = __import__('os').path.join(
+                __import__('os').path.dirname(self._cur_bar.groups_file), 'config.json')
+            if not __import__('os').path.exists(cfg):
+                self._status.set_text('Error: base template missing for this style')
+                return
 
-        self._status.set_text('Saved — restarting Waybar…')
-        subprocess.Popen(['bash', LAUNCH_WAYBAR])
-        GLib.timeout_add(2500, lambda: self._status.set_text('') or False)
+            self._status.set_text('Saved — restarting Waybar…')
+            subprocess.Popen(['bash', LAUNCH_WAYBAR], env=_clean_env())
+            GLib.timeout_add(2500, lambda: self._status.set_text('') or False)
+        except Exception as e:
+            self._status.set_text(f'Error: {e}')
