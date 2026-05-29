@@ -208,8 +208,8 @@ fi
 
 mkdir -p "$HYPR_CONFIG"
 if [[ ! -f "$HYPR_CONFIG/hyprland.lua" ]]; then
-    cat > "$HYPR_CONFIG/hyprland.lua" <<'EOF'
-local base = os.getenv("HOME") .. "/.config/vutureland/hypr.lua/"
+    cat > "$HYPR_CONFIG/hyprland.lua" <<EOF
+local base = (os.getenv("VUTURELAND_DIR") or (os.getenv("HOME") .. "/.config/vutureland")) .. "/hypr.lua/"
 package.path = base .. "?.lua;"
             .. base .. "modules/?.lua;"
             .. base .. "modules/?/init.lua;"
@@ -220,6 +220,14 @@ EOF
 else
     ok "~/.config/hypr/hyprland.lua already exists — skipping."
 fi
+
+# Write VUTURELAND_DIR into systemd user environment so Hyprland inherits it
+mkdir -p "$HOME/.config/environment.d"
+cat > "$HOME/.config/environment.d/vutureland.conf" <<EOF
+VUTURELAND_DIR=$VUTURELAND_DIR
+VUTURELAND_USER_DIR=$VUTURELAND_USER_DIR
+EOF
+ok "Wrote ~/.config/environment.d/vutureland.conf"
 
 # wallust symlink
 if [[ ! -e "$HOME/.config/wallust" ]]; then
