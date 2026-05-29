@@ -49,6 +49,11 @@ hl.bind(MOD .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })
 hl.bind(MOD .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
 hl.bind(MOD .. " + mouse:274", hl.dsp.window.float({ action = "toggle" }))
 
+-- Click outside rofi closes it (non-consuming → click still reaches the app)
+hl.bind("mouse:272",
+    hl.dsp.exec_cmd(VTL_DIR .. "/rofi/assets/close-on-click.sh"),
+    { mouse = true, non_consuming = true, release = true })
+
 
 -- ── Workspaces and Monitors ─────────────────────────
 

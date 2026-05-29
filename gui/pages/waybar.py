@@ -33,7 +33,7 @@ def _build_desc_map(sections: list) -> dict[str, str]:
 class BarZone(Gtk.Box):
     """Left / center / right drop zone inside the bar preview."""
 
-    def __init__(self, zone_id: str, label: str, on_remove, on_drop):
+    def __init__(self, zone_id: str, label: str, on_remove, on_drop, on_add_request):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self._zone_id = zone_id
         self._modules: list[str] = []
@@ -45,25 +45,34 @@ class BarZone(Gtk.Box):
         self.set_hexpand(True)
         self.add_css_class('bar-zone')
 
-        hdr = Gtk.Label(label=label.upper())
-        hdr.add_css_class('zone-label')
-        hdr.set_margin_bottom(6)
-        self.append(hdr)
+        self._hdr = Gtk.Label(label=label.upper())
+        self._hdr.add_css_class('zone-label')
+        self._hdr.set_margin_bottom(6)
+        self.append(self._hdr)
 
         self._chips_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
         self._chips_box.set_vexpand(True)
         self.append(self._chips_box)
 
-        self._hint = Gtk.Label(label='Drag a module …')
+        self._hint = Gtk.Label(label='Click + to add …')
         self._hint.add_css_class('dim-label')
         self._hint.add_css_class('caption')
         self.append(self._hint)
+
+        add_btn = Gtk.Button(icon_name='list-add-symbolic')
+        add_btn.add_css_class('flat')
+        add_btn.set_tooltip_text('Add module')
+        add_btn.connect('clicked', lambda _: on_add_request(zone_id, add_btn))
+        self.append(add_btn)
 
         tgt = Gtk.DropTarget.new(str, Gdk.DragAction.COPY | Gdk.DragAction.MOVE)
         tgt.connect('drop', self._on_drop_cb)
         tgt.connect('enter', self._on_enter)
         tgt.connect('leave', self._on_leave)
         self.add_controller(tgt)
+
+    def set_header_label(self, text: str):
+        self._hdr.set_label(text.upper())
 
     def set_data(self, modules: list[str], key_map: dict[str, str]):
         self._modules = modules
@@ -84,16 +93,22 @@ class BarZone(Gtk.Box):
         self._hint.set_visible(not self._modules)
 
     def _make_chip(self, key: str) -> Gtk.Box:
-        display = self._key_map.get(key, key)
         chip = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
         chip.add_css_class('module-chip')
 
-        lbl = Gtk.Label(label=display)
-        lbl.set_ellipsize(Pango.EllipsizeMode.END)
-        lbl.set_max_width_chars(16)
-        lbl.set_hexpand(True)
-        lbl.set_halign(Gtk.Align.START)
-        chip.append(lbl)
+        if 'separator' in key.lower():
+            line = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+            line.set_hexpand(True)
+            line.set_valign(Gtk.Align.CENTER)
+            chip.append(line)
+        else:
+            display = self._key_map.get(key, key)
+            lbl = Gtk.Label(label=display)
+            lbl.set_ellipsize(Pango.EllipsizeMode.END)
+            lbl.set_max_width_chars(16)
+            lbl.set_hexpand(True)
+            lbl.set_halign(Gtk.Align.START)
+            chip.append(lbl)
 
         rm = Gtk.Button(icon_name='window-close-symbolic')
         rm.add_css_class('flat')
@@ -312,15 +327,14 @@ class WaybarPage(Gtk.Box):
 
         self.append(Gtk.Separator())
 
-        # Main split: zones (left) | palette (right)
         main = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         main.set_vexpand(True)
 
-        # -- Zones panel --
+        # -- Zones panel (full width) --
         zones_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
-                               margin_start=16, margin_end=12,
+                               margin_start=16, margin_end=16,
                                margin_top=14, margin_bottom=14)
-        zones_panel.set_size_request(360, -1)
+        zones_panel.set_hexpand(True)
 
         hdr = Gtk.Label(label='Bar Layout')
         hdr.add_css_class('title-4')
@@ -328,14 +342,15 @@ class WaybarPage(Gtk.Box):
         hdr.set_margin_bottom(2)
         zones_panel.append(hdr)
 
-        zones_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        zones_row.set_vexpand(True)
-        zones_row.set_homogeneous(True)
+        self._zones_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self._zones_row.set_vexpand(True)
+        self._zones_row.set_homogeneous(True)
         for zone_id, label in [('left', 'Left'), ('center', 'Center'), ('right', 'Right')]:
-            z = BarZone(zone_id, label, self._on_remove, self._on_zone_drop)
+            z = BarZone(zone_id, label, self._on_remove, self._on_zone_drop,
+                        self._on_add_request)
             self._zones[zone_id] = z
-            zones_row.append(z)
-        zones_panel.append(zones_row)
+            self._zones_row.append(z)
+        zones_panel.append(self._zones_row)
 
         empty = Adw.StatusPage()
         empty.set_icon_name('view-grid-symbolic')
@@ -344,33 +359,12 @@ class WaybarPage(Gtk.Box):
         empty.set_vexpand(True)
 
         self._stack = Gtk.Stack()
-        self._stack.add_named(empty, 'empty')
-        self._stack.add_named(zones_panel, 'zones')
+        self._stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
+        self._stack.add_named(empty,                  'empty')
+        self._stack.add_named(zones_panel,            'zones')
+        self._stack.add_named(self._build_add_page(), 'add')
         self._stack.set_visible_child_name('empty')
         main.append(self._stack)
-
-        main.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
-
-        # -- Palette panel --
-        pal_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        pal_panel.set_hexpand(True)
-
-        pal_hdr = Gtk.Label(label='Module Palette')
-        pal_hdr.add_css_class('title-4')
-        pal_hdr.set_halign(Gtk.Align.START)
-        pal_hdr.set_margin_start(14)
-        pal_hdr.set_margin_top(14)
-        pal_hdr.set_margin_bottom(6)
-        pal_panel.append(pal_hdr)
-
-        sc = Gtk.ScrolledWindow()
-        sc.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        sc.set_vexpand(True)
-        self._palette_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0,
-                                     margin_start=12, margin_end=12, margin_bottom=12)
-        sc.set_child(self._palette_box)
-        pal_panel.append(sc)
-        main.append(pal_panel)
 
         self.append(main)
 
@@ -485,8 +479,8 @@ class WaybarPage(Gtk.Box):
         self._cur_bar = bar
         self._left, self._center, self._right = list(left), list(center), list(right)
         self._status.set_text('')
+        self._update_zones_layout(bar.orientation() == 'vertical')
         self._refresh_zones()
-        self._refresh_palette()
         self._stack.set_visible_child_name('zones')
 
     # ── zone / palette refresh ───────────────────────────────────────────────
@@ -496,54 +490,130 @@ class WaybarPage(Gtk.Box):
         for zone_id, mods in [('left', self._left), ('center', self._center), ('right', self._right)]:
             self._zones[zone_id].set_data(mods, key_map)
 
-    def _refresh_palette(self):
-        child = self._palette_box.get_first_child()
+    def _update_zones_layout(self, is_vertical: bool):
+        if is_vertical:
+            self._zones_row.set_orientation(Gtk.Orientation.VERTICAL)
+            labels = {'left': 'Top', 'center': 'Middle', 'right': 'Bottom'}
+        else:
+            self._zones_row.set_orientation(Gtk.Orientation.HORIZONTAL)
+            labels = {'left': 'Left', 'center': 'Center', 'right': 'Right'}
+        for zone_id, label in labels.items():
+            self._zones[zone_id].set_header_label(label)
+
+    def _build_add_page(self) -> Gtk.Box:
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        page.set_hexpand(True)
+
+        # Header with back button + zone name
+        hdr_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                          margin_start=16, margin_end=16,
+                          margin_top=10, margin_bottom=10)
+        back_btn = Gtk.Button(icon_name='go-previous-symbolic')
+        back_btn.add_css_class('flat')
+        back_btn.connect('clicked', lambda _: self._stack.set_visible_child_name('zones'))
+        hdr_box.append(back_btn)
+
+        self._add_zone_label = Gtk.Label()
+        self._add_zone_label.add_css_class('title-4')
+        self._add_zone_label.set_halign(Gtk.Align.START)
+        self._add_zone_label.set_hexpand(True)
+        hdr_box.append(self._add_zone_label)
+        page.append(hdr_box)
+        page.append(Gtk.Separator())
+
+        # Search bar
+        search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
+                             margin_start=16, margin_end=16,
+                             margin_top=8, margin_bottom=4)
+        self._add_search = Gtk.SearchEntry()
+        self._add_search.set_placeholder_text('Search modules…')
+        self._add_search.set_hexpand(True)
+        self._add_search.connect('search-changed', self._on_add_search_changed)
+        search_box.append(self._add_search)
+        page.append(search_box)
+
+        # Scrollable module sections
+        sc = Gtk.ScrolledWindow()
+        sc.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        sc.set_vexpand(True)
+        self._add_modules_box = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, spacing=0,
+            margin_start=16, margin_end=16, margin_bottom=16)
+        sc.set_child(self._add_modules_box)
+        page.append(sc)
+
+        self._add_sections: list[tuple] = []  # (hdr, flow, [(key, display)])
+        self._add_target_zone = 'left'
+        return page
+
+    def _populate_add_page(self):
+        child = self._add_modules_box.get_first_child()
         while child:
             nxt = child.get_next_sibling()
-            self._palette_box.remove(child)
+            self._add_modules_box.remove(child)
             child = nxt
+        self._add_sections = []
 
+        desc_map = self._active_desc_map()
         for section, mods in self._active_sections():
             if not mods:
                 continue
             hdr = Gtk.Label(label=section.upper())
             hdr.add_css_class('palette-section-label')
             hdr.set_halign(Gtk.Align.START)
-            hdr.set_margin_top(10)
+            hdr.set_margin_top(12)
             hdr.set_margin_bottom(4)
-            self._palette_box.append(hdr)
+            self._add_modules_box.append(hdr)
 
             flow = Gtk.FlowBox()
             flow.set_selection_mode(Gtk.SelectionMode.NONE)
-            flow.set_column_spacing(4)
-            flow.set_row_spacing(4)
+            flow.set_column_spacing(6)
+            flow.set_row_spacing(6)
             flow.set_min_children_per_line(3)
-            flow.set_max_children_per_line(3)
-            flow.set_homogeneous(True)
-            desc_map = self._active_desc_map()
+            flow.set_max_children_per_line(8)
             for key, display, *_ in mods:
-                flow.append(self._make_palette_chip(key, display, desc_map.get(key, "")))
-            self._palette_box.append(flow)
+                fchild = Gtk.FlowBoxChild()
+                fchild.set_focusable(False)
+                btn = Gtk.Button(label=display)
+                btn.add_css_class('palette-chip')
+                btn.set_tooltip_text(desc_map.get(key, key))
+                btn.connect('clicked', lambda _, k=key: self._on_add_module(k))
+                fchild.set_child(btn)
+                flow.append(fchild)
+            self._add_modules_box.append(flow)
+            self._add_sections.append((hdr, flow, [(k, d) for k, d, *_ in mods]))
 
-    def _make_palette_chip(self, key: str, display: str, description: str = "") -> Gtk.FlowBoxChild:
-        child = Gtk.FlowBoxChild()
-        child.set_focusable(False)
+    def _on_add_request(self, zone_id: str, _parent: Gtk.Widget):
+        self._add_target_zone = zone_id
+        zone_labels_h = {'left': 'Left',  'center': 'Center', 'right': 'Right'}
+        zone_labels_v = {'left': 'Top',   'center': 'Middle', 'right': 'Bottom'}
+        labels = (zone_labels_v
+                  if (self._cur_bar and self._cur_bar.orientation() == 'vertical')
+                  else zone_labels_h)
+        self._add_zone_label.set_label(f'Add to {labels.get(zone_id, zone_id)}')
+        self._populate_add_page()
+        self._add_search.set_text('')
+        self._stack.set_visible_child_name('add')
 
-        btn = Gtk.Button(label=display)
-        btn.add_css_class('palette-chip')
-        btn.set_hexpand(True)
-        btn.set_tooltip_text(description if description else key)
-        child.set_child(btn)
+    def _on_add_module(self, key: str):
+        self._on_zone_drop(None, self._add_target_zone, key, 0)
+        self._stack.set_visible_child_name('zones')
 
-        src = Gtk.DragSource.new()
-        src.set_actions(Gdk.DragAction.COPY)
-        src.connect('prepare', lambda s, x, y, k=key:
-                    Gdk.ContentProvider.new_for_value(f"palette:{k}"))
-        src.connect('drag-begin', lambda s, drag:
-                    s.set_icon(Gtk.WidgetPaintable.new(btn), 0, 0))
-        btn.add_controller(src)
-
-        return child
+    def _on_add_search_changed(self, _):
+        q = self._add_search.get_text().lower()
+        for hdr, flow, mods in self._add_sections:
+            if not q:
+                hdr.set_visible(True)
+                flow.set_visible(True)
+                flow.set_filter_func(None)
+            else:
+                def _filt(child, _q=q):
+                    btn = child.get_child()
+                    return _q in btn.get_label().lower()
+                flow.set_filter_func(_filt)
+                any_match = any(q in d.lower() or q in k.lower() for k, d in mods)
+                hdr.set_visible(any_match)
+                flow.set_visible(any_match)
 
     # ── DnD / edit callbacks ─────────────────────────────────────────────────
 

@@ -22,6 +22,7 @@ hl.layer_rule({
     ignore_alpha = 0.1,
     animation    = "slidefade bottom 80%",
     xray         = true,
+    dim_around   = true, 
 })
 
 -- Rofi
@@ -68,4 +69,5 @@ hl.layer_rule({
     ignore_alpha = 0.1,
     animation    = "slidefade bottom 80%",
     xray         = true,
+    dim_around   = true, 
 })

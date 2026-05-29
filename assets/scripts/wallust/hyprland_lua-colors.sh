@@ -17,4 +17,5 @@ while IFS= read -r line; do
     fi
 done < "$file" > "$file.tmp"
 
-mv "$file.tmp" "$file"
+# cp follows the symlink target; mv would replace the symlink itself
+cp "$file.tmp" "$file" && rm -f "$file.tmp"

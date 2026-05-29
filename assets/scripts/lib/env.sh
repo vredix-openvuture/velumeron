@@ -10,7 +10,7 @@
 #                       Always ${XDG_CONFIG_HOME:-~/.config}/vutureland.
 
 if [[ -z "${VUTURELAND_DIR:-}" ]]; then
-    VUTURELAND_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." && pwd)"
+    VUTURELAND_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../.." && pwd)"
 fi
 export VUTURELAND_DIR
 

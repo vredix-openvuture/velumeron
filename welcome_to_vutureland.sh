@@ -209,14 +209,16 @@ fi
 mkdir -p "$HYPR_CONFIG"
 if [[ ! -f "$HYPR_CONFIG/hyprland.lua" ]]; then
     cat > "$HYPR_CONFIG/hyprland.lua" <<EOF
-local base = (os.getenv("VUTURELAND_DIR") or (os.getenv("HOME") .. "/.config/vutureland")) .. "/hypr.lua/"
+local base = "$VUTURELAND_DIR/hypr.lua/"
+VTL_DIR      = base:match("^(.*)/hypr%.lua/?$")
+VTL_USER_DIR = os.getenv("HOME") .. "/.config/vutureland"
 package.path = base .. "?.lua;"
             .. base .. "modules/?.lua;"
             .. base .. "modules/?/init.lua;"
             .. package.path
 dofile(base .. "hyprland.lua")
 EOF
-    ok "Created ~/.config/hypr/hyprland.lua"
+    ok "Created ~/.config/hypr/hyprland.lua (→ $VUTURELAND_DIR)"
 else
     ok "~/.config/hypr/hyprland.lua already exists — skipping."
 fi
@@ -229,10 +231,28 @@ VUTURELAND_USER_DIR=$VUTURELAND_USER_DIR
 EOF
 ok "Wrote ~/.config/environment.d/vutureland.conf"
 
-# wallust symlink
+# wallust symlink (for wallust tool itself)
 if [[ ! -e "$HOME/.config/wallust" ]]; then
     ln -sf "$VUTURELAND_DIR/wallust" "$HOME/.config/wallust"
     ok "Linked ~/.config/wallust → vutureland/wallust"
+fi
+
+# Symlinks in VUTURELAND_USER_DIR for dirs referenced via ~/.config/vutureland/
+# (rofi .rasi files, kitty, swaync cannot use env vars — they need a stable ~ path)
+mkdir -p "$VUTURELAND_USER_DIR"
+for _dir in rofi kitty swaync; do
+    _target="$VUTURELAND_USER_DIR/$_dir"
+    if [[ ! -e "$_target" ]]; then
+        ln -sf "$VUTURELAND_DIR/$_dir" "$_target"
+        ok "Linked ~/.config/vutureland/$_dir → $VUTURELAND_DIR/$_dir"
+    fi
+done
+
+# Copy hyprlock.conf to user dir (rofi-hyprlock.sh writes the active theme there)
+if [[ ! -f "$VUTURELAND_USER_DIR/hypr.lua/hyprlock.conf" ]]; then
+    mkdir -p "$VUTURELAND_USER_DIR/hypr.lua"
+    cp "$VUTURELAND_DIR/hypr.lua/hyprlock.conf" "$VUTURELAND_USER_DIR/hypr.lua/hyprlock.conf"
+    ok "Copied hyprlock.conf to user dir"
 fi
 
 # ─── 4) Monitor + Workspace setup ────────────────────────────────────────────

@@ -73,18 +73,25 @@ from gi.repository import Gtk, Adw, Gdk, Gio, GdkPixbuf, GLib, Gtk4LayerShell
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from pages.wallpaper  import WallpaperPage
-from pages.hyprland   import HyprlandPage
-from pages.waybar     import WaybarPage
-from pages.lockscreen import LockscreenPage
-from pages.settings   import SettingsPage
+from pages.home          import HomePage
+from pages.wallpaper     import WallpaperPage
+from pages.hyprland      import HyprlandPage
+from pages.waybar        import WaybarPage
+from pages.lockscreen    import LockscreenPage
+from pages.notifications import NotificationsPage
+from pages.settings      import SettingsPage
 
 _CSS           = os.path.join(os.path.dirname(__file__), 'style.css')
 _BANNER        = os.path.join(
     os.environ.get('VUTURELAND_DIR',
                    os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))),
-    'assets', 'icons', 'vuturland.png'
+    'assets', 'icons', 'vutureland.png'
 )
+_LOGO_PATHS = {
+    'full':   _BANNER,
+    'simple': os.path.join(os.path.dirname(_BANNER), 'vuturland-simple.png'),
+    'none':   None,
+}
 _SETTINGS_FILE = os.path.join(
     os.environ.get('VUTURELAND_USER_DIR',
                    os.path.join(os.environ.get('XDG_CONFIG_HOME',
@@ -92,14 +99,65 @@ _SETTINGS_FILE = os.path.join(
                                 'vutureland')),
     'gui', 'settings.json'
 )
-_PANEL_WIDTH   = 900
-_OPACITY_DIM   = 0.88          # opacity when transparency is enabled
+_PANEL_WIDTH   = 900           # fallback when no panel_width_pct saved
+_OPACITY_DIM   = 0.88          # default opacity slider position
+
+def _build_theme_css(bg_primary, bg_element, bg_active, bg_hover,
+                     bo_normal, bo_active, fg_primary, fg_muted, fg_bright) -> str:
+    # Direct rules instead of @define-color overrides — those don't reliably
+    # cross provider boundaries when the base style.css is parsed elsewhere.
+    return f"""
+        .root-area    {{ background-color: {bg_primary}; }}
+        .body-area    {{ background-color: {bg_element}; }}
+        .content-area {{ background-color: {bg_primary}; color: {fg_primary}; }}
+        .logo-bar     {{ background-color: {bg_element}; }}
+        .nav-sidebar  {{ background-color: {bg_element}; }}
+        .nav-btn      {{ color: {fg_muted}; }}
+        .nav-btn:hover   {{ background-color: alpha({bg_active}, 0.15); color: {fg_primary}; }}
+        .nav-btn:checked {{ background-color: {bg_active}; color: {fg_bright}; }}
+        label, .heading, .title-1, .title-2, .title-3, .title-4 {{ color: {fg_primary}; }}
+        .caption, .dim-label                                    {{ color: {fg_muted}; }}
+        .bar-zone      {{ background-color: alpha({bg_element}, 0.6);
+                          border-color: alpha({bo_normal}, 0.55); }}
+        .module-chip   {{ background-color: {bg_element}; color: {fg_primary};
+                          border-color: alpha({bo_normal}, 0.55); }}
+        .palette-chip  {{ background-color: {bg_element}; color: {fg_primary};
+                          border-color: alpha({bo_normal}, 0.45); }}
+    """
+
+_THEME_CSS: dict[str, str] = {
+    'follow': '',
+    'dark':   _build_theme_css(
+        bg_primary='#0d0d0d', bg_element='#1e1e1e', bg_active='#3a7bd5',
+        bg_hover='#2a2a2a',   bo_normal='#505050',  bo_active='#7a7a7a',
+        fg_primary='#f0f0f0', fg_muted='#bcbcbc',   fg_bright='#ffffff',
+    ),
+    'bright': _build_theme_css(
+        bg_primary='#fafafa', bg_element='#eeeeee', bg_active='#1a73e8',
+        bg_hover='#dde6f5',   bo_normal='#b0b0b0',  bo_active='#1a73e8',
+        fg_primary='#101010', fg_muted='#3a3a3a',   fg_bright='#000000',
+    ),
+}
+
+# Base style.css provider lives at module scope so `_apply_theme` can reload it
+# after the @define-color overrides change — @color refs only resolve at parse.
+_BASE_CSS_PROVIDER   = None
+# Provider for the wallust-generated color palette. Reloaded when the file
+# changes on disk so the GUI follows wallpaper theme switches automatically.
+_COLORS_CSS_PROVIDER = None
+_COLORS_CSS_PATH     = os.path.join(
+    os.environ.get('VUTURELAND_DIR',
+                   os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))),
+    'assets', 'colors_gtk.css',
+)
 
 _PAGES = [
-    ('hyprland',   HyprlandPage,   'preferences-desktop-display-symbolic', 'Hyprland'),
-    ('waybar',     WaybarPage,     'view-grid-symbolic',                   'Waybar'),
-    ('wallpaper',  WallpaperPage,  'image-x-generic-symbolic',             'Wallpaper'),
-    ('lockscreen', LockscreenPage, 'system-lock-screen-symbolic',          'Lockscreen'),
+    ('home',          HomePage,          'go-home-symbolic',                          'Home'),
+    ('hyprland',      HyprlandPage,      'preferences-desktop-display-symbolic',      'Hyprland'),
+    ('waybar',        WaybarPage,        'view-grid-symbolic',                        'Bar'),
+    ('wallpaper',     WallpaperPage,     'image-x-generic-symbolic',                  'Theme'),
+    ('lockscreen',    LockscreenPage,    'system-lock-screen-symbolic',               'Power & Lock'),
+    ('notifications', NotificationsPage, 'preferences-system-notifications-symbolic', 'Notifications'),
 ]
 _BOTTOM_PAGES = [
     ('settings',   SettingsPage,   'preferences-system-symbolic',          'Settings'),
@@ -123,11 +181,11 @@ def _save_settings(data: dict) -> None:
         pass
 
 
-def _load_logo(height: int) -> GdkPixbuf.Pixbuf | None:
-    if not os.path.exists(_BANNER):
+def _load_logo(path: str, height: int) -> GdkPixbuf.Pixbuf | None:
+    if not path or not os.path.exists(path):
         return None
     try:
-        pb = GdkPixbuf.Pixbuf.new_from_file(_BANNER)
+        pb = GdkPixbuf.Pixbuf.new_from_file(path)
         if pb.get_has_alpha():
             w, h = pb.get_width(), pb.get_height()
             rs = pb.get_rowstride()
@@ -167,6 +225,20 @@ class MainWindow(Gtk.ApplicationWindow):
         self.set_decorated(False)
         self._settings = _load_settings()
 
+        # ── Monitor geometry (needed for size calculations) ───────────
+        try:
+            mon  = Gdk.Display.get_default().get_monitors().get_item(0)
+            geom = mon.get_geometry()
+            self._monitor_w, self._monitor_h = geom.width, geom.height
+        except Exception:
+            self._monitor_w, self._monitor_h = 1920, 1080
+
+        # ── Theme override CSS provider (priority > main style.css) ───
+        self._theme_provider = Gtk.CssProvider()
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), self._theme_provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
+
         # ── Content stack ─────────────────────────────────────────────
         stack = Adw.ViewStack()
         for name, cls, _, _ in _PAGES + _BOTTOM_PAGES:
@@ -177,6 +249,33 @@ class MainWindow(Gtk.ApplicationWindow):
                 page.set_opacity_callback(
                     self._apply_opacity,
                     initial=self._settings.get('opacity_enabled', False),
+                    initial_value=self._settings.get('opacity_value', _OPACITY_DIM),
+                )
+                page.set_theme_callback(
+                    self._apply_theme,
+                    initial=self._settings.get('menu_theme', 'follow'),
+                )
+                w_pct = self._settings.get(
+                    'panel_width_pct',
+                    max(20, min(90, _PANEL_WIDTH * 100 // self._monitor_w)))
+                page.set_size_callback(
+                    self._apply_size,
+                    w_pct=w_pct,
+                    h_pct=self._settings.get('panel_height_pct', 100),
+                )
+                page.set_sidebar_labels_callback(
+                    self._apply_sidebar_labels,
+                    initial=self._settings.get('sidebar_labels', False),
+                )
+                page.set_logo_callback(
+                    self._apply_logo,
+                    initial=self._settings.get('logo_variant', 'full'),
+                )
+            if isinstance(page, NotificationsPage):
+                page.set_values_callback(
+                    self._apply_notifications,
+                    margin_top_pct=self._settings.get('swaync_margin_top_pct', 10),
+                    width_pct     =self._settings.get('swaync_width_pct',      23),
                 )
             stack.add_named(page, name)
         stack.set_hexpand(True)
@@ -190,60 +289,97 @@ class MainWindow(Gtk.ApplicationWindow):
         content_wrap.append(stack)
 
         # ── Left sidebar ──────────────────────────────────────────────
-        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        sidebar.add_css_class('nav-sidebar')
+        self._sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self._sidebar.add_css_class('nav-sidebar')
+        self._sidebar.set_hexpand(False)   # stops img.hexpand from propagating up
+        self._nav_icons:  list[Gtk.Image] = []
+        self._nav_labels: list[Gtk.Label] = []
 
         nav_btns: list[Gtk.ToggleButton] = []
 
         for name, _, icon, tooltip in _PAGES:
-            btn = Gtk.ToggleButton()
-            btn.set_icon_name(icon)
-            btn.set_tooltip_text(tooltip)
-            btn.add_css_class('nav-btn')
-            btn.connect('toggled', self._on_nav_toggled, name, stack, nav_btns)
-            sidebar.append(btn)
+            btn = self._make_nav_btn(name, icon, tooltip, stack, nav_btns)
+            self._sidebar.append(btn)
             nav_btns.append(btn)
 
         # Spacer + separator push the settings button to the bottom
         spacer = Gtk.Box()
         spacer.set_vexpand(True)
-        sidebar.append(spacer)
+        self._sidebar.append(spacer)
         sep = Gtk.Separator()
         sep.set_margin_top(4)
         sep.set_margin_bottom(4)
-        sidebar.append(sep)
+        self._sidebar.append(sep)
 
         for name, _, icon, tooltip in _BOTTOM_PAGES:
-            btn = Gtk.ToggleButton()
-            btn.set_icon_name(icon)
-            btn.set_tooltip_text(tooltip)
-            btn.add_css_class('nav-btn')
-            btn.connect('toggled', self._on_nav_toggled, name, stack, nav_btns)
-            sidebar.append(btn)
+            btn = self._make_nav_btn(name, icon, tooltip, stack, nav_btns)
+            self._sidebar.append(btn)
             nav_btns.append(btn)
 
         nav_btns[0].set_active(True)
-        sidebar.set_size_request(56, -1)
+        self._apply_sidebar_labels(self._settings.get('sidebar_labels', False),
+                                   save=False)
 
         # ── Body ──────────────────────────────────────────────────────
         body = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         body.add_css_class('body-area')
         body.set_hexpand(True)
         body.set_vexpand(True)
-        body.append(sidebar)
+        body.append(self._sidebar)
         body.append(content_wrap)
 
-        # ── Root ──────────────────────────────────────────────────────
+        # ── Root: panel content (banner + body)
         self._root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self._root.add_css_class('root-area')
-        self._root.set_size_request(_PANEL_WIDTH, -1)
         self._root.append(self._build_banner())
         self._root.append(body)
-        self.set_child(self._root)
 
-        # Apply saved opacity (must come after self._root is assigned)
+        # ── Size-constraint wrapper.
+        # set_size_request on a Box only sets MIN size — natural size from
+        # children dominates. A ScrolledWindow with propagate_natural=False
+        # and min_content=0 reports its natural size as whatever we tell it,
+        # so set_size_request actually clamps. Inner content scrolls if it
+        # would overflow the chosen panel size.
+        self._panel_scroll = Gtk.ScrolledWindow()
+        self._panel_scroll.set_policy(Gtk.PolicyType.NEVER,
+                                      Gtk.PolicyType.AUTOMATIC)
+        self._panel_scroll.set_propagate_natural_width(False)
+        self._panel_scroll.set_propagate_natural_height(False)
+        self._panel_scroll.set_min_content_width(0)
+        self._panel_scroll.set_min_content_height(0)
+        self._panel_scroll.set_halign(Gtk.Align.START)
+        self._panel_scroll.set_valign(Gtk.Align.END)
+        self._panel_scroll.set_hexpand(False)
+        self._panel_scroll.set_vexpand(False)
+        self._panel_scroll.set_overflow(Gtk.Overflow.HIDDEN)
+        self._panel_scroll.set_child(self._root)
+
+        # Fullscreen transparent click-catcher; clicks on it close the panel.
+        self._click_catcher = Gtk.Box()
+        self._click_catcher.set_hexpand(True)
+        self._click_catcher.set_vexpand(True)
+        click_gesture = Gtk.GestureClick.new()
+        click_gesture.set_button(0)   # any mouse button
+        click_gesture.connect('pressed', self._on_outside_click)
+        self._click_catcher.add_controller(click_gesture)
+
+        overlay = Gtk.Overlay()
+        overlay.set_child(self._click_catcher)
+        overlay.add_overlay(self._panel_scroll)
+        self.set_child(overlay)
+
+        # Apply saved size, opacity, and theme
+        w_pct = self._settings.get(
+            'panel_width_pct',
+            max(20, min(90, _PANEL_WIDTH * 100 // self._monitor_w)))
+        self._apply_size(w_pct, self._settings.get('panel_height_pct', 100),
+                         save=False)
         if self._settings.get('opacity_enabled', False):
-            self._root.set_opacity(_OPACITY_DIM)
+            self._root.set_opacity(
+                self._settings.get('opacity_value', _OPACITY_DIM))
+        saved_theme = self._settings.get('menu_theme', 'follow')
+        if saved_theme != 'follow':
+            self._apply_theme(saved_theme, save=False)
 
         # Hide instead of destroy when closed — keeps the daemon alive
         self.connect('close-request', lambda w: w.hide() or True)
@@ -253,16 +389,137 @@ class MainWindow(Gtk.ApplicationWindow):
         key_ctrl.connect('key-pressed', self._on_key_pressed)
         self.add_controller(key_ctrl)
 
+        # ── Watch wallust colors for changes ──────────────────────────
+        self._setup_colors_watch()
+
+    def _setup_colors_watch(self):
+        if not os.path.exists(_COLORS_CSS_PATH):
+            return
+        try:
+            gfile = Gio.File.new_for_path(_COLORS_CSS_PATH)
+            self._colors_monitor = gfile.monitor_file(Gio.FileMonitorFlags.NONE, None)
+            self._colors_monitor.connect('changed', self._on_colors_changed)
+            self._colors_reload_id: int | None = None
+        except Exception as e:
+            print(f"[colors-watch] setup failed: {e}")
+
+    def _on_colors_changed(self, _monitor, _file, _other, event_type):
+        # Coalesce bursts of events (CHANGED + CHANGES_DONE_HINT + ATTRIBUTE_CHANGED)
+        # into one reload after 150ms of silence.
+        if self._colors_reload_id is not None:
+            GLib.source_remove(self._colors_reload_id)
+        self._colors_reload_id = GLib.timeout_add(150, self._reload_colors_css)
+
+    def _reload_colors_css(self):
+        self._colors_reload_id = None
+        try:
+            if _COLORS_CSS_PROVIDER is not None and os.path.exists(_COLORS_CSS_PATH):
+                _COLORS_CSS_PROVIDER.load_from_path(_COLORS_CSS_PATH)
+            if _BASE_CSS_PROVIDER is not None:
+                _BASE_CSS_PROVIDER.load_from_path(_CSS)
+        except Exception as e:
+            print(f"[colors-watch] reload failed: {e}")
+        return False  # don't repeat
+
+    def _on_outside_click(self, _gesture, _n_press, _x, _y):
+        # Fired only when the user clicks on the transparent area outside
+        # the panel. Gtk.Overlay swallows clicks on the panel itself, so this
+        # never triggers from within the panel content.
+        self.hide()
+
     def slide_in(self):
         return False
 
     def close_animated(self):
         self.hide()
 
-    def _apply_opacity(self, enabled: bool):
-        self._root.set_opacity(_OPACITY_DIM if enabled else 1.0)
-        self._settings['opacity_enabled'] = enabled
+    def _make_nav_btn(self, name: str, icon: str, tooltip: str,
+                      stack: Adw.ViewStack, nav_btns: list) -> Gtk.ToggleButton:
+        btn = Gtk.ToggleButton()
+        btn.add_css_class('nav-btn')
+        btn.set_tooltip_text(tooltip)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        img = Gtk.Image.new_from_icon_name(icon)
+        img.set_halign(Gtk.Align.CENTER)
+        img.set_hexpand(True)            # centres the icon when label is hidden
+        box.append(img)
+        lbl = Gtk.Label(label=tooltip)
+        lbl.set_xalign(0.0)
+        lbl.set_hexpand(False)
+        lbl.set_visible(False)
+        box.append(lbl)
+        btn.set_child(box)
+        self._nav_icons.append(img)
+        self._nav_labels.append(lbl)
+
+        btn.connect('toggled', self._on_nav_toggled, name, stack, nav_btns)
+        return btn
+
+    def _apply_sidebar_labels(self, show: bool, save: bool = True):
+        for img, lbl in zip(self._nav_icons, self._nav_labels):
+            lbl.set_visible(show)
+            if show:
+                img.set_halign(Gtk.Align.START)
+                img.set_hexpand(False)
+                img.set_margin_start(8)
+                lbl.set_hexpand(True)
+            else:
+                img.set_halign(Gtk.Align.CENTER)
+                img.set_hexpand(True)
+                img.set_margin_start(0)
+                lbl.set_hexpand(False)
+        self._sidebar.set_size_request(160 if show else 56, -1)
+        if save:
+            self._settings['sidebar_labels'] = show
+            _save_settings(self._settings)
+
+    def _apply_notifications(self, margin_top_pct: int, width_pct: int):
+        self._settings['swaync_margin_top_pct'] = margin_top_pct
+        self._settings['swaync_width_pct']      = width_pct
         _save_settings(self._settings)
+
+    def _apply_opacity(self, value: float):
+        self._root.set_opacity(value)
+        self._settings['opacity_enabled'] = value < 1.0
+        self._settings['opacity_value']   = value
+        _save_settings(self._settings)
+
+    def _apply_theme(self, theme: str, save: bool = True):
+        css = _THEME_CSS.get(theme, '')
+        self._theme_provider.load_from_string(css)
+        # Re-parse the base style.css so its @color refs resolve to the new
+        # @define-color overrides — without this, only widgets created after
+        # the theme change would use the new colours.
+        if _BASE_CSS_PROVIDER is not None:
+            try:
+                _BASE_CSS_PROVIDER.load_from_path(_CSS)
+            except Exception as e:
+                print(f"[theme] base reload: {e}")
+        # Let Adwaita handle its own light/dark text colours
+        style_mgr = Adw.StyleManager.get_default()
+        if theme == 'bright':
+            style_mgr.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
+        elif theme == 'dark':
+            style_mgr.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+        else:
+            style_mgr.set_color_scheme(Adw.ColorScheme.DEFAULT)
+        if save:
+            self._settings['menu_theme'] = theme
+            _save_settings(self._settings)
+
+    def _apply_size(self, w_pct: int, h_pct: int, save: bool = True):
+        w = int(self._monitor_w * w_pct / 100)
+        h = int(self._monitor_h * h_pct / 100)
+        # The size is set on the ScrolledWindow wrapper. Because it doesn't
+        # propagate its child's natural size, this size_request is honoured
+        # exactly — inner content scrolls or is clipped if larger.
+        self._panel_scroll.set_size_request(w, h)
+        self._panel_scroll.queue_resize()
+        if save:
+            self._settings['panel_width_pct']  = w_pct
+            self._settings['panel_height_pct'] = h_pct
+            _save_settings(self._settings)
 
     def _on_key_pressed(self, ctrl, keyval, keycode, state):
         if keyval == Gdk.KEY_Escape:
@@ -271,24 +528,45 @@ class MainWindow(Gtk.ApplicationWindow):
         return False
 
     def _build_banner(self):
-        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        box.add_css_class('logo-bar')
-        box.set_hexpand(True)
-        box.set_vexpand(False)
+        self._banner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self._banner.add_css_class('logo-bar')
+        self._banner.set_hexpand(True)
+        self._banner.set_vexpand(False)
+        self._render_banner(self._settings.get('logo_variant', 'full'))
+        return self._banner
 
-        pb = _load_logo(height=80)
-        if pb:
-            texture = Gdk.Texture.new_for_pixbuf(pb)
-            pic = Gtk.Picture.new_for_paintable(texture)
-            pic.set_content_fit(Gtk.ContentFit.SCALE_DOWN)
-            pic.set_halign(Gtk.Align.CENTER)
-            pic.set_valign(Gtk.Align.CENTER)
-            pic.set_hexpand(True)
-            pic.set_vexpand(False)
-            pic.set_size_request(pb.get_width(), pb.get_height())
-            box.append(pic)
+    def _render_banner(self, variant: str):
+        # Strip existing child
+        child = self._banner.get_first_child()
+        while child:
+            nxt = child.get_next_sibling()
+            self._banner.remove(child)
+            child = nxt
 
-        return box
+        if variant == 'none':
+            self._banner.set_visible(False)
+            return
+        self._banner.set_visible(True)
+
+        path = _LOGO_PATHS.get(variant, _LOGO_PATHS['full'])
+        pb = _load_logo(path, height=96) if path else None
+        if not pb:
+            return
+        texture = Gdk.Texture.new_for_pixbuf(pb)
+        pic = Gtk.Picture.new_for_paintable(texture)
+        pic.set_content_fit(Gtk.ContentFit.SCALE_DOWN)
+        pic.set_halign(Gtk.Align.CENTER)
+        pic.set_valign(Gtk.Align.CENTER)
+        pic.set_hexpand(True)
+        pic.set_vexpand(False)
+        pic.set_size_request(pb.get_width(), pb.get_height())
+        self._banner.append(pic)
+
+    def _apply_logo(self, variant: str, save: bool = True):
+        self._render_banner(variant)
+        if save:
+            self._settings['logo_variant'] = variant
+            _save_settings(self._settings)
 
     def _on_nav_toggled(self, btn, name, stack, btns):
         if btn.get_active():
@@ -321,10 +599,21 @@ class VuturelandSettings(Adw.Application):
             pass
 
     def _activate(self, _):
-        p = Gtk.CssProvider()
-        p.load_from_path(_CSS)
+        global _BASE_CSS_PROVIDER, _COLORS_CSS_PROVIDER
+        display = Gdk.Display.get_default()
+
+        # Wallust colors — loaded first so style.css can resolve @bg-primary etc.
+        _COLORS_CSS_PROVIDER = Gtk.CssProvider()
+        if os.path.exists(_COLORS_CSS_PATH):
+            _COLORS_CSS_PROVIDER.load_from_path(_COLORS_CSS_PATH)
         Gtk.StyleContext.add_provider_for_display(
-            Gdk.Display.get_default(), p,
+            display, _COLORS_CSS_PROVIDER,
+            Gtk.STYLE_PROVIDER_PRIORITY_USER)
+
+        _BASE_CSS_PROVIDER = Gtk.CssProvider()
+        _BASE_CSS_PROVIDER.load_from_path(_CSS)
+        Gtk.StyleContext.add_provider_for_display(
+            display, _BASE_CSS_PROVIDER,
             Gtk.STYLE_PROVIDER_PRIORITY_USER)
 
         win = MainWindow(application=self)
@@ -333,7 +622,11 @@ class VuturelandSettings(Adw.Application):
         Gtk4LayerShell.init_for_window(win)
         Gtk4LayerShell.set_namespace(win, 'vutureland-settings')
         Gtk4LayerShell.set_layer(win, Gtk4LayerShell.Layer.TOP)
+        # Fullscreen layer so we can detect clicks outside the panel.
+        # The actual panel content is positioned bottom-left inside an overlay.
         Gtk4LayerShell.set_anchor(win, Gtk4LayerShell.Edge.LEFT,   True)
+        Gtk4LayerShell.set_anchor(win, Gtk4LayerShell.Edge.RIGHT,  True)
+        Gtk4LayerShell.set_anchor(win, Gtk4LayerShell.Edge.TOP,    True)
         Gtk4LayerShell.set_anchor(win, Gtk4LayerShell.Edge.BOTTOM, True)
         Gtk4LayerShell.set_exclusive_zone(win, -1)
         Gtk4LayerShell.set_keyboard_mode(win, Gtk4LayerShell.KeyboardMode.ON_DEMAND)

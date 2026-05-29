@@ -69,5 +69,5 @@ colors_vuture    = { src = "colors_gtk.css",       dst = "~/.config/vutureland/a
 [hooks]
 hyprland_lua_colors = "~/.config/vutureland/assets/scripts/wallust/hyprland_lua-colors.sh && hyprctl reload"
 pywalfox_update     = "pywalfox update"
-swaync_update       = "killall -q swaync; ~/.config/vutureland/assets/scripts/launcher.sh --swaync"
+swaync_update       = "~/.config/vutureland/assets/scripts/launch-swaync.sh"
 waybar_update       = "sleep 0.8 && pkill -SIGUSR2 waybar"

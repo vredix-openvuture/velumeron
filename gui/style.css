@@ -211,8 +211,8 @@ window.background {
 .root-area {
     background-color: @bg-primary;
     border-top-right-radius: 12px;
-    border-top:   1px solid alpha(@bo-normal, 0.35);
-    border-right: 1px solid alpha(@bo-normal, 0.35);
+    border-top:   1.4px solid alpha(@bo-normal, 0.35);
+    border-right: 1.4px solid alpha(@bo-normal, 0.35);
 }
 
 /* Body-Box trägt bg-element — damit der Innenradius sichtbar wird */
@@ -229,6 +229,12 @@ window.background {
     background-color: @bg-element;
     padding:             20px 20px;
     border-top-right-radius: 12px;
+}
+
+/* Subtle glow around the logo so its dark contours stay visible on dark themes */
+.logo-bar picture {
+    filter: drop-shadow(0 1px 2px alpha(#000000, 0.6))
+            drop-shadow(0 0 8px alpha(#000000, 0.4));
 }
 
 
@@ -295,4 +301,65 @@ actionbar > revealer > box {
     background-color:   transparent;
     border-top:         1px solid alpha(@bo-normal, 0.18);
     padding:            4px 8px;
+}
+
+
+/* ───────────────────────────────────────────────────────────────
+   HOME — Connectivity tiles (Network / Bluetooth)
+   ─────────────────────────────────────────────────────────────── */
+
+.quick-tile {
+    background-color: alpha(@bg-element, 0.4);
+    border:           1px solid alpha(@bo-normal, 0.35);
+    border-radius:    10px;
+    padding:          10px 4px;
+    min-height:       52px;
+    transition:       border-color 120ms ease, background-color 120ms ease;
+}
+
+.quick-tile:hover {
+    background-color: alpha(@bg-element, 0.6);
+    border-color:     alpha(@bo-active, 0.5);
+}
+
+
+/* ───────────────────────────────────────────────────────────────
+   HOME — Session buttons (Lock / Suspend / Logout / Reboot / Shutdown)
+   ─────────────────────────────────────────────────────────────── */
+
+.session-btn {
+    background-color: alpha(@bg-element, 0.4);
+    border:           1px solid alpha(@bo-normal, 0.35);
+    border-radius:    10px;
+    color:            @fg-primary;
+    padding:          4px;
+    transition:       border-color 120ms ease, background-color 120ms ease;
+}
+
+.session-btn:hover {
+    background-color: alpha(@bg-active, 0.25);
+    border-color:     @bo-active;
+    color:            @fg-bright;
+}
+
+
+/* ───────────────────────────────────────────────────────────────
+   ADWAITA PREFERENCES — match Cards background to the sidebar
+   (PreferencesGroup uses .boxed-list internally; each row carries
+    Adwaita's view background by default — override to @bg-element)
+   ─────────────────────────────────────────────────────────────── */
+
+preferencespage > .boxed-list,
+preferencespage > .boxed-list-separate row,
+preferencespage list.boxed-list > row,
+preferencespage list.boxed-list {
+    background-color: @bg-element;
+}
+
+preferencespage actionrow,
+preferencespage comborow,
+preferencespage expanderrow,
+preferencespage entryrow,
+preferencespage switchrow {
+    background-color: @bg-element;
 }

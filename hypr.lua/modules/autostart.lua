@@ -14,7 +14,7 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("nm-applet")
     hl.exec_cmd("systemctl --user start hyprpolkitagent")
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
-    hl.exec_cmd("swaync -c " .. VTL_DIR .. "/swaync/config.json -s " .. VTL_DIR .. "/swaync/style.css")
+    hl.exec_cmd(VTL_DIR .. "/assets/scripts/launch-swaync.sh")
     hl.exec_cmd("wl-paste --watch clipvault store")
     hl.exec_cmd(VTL_DIR .. "/assets/scripts/float-cascade.sh")
 
@@ -31,6 +31,7 @@ hl.on("hyprland.start", function()
     -- ── Cursor and shell ──────────────────────────────
     hl.exec_cmd("hyprctl setcursor " .. cur_theme .. " " .. tostring(cur_size))
     hl.exec_cmd(desktop_shell)
+    hl.exec_cmd(VTL_DIR .. "/bin/vutureland --daemon")
 
     -- ── Workspace startup apps (from user_settings) ───
     for _, item in ipairs(start_apps) do

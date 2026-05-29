@@ -145,6 +145,7 @@ class HyprlandPage(Adw.PreferencesPage):
         apply_btn = Gtk.Button(label='Apply & Reload Hyprland')
         apply_btn.add_css_class('suggested-action')
         apply_btn.add_css_class('pill')
+        apply_btn.set_halign(Gtk.Align.CENTER)
         apply_btn.connect('clicked', self._apply)
         apply_group.add(apply_btn)
         self.add(apply_group)

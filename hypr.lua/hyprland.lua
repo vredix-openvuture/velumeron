@@ -3,9 +3,10 @@
 -- https://wiki.hypr.land/Configuring/
 -- ═══════════════════════════════════════════════════════
 
--- Installation paths (globals used by all modules)
-VTL_DIR      = os.getenv("VUTURELAND_DIR")      or (os.getenv("HOME") .. "/.config/vutureland")
-VTL_USER_DIR = os.getenv("VUTURELAND_USER_DIR") or (os.getenv("HOME") .. "/.config/vutureland")
+-- Installation paths — set by the entry point (~/.config/hypr/hyprland.lua);
+-- fall back to env var or ~/.config/vutureland only if not already provided.
+VTL_DIR      = VTL_DIR      or os.getenv("VUTURELAND_DIR")      or (os.getenv("HOME") .. "/.config/vutureland")
+VTL_USER_DIR = VTL_USER_DIR or os.getenv("VUTURELAND_USER_DIR") or (os.getenv("HOME") .. "/.config/vutureland")
 
 -- Colors (defines global color variables)
 require(".colors")

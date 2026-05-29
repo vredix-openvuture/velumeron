@@ -106,7 +106,7 @@ done < <(hyprctl monitors -j | jq -r '.[] | "\(.name);\(.transform);\(.width);\(
 _run_wallust_hooks() {
     "$VUTURELAND_DIR/assets/scripts/wallust/hyprland_lua-colors.sh" && hyprctl reload
     pywalfox update &>/dev/null &
-    { killall -q swaync; "$VUTURELAND_DIR/assets/scripts/launcher.sh" --swaync; } &
+    "$VUTURELAND_DIR/assets/scripts/launch-swaync.sh" &
     { sleep 0.8 && pkill -SIGUSR2 waybar; } &
 }
 

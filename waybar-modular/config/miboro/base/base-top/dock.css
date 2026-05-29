@@ -13,7 +13,7 @@
 
 .topbar {
     background:     @bg-primary;
-    border:         1px solid @bo-normal;
+    border:         1.6px solid @bo-normal;
     border-top:     none;
     border-radius:  0px 0px 8px 8px;
 }

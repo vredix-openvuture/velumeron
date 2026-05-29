@@ -5,6 +5,18 @@ hypr.lua/user_settings.lua
 # Auto-generated colors (written by wallust on wallpaper change)
 assets/colors_gtk.css
 assets/colors_hyprland.conf
+hypr.lua/colors.lua
+kitty/colors.conf
+rofi/assets/colors.rasi
+
+# Per-user GUI preferences
+gui/settings.json
+
+# Editor / IDE
+.vscode/
+
+# Image editor backups
+assets/icons/.*.png
 
 # Auto-generated Waybar output (rebuilt by waybar.sh --rebuild)
 waybar-modular/output/
