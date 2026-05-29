@@ -3,18 +3,59 @@
 
 import os, sys, signal, json
 
-# ── Toggle: kill running instance, or start if not running ───────────────────
+# ── Flag handling (before GTK / LD_PRELOAD) ───────────────────────────────────
 _PID_FILE = '/tmp/vutureland-settings.pid'
 
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+def _running_pid() -> int | None:
+    try:
+        pid = int(open(_PID_FILE).read().strip())
+        return pid if _pid_alive(pid) else None
+    except (OSError, ValueError):
+        return None
+
+# -h / --help
+if '-h' in sys.argv or '--help' in sys.argv:
+    print(
+        "Usage: python3 main.py [FLAG]\n"
+        "\n"
+        "  (no flag)      Start the panel and show the window\n"
+        "  -d, --daemon   Start as background daemon (window hidden);\n"
+        "                 no-op if the daemon is already running\n"
+        "  -t, --toggle   Show the panel if hidden, hide it if visible;\n"
+        "                 starts the daemon if it is not running yet\n"
+        "  -e, --end      Stop the running daemon\n"
+        "  -h, --help     Show this help message\n"
+    )
+    sys.exit(0)
+
+# -e / --end: stop the running daemon
+if '-e' in sys.argv or '--end' in sys.argv:
+    pid = _running_pid()
+    if pid is not None:
+        os.kill(pid, signal.SIGTERM)
+    sys.exit(0)
+
+# -d / --daemon: start hidden; no-op if process already running
+if '-d' in sys.argv or '--daemon' in sys.argv:
+    sys.argv = [a for a in sys.argv if a not in ('-d', '--daemon')]
+    if _running_pid() is not None:
+        sys.exit(0)                           # already running — nothing to do
+    os.environ['VUTURELAND_START_HIDDEN'] = '1'
+
+# -t / --toggle: toggle visibility of running instance, or start if not running
 if '-t' in sys.argv or '--toggle' in sys.argv:
     sys.argv = [a for a in sys.argv if a not in ('-t', '--toggle')]
-    if os.path.exists(_PID_FILE):
-        try:
-            pid = int(open(_PID_FILE).read().strip())
-            os.kill(pid, signal.SIGTERM)
-            sys.exit(0)           # running → killed, nothing else to do
-        except (ProcessLookupError, ValueError, OSError):
-            pass                  # stale PID file → fall through and start
+    pid = _running_pid()
+    if pid is not None:
+        os.kill(pid, signal.SIGUSR1)
+        sys.exit(0)
 
 _LIB = '/usr/lib/libgtk4-layer-shell.so'
 if 'libgtk4-layer-shell' not in os.environ.get('LD_PRELOAD', ''):
@@ -39,8 +80,18 @@ from pages.lockscreen import LockscreenPage
 from pages.settings   import SettingsPage
 
 _CSS           = os.path.join(os.path.dirname(__file__), 'style.css')
-_BANNER        = os.path.expanduser('~/.config/vutureland/assets/icons/vuturland.png')
-_SETTINGS_FILE = os.path.expanduser('~/.config/vutureland/gui/settings.json')
+_BANNER        = os.path.join(
+    os.environ.get('VUTURELAND_DIR',
+                   os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))),
+    'assets', 'icons', 'vuturland.png'
+)
+_SETTINGS_FILE = os.path.join(
+    os.environ.get('VUTURELAND_USER_DIR',
+                   os.path.join(os.environ.get('XDG_CONFIG_HOME',
+                                               os.path.expanduser('~/.config')),
+                                'vutureland')),
+    'gui', 'settings.json'
+)
 _PANEL_WIDTH   = 900
 _OPACITY_DIM   = 0.88          # opacity when transparency is enabled
 
@@ -194,7 +245,10 @@ class MainWindow(Gtk.ApplicationWindow):
         if self._settings.get('opacity_enabled', False):
             self._root.set_opacity(_OPACITY_DIM)
 
-        # ── Escape key closes the panel ───────────────────────────────
+        # Hide instead of destroy when closed — keeps the daemon alive
+        self.connect('close-request', lambda w: w.hide() or True)
+
+        # ── Escape key hides the panel ────────────────────────────────
         key_ctrl = Gtk.EventControllerKey()
         key_ctrl.connect('key-pressed', self._on_key_pressed)
         self.add_controller(key_ctrl)
@@ -203,7 +257,7 @@ class MainWindow(Gtk.ApplicationWindow):
         return False
 
     def close_animated(self):
-        self.close()
+        self.hide()
 
     def _apply_opacity(self, enabled: bool):
         self._root.set_opacity(_OPACITY_DIM if enabled else 1.0)
@@ -253,6 +307,7 @@ class VuturelandSettings(Adw.Application):
                          flags=Gio.ApplicationFlags.NON_UNIQUE)
         self.connect('activate', self._activate)
         self.connect('shutdown', self._on_shutdown)
+        self.hold()   # keep process alive when window is hidden
         try:
             with open(_PID_FILE, 'w') as f:
                 f.write(str(os.getpid()))
@@ -283,12 +338,19 @@ class VuturelandSettings(Adw.Application):
         Gtk4LayerShell.set_exclusive_zone(win, -1)
         Gtk4LayerShell.set_keyboard_mode(win, Gtk4LayerShell.KeyboardMode.ON_DEMAND)
 
-        # SIGTERM handler — used by --toggle to cleanly close the panel
+        # SIGUSR1: toggle window visibility (sent by --toggle)
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1,
+                             lambda: (win.set_visible(not win.get_visible()), GLib.SOURCE_CONTINUE)[1])
+
+        # SIGTERM: actually quit the process
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM,
                              lambda: (self.quit(), GLib.SOURCE_REMOVE)[1])
 
         win.present()
-        GLib.idle_add(win.slide_in)
+        if os.environ.get('VUTURELAND_START_HIDDEN') == '1':
+            win.hide()
+        else:
+            GLib.idle_add(win.slide_in)
 
 
 if __name__ == '__main__':

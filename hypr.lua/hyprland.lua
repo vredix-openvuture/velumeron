@@ -3,6 +3,10 @@
 -- https://wiki.hypr.land/Configuring/
 -- ═══════════════════════════════════════════════════════
 
+-- Installation paths (globals used by all modules)
+VTL_DIR      = os.getenv("VUTURELAND_DIR")      or (os.getenv("HOME") .. "/.config/vutureland")
+VTL_USER_DIR = os.getenv("VUTURELAND_USER_DIR") or (os.getenv("HOME") .. "/.config/vutureland")
+
 -- Colors (defines global color variables)
 require(".colors")
 

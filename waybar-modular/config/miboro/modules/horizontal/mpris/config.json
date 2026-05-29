@@ -1,6 +1,6 @@
 {
   "custom/mpris": {
-    "exec": "~/.config/vutureland/waybar-modular/assets/mpris.sh",
+    "exec": "$VUTURELAND_DIR/waybar-modular/assets/mpris.sh",
     "return-type": "json",
     "interval": 1,
     "max-length": 24,

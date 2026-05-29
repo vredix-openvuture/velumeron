@@ -8,10 +8,12 @@
 set -euo pipefail
 
 VUTURELAND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VUTURELAND_USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/vutureland"
+export VUTURELAND_DIR VUTURELAND_USER_DIR
 WAYBAR_DIR="$VUTURELAND_DIR/waybar-modular"
 MODULES_DIR="$WAYBAR_DIR/modules"
 BASE_DIR="$WAYBAR_DIR/base"
-OUTPUT_DIR="$WAYBAR_DIR/output"
+OUTPUT_DIR="$VUTURELAND_USER_DIR/waybar-modular/output"
 LAUNCH_SCRIPT="$VUTURELAND_DIR/assets/scripts/launch-waybar.sh"
 
 DEBUG=false

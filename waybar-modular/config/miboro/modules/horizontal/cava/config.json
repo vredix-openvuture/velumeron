@@ -1,11 +1,11 @@
 {
   "custom/cava": {
-    "exec": "~/.config/vutureland/waybar-modular/assets/cava.sh",
+    "exec": "$VUTURELAND_DIR/waybar-modular/assets/cava.sh",
     "format": "{}",
     "return-type": "",
     "on-click": "playerctl -i firefox play-pause",
     "on-double-click": "playerctl next",
     "on-triple-click": "playerctl previous",
-    "on-click-right": "~/.config/vutureland/rofi/assets/active-players.sh"
+    "on-click-right": "$VUTURELAND_DIR/rofi/assets/active-players.sh"
   }
 }

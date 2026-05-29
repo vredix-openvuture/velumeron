@@ -17,7 +17,7 @@ hl.bind(MOD .. " + 0", hl.dsp.focus({ workspace = 10 }))
 
 -- ── Session management ───────────────────────────────
 
-hl.bind(MOD .. " + RETURN", hl.dsp.exit())
+hl.bind(MOD .. " + CONTROL + ALT + RETURN", hl.dsp.exit())
 hl.bind(MOD .. " + P",      hl.dsp.exec_cmd(on_sleep))
 hl.bind(MOD .. " + L",      hl.dsp.exec_cmd(on_lock))
 hl.bind(MOD .. " + O",      hl.dsp.exec_cmd(session_menu))
@@ -31,7 +31,7 @@ hl.bind(MOD .. " + ALT + SPACE", hl.dsp.exec_cmd(theme_switch))
 hl.bind(MOD .. " + T",           hl.dsp.exec_cmd(terminal))
 hl.bind(MOD .. " + S",           hl.dsp.exec_cmd(notifications))
 hl.bind(MOD .. " + V",           hl.dsp.exec_cmd(clipboard))
-hl.bind(MOD .. " + X",           hl.dsp.exec_cmd("python ~/.config/vutureland/gui/main.py -t"))
+hl.bind(MOD .. " + X",           hl.dsp.exec_cmd(VTL_DIR .. "/bin/vutureland -t"))
 
 
 -- ── Window management ────────────────────────────────
@@ -188,7 +188,7 @@ end)
 hl.define_submap("developer", "reset", function()
     hl.bind("W", function()
         hl.dispatch(hl.dsp.exec_cmd("echo 'normal' > /tmp/hypr-submap"))
-        hl.dispatch(hl.dsp.exec_cmd("killall waybar && ~/.config/vutureland/assets/scripts/launcher.sh --waybar"))
+        hl.dispatch(hl.dsp.exec_cmd("killall waybar && " .. VTL_DIR .. "/assets/scripts/launcher.sh --waybar"))
     end)
 
     hl.bind("ESCAPE", exit_submap)

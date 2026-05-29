@@ -5,8 +5,8 @@
 
 set -euo pipefail
 
-VUTURELAND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-OUTPUT_DIR="$VUTURELAND_DIR/waybar-modular/output"
+source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh"
+OUTPUT_DIR="$VUTURELAND_USER_DIR/waybar-modular/output"
 
 # Alle per-Monitor config.json finden (output/{style}/{position}/{monitor}/config.json)
 declare -a CONFIG_FILES=()

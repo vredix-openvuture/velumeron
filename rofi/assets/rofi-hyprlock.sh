@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Rofi custom mode: pick a hyprlock theme
 # Lists .conf files from hyprlock-themes/, shows preview, applies monitor substitution
+source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." && pwd)/assets/scripts/lib/env.sh"
 
-THEMES_DIR=~/.config/vutureland/hypr.lua/hyprlock-themes
-ACTIVE_CONF=~/.config/vutureland/hypr.lua/hyprlock.conf
-BLACK_WP=~/.config/vutureland/assets/wallpaper/pure-black.jpg
-CACHE_DIR=~/.cache/vutureland/hyprlock-thumbs
+THEMES_DIR="$VUTURELAND_DIR/hypr.lua/hyprlock-themes"
+ACTIVE_CONF="$VUTURELAND_USER_DIR/hypr.lua/hyprlock.conf"
+BLACK_WP="$VUTURELAND_DIR/assets/wallpaper/pure-black.jpg"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/vutureland/hyprlock-thumbs"
 THUMB_W=400
 THUMB_H=240
 

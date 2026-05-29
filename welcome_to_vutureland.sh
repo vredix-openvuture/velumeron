@@ -5,7 +5,9 @@
 set -euo pipefail
 
 VUTURELAND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-USER_SETTINGS="$VUTURELAND_DIR/hypr.lua/user_settings.lua"
+VUTURELAND_USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/vutureland"
+export VUTURELAND_DIR VUTURELAND_USER_DIR
+USER_SETTINGS="$VUTURELAND_USER_DIR/hypr.lua/user_settings.lua"
 
 BOLD=$'\033[1m'; CYAN=$'\033[0;36m'; GREEN=$'\033[0;32m'
 YELLOW=$'\033[0;33m'; RED=$'\033[0;31m'; RST=$'\033[0m'; DIM=$'\033[2m'

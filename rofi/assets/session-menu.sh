@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
+source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." && pwd)/assets/scripts/lib/env.sh"
 
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
 export DISPLAY="${DISPLAY:-:0}"
 
-ICONS="~/.config/vutureland/assets/icons"
-THEME="~/.config/vutureland/rofi/session-menu.rasi"
+ICONS="$VUTURELAND_DIR/assets/icons"
+THEME="$VUTURELAND_DIR/rofi/session-menu.rasi"
 
 entries() {
     printf "Settings\0icon\x1f%s\n" "${ICONS}/vuture.png"
@@ -17,8 +18,8 @@ entries() {
 choice=$(entries | rofi -dmenu -p "" -theme "$THEME")
 
 case "$choice" in
-    Settings) python ~/.config/vutureland/gui/main.py ;;
-    Suspend)  ~/.config/vutureland/assets/scripts/launch-hyprlock.sh & sleep 4 && systemctl suspend ;;
+    Settings) "$VUTURELAND_DIR/bin/vutureland" ;;
+    Suspend)  "$VUTURELAND_DIR/assets/scripts/launch-hyprlock.sh" & sleep 4 && systemctl suspend ;;
     Shutdown) systemctl poweroff ;;
     Logout)   hyprctl dispatch exit ;;
     Reboot)   systemctl reboot ;;

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
+source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." && pwd)/assets/scripts/lib/env.sh"
 
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
 export DISPLAY="${DISPLAY:-:0}"
 
-THEME="~/.config/vutureland/rofi/active-players.rasi"
+THEME="$VUTURELAND_DIR/rofi/active-players.rasi"
 
 declare -A PLAYER_NAMES=(
     [firefox]="Firefox"

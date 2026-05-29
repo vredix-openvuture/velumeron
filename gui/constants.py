@@ -1,24 +1,38 @@
 import os, re
 
-VTL           = os.path.expanduser("~/.config/vutureland")
-WALLPAPER_H   = f"{VTL}/assets/wallpaper/horizontal"
-WALLPAPER_V   = f"{VTL}/assets/wallpaper/vertical"
-THUMB_DIR     = os.path.expanduser("~/.cache/vutureland/wallpaper-thumbs")
-THEME_NAMES   = f"{VTL}/assets/wallpaper/theme-names.txt"
-SET_WP        = f"{VTL}/assets/scripts/wallpaper-set.sh"
-GEN_THUMBS    = f"{VTL}/rofi/assets/generate-thumbnail.sh"
-USER_SETTINGS = f"{VTL}/hypr.lua/user_settings.lua"
+# System/package directory — set by VUTURELAND_DIR env var (AUR install) or
+# auto-detected as the directory containing this file's parent (dev mode).
+_xdg_cfg = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+VTL      = os.environ.get("VUTURELAND_DIR") or os.path.join(os.path.dirname(__file__), "..")
+VTL      = os.path.realpath(VTL)
+
+# Per-user config/data directory — always ~/.config/vutureland (or XDG equivalent).
+VTL_USER = os.environ.get("VUTURELAND_USER_DIR") or os.path.join(_xdg_cfg, "vutureland")
+
+# ── System paths (package files, never user-edited) ──────────────────────────
+WALLPAPER_H       = f"{VTL}/assets/wallpaper/horizontal"
+WALLPAPER_V       = f"{VTL}/assets/wallpaper/vertical"
+THEME_NAMES       = f"{VTL}/assets/wallpaper/theme-names.txt"
+SET_WP            = f"{VTL}/assets/scripts/wallpaper-set.sh"
+GEN_THUMBS        = f"{VTL}/rofi/assets/generate-thumbnail.sh"
 WALLUST_FIXED_DIR = f"{VTL}/wallust/fixed_colors"
-WALLUST_MODE_FILE = f"{VTL}/wallust/color-mode"
 LAUNCH_WAYBAR     = f"{VTL}/assets/scripts/launch-waybar.sh"
 WALLPAPER_OLD     = f"{VTL}/assets/wallpaper/old_wallpaper"
 SETS_JSON         = f"{VTL}/assets/wallpaper/sets.json"
 HYPRLOCK_THEMES   = f"{VTL}/hypr.lua/hyprlock-themes"
-HYPRLOCK_CONF     = f"{VTL}/hypr.lua/hyprlock.conf"
-HYPRLOCK_THUMB    = os.path.expanduser("~/.cache/vutureland/hyprlock-thumbs")
 HYPRLOCK_BLACK_WP = f"{VTL}/assets/wallpaper/pure-black.jpg"
 HYPRIDLE_CONF     = f"{VTL}/hypr.lua/hypridle.conf"
 POWERMODE_SH      = f"{VTL}/assets/scripts/powermode.sh"
+
+# ── User paths (per-user state, generated output, preferences) ───────────────
+USER_SETTINGS     = f"{VTL_USER}/hypr.lua/user_settings.lua"
+WALLUST_MODE_FILE = f"{VTL_USER}/wallust/color-mode"
+HYPRLOCK_CONF     = f"{VTL_USER}/hypr.lua/hyprlock.conf"
+
+# ── Cache paths ───────────────────────────────────────────────────────────────
+_xdg_cache    = os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache"))
+THUMB_DIR     = f"{_xdg_cache}/vutureland/wallpaper-thumbs"
+HYPRLOCK_THUMB = f"{_xdg_cache}/vutureland/hyprlock-thumbs"
 
 VIDEO_EXTS = {'.mp4', '.webm', '.mkv', '.avi', '.mov'}
 IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.webp'}

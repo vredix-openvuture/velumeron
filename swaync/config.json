@@ -86,7 +86,7 @@
           "label": "  ",
           "type": "toggle",
           "active": true,
-          "command": "~/.config/vutureland/rofi/assets/session-menu.sh",
+          "command": "$VUTURELAND_DIR/rofi/assets/session-menu.sh",
           "update-command": ""
         },
         {
@@ -100,21 +100,21 @@
           "label": "  ",
           "type": "toggle",
           "active": true,
-          "command": "~/.config/vutureland/rofi/assets/session-menu.sh",
+          "command": "$VUTURELAND_DIR/rofi/assets/session-menu.sh",
           "update-command": ""
         },
         {
           "label": " 󰂯 ",
           "type": "toggle",
           "active": true,
-          "command": "~/.config/vutureland/rofi/assets/bluetooth.sh",
+          "command": "$VUTURELAND_DIR/rofi/assets/bluetooth.sh",
           "update-command": ""
         },
         {
           "label": "  ",
           "type": "toggle",
           "active": true,
-          "command": "python ~/.config/vutureland/gui/main.py",
+          "command": "$VUTURELAND_DIR/bin/vutureland",
           "update-command": ""
         }
       ]

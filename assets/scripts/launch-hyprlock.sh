@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Locks the session via hyprlock.
 # Switches to empty lock workspaces first, then restores everything after unlock.
+source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh"
 
-USER_SETTINGS=~/.config/vutureland/hypr.lua/user_settings.lua
+USER_SETTINGS="$VUTURELAND_USER_DIR/hypr.lua/user_settings.lua"
 
 mon1=$(grep -oP '^mon1\s*=\s*"\K[^"]+' "$USER_SETTINGS" 2>/dev/null | head -1 || true)
 mon2=$(grep -oP '^mon2\s*=\s*"\K[^"]+' "$USER_SETTINGS" 2>/dev/null | head -1 || true)
@@ -31,7 +32,7 @@ fi
 
 sleep 0.4
 
-hyprlock --config ~/.config/vutureland/hypr.lua/hyprlock.conf
+hyprlock --config "$VUTURELAND_DIR/hypr.lua/hyprlock.conf"
 
 # Restore workspaces
 focusmon "$mon1"

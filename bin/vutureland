@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Vutureland Settings Panel launcher
+# Symlink to ~/.local/bin/vutureland to use without a path prefix.
+_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+exec env LD_PRELOAD=/usr/lib/libgtk4-layer-shell.so \
+    python3 "$_DIR/../gui/main.py" "$@"

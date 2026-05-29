@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
+source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh"
 
-path=~/.config/vutureland
-
-launch_wlogout="wlogout -l $path/wlogout/layout -C $path/wlogout/style.css"
-launch_waybar="waybar   -c $path/waybar/config.json -s $path/waybar/style.css"
-launch_swaync="swaync   -c $path/swaync/config.json -s $path/swaync/style.css"
+launch_wlogout="wlogout -l $VUTURELAND_DIR/wlogout/layout -C $VUTURELAND_DIR/wlogout/style.css"
+launch_waybar="waybar   -c $VUTURELAND_DIR/waybar/config.json -s $VUTURELAND_DIR/waybar/style.css"
+launch_swaync="swaync   -c $VUTURELAND_DIR/swaync/config.json -s $VUTURELAND_DIR/swaync/style.css"
 
 # === Define flags ===
 flag_wlogout=false

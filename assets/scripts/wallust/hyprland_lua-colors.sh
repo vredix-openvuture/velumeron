@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Converts hex color values in hypr.lua/colors.lua from "#rrggbb" to "rgb(r,g,b)".
 # Called as a wallust hook after the colors.lua template is rendered.
+source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/../lib/env.sh"
 
-file=~/.config/vutureland/hypr.lua/colors.lua
+file="$VUTURELAND_USER_DIR/hypr.lua/colors.lua"
 
 while IFS= read -r line; do
     if [[ "$line" =~ \"#([0-9a-fA-F]{6})\" ]]; then

@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
+source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." && pwd)/assets/scripts/lib/env.sh"
 
-wallpaper_dir=~/.config/vutureland/assets/wallpaper/horizontal
-wallpaper_script=~/.config/vutureland/assets/scripts/wallpaper-set.sh
-themes_file=~/.config/vutureland/assets/wallpaper/theme-names.txt
-cache_dir=~/.cache/vutureland/wallpaper-thumbs
+wallpaper_dir="$VUTURELAND_DIR/assets/wallpaper/horizontal"
+wallpaper_script="$VUTURELAND_DIR/assets/scripts/wallpaper-set.sh"
+themes_file="$VUTURELAND_DIR/assets/wallpaper/theme-names.txt"
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/vutureland/wallpaper-thumbs"
 
 if [[ "$ROFI_RETV" == "0" || -z "$ROFI_RETV" ]]; then
     # Pre-generate thumbnails (images + videos)
-    bash ~/.config/vutureland/rofi/assets/generate-thumbnail.sh
+    bash "$VUTURELAND_DIR/rofi/assets/generate-thumbnail.sh"
 
     while IFS= read -r f; do
         filename=$(basename "$f")
@@ -41,7 +42,7 @@ else
     # ROFI_INFO contains the original filename
     target="$wallpaper_dir/$ROFI_INFO"
     if [[ -f "$target" ]]; then
-        sets_json=~/.config/vutureland/assets/wallpaper/sets.json
+        sets_json="$VUTURELAND_DIR/assets/wallpaper/sets.json"
         set_id=""
         if [[ -f "$sets_json" ]]; then
             set_id=$(jq -r --arg f "$ROFI_INFO" \

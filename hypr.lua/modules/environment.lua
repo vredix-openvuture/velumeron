@@ -3,6 +3,10 @@
 -- See https://wiki.hypr.land/Configuring/Advanced-and-Cool/Environment-variables/
 -- ═══════════════════════════════════════════════════════
 
+-- Vutureland install paths (propagates to all child processes: waybar, swaync, rofi, …)
+hl.env("VUTURELAND_DIR",      VTL_DIR)
+hl.env("VUTURELAND_USER_DIR", VTL_USER_DIR)
+
 -- QT
 hl.env("QT_QPA_PLATFORM",                    "wayland;xcb")
 hl.env("QT_QPA_PLATFORMTHEME",               "qt5ct")

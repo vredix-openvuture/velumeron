@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # wallpaper-set.sh [--no-showcase] (--set SET_ID | [--hor FILE] [--ver FILE])
+source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh"
 
 showcase=true
 set_id=""
 hor_file=""
 ver_file=""
-WP_H=~/.config/vutureland/assets/wallpaper/horizontal
-WP_V=~/.config/vutureland/assets/wallpaper/vertical
-SETS_JSON=~/.config/vutureland/assets/wallpaper/sets.json
+WP_H="$VUTURELAND_DIR/assets/wallpaper/horizontal"
+WP_V="$VUTURELAND_DIR/assets/wallpaper/vertical"
+SETS_JSON="$VUTURELAND_DIR/assets/wallpaper/sets.json"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -103,13 +104,13 @@ done < <(hyprctl monitors -j | jq -r '.[] | "\(.name);\(.transform);\(.width);\(
 
 # ── Wallust ───────────────────────────────────────────────────────────────
 _run_wallust_hooks() {
-    ~/.config/vutureland/assets/scripts/wallust/hyprland_lua-colors.sh && hyprctl reload
+    "$VUTURELAND_DIR/assets/scripts/wallust/hyprland_lua-colors.sh" && hyprctl reload
     pywalfox update &>/dev/null &
-    { killall -q swaync; ~/.config/vutureland/assets/scripts/launcher.sh --swaync; } &
+    { killall -q swaync; "$VUTURELAND_DIR/assets/scripts/launcher.sh" --swaync; } &
     { sleep 0.8 && pkill -SIGUSR2 waybar; } &
 }
 
-_color_mode=$(cat ~/.config/vutureland/wallust/color-mode 2>/dev/null || echo "auto")
+_color_mode=$(cat "$VUTURELAND_USER_DIR/wallust/color-mode" 2>/dev/null || echo "auto")
 
 if [[ -n "$wallust_src" && "$_color_mode" == "auto" ]]; then
     ext="${wallust_src##*.}"
@@ -117,27 +118,27 @@ if [[ -n "$wallust_src" && "$_color_mode" == "auto" ]]; then
         mp4|webm|mkv|avi|mov)
             tmp=$(mktemp /tmp/wp-frame-XXXXXX.jpg)
             ffmpeg -y -i "$wallust_src" -vframes 1 -q:v 2 "$tmp" &>/dev/null
-            wallust --config-dir ~/.config/vutureland/wallust run "$tmp"
+            wallust --config-dir "$VUTURELAND_DIR/wallust" run "$tmp"
             rm -f "$tmp" ;;
         *)
-            wallust --config-dir ~/.config/vutureland/wallust run "$wallust_src" ;;
+            wallust --config-dir "$VUTURELAND_DIR/wallust" run "$wallust_src" ;;
     esac
 elif [[ "$_color_mode" == fixed:* ]]; then
-    _scheme_file=~/.config/vutureland/wallust/fixed_colors/"${_color_mode#fixed:}"
+    _scheme_file="$VUTURELAND_DIR/wallust/fixed_colors/${_color_mode#fixed:}"
     if [[ -f "$_scheme_file" ]]; then
-        wallust --config-dir ~/.config/vutureland/wallust cs "$_scheme_file"
+        wallust --config-dir "$VUTURELAND_DIR/wallust" cs "$_scheme_file"
         _run_wallust_hooks
     fi
 fi
 
 # ── Restore workspaces ────────────────────────────────────────────────────
 if [[ "$showcase" != "true" ]]; then
-    ~/.config/vutureland/assets/scripts/launch-waybar.sh &
+    "$VUTURELAND_DIR/assets/scripts/launch-waybar.sh" &
 fi
 
 if [[ "$showcase" == "true" ]]; then
     sleep 2
-    ~/.config/vutureland/assets/scripts/launch-waybar.sh
+    "$VUTURELAND_DIR/assets/scripts/launch-waybar.sh"
     i=0
     for mon in "${monitors[@]}"; do
         hyprctl dispatch "hl.dsp.focus({monitor=\"${mon}\"})"

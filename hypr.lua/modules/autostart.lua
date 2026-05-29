@@ -9,14 +9,14 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("echo 'normal' > /tmp/hypr-submap")
 
     -- ── System daemons ────────────────────────────────
-    hl.exec_cmd("hypridle -c ~/.config/vutureland/hypr.lua/hypridle.conf")
+    hl.exec_cmd("hypridle -c " .. VTL_DIR .. "/hypr.lua/hypridle.conf")
     hl.exec_cmd("awww-daemon")
     hl.exec_cmd("nm-applet")
     hl.exec_cmd("systemctl --user start hyprpolkitagent")
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
-    hl.exec_cmd("swaync -c ~/.config/vutureland/swaync/config.json -s ~/.config/vutureland/swaync/style.css")
+    hl.exec_cmd("swaync -c " .. VTL_DIR .. "/swaync/config.json -s " .. VTL_DIR .. "/swaync/style.css")
     hl.exec_cmd("wl-paste --watch clipvault store")
-    hl.exec_cmd("~/.config/vutureland/assets/scripts/float-cascade.sh")
+    hl.exec_cmd(VTL_DIR .. "/assets/scripts/float-cascade.sh")
 
     hl.exec_cmd("[workspace 99 silent] kitty --class no_float -e btop")
 

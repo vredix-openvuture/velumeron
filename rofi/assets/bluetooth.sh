@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
+source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." && pwd)/assets/scripts/lib/env.sh"
 
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
 export DISPLAY="${DISPLAY:-:0}"
 
-THEME="$HOME/.config/vutureland/rofi/bluetooth.rasi"
-ICONS="$HOME/.config/vutureland/assets/icons"
+THEME="$VUTURELAND_DIR/rofi/bluetooth.rasi"
+ICONS="$VUTURELAND_DIR/assets/icons"
 
 # Sort priority: lower = higher up in list
 type_priority() {

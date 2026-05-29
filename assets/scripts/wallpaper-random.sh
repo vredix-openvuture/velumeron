@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
+source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh"
 
-wallpaper_dir=~/.config/vutureland/assets/wallpaper/horizontal
-wallpaper_script=~/.config/vutureland/assets/scripts/wallpaper-set.sh
+wallpaper_dir="$VUTURELAND_DIR/assets/wallpaper/horizontal"
+wallpaper_script="$VUTURELAND_DIR/assets/scripts/wallpaper-set.sh"
 interval_minutes=10
 
 while true; do

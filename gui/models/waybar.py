@@ -6,11 +6,18 @@ _POSITIONS = frozenset({"top", "bottom", "left", "right"})
 
 
 def _vtl() -> str:
-    return os.path.expanduser("~/.config/vutureland")
+    return os.environ.get("VUTURELAND_DIR") or os.path.realpath(
+        os.path.join(os.path.dirname(__file__), "../..")
+    )
+
+
+def _vtl_user() -> str:
+    xdg = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+    return os.environ.get("VUTURELAND_USER_DIR") or os.path.join(xdg, "vutureland")
 
 
 def _output_dir() -> str:
-    return os.path.join(_vtl(), "waybar-modular", "output")
+    return os.path.join(_vtl_user(), "waybar-modular", "output")
 
 
 def _modules_dir() -> str:
