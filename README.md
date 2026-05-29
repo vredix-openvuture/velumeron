@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/icons/vuturland.png" alt="Vutureland" width="320" />
+  <img src="assets/icons/vutureland.png" alt="Vutureland" width="320" />
 </div>
 
 <br/>
