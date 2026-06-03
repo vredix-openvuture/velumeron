@@ -82,12 +82,21 @@ sync_templates() {
             local user_path="$VUTURELAND_USER_DIR/$rel"
             is_wallust_output "$rel" && continue
 
+            # Replace any pre-existing symlink (from older versions or dev
+            # setup) with a real file so cp doesn't follow it into a read-only
+            # source dir.
+            if [[ -L "$user_path" ]]; then
+                rm -f "$user_path"
+            fi
+
             if [[ ! -e "$user_path" ]]; then
                 mkdir -p "$(dirname "$user_path")"
                 cp "$file" "$user_path"
             elif [[ "$file" -nt "$user_path" ]]; then
-                # Only overwrite if the user's copy hasn't been modified after
-                # the package's mtime — i.e. no manual edits.
+                # Package file newer than user copy — refresh it. (mtime
+                # comparison protects user-edited files: if the user modified
+                # the file after the package was built/installed, the user's
+                # copy is newer and we leave it.)
                 mkdir -p "$(dirname "$user_path")"
                 cp "$file" "$user_path"
             fi
@@ -97,11 +106,15 @@ sync_templates() {
     # Make sure assets/, gui/ exist in user dir (wallust + gui write into these)
     mkdir -p "$VUTURELAND_USER_DIR/assets" "$VUTURELAND_USER_DIR/gui"
 
-    # Seed initial wallust outputs from package defaults if missing
+    # Seed initial wallust outputs from package defaults if missing.
+    # A symlink here would be from an older dev setup pointing at a read-only
+    # location — replace it with a real file so wallust can write to it.
     for _f in "${_wallust_outputs[@]}"; do
-        if [[ ! -f "$VUTURELAND_USER_DIR/$_f" && -f "$VUTURELAND_DIR/$_f" ]]; then
-            mkdir -p "$(dirname "$VUTURELAND_USER_DIR/$_f")"
-            cp "$VUTURELAND_DIR/$_f" "$VUTURELAND_USER_DIR/$_f"
+        local _dst="$VUTURELAND_USER_DIR/$_f"
+        [[ -L "$_dst" ]] && rm -f "$_dst"
+        if [[ ! -f "$_dst" && -f "$VUTURELAND_DIR/$_f" ]]; then
+            mkdir -p "$(dirname "$_dst")"
+            cp "$VUTURELAND_DIR/$_f" "$_dst"
         fi
     done
 }
