@@ -376,21 +376,28 @@ elif [[ -d "$HOME/.config/hypr.bak" ]]; then
 fi
 
 mkdir -p "$HYPR_CONFIG"
-if [[ ! -f "$HYPR_CONFIG/hyprland.lua" ]]; then
-    cat > "$HYPR_CONFIG/hyprland.lua" <<EOF
+
+# Always (re)generate the entry point so it points at the currently-installed
+# vutureland package (paths embedded inline). Back up any user-edited version.
+_HYP_ENTRY="$HYPR_CONFIG/hyprland.lua"
+_NEW_ENTRY=$(cat <<EOF
 local base = "$VUTURELAND_DIR/hypr.lua/"
 VTL_DIR      = base:match("^(.*)/hypr%.lua/?$")
-VTL_USER_DIR = os.getenv("HOME") .. "/.config/vutureland"
+VTL_USER_DIR = "$VUTURELAND_USER_DIR"
 package.path = base .. "?.lua;"
             .. base .. "modules/?.lua;"
             .. base .. "modules/?/init.lua;"
             .. package.path
 dofile(base .. "hyprland.lua")
 EOF
-    ok "Created ~/.config/hypr/hyprland.lua (→ $VUTURELAND_DIR)"
-else
-    ok "~/.config/hypr/hyprland.lua already exists — skipping."
+)
+
+if [[ -f "$_HYP_ENTRY" ]] && ! diff -q <(echo "$_NEW_ENTRY") "$_HYP_ENTRY" >/dev/null 2>&1; then
+    cp "$_HYP_ENTRY" "$_HYP_ENTRY.bak"
+    ok "Backed up existing hyprland.lua → hyprland.lua.bak"
 fi
+echo "$_NEW_ENTRY" > "$_HYP_ENTRY"
+ok "Wrote ~/.config/hypr/hyprland.lua (→ $VUTURELAND_DIR)"
 
 # ─── 4) Monitor + Workspace setup ────────────────────────────────────────────
 say "Monitor & Workspace setup"
