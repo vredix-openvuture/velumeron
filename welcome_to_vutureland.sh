@@ -8,8 +8,17 @@
 
 set -euo pipefail
 
-# realpath resolves the /usr/bin/vutureland-setup symlink → /usr/share/vutureland/…
-: "${VUTURELAND_DIR:=$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)}"
+# Detect the package dir from this script's own location (realpath resolves
+# the /usr/bin/vutureland-setup symlink → /usr/share/vutureland/…). We trust
+# a pre-set VUTURELAND_DIR env var only if it points at a real vutureland
+# package — otherwise it would be a stale value from an older install and
+# corrupt every path we write (e.g. into ~/.config/hypr/hyprland.lua).
+_SELF_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+if [[ -z "${VUTURELAND_DIR:-}" \
+   || ! -f "$VUTURELAND_DIR/bin/vutureland" \
+   || ! -d "$VUTURELAND_DIR/hypr.lua/modules" ]]; then
+    VUTURELAND_DIR="$_SELF_DIR"
+fi
 : "${VUTURELAND_USER_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/vutureland}"
 export VUTURELAND_DIR VUTURELAND_USER_DIR
 USER_SETTINGS="$VUTURELAND_USER_DIR/hypr.lua/user_settings.lua"
