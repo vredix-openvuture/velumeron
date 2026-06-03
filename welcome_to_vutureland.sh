@@ -440,42 +440,90 @@ if [[ -f "$FACE_CSS" ]]; then
     ok "Updated face image path in actionuser CSS"
 fi
 
-# ─── 7) Apply default Waybar template ────────────────────────────────────────
-say "Applying default Waybar layout"
+# ─── 7) Generate default Waybar config ───────────────────────────────────────
+say "Generating default Waybar layout"
 
-OUTPUT_DIR="$VUTURELAND_DIR/waybar-modular/output"
-TEMPLATE_DIR="$VUTURELAND_DIR/waybar-modular/templates"
-
-apply_template() {
-    local monitor="$1" tmpl_name="$2"
-    local tmpl="$TEMPLATE_DIR/$tmpl_name/groups.json"
-    local dest="$OUTPUT_DIR/dock/top/$monitor"
-    if [[ ! -f "$tmpl" ]]; then
-        warn "Template not found: $tmpl — skipping $monitor."
-        return
-    fi
-    if [[ -d "$dest" ]]; then
-        ok "Panel for $monitor already configured — skipping template."
+# Generate a minimal but useful waybar config inline — no external template
+# files needed. The user can switch styles / add modules later through the
+# settings GUI (Super + X → Bar).
+apply_default_bar() {
+    local monitor="$1"
+    local dest="$VUTURELAND_USER_DIR/waybar-modular/output/miboro/bar/top/$monitor"
+    if [[ -f "$dest/config.json" ]]; then
+        ok "Bar config for $monitor already exists — skipping."
         return
     fi
     mkdir -p "$dest"
-    cp "$tmpl" "$dest/groups.json"
-    ok "Applied '$tmpl_name' template → $monitor"
+
+    local mods="$VUTURELAND_USER_DIR/waybar-modular/config/miboro/modules/horizontal"
+    local base="$VUTURELAND_USER_DIR/waybar-modular/config/miboro/base/base-top"
+
+    # groups.json — module includes + group definitions
+    cat > "$dest/groups.json" <<EOF
+{
+    "include": [
+        "$mods/clock/config.json",
+        "$mods/workspaces/config.json",
+        "$mods/pulseaudio/config.json",
+        "$mods/battery/config.json",
+        "$mods/tray/config.json",
+        "$mods/notification/config.json"
+    ],
+    "group/left":   { "orientation": "horizontal", "modules": ["clock"] },
+    "group/center": { "orientation": "horizontal", "modules": ["hyprland/workspaces"] },
+    "group/right":  { "orientation": "horizontal",
+                      "modules": ["pulseaudio", "battery", "tray", "custom/notification"] }
+}
+EOF
+
+    # config.json — base bar template + this monitor's id/output/groups
+    if [[ -f "$base/bar.config.json" ]]; then
+        jq --arg mon "$monitor" \
+           --arg id "bar-top-$monitor" \
+           --arg groups "$dest/groups.json" \
+           '. + {
+                output: $mon,
+                id: $id,
+                include: [$groups],
+                "modules-left":   ["group/left"],
+                "modules-center": ["group/center"],
+                "modules-right":  ["group/right"]
+            }' "$base/bar.config.json" > "$dest/config.json"
+    else
+        warn "$base/bar.config.json missing — using minimal config"
+        cat > "$dest/config.json" <<EOF
+{
+    "name": "topbar-$monitor",
+    "output": "$monitor",
+    "layer": "top",
+    "position": "top",
+    "include": ["$dest/groups.json"],
+    "modules-left":   ["group/left"],
+    "modules-center": ["group/center"],
+    "modules-right":  ["group/right"]
+}
+EOF
+    fi
+
+    # style.css — base + per-module styling
+    {
+        echo "@import url(\"$base/bar.css\");"
+        for m in clock workspaces pulseaudio battery tray notification; do
+            local css="$mods/$m/style.css"
+            [[ -f "$css" ]] && echo "@import url(\"$css\");"
+        done
+    } > "$dest/style.css"
+
+    ok "Created default bar for $monitor"
 }
 
-apply_template "$mon1" "primary"
-[[ -n "$mon2" ]] && apply_template "$mon2" "secondary"
+apply_default_bar "$mon1"
+[[ -n "$mon2" ]] && apply_default_bar "$mon2"
 
-# ─── 8) Build + launch Waybar ────────────────────────────────────────────────
-say "Building and launching Waybar"
-
-bash "$VUTURELAND_DIR/.setup/waybar.sh" --rebuild
-ok "Waybar running."
-
-echo ""
-if ask_yn "Customize Waybar modules now?" "y"; then
-    bash "$VUTURELAND_DIR/.setup/waybar.sh"
-fi
+# ─── 8) Launch Waybar ────────────────────────────────────────────────────────
+say "Starting Waybar"
+"$VUTURELAND_DIR/assets/scripts/launch-waybar.sh" >/dev/null 2>&1 && ok "Waybar running." \
+    || warn "Waybar did not start cleanly — open the settings GUI (Super+X) to inspect."
 
 # ─── 9) Default wallpaper ─────────────────────────────────────────────────────
 say "Setting default wallpaper"
