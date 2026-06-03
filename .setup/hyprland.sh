@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 # Hyprland interactive configurator – writes device-specific settings
-# to ~/.config/vutureland/hypr.lua/user_settings.lua
+# to $VUTURELAND_USER_DIR/hypr.lua/user_settings.lua
 
 set -euo pipefail
 
-VUTURELAND_DIR="$HOME/.config/vutureland"
-HYPR_DIR="$VUTURELAND_DIR/hypr"
-MODULES_DIR="$HYPR_DIR/modules"
-USER_SETTINGS="$VUTURELAND_DIR/hypr.lua/user_settings.lua"
+# Package source (read-only on AUR installs) and per-user state dir.
+: "${VUTURELAND_DIR:=$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/.." && pwd)}"
+: "${VUTURELAND_USER_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/vutureland}"
 
-mkdir -p "$HYPR_DIR" "$MODULES_DIR" "$VUTURELAND_DIR/hypr.lua"
+HYPR_DIR="$VUTURELAND_USER_DIR/hypr"
+MODULES_DIR="$HYPR_DIR/modules"
+USER_SETTINGS="$VUTURELAND_USER_DIR/hypr.lua/user_settings.lua"
+
+mkdir -p "$HYPR_DIR" "$MODULES_DIR" "$VUTURELAND_USER_DIR/hypr.lua"
 
 # ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -689,7 +692,7 @@ init_user_settings() {
         fi
     fi
 
-    mkdir -p "$VUTURELAND_DIR/hypr.lua"
+    mkdir -p "$VUTURELAND_USER_DIR/hypr.lua"
     cat > "$USER_SETTINGS" <<'EOF'
 -- ════════════════════════════════════════════════════════════════════════
 --

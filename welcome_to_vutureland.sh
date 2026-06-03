@@ -107,6 +107,22 @@ sync_templates() {
     # Make sure assets/, gui/ exist in user dir (wallust + gui write into these)
     mkdir -p "$VUTURELAND_USER_DIR/assets" "$VUTURELAND_USER_DIR/gui"
 
+    # Read-only assets (wallpaper, icons, scripts) live in the package and are
+    # referenced by ~/.config/vutureland/assets/... from hypridle.conf,
+    # hyprlock-themes, bt-notify.sh etc. Expose them via symlinks so those
+    # absolute paths resolve. wallust outputs land alongside as real files.
+    for _sub in wallpaper icons scripts; do
+        local _link="$VUTURELAND_USER_DIR/assets/$_sub"
+        local _real="$VUTURELAND_DIR/assets/$_sub"
+        [[ -d "$_real" ]] || continue
+        # If something there isn't already pointing at the right target, replace
+        if [[ -L "$_link" ]]; then
+            [[ "$(readlink "$_link")" == "$_real" ]] || { rm -f "$_link"; ln -sf "$_real" "$_link"; }
+        elif [[ ! -e "$_link" ]]; then
+            ln -sf "$_real" "$_link"
+        fi
+    done
+
     # Seed initial wallust outputs from package defaults if missing.
     # A symlink here would be from an older dev setup pointing at a read-only
     # location — replace it with a real file so wallust can write to it.
