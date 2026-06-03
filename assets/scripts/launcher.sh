@@ -3,7 +3,7 @@ source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh"
 
 launch_wlogout="wlogout -l $VUTURELAND_DIR/wlogout/layout -C $VUTURELAND_DIR/wlogout/style.css"
 launch_waybar="waybar   -c $VUTURELAND_DIR/waybar/config.json -s $VUTURELAND_DIR/waybar/style.css"
-launch_swaync="swaync   -c $VUTURELAND_DIR/swaync/config.json -s $VUTURELAND_DIR/swaync/style.css"
+launch_swaync="swaync   -c $VUTURELAND_USER_DIR/swaync/config.json -s $VUTURELAND_USER_DIR/swaync/style.css"
 
 # === Define flags ===
 flag_wlogout=false

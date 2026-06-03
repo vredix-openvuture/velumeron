@@ -1,13 +1,29 @@
 #!/usr/bin/env bash
-# First-run setup wizard for vutureland.
-# Run once after cloning on a fresh system.
+# Vutureland setup wizard.
+#
+#   welcome_to_vutureland.sh           Full interactive first-run setup
+#   welcome_to_vutureland.sh --sync    Refresh package templates from
+#                                      $VUTURELAND_DIR without touching user
+#                                      state (use after a pacman/yay upgrade)
 
 set -euo pipefail
 
-VUTURELAND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VUTURELAND_USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/vutureland"
+: "${VUTURELAND_DIR:=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+: "${VUTURELAND_USER_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/vutureland}"
 export VUTURELAND_DIR VUTURELAND_USER_DIR
 USER_SETTINGS="$VUTURELAND_USER_DIR/hypr.lua/user_settings.lua"
+
+# Parse flags
+SYNC_MODE=false
+for arg in "$@"; do
+    case "$arg" in
+        --sync) SYNC_MODE=true ;;
+        -h|--help)
+            echo "Usage: $(basename "$0") [--sync]"
+            echo "  --sync   Refresh package templates without re-running setup"
+            exit 0 ;;
+    esac
+done
 
 BOLD=$'\033[1m'; CYAN=$'\033[0;36m'; GREEN=$'\033[0;32m'
 YELLOW=$'\033[0;33m'; RED=$'\033[0;31m'; RST=$'\033[0m'; DIM=$'\033[2m'
@@ -24,6 +40,87 @@ ask_yn() {
     ans="${ans:-$default}"
     [[ "$ans" =~ ^[Yy] ]]
 }
+
+# ─── Template sync — rsync-style update of unchanged package files ───────────
+# Copies each tracked file from $VUTURELAND_DIR to $VUTURELAND_USER_DIR unless
+# the destination has been edited (mtime newer than source by more than a few
+# seconds OR contents differ from a previously-tracked-shipped version).
+# Files in $WALLUST_OUTPUTS are never overwritten — those are wallust's job.
+sync_templates() {
+    local _dir
+    mkdir -p "$VUTURELAND_USER_DIR"
+
+    # Drop stale symlinks left over from older versions of this script
+    for _dir in rofi kitty swaync assets hypr.lua waybar-modular; do
+        [[ -L "$VUTURELAND_USER_DIR/$_dir" ]] && rm -f "$VUTURELAND_USER_DIR/$_dir"
+    done
+
+    # Files that wallust writes — never overwrite these
+    local _wallust_outputs=(
+        "assets/colors_gtk.css"
+        "assets/colors_hyprland.conf"
+        "hypr.lua/colors.lua"
+        "kitty/colors.conf"
+        "rofi/assets/colors.rasi"
+    )
+    is_wallust_output() {
+        local rel="$1"
+        for w in "${_wallust_outputs[@]}"; do [[ "$rel" == "$w" ]] && return 0; done
+        return 1
+    }
+
+    # Sync these subtrees
+    for _dir in kitty rofi swaync hypr.lua waybar-modular; do
+        local src="$VUTURELAND_DIR/$_dir"
+        local dst="$VUTURELAND_USER_DIR/$_dir"
+        [[ -d "$src" ]] || continue
+        mkdir -p "$dst"
+
+        # Walk the source tree, copy missing or older files (skip wallust outputs)
+        while IFS= read -r -d '' file; do
+            local rel="${file#$VUTURELAND_DIR/}"
+            local user_path="$VUTURELAND_USER_DIR/$rel"
+            is_wallust_output "$rel" && continue
+
+            if [[ ! -e "$user_path" ]]; then
+                mkdir -p "$(dirname "$user_path")"
+                cp "$file" "$user_path"
+            elif [[ "$file" -nt "$user_path" ]]; then
+                # Only overwrite if the user's copy hasn't been modified after
+                # the package's mtime — i.e. no manual edits.
+                mkdir -p "$(dirname "$user_path")"
+                cp "$file" "$user_path"
+            fi
+        done < <(find "$src" -type f -print0)
+    done
+
+    # Make sure assets/, gui/ exist in user dir (wallust + gui write into these)
+    mkdir -p "$VUTURELAND_USER_DIR/assets" "$VUTURELAND_USER_DIR/gui"
+
+    # Seed initial wallust outputs from package defaults if missing
+    for _f in "${_wallust_outputs[@]}"; do
+        if [[ ! -f "$VUTURELAND_USER_DIR/$_f" && -f "$VUTURELAND_DIR/$_f" ]]; then
+            mkdir -p "$(dirname "$VUTURELAND_USER_DIR/$_f")"
+            cp "$VUTURELAND_DIR/$_f" "$VUTURELAND_USER_DIR/$_f"
+        fi
+    done
+}
+
+# ─── --sync: refresh package templates and exit ──────────────────────────────
+if [[ "$SYNC_MODE" == true ]]; then
+    echo ""
+    echo "  ${BOLD}${CYAN}── Syncing Vutureland templates${RST}"
+    echo ""
+    echo "  Source: $VUTURELAND_DIR"
+    echo "  Dest:   $VUTURELAND_USER_DIR"
+    echo ""
+    sync_templates
+    ok "Templates synced."
+    echo ""
+    echo "  Restart Hyprland or run  ${DIM}hyprctl reload${RST}  to pick up changes."
+    echo ""
+    exit 0
+fi
 
 # ─── Header ──────────────────────────────────────────────────────────────────
 clear; echo ""
@@ -231,29 +328,15 @@ VUTURELAND_USER_DIR=$VUTURELAND_USER_DIR
 EOF
 ok "Wrote ~/.config/environment.d/vutureland.conf"
 
-# wallust symlink (for wallust tool itself)
+# wallust symlink — wallust expects its config at ~/.config/wallust/
 if [[ ! -e "$HOME/.config/wallust" ]]; then
     ln -sf "$VUTURELAND_DIR/wallust" "$HOME/.config/wallust"
     ok "Linked ~/.config/wallust → vutureland/wallust"
 fi
 
-# Symlinks in VUTURELAND_USER_DIR for dirs referenced via ~/.config/vutureland/
-# (rofi .rasi files, kitty, swaync cannot use env vars — they need a stable ~ path)
-mkdir -p "$VUTURELAND_USER_DIR"
-for _dir in rofi kitty swaync; do
-    _target="$VUTURELAND_USER_DIR/$_dir"
-    if [[ ! -e "$_target" ]]; then
-        ln -sf "$VUTURELAND_DIR/$_dir" "$_target"
-        ok "Linked ~/.config/vutureland/$_dir → $VUTURELAND_DIR/$_dir"
-    fi
-done
-
-# Copy hyprlock.conf to user dir (rofi-hyprlock.sh writes the active theme there)
-if [[ ! -f "$VUTURELAND_USER_DIR/hypr.lua/hyprlock.conf" ]]; then
-    mkdir -p "$VUTURELAND_USER_DIR/hypr.lua"
-    cp "$VUTURELAND_DIR/hypr.lua/hyprlock.conf" "$VUTURELAND_USER_DIR/hypr.lua/hyprlock.conf"
-    ok "Copied hyprlock.conf to user dir"
-fi
+# Seed VUTURELAND_USER_DIR from the package — also strips obsolete symlinks
+sync_templates
+ok "Seeded ~/.config/vutureland/ from package templates"
 
 # ─── 4) Monitor + Workspace setup ────────────────────────────────────────────
 say "Monitor & Workspace setup"

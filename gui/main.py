@@ -145,7 +145,17 @@ _BASE_CSS_PROVIDER   = None
 # Provider for the wallust-generated color palette. Reloaded when the file
 # changes on disk so the GUI follows wallpaper theme switches automatically.
 _COLORS_CSS_PROVIDER = None
+# Wallust writes the live colour palette to the user dir, not the package dir.
 _COLORS_CSS_PATH     = os.path.join(
+    os.environ.get('VUTURELAND_USER_DIR',
+                   os.path.join(os.environ.get('XDG_CONFIG_HOME',
+                                               os.path.expanduser('~/.config')),
+                                'vutureland')),
+    'assets', 'colors_gtk.css',
+)
+# Fallback to the package's default palette if the user-dir copy doesn't exist
+# yet (e.g. very first launch before welcome_to_vutureland.sh has run).
+_COLORS_CSS_FALLBACK = os.path.join(
     os.environ.get('VUTURELAND_DIR',
                    os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))),
     'assets', 'colors_gtk.css',
@@ -606,6 +616,8 @@ class VuturelandSettings(Adw.Application):
         _COLORS_CSS_PROVIDER = Gtk.CssProvider()
         if os.path.exists(_COLORS_CSS_PATH):
             _COLORS_CSS_PROVIDER.load_from_path(_COLORS_CSS_PATH)
+        elif os.path.exists(_COLORS_CSS_FALLBACK):
+            _COLORS_CSS_PROVIDER.load_from_path(_COLORS_CSS_FALLBACK)
         Gtk.StyleContext.add_provider_for_display(
             display, _COLORS_CSS_PROVIDER,
             Gtk.STYLE_PROVIDER_PRIORITY_USER)

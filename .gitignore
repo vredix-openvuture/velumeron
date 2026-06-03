@@ -2,12 +2,13 @@
 hypr/user_settings.conf
 hypr.lua/user_settings.lua
 
-# Auto-generated colors (written by wallust on wallpaper change)
-assets/colors_gtk.css
-assets/colors_hyprland.conf
-hypr.lua/colors.lua
-kitty/colors.conf
-rofi/assets/colors.rasi
+# Auto-generated colors (written by wallust on wallpaper change).
+# These files are committed with default values as fallback templates so
+# Hyprland/Waybar can start before the first wallpaper has been applied.
+# The actual runtime versions live in ~/.config/vutureland/ — created by
+# welcome_to_vutureland.sh on first run.
+# (kept tracked: assets/colors_gtk.css, hypr.lua/colors.lua, kitty/colors.conf,
+#  rofi/assets/colors.rasi, assets/colors_hyprland.conf)
 
 # Per-user GUI preferences
 gui/settings.json

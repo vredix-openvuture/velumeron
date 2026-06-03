@@ -8,12 +8,23 @@
 VTL_DIR      = VTL_DIR      or os.getenv("VUTURELAND_DIR")      or (os.getenv("HOME") .. "/.config/vutureland")
 VTL_USER_DIR = VTL_USER_DIR or os.getenv("VUTURELAND_USER_DIR") or (os.getenv("HOME") .. "/.config/vutureland")
 
--- Colors (defines global color variables)
-require(".colors")
+-- Colors — wallust writes the live palette to ~/.config/vutureland/hypr.lua/colors.lua.
+-- Fall back to the default palette shipped with the package if wallust hasn't
+-- run yet (typical on first start, before the user picked a wallpaper).
+local function _try_dofile(path)
+    local f = io.open(path, "r")
+    if not f then return false end
+    f:close()
+    dofile(path)
+    return true
+end
+if not _try_dofile(VTL_USER_DIR .. "/hypr.lua/colors.lua") then
+    _try_dofile(VTL_DIR .. "/hypr.lua/colors.lua")
+end
 
 -- Device-specific settings (monitors, workspaces, peripherals)
--- Not in git — generated per device.
-require("user_settings")
+-- Not in git — generated per device. Always lives in the user dir.
+_try_dofile(VTL_USER_DIR .. "/hypr.lua/user_settings.lua")
 
 -- Modules (order matters: variables before their consumers)
 require("modules.gpu")

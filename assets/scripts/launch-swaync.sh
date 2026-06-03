@@ -8,8 +8,8 @@
 set -euo pipefail
 source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh"
 
-SRC_CFG="$VUTURELAND_DIR/swaync/config.json"
-SRC_CSS="$VUTURELAND_DIR/swaync/style.css"
+SRC_CFG="$VUTURELAND_USER_DIR/swaync/config.json"
+SRC_CSS="$VUTURELAND_USER_DIR/swaync/style.css"
 GEN_CFG="/tmp/swaync-config-$USER.json"
 GUI_SETTINGS="$VUTURELAND_USER_DIR/gui/settings.json"
 

@@ -17,20 +17,27 @@ hl.config({
         resize_on_border        = true,
         allow_tearing           = true,
         layout                  = "dwindle",
+
+        snap = {
+            enabled  = true,
+            respect_gaps  = true,
+        }
     },
 
     decoration = {
-        rounding  = 5,
+        rounding  = 10,
+        rounding_power = 2,
         dim_modal = true,
+        border_part_of_window = false,
 
         blur = {
             enabled           = true,
-            size              = 4,
+            size              = 8,
             passes            = 4,
             contrast          = 0.5,
             noise             = 0.025,
-            vibrancy          = 0.04,
-            vibrancy_darkness = 0.08,
+            vibrancy          = 0.2,
+            vibrancy_darkness = 0.4,
             xray              = true,
             popups            = false,
         },
@@ -42,6 +49,12 @@ hl.config({
             color        = color1,
             scale        = 8,
         },
+
+        glow = {
+            range        = 20,
+            render_power = 4,
+            color        = color1,
+        }
     },
 
     dwindle = {
@@ -56,4 +69,7 @@ hl.config({
         disable_autoreload = true,
     },
 
+
 })
+
+
