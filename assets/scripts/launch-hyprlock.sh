@@ -32,7 +32,9 @@ fi
 
 sleep 0.4
 
-hyprlock --config "$VUTURELAND_DIR/hypr.lua/hyprlock.conf"
+# hyprlock reads ~/.config/hypr/hyprlock.conf (symlink seeded by setup);
+# rofi-hyprlock.sh writes the active theme to $VUTURELAND_USER_DIR/hypr.lua/hyprlock.conf
+hyprlock
 
 # Restore workspaces
 focusmon "$mon1"

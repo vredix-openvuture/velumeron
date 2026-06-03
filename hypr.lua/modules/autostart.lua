@@ -9,7 +9,9 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("echo 'normal' > /tmp/hypr-submap")
 
     -- ── System daemons ────────────────────────────────
-    hl.exec_cmd("hypridle -c " .. VTL_DIR .. "/hypr.lua/hypridle.conf")
+    -- hypridle reads ~/.config/hypr/hypridle.conf (symlink seeded by setup);
+    -- older versions also accepted -c <path> but some recent builds ignore it.
+    hl.exec_cmd("hypridle")
     hl.exec_cmd("awww-daemon")
     hl.exec_cmd("nm-applet")
     hl.exec_cmd("systemctl --user start hyprpolkitagent")

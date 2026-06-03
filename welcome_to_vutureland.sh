@@ -257,6 +257,20 @@ if [[ ! -e "$HOME/.config/wallust" ]]; then
     ok "Linked ~/.config/wallust → vutureland/wallust"
 fi
 
+# hypridle and hyprlock ignore the -c flag on some versions — they only look
+# at ~/.config/hypr/{hypridle,hyprlock}.conf. Symlink ours into place.
+mkdir -p "$HOME/.config/hypr"
+for _f in hypridle.conf hyprlock.conf; do
+    _link="$HOME/.config/hypr/$_f"
+    _target="$VUTURELAND_USER_DIR/hypr.lua/$_f"
+    # Drop a stale symlink so we always re-point at the right target
+    [[ -L "$_link" ]] && rm -f "$_link"
+    if [[ ! -e "$_link" && -f "$_target" ]]; then
+        ln -sf "$_target" "$_link"
+        ok "Linked ~/.config/hypr/$_f → vutureland"
+    fi
+done
+
 # Copy templates from the package into the user dir
 sync_templates
 ok "Seeded ~/.config/vutureland/ from package templates"
@@ -340,7 +354,8 @@ _run_once() {
 # Mirrored from hypr.lua/modules/autostart.lua so we don't have to parse Lua
 # string-concatenation syntax. Keep these in sync when daemons are added.
 _SYSTEM_DAEMONS=(
-    "hypridle -c $VUTURELAND_USER_DIR/hypr.lua/hypridle.conf"
+    # hypridle picks up ~/.config/hypr/hypridle.conf via the symlink seeded above
+    "hypridle"
     "awww-daemon"
     "nm-applet"
     "systemctl --user start hyprpolkitagent"
