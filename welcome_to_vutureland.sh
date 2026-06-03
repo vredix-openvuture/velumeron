@@ -8,7 +8,8 @@
 
 set -euo pipefail
 
-: "${VUTURELAND_DIR:=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+# realpath resolves the /usr/bin/vutureland-setup symlink → /usr/share/vutureland/…
+: "${VUTURELAND_DIR:=$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)}"
 : "${VUTURELAND_USER_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/vutureland}"
 export VUTURELAND_DIR VUTURELAND_USER_DIR
 USER_SETTINGS="$VUTURELAND_USER_DIR/hypr.lua/user_settings.lua"
