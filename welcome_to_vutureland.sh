@@ -221,6 +221,34 @@ else
     read -rp "  Press Enter to continue without an avatar, or Ctrl+C to abort. "
 fi
 
+# ─── 1.5) Seed user dir + environment ────────────────────────────────────────
+# Must run BEFORE we start services — hypridle and friends look for config
+# files in $VUTURELAND_USER_DIR.
+say "Setting up ~/.config/vutureland/"
+
+# wallust symlink — wallust expects its config at ~/.config/wallust/
+if [[ ! -e "$HOME/.config/wallust" ]]; then
+    ln -sf "$VUTURELAND_DIR/wallust" "$HOME/.config/wallust"
+    ok "Linked ~/.config/wallust → vutureland/wallust"
+fi
+
+# Copy templates from the package into the user dir
+sync_templates
+ok "Seeded ~/.config/vutureland/ from package templates"
+
+# Write VUTURELAND_DIR / VUTURELAND_USER_DIR into systemd user environment
+# (takes effect on next login; we already have them exported in this shell)
+mkdir -p "$HOME/.config/environment.d"
+cat > "$HOME/.config/environment.d/vutureland.conf" <<EOF
+VUTURELAND_DIR=$VUTURELAND_DIR
+VUTURELAND_USER_DIR=$VUTURELAND_USER_DIR
+EOF
+ok "Wrote ~/.config/environment.d/vutureland.conf"
+
+# Also push them into the running systemd user session so child processes
+# (services we start below) inherit them right away.
+systemctl --user import-environment VUTURELAND_DIR VUTURELAND_USER_DIR 2>/dev/null || true
+
 # ─── 2) Background services ───────────────────────────────────────────────────
 say "Starting background services"
 
@@ -271,20 +299,22 @@ _run_once() {
     ok "$binary"
 }
 
-# ── System daemons from autostart.lua ──────────────────
-while IFS= read -r cmd; do
-    [[ -z "$cmd" ]] && continue
+# ── System daemons ─────────────────────────────────────
+# Mirrored from hypr.lua/modules/autostart.lua so we don't have to parse Lua
+# string-concatenation syntax. Keep these in sync when daemons are added.
+_SYSTEM_DAEMONS=(
+    "hypridle -c $VUTURELAND_USER_DIR/hypr.lua/hypridle.conf"
+    "awww-daemon"
+    "nm-applet"
+    "systemctl --user start hyprpolkitagent"
+    "gnome-keyring-daemon --start --components=secrets"
+    "$VUTURELAND_DIR/assets/scripts/launch-swaync.sh"
+    "wl-paste --watch clipvault store"
+    "$VUTURELAND_DIR/assets/scripts/float-cascade.sh"
+)
+for cmd in "${_SYSTEM_DAEMONS[@]}"; do
     _start_daemon "$cmd"
-done < <(awk '
-    /System daemons/ { in_s=1; next }
-    /Device-specific|Cursor and shell/ { in_s=0 }
-    in_s && /hl\.exec_cmd\(/ {
-        s = $0
-        sub(/.*hl\.exec_cmd\("/, "", s)
-        sub(/".*$/, "", s)
-        print s
-    }
-' "$AUTOSTART_LUA")
+done
 
 # ── exec_once_daemons from user_settings.lua ───────────
 if [[ -f "$USER_SETTINGS" ]]; then
@@ -333,24 +363,6 @@ EOF
 else
     ok "~/.config/hypr/hyprland.lua already exists — skipping."
 fi
-
-# Write VUTURELAND_DIR into systemd user environment so Hyprland inherits it
-mkdir -p "$HOME/.config/environment.d"
-cat > "$HOME/.config/environment.d/vutureland.conf" <<EOF
-VUTURELAND_DIR=$VUTURELAND_DIR
-VUTURELAND_USER_DIR=$VUTURELAND_USER_DIR
-EOF
-ok "Wrote ~/.config/environment.d/vutureland.conf"
-
-# wallust symlink — wallust expects its config at ~/.config/wallust/
-if [[ ! -e "$HOME/.config/wallust" ]]; then
-    ln -sf "$VUTURELAND_DIR/wallust" "$HOME/.config/wallust"
-    ok "Linked ~/.config/wallust → vutureland/wallust"
-fi
-
-# Seed VUTURELAND_USER_DIR from the package — also strips obsolete symlinks
-sync_templates
-ok "Seeded ~/.config/vutureland/ from package templates"
 
 # ─── 4) Monitor + Workspace setup ────────────────────────────────────────────
 say "Monitor & Workspace setup"
