@@ -254,11 +254,15 @@ say "Starting background services"
 
 AUTOSTART_LUA="$VUTURELAND_DIR/hypr.lua/modules/autostart.lua"
 
-# Kill existing instance and restart as background daemon.
+# Kill an existing instance and start the daemon in the background.
+# Success is determined by looking for the actual binary in the process list
+# (not the wrapper subshell), because:
+#   - gnome-keyring-daemon forks and the parent exits immediately
+#   - launch-*.sh wrappers exec the real daemon then exit themselves
 _start_daemon() {
     local cmd_raw="$1"
     local cmd="${cmd_raw//\~/$HOME}"
-    local first_word binary
+    local first_word binary target
 
     first_word=$(printf '%s' "$cmd" | awk '{print $1}')
     binary=$(basename "$first_word")
@@ -273,14 +277,22 @@ _start_daemon() {
         return
     fi
 
-    pkill -f "$binary" 2>/dev/null || true
+    # Pick the target process name to look for in pgrep
+    case "$binary" in
+        launch-waybar.sh) target="waybar" ;;
+        launch-swaync.sh) target="swaync" ;;
+        launch-*.sh)      target="${binary#launch-}"; target="${target%.sh}" ;;
+        *)                target="$binary" ;;
+    esac
+
+    pkill -f "$target" 2>/dev/null || true
     sleep 0.1
 
     eval "$cmd" &>/dev/null &
-    local pid=$!
-    disown "$pid" 2>/dev/null
-    sleep 0.3
-    if kill -0 "$pid" 2>/dev/null; then
+    disown 2>/dev/null
+    sleep 0.5
+
+    if pgrep -f "$target" >/dev/null; then
         ok "$binary"
     else
         warn "Failed: $binary"
