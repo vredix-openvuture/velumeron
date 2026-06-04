@@ -357,11 +357,11 @@ preferencespage list.boxed-list {
 }
 
 /* Adwaita's Adw.Clamp inside PreferencesPage enforces a min-width that
-   stops our panel size slider from shrinking below ~600px. Let pages
-   collapse to whatever the user picks. */
-preferencespage clamp,
-preferencespage scrolledwindow,
-preferencespage scrolledwindow > viewport {
+   stops our panel size slider from shrinking below ~600px. Strip every
+   min-width / min-content-width on every descendant so the slider can
+   actually collapse the panel. */
+preferencespage,
+preferencespage * {
     min-width: 0;
 }
 
