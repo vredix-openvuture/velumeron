@@ -188,9 +188,17 @@ sync_templates() {
     for _gtk in gtk-3.0 gtk-4.0; do
         local _gdir="$HOME/.config/$_gtk"
         local _gcss="$_gdir/gtk.css"
-        mkdir -p "$_gdir"
+        mkdir -p "$_gdir" 2>/dev/null || true
+        if [[ ! -w "$_gdir" ]]; then
+            echo "  ! ~/.config/$_gtk is not writable — skipping gtk.css wallust import"
+            echo "    fix: sudo chown -R \$USER:\$USER ~/.config/$_gtk"
+            continue
+        fi
         if [[ ! -f "$_gcss" ]]; then
             echo '@import url("wallust.css");' > "$_gcss"
+        elif [[ ! -w "$_gcss" ]]; then
+            echo "  ! ~/.config/$_gtk/gtk.css is not writable — skipping wallust import"
+            echo "    fix: sudo chown \$USER:\$USER ~/.config/$_gtk/gtk.css"
         elif ! grep -q 'wallust.css' "$_gcss"; then
             printf '\n@import url("wallust.css");\n' >> "$_gcss"
         fi
