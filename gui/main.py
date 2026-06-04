@@ -521,9 +521,11 @@ class MainWindow(Gtk.ApplicationWindow):
     def _apply_size(self, w_pct: int, h_pct: int, save: bool = True):
         w = int(self._monitor_w * w_pct / 100)
         h = int(self._monitor_h * h_pct / 100)
-        # The size is set on the ScrolledWindow wrapper. Because it doesn't
-        # propagate its child's natural size, this size_request is honoured
-        # exactly — inner content scrolls or is clipped if larger.
+        # ScrolledWindow honours min_content_{width,height} as the exact
+        # request when propagate-natural-* is off. set_size_request alone is
+        # only a soft minimum that the Overlay child layout sometimes ignores.
+        self._panel_scroll.set_min_content_width(w)
+        self._panel_scroll.set_min_content_height(h)
         self._panel_scroll.set_size_request(w, h)
         self._panel_scroll.queue_resize()
         if save:
