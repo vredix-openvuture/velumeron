@@ -143,6 +143,20 @@ sync_templates() {
             cp "$VUTURELAND_DIR/$_f" "$_dst"
         fi
     done
+
+    # hypridle and hyprlock ignore the --config flag on some versions — they
+    # only read $XDG_CONFIG_HOME/hypr/{hypridle,hyprlock}.conf. Symlink ours
+    # into the standard path so the daemons can always find the config.
+    mkdir -p "$HOME/.config/hypr"
+    for _f in hypridle.conf hyprlock.conf; do
+        local _link="$HOME/.config/hypr/$_f"
+        local _target="$VUTURELAND_USER_DIR/hypr.lua/$_f"
+        # Always re-point: stale symlinks from older installs break things
+        [[ -L "$_link" ]] && rm -f "$_link"
+        if [[ ! -e "$_link" && -f "$_target" ]]; then
+            ln -sf "$_target" "$_link"
+        fi
+    done
 }
 
 # ─── --sync: refresh package templates and exit ──────────────────────────────
@@ -256,20 +270,7 @@ if [[ ! -e "$HOME/.config/wallust" ]]; then
     ln -sf "$VUTURELAND_DIR/wallust" "$HOME/.config/wallust"
     ok "Linked ~/.config/wallust → vutureland/wallust"
 fi
-
-# hypridle and hyprlock ignore the -c flag on some versions — they only look
-# at ~/.config/hypr/{hypridle,hyprlock}.conf. Symlink ours into place.
-mkdir -p "$HOME/.config/hypr"
-for _f in hypridle.conf hyprlock.conf; do
-    _link="$HOME/.config/hypr/$_f"
-    _target="$VUTURELAND_USER_DIR/hypr.lua/$_f"
-    # Drop a stale symlink so we always re-point at the right target
-    [[ -L "$_link" ]] && rm -f "$_link"
-    if [[ ! -e "$_link" && -f "$_target" ]]; then
-        ln -sf "$_target" "$_link"
-        ok "Linked ~/.config/hypr/$_f → vutureland"
-    fi
-done
+# hypridle / hyprlock symlinks under ~/.config/hypr/ are created by sync_templates
 
 # Copy templates from the package into the user dir
 sync_templates
