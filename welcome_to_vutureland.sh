@@ -181,6 +181,46 @@ sync_templates() {
         fi
     done
 
+    # ── GTK theme + palette wiring ────────────────────────────────────
+    # For wallust colours to actually take effect in GTK apps, two things
+    # must be true:
+    #   1) The active GTK theme must use Adwaita's named colours (e.g.
+    #      @window_bg_color, @accent_bg_color). Themes with hardcoded hex
+    #      values (Breeze, Arc, ...) ignore @define-color overrides.
+    #      adw-gtk3 / adw-gtk3-dark are pure-Adwaita ports that respect them.
+    #   2) ~/.config/gtk-{3,4}.0/gtk.css must @import wallust.css LAST so
+    #      its overrides win over any theme-shipped @define-color blocks.
+    #
+    # We seed settings.ini with adw-gtk3-dark + dark color-scheme if the
+    # user hasn't picked something else; we never overwrite an existing
+    # gtk-theme-name= line.
+    for _gtk in gtk-3.0 gtk-4.0; do
+        local _gdir="$HOME/.config/$_gtk"
+        local _ini="$_gdir/settings.ini"
+        mkdir -p "$_gdir" 2>/dev/null || true
+        [[ -w "$_gdir" ]] || continue
+        if [[ ! -f "$_ini" ]]; then
+            cat > "$_ini" <<EOF
+[Settings]
+gtk-theme-name=adw-gtk3-dark
+gtk-application-prefer-dark-theme=true
+gtk-icon-theme-name=Adwaita
+gtk-cursor-theme-size=24
+gtk-font-name=FantasqueSansM Nerd Font  10
+EOF
+        else
+            # Make sure the dark-mode hint is on (Adwaita-Dark sees it)
+            if ! grep -q 'gtk-application-prefer-dark-theme' "$_ini"; then
+                printf '\ngtk-application-prefer-dark-theme=true\n' >> "$_ini"
+            fi
+        fi
+    done
+
+    # Tell GTK4 / libadwaita to prefer dark; safe to set every run.
+    if command -v gsettings >/dev/null 2>&1; then
+        gsettings set org.gnome.desktop.interface color-scheme prefer-dark 2>/dev/null || true
+    fi
+
     # GTK 3 / 4 apps load colours from ~/.config/gtk-{3,4}.0/gtk.css. Wallust
     # writes wallust.css into those folders, but only an @import in gtk.css
     # actually pulls the palette in. Create the gtk.css if missing; append
