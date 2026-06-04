@@ -185,20 +185,21 @@ sync_templates() {
     # writes wallust.css into those folders, but only an @import in gtk.css
     # actually pulls the palette in. Create the gtk.css if missing; append
     # the import line if it already exists but doesn't reference wallust.css.
+    local _me="$(id -un):$(id -gn)"
     for _gtk in gtk-3.0 gtk-4.0; do
         local _gdir="$HOME/.config/$_gtk"
         local _gcss="$_gdir/gtk.css"
         mkdir -p "$_gdir" 2>/dev/null || true
         if [[ ! -w "$_gdir" ]]; then
             echo "  ! ~/.config/$_gtk is not writable — skipping gtk.css wallust import"
-            echo "    fix: sudo chown -R \$USER:\$USER ~/.config/$_gtk"
+            echo "    fix: sudo chown -R $_me ~/.config/$_gtk"
             continue
         fi
         if [[ ! -f "$_gcss" ]]; then
             echo '@import url("wallust.css");' > "$_gcss"
         elif [[ ! -w "$_gcss" ]]; then
             echo "  ! ~/.config/$_gtk/gtk.css is not writable — skipping wallust import"
-            echo "    fix: sudo chown \$USER:\$USER ~/.config/$_gtk/gtk.css"
+            echo "    fix: sudo chown $_me ~/.config/$_gtk/gtk.css"
         elif ! grep -q 'wallust.css' "$_gcss"; then
             printf '\n@import url("wallust.css");\n' >> "$_gcss"
         fi
@@ -215,8 +216,27 @@ if [[ "$SYNC_MODE" == true ]]; then
     echo ""
     sync_templates
     ok "Templates synced."
-    echo ""
-    echo "  Restart Hyprland or run  ${DIM}hyprctl reload${RST}  to pick up changes."
+
+    # Reload anything that might be running, so the user doesn't need to
+    # log out / log in to pick up the new files.
+    if command -v hyprctl >/dev/null 2>&1 && hyprctl version >/dev/null 2>&1; then
+        hyprctl reload >/dev/null 2>&1 && ok "Hyprland reloaded"
+    fi
+    if pgrep -x waybar >/dev/null 2>&1; then
+        "$VUTURELAND_DIR/assets/scripts/launch-waybar.sh" >/dev/null 2>&1 \
+            && ok "Waybar restarted"
+    fi
+    # Settings-panel daemon: easiest to bounce.
+    if pgrep -f "python3.*gui/main.py" >/dev/null 2>&1; then
+        "$VUTURELAND_DIR/bin/vutureland" --end  >/dev/null 2>&1 || true
+        "$VUTURELAND_DIR/bin/vutureland" --daemon >/dev/null 2>&1 &
+        ok "Settings panel restarted"
+    fi
+    # Pre-generate wallpaper thumbnails for the picker.
+    if [[ -x "$VUTURELAND_DIR/rofi/assets/generate-thumbnail.sh" ]]; then
+        ( "$VUTURELAND_DIR/rofi/assets/generate-thumbnail.sh" >/dev/null 2>&1 ) &
+        ok "Generating wallpaper thumbnails in the background"
+    fi
     echo ""
     exit 0
 fi
