@@ -17,17 +17,17 @@ SET_WP            = f"{VTL}/assets/scripts/wallpaper-set.sh"
 GEN_THUMBS        = f"{VTL}/rofi/assets/generate-thumbnail.sh"
 WALLUST_FIXED_DIR = f"{VTL}/wallust/fixed_colors"
 LAUNCH_WAYBAR     = f"{VTL}/assets/scripts/launch-waybar.sh"
-WALLPAPER_OLD     = f"{VTL}/assets/wallpaper/old_wallpaper"
 SETS_JSON         = f"{VTL}/assets/wallpaper/sets.json"
 HYPRLOCK_THEMES   = f"{VTL}/hypr.lua/hyprlock-themes"
 HYPRLOCK_BLACK_WP = f"{VTL}/assets/wallpaper/pure-black.jpg"
-HYPRIDLE_CONF     = f"{VTL}/hypr.lua/hypridle.conf"
 POWERMODE_SH      = f"{VTL}/assets/scripts/powermode.sh"
 
 # ── User paths (per-user state, generated output, preferences) ───────────────
 USER_SETTINGS     = f"{VTL_USER}/hypr.lua/user_settings.lua"
 WALLUST_MODE_FILE = f"{VTL_USER}/wallust/color-mode"
 HYPRLOCK_CONF     = f"{VTL_USER}/hypr.lua/hyprlock.conf"
+HYPRIDLE_CONF     = f"{VTL_USER}/hypr.lua/hypridle.conf"
+WALLPAPER_OLD     = f"{VTL_USER}/assets/wallpaper/old_wallpaper"
 
 # ── Cache paths ───────────────────────────────────────────────────────────────
 _xdg_cache    = os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache"))
