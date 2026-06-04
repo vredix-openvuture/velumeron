@@ -21,6 +21,29 @@ if [[ -z "${VUTURELAND_DIR:-}" \
 fi
 : "${VUTURELAND_USER_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/vutureland}"
 export VUTURELAND_DIR VUTURELAND_USER_DIR
+
+# Never run this script as root. It writes into the user's home and would
+# end up owning ~/.config/vutureland/ as root, breaking every subsequent
+# non-root run with permission-denied. Package installation (pacman/yay)
+# uses sudo internally, but THIS wizard must run as the desktop user.
+if [[ $EUID -eq 0 ]]; then
+    echo ""
+    echo "  vutureland-setup must NOT be run as root."
+    echo "  Drop sudo and re-run as your desktop user:"
+    echo ""
+    echo "      vutureland-setup ${1:-}"
+    echo ""
+    if [[ -n "${SUDO_USER:-}" ]]; then
+        echo "  If files in your home are already owned by root, fix them:"
+        echo "      sudo chown -R $SUDO_USER:$SUDO_USER \\"
+        echo "          ~$SUDO_USER/.config/vutureland \\"
+        echo "          ~$SUDO_USER/.config/hypr \\"
+        echo "          ~$SUDO_USER/.config/wallust \\"
+        echo "          ~$SUDO_USER/.config/environment.d"
+        echo ""
+    fi
+    exit 1
+fi
 USER_SETTINGS="$VUTURELAND_USER_DIR/hypr.lua/user_settings.lua"
 
 # Parse flags
