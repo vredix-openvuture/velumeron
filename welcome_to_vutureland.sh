@@ -157,6 +157,21 @@ sync_templates() {
             ln -sf "$_target" "$_link"
         fi
     done
+
+    # GTK 3 / 4 apps load colours from ~/.config/gtk-{3,4}.0/gtk.css. Wallust
+    # writes wallust.css into those folders, but only an @import in gtk.css
+    # actually pulls the palette in. Create the gtk.css if missing; append
+    # the import line if it already exists but doesn't reference wallust.css.
+    for _gtk in gtk-3.0 gtk-4.0; do
+        local _gdir="$HOME/.config/$_gtk"
+        local _gcss="$_gdir/gtk.css"
+        mkdir -p "$_gdir"
+        if [[ ! -f "$_gcss" ]]; then
+            echo '@import url("wallust.css");' > "$_gcss"
+        elif ! grep -q 'wallust.css' "$_gcss"; then
+            printf '\n@import url("wallust.css");\n' >> "$_gcss"
+        fi
+    done
 }
 
 # ─── --sync: refresh package templates and exit ──────────────────────────────
