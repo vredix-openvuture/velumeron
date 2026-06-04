@@ -291,12 +291,25 @@ class MainWindow(Gtk.ApplicationWindow):
         stack.set_hexpand(True)
         stack.set_vexpand(True)
 
-        # ── Content wrapper ───────────────────────────────────────────
-        content_wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        content_wrap.add_css_class('content-area')
+        # ── Content wrapper — only this part scrolls when the panel shrinks.
+        # Banner and sidebar stay pinned. ScrolledWindow with
+        # propagate-natural-* = false + min_content = 0 lets the wrapping
+        # collapse below the Adw.PreferencesPage natural size.
+        content_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        content_inner.add_css_class('content-area')
+        content_inner.set_hexpand(True)
+        content_inner.set_vexpand(True)
+        content_inner.append(stack)
+
+        content_wrap = Gtk.ScrolledWindow()
+        content_wrap.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        content_wrap.set_propagate_natural_width(False)
+        content_wrap.set_propagate_natural_height(False)
+        content_wrap.set_min_content_width(0)
+        content_wrap.set_min_content_height(0)
         content_wrap.set_hexpand(True)
         content_wrap.set_vexpand(True)
-        content_wrap.append(stack)
+        content_wrap.set_child(content_inner)
 
         # ── Left sidebar ──────────────────────────────────────────────
         self._sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
@@ -338,31 +351,19 @@ class MainWindow(Gtk.ApplicationWindow):
         body.append(self._sidebar)
         body.append(content_wrap)
 
-        # ── Root: panel content (banner + body)
+        # ── Root: panel content (banner + body). Positioned bottom-left in
+        # the fullscreen overlay; size driven directly by _apply_size().
+        # The inner ScrolledWindow handles overflow so banner and sidebar
+        # stay fixed when the user shrinks the panel.
         self._root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self._root.add_css_class('root-area')
+        self._root.set_halign(Gtk.Align.START)
+        self._root.set_valign(Gtk.Align.END)
+        self._root.set_hexpand(False)
+        self._root.set_vexpand(False)
+        self._root.set_overflow(Gtk.Overflow.HIDDEN)
         self._root.append(self._build_banner())
         self._root.append(body)
-
-        # ── Size-constraint wrapper.
-        # set_size_request on a Box only sets MIN size — natural size from
-        # children dominates. A ScrolledWindow with propagate_natural=False
-        # and min_content=0 reports its natural size as whatever we tell it,
-        # so set_size_request actually clamps. Inner content scrolls if it
-        # would overflow the chosen panel size.
-        self._panel_scroll = Gtk.ScrolledWindow()
-        self._panel_scroll.set_policy(Gtk.PolicyType.NEVER,
-                                      Gtk.PolicyType.AUTOMATIC)
-        self._panel_scroll.set_propagate_natural_width(False)
-        self._panel_scroll.set_propagate_natural_height(False)
-        self._panel_scroll.set_min_content_width(0)
-        self._panel_scroll.set_min_content_height(0)
-        self._panel_scroll.set_halign(Gtk.Align.START)
-        self._panel_scroll.set_valign(Gtk.Align.END)
-        self._panel_scroll.set_hexpand(False)
-        self._panel_scroll.set_vexpand(False)
-        self._panel_scroll.set_overflow(Gtk.Overflow.HIDDEN)
-        self._panel_scroll.set_child(self._root)
 
         # Fullscreen transparent click-catcher; clicks on it close the panel.
         self._click_catcher = Gtk.Box()
@@ -375,7 +376,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
         overlay = Gtk.Overlay()
         overlay.set_child(self._click_catcher)
-        overlay.add_overlay(self._panel_scroll)
+        overlay.add_overlay(self._root)
         self.set_child(overlay)
 
         # Apply saved size, opacity, and theme
@@ -521,13 +522,11 @@ class MainWindow(Gtk.ApplicationWindow):
     def _apply_size(self, w_pct: int, h_pct: int, save: bool = True):
         w = int(self._monitor_w * w_pct / 100)
         h = int(self._monitor_h * h_pct / 100)
-        # ScrolledWindow honours min_content_{width,height} as the exact
-        # request when propagate-natural-* is off. set_size_request alone is
-        # only a soft minimum that the Overlay child layout sometimes ignores.
-        self._panel_scroll.set_min_content_width(w)
-        self._panel_scroll.set_min_content_height(h)
-        self._panel_scroll.set_size_request(w, h)
-        self._panel_scroll.queue_resize()
+        # The root is overflow=HIDDEN, so whatever we put as size_request is
+        # the visible panel size. Banner and sidebar are above/beside the
+        # inner ScrolledWindow, which absorbs the height change.
+        self._root.set_size_request(w, h)
+        self._root.queue_resize()
         if save:
             self._settings['panel_width_pct']  = w_pct
             self._settings['panel_height_pct'] = h_pct
