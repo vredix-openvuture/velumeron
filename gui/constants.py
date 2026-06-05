@@ -19,7 +19,7 @@ WALLUST_FIXED_DIR = f"{VTL}/wallust/fixed_colors"
 LAUNCH_WAYBAR     = f"{VTL}/assets/scripts/launch-waybar.sh"
 SETS_JSON         = f"{VTL}/assets/wallpaper/sets.json"
 HYPRLOCK_THEMES   = f"{VTL}/hypr.lua/hyprlock-themes"
-HYPRLOCK_BLACK_WP = f"{VTL}/assets/wallpaper/pure-black.jpg"
+HYPRLOCK_BLACK_WP = f"{VTL}/assets/wallpaper/hyprlock/pure-black.jpg"
 POWERMODE_SH      = f"{VTL}/assets/scripts/powermode.sh"
 
 # ── User paths (per-user state, generated output, preferences) ───────────────

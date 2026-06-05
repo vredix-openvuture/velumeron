@@ -2,14 +2,17 @@
 # launch-swaync.sh — write swaync config with monitor-relative dimensions
 # into ~/.config/swaync/config.json (the path swaync looks at by default,
 # regardless of who started it — systemd user unit, D-Bus activation, or
-# us calling it directly). style.css is already a symlink there (created
-# by sync_templates).
+# us calling it directly). style.css is written there by sync_templates
+# (a real file with the palette @import rewritten to an absolute path).
 
 set -euo pipefail
 source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh"
 
 SRC_CFG="$VUTURELAND_USER_DIR/swaync/config.json"
 DST_CFG="$HOME/.config/swaync/config.json"
+SRC_STYLE="$VUTURELAND_USER_DIR/swaync/style.css"
+DST_STYLE="$HOME/.config/swaync/style.css"
+SW_COLORS="$VUTURELAND_USER_DIR/assets/colors_gtk.css"
 GUI_SETTINGS="$VUTURELAND_USER_DIR/gui/settings.json"
 
 # ── Read user preferences (with defaults) ────────────────────────────────────
@@ -35,6 +38,18 @@ mkdir -p "$(dirname "$DST_CFG")"
 jq --argjson mt "$margin_top" --argjson w "$width" \
    '."control-center-margin-top" = $mt | ."control-center-width" = $w' \
    "$SRC_CFG" > "$DST_CFG"
+
+# ── Write style.css to the default path too ──────────────────────────────────
+# swaync started by its systemd unit / D-Bus runs `swaync` with no -s, so it
+# reads ~/.config/swaync/style.css. GTK4 resolves the template's relative
+# `@import url("../assets/colors_gtk.css")` against the file's own directory, so
+# rewrite it to an absolute path. Done on every launch (not just sync) so a
+# stale or foreign style.css from an older install / another theme gets
+# overwritten with ours on the next login without needing a full re-sync.
+if [[ -f "$SRC_STYLE" ]]; then
+    [[ -L "$DST_STYLE" ]] && rm -f "$DST_STYLE"
+    sed "s#\.\./assets/colors_gtk\.css#${SW_COLORS}#" "$SRC_STYLE" > "$DST_STYLE"
+fi
 
 # ── Restart swaync: prefer systemd unit (it's usually the one running) ───────
 if systemctl --user is-active swaync.service >/dev/null 2>&1; then

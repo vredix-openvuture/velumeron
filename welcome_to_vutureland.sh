@@ -174,24 +174,32 @@ sync_templates() {
     for _f in hypridle.conf hyprlock.conf; do
         local _link="$HOME/.config/hypr/$_f"
         local _target="$VUTURELAND_USER_DIR/hypr.lua/$_f"
-        # Always re-point: stale symlinks from older installs break things
-        [[ -L "$_link" ]] && rm -f "$_link"
-        if [[ ! -e "$_link" && -f "$_target" ]]; then
-            ln -sf "$_target" "$_link"
+        [[ -f "$_target" ]] || continue
+        # Re-point unless it's already our symlink. This also replaces a plain
+        # regular file left behind by an older install or a manual `cp` — otherwise
+        # hyprlock keeps reading that stale copy and never sees what the GUI writes.
+        if [[ -L "$_link" && "$(readlink "$_link")" == "$_target" ]]; then
+            continue
         fi
+        rm -f "$_link"
+        ln -sf "$_target" "$_link"
     done
 
     # swaync gets started by its systemd user unit OR via D-Bus activation,
-    # always without our -c / -s arguments. Symlink our style.css to the
-    # default lookup path so swaync picks up the vutureland theme regardless
-    # of who started it. (config.json is written here by launch-swaync.sh
-    # with dynamic margins, so we DON'T symlink it — only create the dir.)
+    # always without our -c / -s arguments, so it reads ~/.config/swaync/style.css.
+    # We can't just symlink our style.css there: GTK4 resolves its
+    # `@import url("../assets/colors_gtk.css")` against the *symlink's* directory
+    # (~/.config/swaync/), not the real file, so the wallust palette import would
+    # silently fail and swaync would fall back to an unthemed look. Instead write
+    # a real style.css with the import rewritten to the absolute palette path.
+    # (config.json is written here by launch-swaync.sh with dynamic margins.)
     mkdir -p "$HOME/.config/swaync"
     local _swstyle="$HOME/.config/swaync/style.css"
-    local _swstyle_target="$VUTURELAND_USER_DIR/swaync/style.css"
+    local _swstyle_src="$VUTURELAND_USER_DIR/swaync/style.css"
+    local _sw_colors="$VUTURELAND_USER_DIR/assets/colors_gtk.css"
     [[ -L "$_swstyle" ]] && rm -f "$_swstyle"
-    if [[ ! -e "$_swstyle" && -f "$_swstyle_target" ]]; then
-        ln -sf "$_swstyle_target" "$_swstyle"
+    if [[ -f "$_swstyle_src" ]]; then
+        sed "s#\.\./assets/colors_gtk\.css#${_sw_colors}#" "$_swstyle_src" > "$_swstyle"
     fi
 
     # ── GTK theme + palette wiring ────────────────────────────────────
@@ -277,20 +285,43 @@ apply_default_bar() {
     local mods="$VUTURELAND_USER_DIR/waybar-modular/config/miboro/modules/horizontal"
     local base="$VUTURELAND_USER_DIR/waybar-modular/config/miboro/base/base-top"
 
+    # Only show the battery module on devices that actually have a battery.
+    local has_battery=false
+    compgen -G "/sys/class/power_supply/BAT*" >/dev/null 2>&1 && has_battery=true
+
+    # Module config.json files to pull in. The drawers (performance/audio/tray)
+    # only *reference* their child modules, so those children must be included
+    # too or waybar can't resolve them.
+    local module_dirs=(
+        clock separator
+        a-left-drawer-performance performance temperature-gpu temperature-cpu memory cpu
+        actionuser
+        workspaces submap
+        cava
+        a-right-drawer-audio pulseaudio mpris bluetooth
+        a-right-drawer-tray notification tray
+    )
+    $has_battery && module_dirs+=(battery)
+
+    # Comma-joined "include" entries for every module config.json.
+    local _inc=()
+    local m
+    for m in "${module_dirs[@]}"; do _inc+=("\"$mods/$m/config.json\""); done
+    local includes; includes=$(IFS=,; echo "${_inc[*]}")
+
+    # Right group: battery only appended when the device has one.
+    local right='"custom/cava", "group/audio_drawer", "custom/separator", "group/tray_drawer"'
+    $has_battery && right+=', "battery"'
+
     cat > "$dest/groups.json" <<EOF
 {
-    "include": [
-        "$mods/clock/config.json",
-        "$mods/workspaces/config.json",
-        "$mods/pulseaudio/config.json",
-        "$mods/battery/config.json",
-        "$mods/tray/config.json",
-        "$mods/notification/config.json"
-    ],
-    "group/left":   { "orientation": "horizontal", "modules": ["clock"] },
-    "group/center": { "orientation": "horizontal", "modules": ["hyprland/workspaces"] },
+    "include": [ $includes ],
+    "group/left":   { "orientation": "horizontal",
+                      "modules": ["clock", "custom/separator", "group/performance_drawer", "custom/separator", "custom/actionuser"] },
+    "group/center": { "orientation": "horizontal",
+                      "modules": ["hyprland/workspaces", "hyprland/submap"] },
     "group/right":  { "orientation": "horizontal",
-                      "modules": ["pulseaudio", "battery", "tray", "custom/notification"] }
+                      "modules": [$right] }
 }
 EOF
 
@@ -324,7 +355,7 @@ EOF
 
     {
         echo "@import url(\"$base/bar.css\");"
-        for m in clock workspaces pulseaudio battery tray notification; do
+        for m in "${module_dirs[@]}"; do
             local css="$mods/$m/style.css"
             [[ -f "$css" ]] && echo "@import url(\"$css\");"
         done

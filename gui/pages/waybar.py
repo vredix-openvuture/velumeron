@@ -596,7 +596,11 @@ class WaybarPage(Gtk.Box):
         self._stack.set_visible_child_name('add')
 
     def _on_add_module(self, key: str):
-        self._on_zone_drop(None, self._add_target_zone, key, 0)
+        # Append at the bottom of the zone (drag-and-drop still places freely).
+        dst_list = self._slot_list(self._add_target_zone)
+        dst_list.append(key)
+        self._zones[self._add_target_zone].refresh()
+        self._status.set_text('Unsaved changes')
         self._stack.set_visible_child_name('zones')
 
     def _on_add_search_changed(self, _):
