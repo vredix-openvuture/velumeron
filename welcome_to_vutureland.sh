@@ -181,6 +181,19 @@ sync_templates() {
         fi
     done
 
+    # swaync gets started by its systemd user unit OR via D-Bus activation,
+    # always without our -c / -s arguments. Symlink our style.css to the
+    # default lookup path so swaync picks up the vutureland theme regardless
+    # of who started it. (config.json is written here by launch-swaync.sh
+    # with dynamic margins, so we DON'T symlink it — only create the dir.)
+    mkdir -p "$HOME/.config/swaync"
+    local _swstyle="$HOME/.config/swaync/style.css"
+    local _swstyle_target="$VUTURELAND_USER_DIR/swaync/style.css"
+    [[ -L "$_swstyle" ]] && rm -f "$_swstyle"
+    if [[ ! -e "$_swstyle" && -f "$_swstyle_target" ]]; then
+        ln -sf "$_swstyle_target" "$_swstyle"
+    fi
+
     # ── GTK theme + palette wiring ────────────────────────────────────
     # For wallust colours to actually take effect in GTK apps, two things
     # must be true:
