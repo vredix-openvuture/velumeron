@@ -360,6 +360,10 @@ if [[ "$SYNC_MODE" == true ]]; then
         "$VUTURELAND_DIR/assets/scripts/launch-waybar.sh" >/dev/null 2>&1 \
             && ok "Waybar restarted"
     fi
+    if pgrep -x swaync >/dev/null 2>&1; then
+        "$VUTURELAND_DIR/assets/scripts/launch-swaync.sh" >/dev/null 2>&1 \
+            && ok "swaync restarted"
+    fi
     # Settings-panel daemon: easiest to bounce.
     if pgrep -f "python3.*gui/main.py" >/dev/null 2>&1; then
         "$VUTURELAND_DIR/bin/vutureland" --end  >/dev/null 2>&1 || true
