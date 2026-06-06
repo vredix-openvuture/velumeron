@@ -5,7 +5,7 @@ gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, GLib
 import os, re, json, subprocess, threading, time
 from constants import (
-    HYPRLOCK_THEMES, HYPRLOCK_CONF, HYPRLOCK_THUMB, HYPRLOCK_BLACK_WP,
+    VTL, HYPRLOCK_THEMES, HYPRLOCK_CONF, HYPRLOCK_THUMB, HYPRLOCK_BLACK_WP,
     HYPRIDLE_CONF, POWERMODE_SH,
 )
 
@@ -70,47 +70,15 @@ def _ensure_thumb(theme_file: str, name: str) -> str | None:
 
 
 def _apply_theme(theme_file: str) -> None:
-    with open(theme_file) as f:
-        content = f.read()
-
-    try:
-        result = subprocess.run(['hyprctl', 'monitors', '-j'], capture_output=True, text=True)
-        monitors = json.loads(result.stdout)
-        primary = next((m['name'] for m in monitors if m.get('focused')), None)
-        if primary is None and monitors:
-            primary = monitors[0]['name']
-        others = [m['name'] for m in monitors if not m.get('focused')]
-    except Exception:
-        primary = 'eDP-1'
-        others = []
-
-    if primary:
-        content = content.replace('{{mon1}}', primary)
-
-    for i, mon in enumerate(others):
-        n = i + 2
-        placeholder = f'{{{{mon{n}}}}}'
-        if placeholder in content:
-            content = content.replace(placeholder, mon)
-        else:
-            content += (
-                f'\nbackground {{\n'
-                f'    monitor = {mon}\n'
-                f'    path = {HYPRLOCK_BLACK_WP}\n'
-                f'}}'
-            )
-
-    with open(HYPRLOCK_CONF, 'w') as f:
-        f.write(content)
-
-    # Remember the chosen theme so launch-hyprlock's monitor self-heal can
-    # regenerate this exact theme (with the then-current monitors) if needed.
-    try:
-        name = os.path.splitext(os.path.basename(theme_file))[0]
-        with open(os.path.join(os.path.dirname(HYPRLOCK_CONF), '.hyprlock-theme'), 'w') as f:
-            f.write(name + '\n')
-    except OSError:
-        pass
+    # Delegate to the shared script so the rofi picker, the launch-hyprlock
+    # self-heal and this page all write the active config identically: current
+    # monitors substituted, absolute image paths (hyprlock 0.9.x doesn't expand
+    # ~), leftover {{monN}} blocks dropped, and the chosen theme remembered.
+    name = os.path.splitext(os.path.basename(theme_file))[0]
+    subprocess.run(
+        [os.path.join(VTL, 'assets', 'scripts', 'apply-hyprlock-theme.sh'), name],
+        capture_output=True,
+    )
 
 
 # ── Hypridle helpers ──────────────────────────────────────────────────────────

@@ -46,6 +46,23 @@ for i in "${!others[@]}"; do
     fi
 done
 
+# hyprlock (older versions, incl. 0.9.x) does NOT expand ~ in background:path,
+# so make the image paths absolute and point them at the real (package) asset
+# dir — this also removes the dependency on the per-user assets symlink. Then
+# drop any leftover background block whose {{monN}} was never substituted
+# (the theme expects more monitors than this machine has).
+content=$(printf '%s\n' "$content" \
+    | sed -e "s#~/.config/vutureland/assets/#${VUTURELAND_DIR}/assets/#g" \
+          -e "s#~/#${HOME}/#g" \
+    | awk '
+        /^background[[:space:]]*\{/ { buf=$0; c=1; ph=0; next }
+        c { buf=buf ORS $0
+            if ($0 ~ /\{\{mon[0-9]+\}\}/) ph=1
+            if ($0 ~ /^\}/) { c=0; if (!ph) print buf }
+            next }
+        { print }
+    ')
+
 mkdir -p "$(dirname "$ACTIVE_CONF")"
 printf '%s\n' "$content" > "$ACTIVE_CONF"
 printf '%s\n' "$theme" > "$MARKER"
