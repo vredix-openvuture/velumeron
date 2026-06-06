@@ -70,9 +70,9 @@ colors_vuture    = { src = "colors_gtk.css",       dst = "~/.config/vutureland/a
 hyprland_lua_colors = "~/.config/vutureland/assets/scripts/wallust/hyprland_lua-colors.sh && hyprctl reload"
 pywalfox_update     = "pywalfox update"
 swaync_update       = "~/.config/vutureland/assets/scripts/launch-swaync.sh"
-# NOTE: waybar is restarted by wallpaper-set.sh itself (a single full restart
-# after wallust finishes), so we deliberately do NOT restart it here too — a
-# hook here plus that call meant waybar started twice on every wallpaper change.
+# Restart waybar fully — SIGUSR2 only reloads the top-level style.css and
+# misses changes that live in @imported colour files.
+waybar_update       = "sleep 0.8 && ~/.config/vutureland/assets/scripts/launch-waybar.sh"
 # Bump gtk.css mtime so GTK file-monitors see a change and reload the palette.
 # (vutureland's own settings panel watches colors_gtk.css directly — no extra hook needed.)
 gtk_reload          = "touch ~/.config/gtk-3.0/gtk.css ~/.config/gtk-4.0/gtk.css 2>/dev/null || true"
