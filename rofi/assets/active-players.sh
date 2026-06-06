@@ -4,7 +4,7 @@ source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." && pwd)/assets
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
 export DISPLAY="${DISPLAY:-:0}"
 
-THEME="$VUTURELAND_DIR/rofi/active-players.rasi"
+THEME="$VUTURELAND_USER_DIR/rofi/active-players.rasi"
 
 declare -A PLAYER_NAMES=(
     [firefox]="Firefox"

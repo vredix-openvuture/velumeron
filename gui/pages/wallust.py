@@ -21,8 +21,11 @@ def _run_hooks() -> None:
         ['bash', '-c',
          f'killall -q swaync; {VTL}/assets/scripts/launcher.sh --swaync'],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # Full restart, not SIGUSR2: waybar's palette lives in an @imported
+    # colors_gtk.css and SIGUSR2 only reloads the top-level style.css, so a
+    # signal would leave the bar with the old colours.
     subprocess.Popen(
-        ['bash', '-c', 'sleep 0.8 && pkill -SIGUSR2 waybar'],
+        ['bash', f'{VTL}/assets/scripts/launch-waybar.sh'],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 

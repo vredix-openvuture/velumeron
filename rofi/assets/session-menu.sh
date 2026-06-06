@@ -5,7 +5,7 @@ export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
 export DISPLAY="${DISPLAY:-:0}"
 
 ICONS="$VUTURELAND_DIR/assets/icons"
-THEME="$VUTURELAND_DIR/rofi/session-menu.rasi"
+THEME="$VUTURELAND_USER_DIR/rofi/session-menu.rasi"
 
 entries() {
     printf "Settings\0icon\x1f%s\n" "${ICONS}/vuture.png"
