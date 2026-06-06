@@ -107,7 +107,8 @@ _run_wallust_hooks() {
     "$VUTURELAND_DIR/assets/scripts/wallust/hyprland_lua-colors.sh" && hyprctl reload
     pywalfox update &>/dev/null &
     "$VUTURELAND_DIR/assets/scripts/launch-swaync.sh" &
-    { sleep 0.8 && pkill -SIGUSR2 waybar; } &
+    # waybar is restarted once by launch-waybar.sh further below (a full restart
+    # that also picks up @imported colour changes), so don't also poke it here.
 }
 
 _color_mode=$(cat "$VUTURELAND_USER_DIR/wallust/color-mode" 2>/dev/null || echo "auto")

@@ -103,6 +103,15 @@ def _apply_theme(theme_file: str) -> None:
     with open(HYPRLOCK_CONF, 'w') as f:
         f.write(content)
 
+    # Remember the chosen theme so launch-hyprlock's monitor self-heal can
+    # regenerate this exact theme (with the then-current monitors) if needed.
+    try:
+        name = os.path.splitext(os.path.basename(theme_file))[0]
+        with open(os.path.join(os.path.dirname(HYPRLOCK_CONF), '.hyprlock-theme'), 'w') as f:
+            f.write(name + '\n')
+    except OSError:
+        pass
+
 
 # ── Hypridle helpers ──────────────────────────────────────────────────────────
 

@@ -16,7 +16,7 @@ from models.waybar import (
     scan_bar_styles, scan_config_styles, read_bar_slots, write_bar_slots,
     scan_modules_by_section, BarConfig, BarStyle, init_groups_json,
     build_bar_config, refresh_groups_includes, remove_other_bar_configs,
-    _known_monitors,
+    active_bar_for_monitor, _known_monitors,
 )
 
 _INVALID = Gtk.INVALID_LIST_POSITION
@@ -178,6 +178,11 @@ class WaybarPage(Gtk.Box):
         self._desc_vr = _build_desc_map(self._sections_vr)
         self._zones: dict[str, BarZone] = {}
         self._updating_bars = False
+        # Pending combo selections for the active bar, consumed by the _populate_*
+        # cascade so opening the page lands on the running bar, not bar/bottom.
+        self._want_type: str | None = None
+        self._want_variant: str | None = None
+        self._want_position: str | None = None
 
         self._build_ui()
         self._populate_monitors()
@@ -395,11 +400,15 @@ class WaybarPage(Gtk.Box):
         self._mon_combo.set_model(strings)
 
     def _populate_styles(self):
+        names = self._type_names()
         strings = Gtk.StringList()
-        for n in self._type_names():
+        for n in names:
             strings.append(n)
         self._updating_bars = True
         self._style_combo.set_model(strings)
+        sel, self._want_type = self._want_type, None
+        if sel is not None and sel in names:
+            self._style_combo.set_selected(names.index(sel))
         self._updating_bars = False
         self._populate_variants()
 
@@ -407,20 +416,28 @@ class WaybarPage(Gtk.Box):
         is_frame = self._cur_type() == 'frame'
         self._variant_row.set_visible(is_frame)
         if is_frame:
+            variants = self._frame_variants()
             strings = Gtk.StringList()
-            for v in self._frame_variants():
+            for v in variants:
                 strings.append(v)
             self._updating_bars = True
             self._variant_combo.set_model(strings)
+            sel, self._want_variant = self._want_variant, None
+            if sel is not None and sel in variants:
+                self._variant_combo.set_selected(variants.index(sel))
             self._updating_bars = False
         self._populate_positions()
 
     def _populate_positions(self):
+        positions = self._positions_for_current()
         strings = Gtk.StringList()
-        for p in self._positions_for_current():
+        for p in positions:
             strings.append(p)
         self._updating_bars = True
         self._subbar_combo.set_model(strings)
+        sel, self._want_position = self._want_position, None
+        if sel is not None and sel in positions:
+            self._subbar_combo.set_selected(positions.index(sel))
         self._updating_bars = False
         self._resolve_bar()
 
@@ -440,7 +457,33 @@ class WaybarPage(Gtk.Box):
         self._left, self._center, self._right = [], [], []
         self._populate_styles()
 
+    def _set_wants_for_monitor(self, monitor: str | None) -> str | None:
+        """Queue the active bar's type/variant/position for `monitor`; return its
+        design (so the caller can switch the design combo). None if no active bar."""
+        self._want_type = self._want_variant = self._want_position = None
+        active = active_bar_for_monitor(monitor) if monitor else None
+        if not active:
+            return None
+        design, style, position = active
+        self._want_position = position
+        bs = next((s for s in scan_bar_styles(design) if s.name == style), None)
+        if bs and bs.is_frame:
+            self._want_type, self._want_variant = 'frame', style
+        else:
+            self._want_type = style
+        return design
+
     def _on_monitor_changed(self, combo, _):
+        mon_idx = self._mon_combo.get_selected()
+        monitor = self._monitors[mon_idx] if (mon_idx != _INVALID and self._monitors) else None
+        design = self._set_wants_for_monitor(monitor)
+        if design and design in self._design_styles:
+            d_idx = self._design_styles.index(design)
+            if self._design_combo.get_selected() != d_idx:
+                # switching design re-runs _on_design_changed -> _populate_styles,
+                # which consumes the queued wants
+                self._design_combo.set_selected(d_idx)
+                return
         self._populate_styles()
 
     def _on_style_changed(self, combo, _):

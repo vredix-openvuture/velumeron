@@ -5,7 +5,7 @@ source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." && pwd)/assets
 
 THEMES_DIR="$VUTURELAND_DIR/hypr.lua/hyprlock-themes"
 ACTIVE_CONF="$VUTURELAND_USER_DIR/hypr.lua/hyprlock.conf"
-BLACK_WP="$VUTURELAND_DIR/assets/wallpaper/pure-black.jpg"
+BLACK_WP="$VUTURELAND_DIR/assets/wallpaper/hyprlock/pure-black.jpg"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/vutureland/hyprlock-thumbs"
 THUMB_W=400
 THUMB_H=240
@@ -79,33 +79,12 @@ _ensure_thumb() {
     echo "$thumb"
 }
 
-# Apply monitor substitutions and write active-hyprlock.conf
+# Apply monitor substitutions and write the active hyprlock.conf. Delegated to
+# the shared script so the picker, launch-hyprlock self-heal and setup all use
+# the exact same substitution logic and remember the chosen theme.
 _apply_theme() {
     local theme_file="$1"
-    local primary other_mons=()
-    primary=$(_primary_monitor)
-    readarray -t other_mons < <(_other_monitors)
-
-    local content
-    content=$(cat "$theme_file")
-
-    # Substitute {{mon1}} with primary monitor
-    content="${content//\{\{mon1\}\}/$primary}"
-
-    # Substitute {{monN}} for each secondary monitor
-    local i n mon
-    for i in "${!other_mons[@]}"; do
-        n=$((i + 2))
-        mon="${other_mons[$i]}"
-        if [[ "$content" == *"{{mon${n}}}"* ]]; then
-            content="${content//\{\{mon${n}\}\}/$mon}"
-        else
-            # No placeholder for this monitor → append a black background block
-            content+=$'\n'"background {"$'\n'"    monitor = $mon"$'\n'"    path = $BLACK_WP"$'\n'"}"
-        fi
-    done
-
-    printf '%s\n' "$content" > "${ACTIVE_CONF/#\~/$HOME}"
+    "$VUTURELAND_DIR/assets/scripts/apply-hyprlock-theme.sh" "$(basename "$theme_file" .conf)"
 }
 
 # ──────────────────────────────────────────────────────────────

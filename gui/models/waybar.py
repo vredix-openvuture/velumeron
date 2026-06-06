@@ -409,6 +409,38 @@ def scan_bars() -> list[BarConfig]:
     return bars
 
 
+def active_bar_for_monitor(monitor: str) -> tuple[str, str, str] | None:
+    """(design, style, position) of the *applied* output bar for `monitor`, or None.
+    Only an applied bar has a config.json (what launch-waybar.sh loads); auto-init
+    scaffolding leaves just a groups.json, so we key off config.json to find the
+    one that's actually running. Prefers a design-structured bar over a legacy one."""
+    out = _output_dir()
+    if not os.path.isdir(out):
+        return None
+    legacy: tuple[str, str, str] | None = None
+    for d1 in sorted(os.listdir(out)):
+        p1 = os.path.join(out, d1)
+        if not os.path.isdir(p1):
+            continue
+        for d2 in sorted(os.listdir(p1)):
+            p2 = os.path.join(p1, d2)
+            if not os.path.isdir(p2):
+                continue
+            if d2 in _POSITIONS:
+                md = os.path.join(p2, monitor)
+                if os.path.exists(os.path.join(md, "config.json")) and legacy is None:
+                    legacy = ("", d1, d2)
+            else:
+                for d3 in sorted(os.listdir(p2)):
+                    p3 = os.path.join(p2, d3)
+                    if not os.path.isdir(p3) or d3 not in _POSITIONS:
+                        continue
+                    md = os.path.join(p3, monitor)
+                    if os.path.exists(os.path.join(md, "config.json")):
+                        return (d1, d2, d3)
+    return legacy
+
+
 def read_bar_slots(bar: BarConfig) -> tuple[list, list, list]:
     if not os.path.exists(bar.groups_file):
         return [], [], []

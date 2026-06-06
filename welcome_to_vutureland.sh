@@ -267,17 +267,42 @@ EOF
     done
 }
 
+# Normalised module layout of a bar's groups.json — monitor- and battery-agnostic
+# so it can be compared against the layouts vutureland has shipped as defaults.
+_bar_layout() {
+    jq -r '
+      def mods(g): (.[g].modules // []) | map(select(. != "battery")) | join(",");
+      "L:" + mods("group/left") + "|C:" + mods("group/center") + "|R:" + mods("group/right")
+    ' "$1" 2>/dev/null
+}
+
+# Every module arrangement we have shipped as the default top bar. A bar matching
+# one of these is an untouched default and may be refreshed to the latest; newest
+# entry first. Anything else is a user customisation and is left alone.
+_default_bar_layouts=(
+    "L:clock,custom/separator,group/performance_drawer,custom/separator,custom/actionuser|C:hyprland/workspaces,hyprland/submap|R:custom/cava,group/audio_drawer,custom/separator,group/tray_drawer"
+    "L:clock|C:hyprland/workspaces|R:pulseaudio,tray,custom/notification"
+)
+
 # Generate a minimal but useful waybar config inline — no external template
 # files needed. The user can switch styles / add modules later through the
 # settings GUI (Super + X → Bar). Defined here so --sync can call it too.
 apply_default_bar() {
     local monitor="$1"
     local dest="$VUTURELAND_USER_DIR/waybar-modular/output/miboro/bar/top/$monitor"
-    # Regenerate if the existing config still points at the package dir
-    # (would import colours from a read-only path that wallust never updates).
+    # Leave user-customised bars alone. (Re)generate only when there's no bar yet,
+    # when it still points at the read-only package dir (broken colours), or when
+    # it matches a layout we shipped as a default — i.e. the user never touched it.
     if [[ -f "$dest/style.css" ]] && grep -q "$VUTURELAND_USER_DIR" "$dest/style.css"; then
-        ok "Bar config for $monitor already exists — skipping."
-        return
+        local _cur _l _is_default=false
+        _cur=$(_bar_layout "$dest/groups.json")
+        for _l in "${_default_bar_layouts[@]}"; do
+            [[ -n "$_cur" && "$_cur" == "$_l" ]] && { _is_default=true; break; }
+        done
+        if [[ "$_is_default" != true ]]; then
+            ok "Bar config for $monitor is customised — keeping it."
+            return
+        fi
     fi
     rm -rf "$dest"
     mkdir -p "$dest"
