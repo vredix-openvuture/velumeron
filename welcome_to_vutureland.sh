@@ -114,6 +114,11 @@ sync_templates() {
             local rel="${file#$VUTURELAND_DIR/}"
             local user_path="$VUTURELAND_USER_DIR/$rel"
             is_wallust_output "$rel" && continue
+            # waybar-modular/output/ is generated per-machine (and gitignored, so
+            # it isn't in the package on clients). On a dev box the source tree
+            # may carry stale output/ files — never sync those over, they'd pin
+            # the user's bars to whichever paths/colours they were built with.
+            [[ "$rel" == waybar-modular/output/* ]] && continue
 
             # Replace any pre-existing symlink (from older versions or dev
             # setup) with a real file so cp doesn't follow it into a read-only

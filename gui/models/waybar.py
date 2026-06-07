@@ -21,24 +21,24 @@ def _output_dir() -> str:
 
 
 def _modules_dir() -> str:
-    return os.path.join(_vtl(), "waybar-modular", "modules")
+    return os.path.join(_vtl_user(), "waybar-modular", "modules")
 
 
 def _effective_base_dir(design: str) -> str:
     if design:
-        return os.path.join(_vtl(), "waybar-modular", "config", design, "base")
-    return os.path.join(_vtl(), "waybar-modular", "base")
+        return os.path.join(_vtl_user(), "waybar-modular", "config", design, "base")
+    return os.path.join(_vtl_user(), "waybar-modular", "base")
 
 
 def _effective_modules_dir(design: str) -> str:
     if design:
-        return os.path.join(_vtl(), "waybar-modular", "config", design, "modules")
+        return os.path.join(_vtl_user(), "waybar-modular", "config", design, "modules")
     return _modules_dir()
 
 
 def scan_config_styles() -> list[str]:
     """Return sorted list of design style names from waybar-modular/config/."""
-    config_dir = os.path.join(_vtl(), "waybar-modular", "config")
+    config_dir = os.path.join(_vtl_user(), "waybar-modular", "config")
     if not os.path.isdir(config_dir):
         return []
     return sorted(d for d in os.listdir(config_dir)
@@ -395,11 +395,11 @@ def scan_bars() -> list[BarConfig]:
     # 2. Auto-init groups.json for configs not yet in output
     monitors = _known_monitors()
     if monitors:
-        legacy_base = os.path.join(_vtl(), "waybar-modular", "base")
+        legacy_base = os.path.join(_vtl_user(), "waybar-modular", "base")
         if os.path.isdir(legacy_base):
             _auto_init_from_base(legacy_base, "", monitors, seen, bars)
 
-        config_dir = os.path.join(_vtl(), "waybar-modular", "config")
+        config_dir = os.path.join(_vtl_user(), "waybar-modular", "config")
         if os.path.isdir(config_dir):
             for design in sorted(os.listdir(config_dir)):
                 design_base = os.path.join(config_dir, design, "base")
