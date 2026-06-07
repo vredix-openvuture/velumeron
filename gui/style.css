@@ -253,7 +253,9 @@ window.background {
    ─────────────────────────────────────────────────────────────── */
 
 .nav-sidebar {
-    background-color: @bg-element;
+    /* Normal window background with ~10% of the accent mixed in, so the sidebar
+       lifts off the content area subtly instead of using a heavy colour block. */
+    background-color: mix(@bg-primary, @bg-active, 0.10);
     min-width:        56px;
     padding-top:      12px;
     padding-bottom:   12px;
@@ -383,14 +385,14 @@ preferencespage switchrow {
 
 switch {
     border-radius: 9999px;
-    min-height:    26px;
-    min-width:     48px;
+    min-height:    22px;
+    min-width:     40px;
 }
 
 switch > slider {
     border-radius: 9999px;
-    min-width:     20px;
-    min-height:    20px;
+    min-width:     16px;
+    min-height:    16px;
 }
 
 scale > trough,

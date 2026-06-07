@@ -83,7 +83,9 @@ def scan_wallpapers() -> list:
             stem = os.path.splitext(fname)[0]
             wp_id = extract_id(stem)
             if not wp_id:
-                continue
+                # Arbitrary file in a custom folder — include it as a standalone
+                # entry (orientation-prefixed id so hor/ver never merge by name).
+                wp_id = ('h:' if is_hor else 'v:') + stem
             e = entries.setdefault(wp_id, WallpaperEntry(id=wp_id))
             thumb = os.path.join(THUMB_DIR, stem + '.png')
             if is_hor:
