@@ -32,8 +32,12 @@ def _read_section(content: str, name: str) -> str:
 
 
 def _write_section(content: str, name: str, new_body: str) -> str:
+    # Capture the optional "-- " comment prefix on the START/END markers into the
+    # marker groups, so it is preserved. Otherwise the prefix on the END marker
+    # lives inside the replaced body and gets stripped, turning
+    #   -- <<<NAME-END>>>   into   <<<NAME-END>>>   (invalid Lua).
     return re.sub(
-        rf'(<<<{name}-START>>>)(.*?)(<<<{name}-END>>>)',
+        rf'((?:--[ \t]*)?<<<{name}-START>>>)(.*?)((?:--[ \t]*)?<<<{name}-END>>>)',
         lambda mo: mo.group(1) + new_body + mo.group(3),
         content, flags=re.DOTALL
     )
