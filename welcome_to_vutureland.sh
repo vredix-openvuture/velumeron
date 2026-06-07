@@ -207,6 +207,30 @@ sync_templates() {
         sed "s#\.\./assets/colors_gtk\.css#${_sw_colors}#" "$_swstyle_src" > "$_swstyle"
     fi
 
+    # ── Bundled fonts ─────────────────────────────────────────────────
+    # The configs rely on specific fonts (FantasqueSansM Nerd Font, Atomic Age,
+    # Audiowide for waybar/swaync/rofi/hyprlock). Install the bundled copies into
+    # the per-user font dir so a fresh client renders correctly with no manual
+    # step and no root. Idempotent: only copy new/updated files, rebuild the cache
+    # only when something changed.
+    local _font_src="$VUTURELAND_DIR/assets/fonts"
+    local _font_dst="$HOME/.local/share/fonts/vutureland"
+    if [[ -d "$_font_src" ]]; then
+        mkdir -p "$_font_dst"
+        local _font_changed=false _ff _fd
+        for _ff in "$_font_src"/*.ttf "$_font_src"/*.otf; do
+            [[ -e "$_ff" ]] || continue
+            _fd="$_font_dst/$(basename "$_ff")"
+            if [[ ! -f "$_fd" || "$_ff" -nt "$_fd" ]]; then
+                cp "$_ff" "$_fd" && _font_changed=true
+            fi
+        done
+        if [[ "$_font_changed" == true ]]; then
+            command -v fc-cache >/dev/null 2>&1 && fc-cache -f "$_font_dst" >/dev/null 2>&1 || true
+            ok "Fonts installed to $_font_dst"
+        fi
+    fi
+
     # ── GTK theme + palette wiring ────────────────────────────────────
     # For wallust colours to actually take effect in GTK apps, two things
     # must be true:

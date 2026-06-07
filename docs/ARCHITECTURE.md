@@ -110,6 +110,10 @@ Two modes:
    palette). config.json is written by `launch-swaync.sh`.
 7. Wires the GTK theme (adw-gtk3-dark + dark color-scheme; `gtk.css` imports
    `wallust.css`).
+8. Installs the bundled fonts (`assets/fonts/*.ttf` → `~/.local/share/fonts/
+   vutureland/`, then `fc-cache`). Per-user, no root; idempotent (only copies
+   new/updated files). These are the fonts the configs require — `FantasqueSansM
+   Nerd Font` (waybar/swaync/rofi), `Atomic Age` (hyprlock), `Audiowide`.
 
 `apply_default_bar(monitor)` generates the default top bar (see §6). The `--sync`
 path then regenerates bars, runs `hyprctl reload`, restarts waybar + swaync, and
@@ -302,6 +306,14 @@ Newest first. Each entry: what changed, why, and the commit.
 ### 2026-06-07
 - **This document created** — comprehensive architecture reference + living change
   log.
+- **Bundled fonts auto-installed on sync** (`<pending>`). `assets/fonts/` now ships
+  FantasqueSansM Nerd Font, Atomic Age and Audiowide; `--sync` installs them to
+  `~/.local/share/fonts/vutureland/` (per-user, idempotent) so clients render
+  correctly without manual font setup. See §3 step 8.
+- **In-panel set editor + library image picker** (`f7b7b49`). The set editor was a
+  separate `Adw.Window` that couldn't be used under the layer-shell panel. It is
+  now an in-panel `Gtk.Stack` view (main ↔ editor ↔ image picker); the picker
+  chooses from the existing wallpaper library instead of a file dialog.
 - **Set editor usable from the panel** (`805946d`). "New Set"/edit-set was a modal
   `Adw.Window` transient-for the layer-shell panel, so it rendered under the panel
   and couldn't be interacted with. Now the panel hides while the set editor is open
