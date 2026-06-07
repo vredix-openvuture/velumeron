@@ -483,7 +483,7 @@ REQUIRED_PKGS=(
     hypridle hyprlock hyprpolkitagent
     waybar rofi-wayland kitty
     swaync cava
-    awww wallust
+    awww wallust hypremoji
     playerctl jq socat fastfetch tmux
     network-manager-applet gnome-keyring
     nextcloud-client localsend

@@ -24,6 +24,7 @@ Complete list of everything required for this config to work.
 | `rofi-wayland` | App launcher & session menu |
 | `swaync` | Notification daemon |
 | `cava` | Audio visualizer (waybar cava module) |
+| `hypremoji` (AUR) | Emoji picker |
 
 ---
 
