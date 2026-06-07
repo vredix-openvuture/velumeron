@@ -2,10 +2,13 @@ from __future__ import annotations
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
+gi.require_version('GdkPixbuf', '2.0')
 
-from gi.repository import Gtk, Adw, GLib
+from gi.repository import Gtk, Adw, GLib, Gdk, GdkPixbuf
 
-import os, subprocess, threading, shutil
+import os, subprocess, threading, shutil, json
+
+from models.waybar import active_bar_for_monitor
 
 
 def _clean_env() -> dict:
@@ -37,9 +40,91 @@ class HomePage(Adw.PreferencesPage):
     def set_apply_callback(self, cb):
         self._apply_cb = cb
 
+    # ── Current look (waybar style + wallpaper preview) ─────────────────────────
+
+    @staticmethod
+    def _monitor_names() -> list[str]:
+        try:
+            mons = json.loads(subprocess.run(
+                ['hyprctl', 'monitors', '-j'], capture_output=True, text=True).stdout)
+            focused = [m['name'] for m in mons if m.get('focused')]
+            others  = [m['name'] for m in mons if not m.get('focused')]
+            return focused + others
+        except Exception:
+            return []
+
+    def _active_style(self) -> str | None:
+        for mon in self._monitor_names():
+            active = active_bar_for_monitor(mon)
+            if active:
+                design, style, _pos = active
+                return design or style
+        return None
+
+    def _active_wallpaper(self) -> str | None:
+        names = self._monitor_names()
+        try:
+            lines = subprocess.run(['awww', 'query'], capture_output=True,
+                                   text=True).stdout.splitlines()
+        except Exception:
+            return None
+        def _img(line):
+            return line.split('image:', 1)[1].strip() if 'image:' in line else None
+        for mon in names:                      # prefer the focused monitor
+            for line in lines:
+                if f'{mon}:' in line:
+                    p = _img(line)
+                    if p:
+                        return p
+        for line in lines:                     # otherwise any image
+            p = _img(line)
+            if p:
+                return p
+        return None
+
+    def _build_current_group(self) -> Adw.PreferencesGroup:
+        grp = Adw.PreferencesGroup()
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        box.set_margin_top(4); box.set_margin_bottom(8)
+        box.set_margin_start(4); box.set_margin_end(4)
+
+        style = self._active_style()
+        lbl = Gtk.Label(label=style or 'No active bar')
+        lbl.add_css_class('title-3')
+        lbl.set_halign(Gtk.Align.START)
+        box.append(lbl)
+
+        child = None
+        wp = self._active_wallpaper()
+        if wp and os.path.exists(wp):
+            try:
+                pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(wp, 520, -1, True)
+                pic = Gtk.Picture.new_for_paintable(Gdk.Texture.new_for_pixbuf(pb))
+                pic.set_content_fit(Gtk.ContentFit.COVER)
+                pic.set_size_request(-1, 150)
+                child = pic
+            except Exception:
+                child = None
+        if child is None:
+            child = Gtk.Image.new_from_icon_name('image-x-generic')
+            child.set_pixel_size(48)
+            child.set_size_request(-1, 150)
+
+        frame = Gtk.Frame()
+        frame.add_css_class('wp-frame')
+        frame.set_overflow(Gtk.Overflow.HIDDEN)
+        frame.set_child(child)
+        box.append(frame)
+
+        grp.add(box)
+        return grp
+
     # ── UI ────────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
+        # ── Current look: active waybar style + wallpaper preview ──
+        self.add(self._build_current_group())
+
         # Connectivity group
         conn = Adw.PreferencesGroup(title='Connectivity')
 
