@@ -8,7 +8,7 @@ hor_file=""
 ver_file=""
 WP_H="$VUTURELAND_DIR/assets/wallpaper/horizontal"
 WP_V="$VUTURELAND_DIR/assets/wallpaper/vertical"
-SETS_JSON="$VUTURELAND_DIR/assets/wallpaper/sets.json"
+SETS_JSON="$VUTURELAND_USER_DIR/assets/sets.json"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in

@@ -17,13 +17,15 @@ SET_WP            = f"{VTL}/assets/scripts/wallpaper-set.sh"
 GEN_THUMBS        = f"{VTL}/rofi/assets/generate-thumbnail.sh"
 WALLUST_FIXED_DIR = f"{VTL}/wallust/fixed_colors"
 LAUNCH_WAYBAR     = f"{VTL}/assets/scripts/launch-waybar.sh"
-SETS_JSON         = f"{VTL}/assets/wallpaper/sets.json"
+# Wallpaper sets are per-client (monitor layouts differ), so they live in the
+# user dir and are NOT shipped — outside the read-only wallpaper symlink.
 HYPRLOCK_THEMES   = f"{VTL}/hypr.lua/hyprlock-themes"
 HYPRLOCK_BLACK_WP = f"{VTL}/assets/wallpaper/hyprlock/pure-black.jpg"
 POWERMODE_SH      = f"{VTL}/assets/scripts/powermode.sh"
 
 # ── User paths (per-user state, generated output, preferences) ───────────────
 USER_SETTINGS     = f"{VTL_USER}/hypr.lua/user_settings.lua"
+SETS_JSON         = f"{VTL_USER}/assets/sets.json"
 WALLUST_MODE_FILE = f"{VTL_USER}/wallust/color-mode"
 HYPRLOCK_CONF     = f"{VTL_USER}/hypr.lua/hyprlock.conf"
 HYPRIDLE_CONF     = f"{VTL_USER}/hypr.lua/hypridle.conf"

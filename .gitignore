@@ -35,3 +35,6 @@ panel/node_modules/
 gui/__pycache__/
 gui/models/__pycache__/
 gui/pages/__pycache__/
+
+# Wallpaper sets are per-client now (stored in ~/.config/vutureland/assets/sets.json)
+assets/wallpaper/sets.json

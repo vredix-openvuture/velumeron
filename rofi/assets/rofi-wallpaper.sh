@@ -42,7 +42,7 @@ else
     # ROFI_INFO contains the original filename
     target="$wallpaper_dir/$ROFI_INFO"
     if [[ -f "$target" ]]; then
-        sets_json="$VUTURELAND_DIR/assets/wallpaper/sets.json"
+        sets_json="$VUTURELAND_USER_DIR/assets/sets.json"
         set_id=""
         if [[ -f "$sets_json" ]]; then
             set_id=$(jq -r --arg f "$ROFI_INFO" \
