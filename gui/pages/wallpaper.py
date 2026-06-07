@@ -817,14 +817,26 @@ class WallpaperPage(Gtk.Box):
         sl = Gio.ListStore.new(Gtk.FileFilter)
         sl.append(flt)
         d.set_filters(sl)
-        d.open_multiple(self.get_root(), None, self._files_chosen)
+        # The panel is a fullscreen layer-shell window on the TOP layer; a portal
+        # file dialog would render *under* it and its click would hit our
+        # outside-click catcher and dismiss the panel. So hide the panel while the
+        # dialog is open (parent=None — a layer-shell surface can't parent it) and
+        # bring it back when the dialog returns.
+        root = self.get_root()
+        if root is not None:
+            root.set_visible(False)
+        d.open_multiple(None, None, self._files_chosen)
 
     def _files_chosen(self, dialog, result):
+        paths = []
         try:
             files = dialog.open_multiple_finish(result)
             paths = [files.get_item(i).get_path() for i in range(files.get_n_items())]
         except Exception:
-            return
+            paths = []
+        root = self.get_root()
+        if root is not None:
+            root.set_visible(True)
         if paths:
             threading.Thread(target=self._import, args=(paths,), daemon=True).start()
 
