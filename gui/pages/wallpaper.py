@@ -424,13 +424,23 @@ class SetEditorDialog(Adw.Window):
         super().__init__()
         self.ws = ws
         self._on_saved = on_saved
+        self._panel = parent   # the layer-shell settings panel, hidden while open
         self._monitors = get_monitor_names()
         self.set_title(f'Edit Set — {ws.name}')
         self.set_default_size(520, 460)
-        self.set_modal(True)
-        if parent:
-            self.set_transient_for(parent)
+        # Do NOT make this transient/modal against the panel: it is a fullscreen
+        # TOP layer-shell window, so this dialog would render under it and the
+        # panel's overlay would swallow all input ("the window can't be used").
+        # Instead hide the panel while we're open and restore it on close.
+        if self._panel is not None:
+            self._panel.set_visible(False)
+        self.connect('close-request', self._on_close)
         self._build()
+
+    def _on_close(self, *_):
+        if self._panel is not None:
+            self._panel.set_visible(True)
+        return False  # allow the window to close
 
     def _build(self):
         self._name_entry = Gtk.Entry()
