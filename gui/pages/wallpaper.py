@@ -771,38 +771,59 @@ class WallpaperPage(Gtk.Box):
         title = Gtk.Label(label='Pick an image'); title.add_css_class('title-4')
         header.append(title)
 
-        flow = Gtk.FlowBox()
-        flow.set_valign(Gtk.Align.START)
-        flow.set_max_children_per_line(4)
-        flow.set_min_children_per_line(1)
-        flow.set_selection_mode(Gtk.SelectionMode.NONE)
-        flow.set_row_spacing(12); flow.set_column_spacing(12)
-        flow.set_margin_top(10); flow.set_margin_bottom(14)
-        flow.set_margin_start(14); flow.set_margin_end(14)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
-        for d in (WALLPAPER_H, WALLPAPER_V):
-            if not os.path.isdir(d):
-                continue
-            for fname in sorted(os.listdir(d)):
-                if os.path.splitext(fname)[1].lower() not in ALL_EXTS:
-                    continue
+        # Two sections so horizontal images render landscape and vertical ones
+        # portrait, with a light divider between them.
+        def _section(label_text, directory, w, h, per_line):
+            files = []
+            if os.path.isdir(directory):
+                files = [f for f in sorted(os.listdir(directory))
+                         if os.path.splitext(f)[1].lower() in ALL_EXTS]
+            if not files:
+                return None
+            sec = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            lbl = Gtk.Label(label=label_text)
+            lbl.set_xalign(0); lbl.add_css_class('dim-label')
+            lbl.set_margin_start(14); lbl.set_margin_top(8)
+            sec.append(lbl)
+            flow = Gtk.FlowBox()
+            flow.set_valign(Gtk.Align.START)
+            flow.set_max_children_per_line(per_line)
+            flow.set_min_children_per_line(1)
+            flow.set_selection_mode(Gtk.SelectionMode.NONE)
+            flow.set_row_spacing(12); flow.set_column_spacing(12)
+            flow.set_margin_top(6); flow.set_margin_bottom(6)
+            flow.set_margin_start(14); flow.set_margin_end(14)
+            for fname in files:
                 img = SetImage(file=fname)
                 card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
                 card.add_css_class('wp-card')
-                card.append(_framed(_make_pic(img.thumb_path(), 160, 90)))
-                lbl = Gtk.Label(label=fname); lbl.add_css_class('wp-name')
-                lbl.set_max_width_chars(20); lbl.set_ellipsize(3)
-                card.append(lbl)
-                btn = Gtk.Button()
-                btn.add_css_class('flat')
-                btn.set_child(card)
+                card.append(_framed(_make_pic(img.thumb_path(), w, h)))
+                cl = Gtk.Label(label=fname); cl.add_css_class('wp-name')
+                cl.set_max_width_chars(18); cl.set_ellipsize(3)
+                card.append(cl)
+                btn = Gtk.Button(); btn.add_css_class('flat'); btn.set_child(card)
                 btn.connect('clicked', lambda _, f=fname: self._picker_choose(f))
                 flow.append(btn)
+            sec.append(flow)
+            return sec
+
+        hor = _section('Horizontal', WALLPAPER_H, 160, 90, 4)
+        ver = _section('Vertical',   WALLPAPER_V, 90, 160, 6)
+        if hor is not None:
+            content.append(hor)
+        if hor is not None and ver is not None:
+            sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+            sep.set_margin_start(14); sep.set_margin_end(14); sep.set_margin_top(6)
+            content.append(sep)
+        if ver is not None:
+            content.append(ver)
 
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_child(flow)
+        scroll.set_child(content)
 
         picker = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         picker.append(header)

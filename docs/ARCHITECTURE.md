@@ -313,7 +313,9 @@ Newest first. Each entry: what changed, why, and the commit.
 - **In-panel set editor + library image picker** (`f7b7b49`). The set editor was a
   separate `Adw.Window` that couldn't be used under the layer-shell panel. It is
   now an in-panel `Gtk.Stack` view (main ↔ editor ↔ image picker); the picker
-  chooses from the existing wallpaper library instead of a file dialog.
+  chooses from the existing wallpaper library instead of a file dialog. The picker
+  shows Horizontal and Vertical images in separate sections (landscape vs portrait
+  thumbnails) divided by a light separator.
 - **Set editor usable from the panel** (`805946d`). "New Set"/edit-set was a modal
   `Adw.Window` transient-for the layer-shell panel, so it rendered under the panel
   and couldn't be interacted with. Now the panel hides while the set editor is open
