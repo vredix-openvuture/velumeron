@@ -154,6 +154,37 @@ def generate_windowrules_section(floating: str, opacity: str) -> str:
     return f'\nfloating_window = "{floating}"\nopacity_window  = "{opacity}"\n'
 
 
+def parse_rule_entries(pattern: str) -> list:
+    """Turn a window-rule regex into a list of plain app names for the GUI list.
+    e.g.  (.*[Kk]itty.*|.*[Aa]rk.*)  ->  ['kitty', 'ark'].
+    Unrecognised tokens are kept verbatim so nothing is silently dropped."""
+    pattern = (pattern or '').strip()
+    if pattern.startswith('(') and pattern.endswith(')'):
+        pattern = pattern[1:-1]
+    names = []
+    for tok in pattern.split('|'):
+        tok = tok.strip()
+        if not tok:
+            continue
+        m = re.match(r'^\.\*\[(.)(.)\](.*)\.\*$', tok)
+        if m and m.group(1).lower() == m.group(2).lower():
+            names.append(m.group(2).lower() + m.group(3))
+        else:
+            names.append(tok)
+    return names
+
+
+def build_rule_pattern(names: list) -> str:
+    """Inverse of parse_rule_entries: ['kitty', 'ark'] -> (.*[Aa]rk.*|.*[Kk]itty.*).
+    De-duplicated and sorted alphabetically (case-insensitive)."""
+    toks = []
+    for n in sorted({x.strip() for x in names if x and x.strip()}, key=str.lower):
+        c = n[0]
+        head = f'[{c.upper()}{c.lower()}]' if c.isalpha() else c
+        toks.append(f'.*{head}{n[1:]}.*')
+    return '(' + '|'.join(toks) + ')' if toks else ''
+
+
 def read_user_settings() -> str:
     with open(USER_SETTINGS) as f:
         return f.read()

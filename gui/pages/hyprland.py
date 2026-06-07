@@ -10,6 +10,7 @@ from models.hyprland import (
     parse_peripherals, generate_peripherals_section,
     parse_autostart, generate_autostart_section,
     parse_windowrules, generate_windowrules_section,
+    parse_rule_entries, build_rule_pattern,
     read_user_settings, write_user_settings,
     _write_section,
 )
@@ -67,22 +68,37 @@ class MonitorRow(Adw.ExpanderRow):
         self.add_row(pos_row)
 
 
-class HyprlandPage(Adw.PreferencesPage):
+class HyprlandPage(Gtk.Box):
     def __init__(self):
-        super().__init__()
+        super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self._content                       = read_user_settings()
         self._monitors                      = parse_monitors(self._content)
         self._periph                        = parse_peripherals(self._content)
         self._daemons, self._apps           = parse_autostart(self._content)
         self._float_pat, self._opacity_pat  = parse_windowrules(self._content)
-        self._build()
+        self._float_names   = parse_rule_entries(self._float_pat)
+        self._opacity_names = parse_rule_entries(self._opacity_pat)
 
-    def _build(self):
+        # Stack so the window-rule list editor can be shown as an in-panel
+        # subpage (a separate window can't be used under the layer-shell panel).
+        self._stack = Gtk.Stack()
+        self._stack.set_vexpand(True)
+        self._stack.add_named(self._build_main(), 'main')
+        self.append(self._stack)
+
+    @staticmethod
+    def _rule_summary(names: list) -> str:
+        names = sorted((n for n in names if n.strip()), key=str.lower)
+        return ', '.join(names) if names else 'None'
+
+    def _build_main(self) -> Adw.PreferencesPage:
+        page = Adw.PreferencesPage()
+
         # ── Monitors ──────────────────────────────────────────────────────────
         mon_group = Adw.PreferencesGroup(title='Monitors')
         for mon in self._monitors:
             mon_group.add(MonitorRow(mon))
-        self.add(mon_group)
+        page.add(mon_group)
 
         # ── Peripherals ───────────────────────────────────────────────────────
         per_group = Adw.PreferencesGroup(title='Keys and Cursor')
@@ -116,19 +132,24 @@ class HyprlandPage(Adw.PreferencesPage):
         cur_size_row = Adw.ActionRow(title='Cursor Size')
         cur_size_row.add_suffix(cur_size_spin)
         per_group.add(cur_size_row)
-        self.add(per_group)
+        page.add(per_group)
 
-        # ── Window Rules ──────────────────────────────────────────────────────
+        # ── Window Rules (open a list editor subpage) ─────────────────────────
         wr_group = Adw.PreferencesGroup(title='Window Rules')
-        float_row = Adw.EntryRow(title='Floating-Regex')
-        float_row.set_text(self._float_pat)
-        float_row.connect('changed', lambda r: setattr(self, '_float_pat', r.get_text()))
-        wr_group.add(float_row)
-        opacity_row = Adw.EntryRow(title='Opacity-Regex')
-        opacity_row.set_text(self._opacity_pat)
-        opacity_row.connect('changed', lambda r: setattr(self, '_opacity_pat', r.get_text()))
-        wr_group.add(opacity_row)
-        self.add(wr_group)
+        self._float_row = Adw.ActionRow(
+            title='Floating', subtitle=self._rule_summary(self._float_names))
+        self._float_row.add_suffix(Gtk.Image.new_from_icon_name('go-next-symbolic'))
+        self._float_row.set_activatable(True)
+        self._float_row.connect('activated', lambda r: self._open_rule_editor('float'))
+        wr_group.add(self._float_row)
+
+        self._opacity_row = Adw.ActionRow(
+            title='Opacity', subtitle=self._rule_summary(self._opacity_names))
+        self._opacity_row.add_suffix(Gtk.Image.new_from_icon_name('go-next-symbolic'))
+        self._opacity_row.set_activatable(True)
+        self._opacity_row.connect('activated', lambda r: self._open_rule_editor('opacity'))
+        wr_group.add(self._opacity_row)
+        page.add(wr_group)
 
         # ── Startup Apps ──────────────────────────────────────────────────────
         self._apps_group = Adw.PreferencesGroup(title='Startup Apps')
@@ -138,7 +159,7 @@ class HyprlandPage(Adw.PreferencesPage):
         add_btn.add_css_class('flat')
         add_btn.connect('clicked', self._add_app)
         self._apps_group.set_header_suffix(add_btn)
-        self.add(self._apps_group)
+        page.add(self._apps_group)
 
         # ── Apply ─────────────────────────────────────────────────────────────
         apply_group = Adw.PreferencesGroup()
@@ -148,7 +169,77 @@ class HyprlandPage(Adw.PreferencesPage):
         apply_btn.set_halign(Gtk.Align.CENTER)
         apply_btn.connect('clicked', self._apply)
         apply_group.add(apply_btn)
-        self.add(apply_group)
+        page.add(apply_group)
+        return page
+
+    # ── Window-rule list editor (in-panel subpage) ────────────────────────────
+
+    def _open_rule_editor(self, kind: str):
+        names = self._float_names if kind == 'float' else self._opacity_names
+        self._editing_kind = kind
+        self._rule_rows = []
+
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                         margin_start=12, margin_end=12, margin_top=10, margin_bottom=6)
+        back = Gtk.Button(icon_name='go-previous-symbolic')
+        back.add_css_class('flat')
+        back.connect('clicked', lambda _: self._close_rule_editor())
+        header.append(back)
+        title = Gtk.Label(
+            label='Floating windows' if kind == 'float' else 'Reduced-opacity windows')
+        title.add_css_class('title-4')
+        header.append(title)
+
+        group = Adw.PreferencesGroup(
+            title='Apps',
+            description='Type an app name (e.g. kitty). Matching is case-insensitive.')
+        add = Gtk.Button(icon_name='list-add-symbolic')
+        add.add_css_class('flat')
+        add.connect('clicked', lambda _: self._rule_add_row(group, ''))
+        group.set_header_suffix(add)
+        self._editing_group = group
+        for n in sorted((x for x in names if x.strip()), key=str.lower):
+            self._rule_add_row(group, n)
+
+        page = Adw.PreferencesPage()
+        page.add(group)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.append(header)
+        box.append(page)
+
+        old = self._stack.get_child_by_name('wr-edit')
+        if old is not None:
+            self._stack.remove(old)
+        self._stack.add_named(box, 'wr-edit')
+        self._stack.set_visible_child_name('wr-edit')
+
+    def _rule_add_row(self, group, text: str):
+        row = Adw.EntryRow(title='App name')
+        row.set_text(text)
+        rm = Gtk.Button(icon_name='list-remove-symbolic')
+        rm.add_css_class('flat')
+        rm.set_valign(Gtk.Align.CENTER)
+        def _remove(_):
+            group.remove(row)
+            if row in self._rule_rows:
+                self._rule_rows.remove(row)
+        rm.connect('clicked', _remove)
+        row.add_suffix(rm)
+        group.add(row)
+        self._rule_rows.append(row)
+
+    def _close_rule_editor(self):
+        names = [r.get_text().strip() for r in self._rule_rows if r.get_text().strip()]
+        if self._editing_kind == 'float':
+            self._float_names = names
+            self._float_pat = build_rule_pattern(names)
+            self._float_row.set_subtitle(self._rule_summary(names))
+        else:
+            self._opacity_names = names
+            self._opacity_pat = build_rule_pattern(names)
+            self._opacity_row.set_subtitle(self._rule_summary(names))
+        self._stack.set_visible_child_name('main')
 
     def _make_app_row(self, app_entry: dict) -> Adw.EntryRow:
         row = Adw.EntryRow(title=f'WS {app_entry["ws"]}')
@@ -176,6 +267,9 @@ class HyprlandPage(Adw.PreferencesPage):
         self._apps_group.add(self._make_app_row(new_entry))
 
     def _apply(self, _):
+        # Rebuild the regexes from the edited name lists (alphabetical, de-duped).
+        self._float_pat   = build_rule_pattern(self._float_names)
+        self._opacity_pat = build_rule_pattern(self._opacity_names)
         content = self._content
         content = _write_section(content, 'MONITORS',
                                  generate_monitors_section(self._monitors))
