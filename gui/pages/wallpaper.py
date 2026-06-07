@@ -11,7 +11,7 @@ def _clean_env() -> dict:
     env.pop('LD_PRELOAD', None)
     return env
 from constants import (
-    WALLPAPER_H, WALLPAPER_V, VIDEO_EXTS, SET_WP, GEN_THUMBS,
+    WALLPAPER_H, WALLPAPER_V, VIDEO_EXTS, ALL_EXTS, SET_WP, GEN_THUMBS,
     WALLPAPER_OLD, THEME_NAMES,
 )
 from models.wallpaper import (
@@ -283,12 +283,13 @@ class NewSetCard(Gtk.Box):
     HOR_W   = int(400 * 2 / 3)
     VER_W   = 400 - int(400 * 2 / 3) - 2
 
-    def __init__(self, ws: WallpaperSet, on_change=None):
+    def __init__(self, ws: WallpaperSet, on_change=None, on_edit=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self.set_halign(Gtk.Align.CENTER)
         self.add_css_class('wp-card')
         self.ws = ws
         self._on_change = on_change
+        self._on_edit = on_edit
         self._build()
 
         self._name_label = Gtk.Label(label=ws.name)
@@ -363,8 +364,8 @@ class NewSetCard(Gtk.Box):
         popover.popup()
 
     def _edit_set(self):
-        SetEditorDialog(self.ws, parent=self.get_root(),
-                        on_saved=self._on_change).present()
+        if self._on_edit is not None:
+            self._on_edit(self.ws)
 
     def _rename_set(self):
         entry_w = Gtk.Entry()
@@ -627,8 +628,15 @@ class WallpaperPage(Gtk.Box):
         switcher.set_stack(inner)
         switcher.set_reveal(True)
         inner.set_vexpand(True)
-        self.append(inner)
-        self.append(switcher)
+
+        # Everything lives inside a Stack so the set editor and its image picker
+        # can be shown *in-panel* rather than as a separate window — a separate
+        # window renders under the fullscreen layer-shell panel and can't be used.
+        self._monitors = get_monitor_names()
+        main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        main.set_vexpand(True)
+        main.append(inner)
+        main.append(switcher)
 
         bar = Gtk.ActionBar()
         self._spinner = Gtk.Spinner()
@@ -650,8 +658,190 @@ class WallpaperPage(Gtk.Box):
         btn_add.connect('clicked', self._on_add)
         bar.pack_end(btn_add)
 
-        self.append(bar)
+        main.append(bar)
+
+        self._pstack = Gtk.Stack()
+        self._pstack.set_vexpand(True)
+        self._pstack.add_named(main, 'main')
+        self.append(self._pstack)
         self._reload()
+
+    # ── In-panel set editor ─────────────────────────────────────────────────
+
+    def open_set_editor(self, ws: WallpaperSet):
+        """Show the set editor as an in-panel view (no separate window)."""
+        self._editor_ws = ws
+        self._monitors = get_monitor_names()
+
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                         margin_start=12, margin_end=12, margin_top=10, margin_bottom=6)
+        back = Gtk.Button(icon_name='go-previous-symbolic')
+        back.add_css_class('flat')
+        back.connect('clicked', lambda _: self._close_set_editor())
+        header.append(back)
+        title = Gtk.Label(label='Edit Set')
+        title.add_css_class('title-4')
+        header.append(title)
+
+        name_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                           margin_start=12, margin_end=12, margin_bottom=8)
+        name_lbl = Gtk.Label(label='Name'); name_lbl.set_xalign(0)
+        self._editor_name = Gtk.Entry()
+        self._editor_name.set_text(ws.name)
+        self._editor_name.set_hexpand(True)
+        name_box.append(name_lbl); name_box.append(self._editor_name)
+
+        self._editor_img_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6,
+                                       margin_start=12, margin_end=12)
+        for img in ws.images:
+            self._editor_img_box.append(self._editor_make_row(img))
+
+        add_img = Gtk.Button(label='Add Image')
+        add_img.add_css_class('flat')
+        add_img.set_halign(Gtk.Align.CENTER)
+        add_img.set_margin_top(8); add_img.set_margin_bottom(8)
+        add_img.connect('clicked', lambda _: self._show_set_picker())
+
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        content.append(name_box)
+        content.append(self._editor_img_box)
+        content.append(add_img)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_child(content)
+
+        cancel = Gtk.Button(label='Cancel')
+        cancel.connect('clicked', lambda _: self._close_set_editor())
+        save = Gtk.Button(label='Save')
+        save.add_css_class('suggested-action')
+        save.connect('clicked', lambda _: self._save_set_editor())
+        btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                          margin_start=12, margin_end=12, margin_top=8, margin_bottom=12)
+        btn_row.set_halign(Gtk.Align.END)
+        btn_row.append(cancel); btn_row.append(save)
+
+        editor = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        editor.append(header)
+        editor.append(scroll)
+        editor.append(Gtk.Separator())
+        editor.append(btn_row)
+
+        old = self._pstack.get_child_by_name('editor')
+        if old is not None:
+            self._pstack.remove(old)
+        self._pstack.add_named(editor, 'editor')
+        self._pstack.set_visible_child_name('editor')
+
+    def _editor_make_row(self, img: SetImage) -> Gtk.Box:
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                      margin_top=2, margin_bottom=2)
+        row._img = img
+        pic = _make_pic(img.thumb_path(), 80, 45)
+        pic.set_valign(Gtk.Align.CENTER)
+        row.append(pic)
+        lbl = Gtk.Label(label=img.file)
+        lbl.set_hexpand(True); lbl.set_xalign(0); lbl.set_ellipsize(3)
+        row.append(lbl)
+        combo = Gtk.ComboBoxText()
+        combo.append_text('Auto')
+        for mon in self._monitors:
+            combo.append_text(mon)
+        idx = 0
+        if img.monitor and img.monitor in self._monitors:
+            idx = self._monitors.index(img.monitor) + 1
+        combo.set_active(idx)
+        combo.set_valign(Gtk.Align.CENTER)
+        row._monitor_combo = combo
+        row.append(combo)
+        rm = Gtk.Button(icon_name='list-remove-symbolic')
+        rm.add_css_class('flat'); rm.set_valign(Gtk.Align.CENTER)
+        rm.connect('clicked', lambda _, r=row: self._editor_img_box.remove(r))
+        row.append(rm)
+        return row
+
+    def _show_set_picker(self):
+        """In-panel picker: choose an image from the existing wallpaper library."""
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                         margin_start=12, margin_end=12, margin_top=10, margin_bottom=6)
+        back = Gtk.Button(icon_name='go-previous-symbolic')
+        back.add_css_class('flat')
+        back.connect('clicked', lambda _: self._pstack.set_visible_child_name('editor'))
+        header.append(back)
+        title = Gtk.Label(label='Pick an image'); title.add_css_class('title-4')
+        header.append(title)
+
+        flow = Gtk.FlowBox()
+        flow.set_valign(Gtk.Align.START)
+        flow.set_max_children_per_line(4)
+        flow.set_min_children_per_line(1)
+        flow.set_selection_mode(Gtk.SelectionMode.NONE)
+        flow.set_row_spacing(12); flow.set_column_spacing(12)
+        flow.set_margin_top(10); flow.set_margin_bottom(14)
+        flow.set_margin_start(14); flow.set_margin_end(14)
+
+        for d in (WALLPAPER_H, WALLPAPER_V):
+            if not os.path.isdir(d):
+                continue
+            for fname in sorted(os.listdir(d)):
+                if os.path.splitext(fname)[1].lower() not in ALL_EXTS:
+                    continue
+                img = SetImage(file=fname)
+                card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+                card.add_css_class('wp-card')
+                card.append(_framed(_make_pic(img.thumb_path(), 160, 90)))
+                lbl = Gtk.Label(label=fname); lbl.add_css_class('wp-name')
+                lbl.set_max_width_chars(20); lbl.set_ellipsize(3)
+                card.append(lbl)
+                btn = Gtk.Button()
+                btn.add_css_class('flat')
+                btn.set_child(card)
+                btn.connect('clicked', lambda _, f=fname: self._picker_choose(f))
+                flow.append(btn)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_child(flow)
+
+        picker = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        picker.append(header)
+        picker.append(scroll)
+
+        old = self._pstack.get_child_by_name('editor-pick')
+        if old is not None:
+            self._pstack.remove(old)
+        self._pstack.add_named(picker, 'editor-pick')
+        self._pstack.set_visible_child_name('editor-pick')
+
+    def _picker_choose(self, fname: str):
+        self._editor_img_box.append(self._editor_make_row(SetImage(file=fname)))
+        self._pstack.set_visible_child_name('editor')
+
+    def _save_set_editor(self):
+        name = self._editor_name.get_text().strip() or self._editor_ws.name
+        images = []
+        row = self._editor_img_box.get_first_child()
+        while row:
+            if hasattr(row, '_img') and hasattr(row, '_monitor_combo'):
+                active = row._monitor_combo.get_active()
+                monitor = (self._monitors[active - 1]
+                           if 0 < active <= len(self._monitors) else None)
+                images.append(SetImage(file=row._img.file, monitor=monitor))
+            row = row.get_next_sibling()
+        sets = load_sets()
+        if self._editor_ws.set_id in sets:
+            sets[self._editor_ws.set_id].name = name
+            sets[self._editor_ws.set_id].images = images
+        else:
+            sets[self._editor_ws.set_id] = WallpaperSet(
+                set_id=self._editor_ws.set_id, name=name, images=images)
+        save_sets(sets)
+        self._close_set_editor()
+        self._reload()
+
+    def _close_set_editor(self):
+        self._pstack.set_visible_child_name('main')
 
     def set_apply_callback(self, cb):
         self._apply_cb = cb
@@ -759,7 +949,8 @@ class WallpaperPage(Gtk.Box):
         self._spinner.stop()
 
         for ws in sets.values():
-            self._flows['set'].append(NewSetCard(ws, on_change=self._reload))
+            self._flows['set'].append(
+                NewSetCard(ws, on_change=self._reload, on_edit=self.open_set_editor))
 
         hor_count = ver_count = 0
         for e in entries:
@@ -816,7 +1007,7 @@ class WallpaperPage(Gtk.Box):
         while nid in sets:
             nid = gen_id()
         ws = WallpaperSet(set_id=nid, name='New Set', images=[])
-        SetEditorDialog(ws, parent=self.get_root(), on_saved=self._reload).present()
+        self.open_set_editor(ws)
 
     def _on_add(self, _):
         d = Gtk.FileDialog(title='Add wallpaper')
