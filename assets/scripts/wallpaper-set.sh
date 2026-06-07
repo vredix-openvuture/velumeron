@@ -6,8 +6,8 @@ showcase=true
 set_id=""
 hor_file=""
 ver_file=""
-WP_H="$VUTURELAND_DIR/assets/wallpaper/horizontal"
-WP_V="$VUTURELAND_DIR/assets/wallpaper/vertical"
+WP_H="$WALLPAPER_DIR_H"
+WP_V="$WALLPAPER_DIR_V"
 SETS_JSON="$VUTURELAND_USER_DIR/assets/sets.json"
 
 while [[ $# -gt 0 ]]; do

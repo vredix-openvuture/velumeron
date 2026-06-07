@@ -4,7 +4,7 @@ gi.require_version('Adw', '1')
 gi.require_version('GdkPixbuf', '2.0')
 
 from gi.repository import Gtk, Adw, Gdk, GdkPixbuf, Gio, GLib
-import os, re, subprocess, threading, shutil
+import os, re, subprocess, threading, shutil, json
 
 def _clean_env() -> dict:
     env = dict(os.environ)
@@ -12,6 +12,7 @@ def _clean_env() -> dict:
     return env
 from constants import (
     WALLPAPER_H, WALLPAPER_V, VIDEO_EXTS, ALL_EXTS, SET_WP, GEN_THUMBS,
+    wallpaper_dir, GUI_SETTINGS,
     WALLPAPER_OLD, THEME_NAMES,
 )
 from models.wallpaper import (
@@ -653,6 +654,10 @@ class WallpaperPage(Gtk.Box):
         btn_new_set.connect('clicked', lambda _: self._on_new_set())
         bar.pack_end(btn_new_set)
 
+        btn_folders = Gtk.Button(label='Folders')
+        btn_folders.connect('clicked', lambda _: self._open_folders())
+        bar.pack_end(btn_folders)
+
         btn_add = Gtk.Button(label='Add …')
         btn_add.add_css_class('suggested-action')
         btn_add.connect('clicked', self._on_add)
@@ -809,8 +814,8 @@ class WallpaperPage(Gtk.Box):
             sec.append(flow)
             return sec
 
-        hor = _section('Horizontal', WALLPAPER_H, 160, 90, 4)
-        ver = _section('Vertical',   WALLPAPER_V, 90, 160, 6)
+        hor = _section('Horizontal', wallpaper_dir('hor'), 160, 90, 4)
+        ver = _section('Vertical',   wallpaper_dir('ver'), 90, 160, 6)
         if hor is not None:
             content.append(hor)
         if hor is not None and ver is not None:
@@ -863,6 +868,76 @@ class WallpaperPage(Gtk.Box):
 
     def _close_set_editor(self):
         self._pstack.set_visible_child_name('main')
+
+    # ── Custom wallpaper folders (in-panel subpage) ───────────────────────────
+
+    def _open_folders(self):
+        try:
+            with open(GUI_SETTINGS) as f:
+                settings = json.load(f)
+        except Exception:
+            settings = {}
+
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                         margin_start=12, margin_end=12, margin_top=10, margin_bottom=6)
+        back = Gtk.Button(icon_name='go-previous-symbolic')
+        back.add_css_class('flat')
+        back.connect('clicked', lambda _: self._pstack.set_visible_child_name('main'))
+        header.append(back)
+        title = Gtk.Label(label='Wallpaper folders'); title.add_css_class('title-4')
+        header.append(title)
+
+        group = Adw.PreferencesGroup(
+            title='Custom image folders',
+            description='Absolute paths to search for images. Leave empty to use '
+                        'the bundled wallpapers. A custom folder is also where the '
+                        '"Add …" button saves new images.')
+        self._fld_hor = Adw.EntryRow(title='Horizontal folder')
+        self._fld_hor.set_text(str(settings.get('wallpaper_dir_hor', '') or ''))
+        self._fld_ver = Adw.EntryRow(title='Vertical folder')
+        self._fld_ver.set_text(str(settings.get('wallpaper_dir_ver', '') or ''))
+        group.add(self._fld_hor)
+        group.add(self._fld_ver)
+        page = Adw.PreferencesPage()
+        page.add(group)
+
+        save = Gtk.Button(label='Save')
+        save.add_css_class('suggested-action')
+        save.connect('clicked', lambda _: self._save_folders())
+        cancel = Gtk.Button(label='Cancel')
+        cancel.connect('clicked', lambda _: self._pstack.set_visible_child_name('main'))
+        btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                          margin_start=12, margin_end=12, margin_top=8, margin_bottom=12)
+        btn_row.set_halign(Gtk.Align.END)
+        btn_row.append(cancel); btn_row.append(save)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.append(header)
+        box.append(page)
+        box.append(btn_row)
+
+        old = self._pstack.get_child_by_name('folders')
+        if old is not None:
+            self._pstack.remove(old)
+        self._pstack.add_named(box, 'folders')
+        self._pstack.set_visible_child_name('folders')
+
+    def _save_folders(self):
+        try:
+            with open(GUI_SETTINGS) as f:
+                settings = json.load(f)
+        except Exception:
+            settings = {}
+        settings['wallpaper_dir_hor'] = self._fld_hor.get_text().strip()
+        settings['wallpaper_dir_ver'] = self._fld_ver.get_text().strip()
+        try:
+            os.makedirs(os.path.dirname(GUI_SETTINGS), exist_ok=True)
+            with open(GUI_SETTINGS, 'w') as f:
+                json.dump(settings, f, indent=2)
+        except OSError:
+            pass
+        self._pstack.set_visible_child_name('main')
+        self._reload()
 
     def set_apply_callback(self, cb):
         self._apply_cb = cb
@@ -1063,8 +1138,10 @@ class WallpaperPage(Gtk.Box):
             threading.Thread(target=self._import, args=(paths,), daemon=True).start()
 
     def _import(self, paths: list):
-        os.makedirs(WALLPAPER_H, exist_ok=True)
-        os.makedirs(WALLPAPER_V, exist_ok=True)
+        # Copy into the effective dirs (custom path if set, else bundled). With a
+        # custom writable folder this is also what makes Add work on clients.
+        os.makedirs(wallpaper_dir('hor'), exist_ok=True)
+        os.makedirs(wallpaper_dir('ver'), exist_ok=True)
         for path in paths:
             is_hor = is_horizontal_file(path)
             is_vid = os.path.splitext(path)[1].lower() in VIDEO_EXTS
@@ -1075,7 +1152,7 @@ class WallpaperPage(Gtk.Box):
         ext = os.path.splitext(path)[1].lower()
         if is_hor:
             stem = f'wp_{wp_id}_vid_hor' if is_vid else f'wp_{wp_id}_hor'
-            dst  = os.path.join(WALLPAPER_H, stem + ext)
+            dst  = os.path.join(wallpaper_dir('hor'), stem + ext)
         else:
-            dst = os.path.join(WALLPAPER_V, f'wp_{wp_id}_ver{ext}')
+            dst = os.path.join(wallpaper_dir('ver'), f'wp_{wp_id}_ver{ext}')
         shutil.copy2(path, dst)

@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 from constants import (
     WALLPAPER_H, WALLPAPER_V, THUMB_DIR, THEME_NAMES, SETS_JSON,
-    VIDEO_EXTS, ALL_EXTS, ID_RE,
+    VIDEO_EXTS, ALL_EXTS, ID_RE, wallpaper_dir,
 )
 
 
@@ -93,8 +93,8 @@ def scan_wallpapers() -> list:
                 e.ver_file  = os.path.join(directory, fname)
                 e.ver_thumb = thumb
 
-    _scan(WALLPAPER_H, True)
-    _scan(WALLPAPER_V, False)
+    _scan(wallpaper_dir('hor'), True)
+    _scan(wallpaper_dir('ver'), False)
     return sorted(entries.values(), key=lambda e: e.id)
 
 
@@ -110,7 +110,7 @@ class SetImage:
         return 'ver' if '_ver' in self.file else 'hor'
 
     def full_path(self) -> Optional[str]:
-        d = WALLPAPER_V if self.orientation == 'ver' else WALLPAPER_H
+        d = wallpaper_dir('ver') if self.orientation == 'ver' else wallpaper_dir('hor')
         p = os.path.join(d, self.file)
         return p if os.path.exists(p) else None
 
@@ -188,8 +188,9 @@ def migrate_pairs_to_sets() -> None:
 
     # Build set of existing ver IDs to avoid collisions when renaming
     existing_ver_ids: set = set()
-    if os.path.isdir(WALLPAPER_V):
-        for fname in os.listdir(WALLPAPER_V):
+    _ver_dir = wallpaper_dir('ver')
+    if os.path.isdir(_ver_dir):
+        for fname in os.listdir(_ver_dir):
             m = re.match(r'^wp_([a-zA-Z0-9]+)_ver', fname)
             if m:
                 existing_ver_ids.add(m.group(1))
@@ -208,8 +209,8 @@ def migrate_pairs_to_sets() -> None:
         existing_ver_ids.add(new_id)
 
         new_ver_basename = f'wp_{new_id}_ver{ver_ext}'
-        old_ver_path = os.path.join(WALLPAPER_V, ver_basename)
-        new_ver_path = os.path.join(WALLPAPER_V, new_ver_basename)
+        old_ver_path = os.path.join(_ver_dir, ver_basename)
+        new_ver_path = os.path.join(_ver_dir, new_ver_basename)
 
         try:
             os.rename(old_ver_path, new_ver_path)

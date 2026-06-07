@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." && pwd)/assets/scripts/lib/env.sh"
 
-WALLPAPER_H="$VUTURELAND_DIR/assets/wallpaper/horizontal"
-WALLPAPER_V="$VUTURELAND_DIR/assets/wallpaper/vertical"
+WALLPAPER_H="$WALLPAPER_DIR_H"
+WALLPAPER_V="$WALLPAPER_DIR_V"
 cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/vutureland/wallpaper-thumbs"
 thumb_size=400
 radius=10

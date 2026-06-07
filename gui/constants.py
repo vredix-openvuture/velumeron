@@ -1,4 +1,4 @@
-import os, re
+import os, re, json
 
 # System/package directory — set by VUTURELAND_DIR env var (AUR install) or
 # auto-detected as the directory containing this file's parent (dev mode).
@@ -26,6 +26,29 @@ POWERMODE_SH      = f"{VTL}/assets/scripts/powermode.sh"
 # ── User paths (per-user state, generated output, preferences) ───────────────
 USER_SETTINGS     = f"{VTL_USER}/hypr.lua/user_settings.lua"
 SETS_JSON         = f"{VTL_USER}/assets/sets.json"
+GUI_SETTINGS      = f"{VTL_USER}/gui/settings.json"
+
+
+def _gui_setting(key, default=None):
+    """Read a single key from the per-user gui/settings.json (best effort)."""
+    try:
+        with open(GUI_SETTINGS) as f:
+            return json.load(f).get(key, default)
+    except Exception:
+        return default
+
+
+def wallpaper_dir(orientation: str) -> str:
+    """Effective wallpaper directory for 'hor'/'ver': a user-set custom path if
+    it exists, otherwise the bundled directory. Lets clients point at their own
+    image folder (and makes that folder writable for the Add button)."""
+    key = 'wallpaper_dir_hor' if orientation == 'hor' else 'wallpaper_dir_ver'
+    custom = (_gui_setting(key) or '').strip()
+    if custom:
+        custom = os.path.expanduser(custom)
+        if os.path.isdir(custom):
+            return custom
+    return WALLPAPER_H if orientation == 'hor' else WALLPAPER_V
 WALLUST_MODE_FILE = f"{VTL_USER}/wallust/color-mode"
 HYPRLOCK_CONF     = f"{VTL_USER}/hypr.lua/hyprlock.conf"
 HYPRIDLE_CONF     = f"{VTL_USER}/hypr.lua/hypridle.conf"
