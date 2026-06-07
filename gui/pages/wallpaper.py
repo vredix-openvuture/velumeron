@@ -603,15 +603,15 @@ class WallpaperPage(Gtk.Box):
         self._apply_cb = None
 
         _icons = {
-            'set': 'flower-shape-symbolic',
-            'hor': 'transform-scale-horizontal-symbolic',
-            'ver': 'transform-scale-vertical-symbolic',
+            'set': 'view-grid-symbolic',
+            'hor': 'object-flip-horizontal-symbolic',
+            'ver': 'object-flip-vertical-symbolic',
         }
         for key, label in self.TABS:
             page = inner.add_titled(self._make_tab(key), key, label)
             page.set_icon_name(_icons[key])
 
-        inner.add_titled(WallustPage(), 'colors', 'Colors').set_icon_name('draw-brush-symbolic')
+        inner.add_titled(WallustPage(), 'colors', 'Colors').set_icon_name('color-select-symbolic')
 
         switcher = Adw.ViewSwitcherBar()
         switcher.set_stack(inner)

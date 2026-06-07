@@ -613,6 +613,12 @@ class VuturelandSettings(Adw.Application):
         global _BASE_CSS_PROVIDER, _COLORS_CSS_PROVIDER
         display = Gdk.Display.get_default()
 
+        # Force a complete icon theme for our symbolic icons. The user's system
+        # icon theme (e.g. Papirus-Dark, set via gsettings) may be missing many
+        # freedesktop symbolic names, which would render every icon as the broken
+        # "image-missing" placeholder. Adwaita ships with GTK and has them all.
+        Gtk.Settings.get_default().set_property('gtk-icon-theme-name', 'Adwaita')
+
         # Wallust colors — loaded first so style.css can resolve @bg-primary etc.
         _COLORS_CSS_PROVIDER = Gtk.CssProvider()
         if os.path.exists(_COLORS_CSS_PATH):

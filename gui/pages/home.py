@@ -83,7 +83,7 @@ class HomePage(Adw.PreferencesPage):
         grid.set_margin_top(8);    grid.set_margin_bottom(8)
         for label, icon, handler in [
             ('Lock',     'system-lock-screen-symbolic', self._on_lock),
-            ('Suspend',  'system-suspend-symbolic',     self._on_suspend),
+            ('Suspend',  'weather-clear-night-symbolic', self._on_suspend),
             ('Logout',   'system-log-out-symbolic',     self._on_logout),
             ('Reboot',   'system-reboot-symbolic',      self._on_reboot),
             ('Shutdown', 'system-shutdown-symbolic',    self._on_shutdown),
