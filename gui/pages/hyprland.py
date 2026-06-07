@@ -11,6 +11,8 @@ from models.hyprland import (
     parse_autostart, generate_autostart_section,
     parse_windowrules, generate_windowrules_section,
     parse_rule_entries, build_rule_pattern,
+    parse_lookandfeel, generate_lookandfeel_section, ensure_lookandfeel_section,
+    LNF_DEFAULTS,
     read_user_settings, write_user_settings,
     _write_section,
 )
@@ -78,6 +80,7 @@ class HyprlandPage(Gtk.Box):
         self._float_pat, self._opacity_pat  = parse_windowrules(self._content)
         self._float_names   = parse_rule_entries(self._float_pat)
         self._opacity_names = parse_rule_entries(self._opacity_pat)
+        self._lnf           = {**LNF_DEFAULTS, **parse_lookandfeel(self._content)}
 
         # Stack so the window-rule list editor can be shown as an in-panel
         # subpage (a separate window can't be used under the layer-shell panel).
@@ -150,6 +153,36 @@ class HyprlandPage(Gtk.Box):
         self._opacity_row.connect('activated', lambda r: self._open_rule_editor('opacity'))
         wr_group.add(self._opacity_row)
         page.add(wr_group)
+
+        # ── Look and Feel ─────────────────────────────────────────────────────
+        # Overrides the defaults in hypr.lua/modules/look_and_feel.lua via
+        # user_settings.lua. Left untouched, the hypr.lua defaults apply.
+        lnf_group = Adw.PreferencesGroup(
+            title='Look and Feel',
+            description='Overrides the Hyprland defaults. Reset to the defaults '
+                        f'({LNF_DEFAULTS["lnf_rounding"]} / {LNF_DEFAULTS["lnf_border_size"]}) '
+                        'to fall back to hypr.lua.')
+
+        radius_adj = Gtk.Adjustment(value=self._lnf['lnf_rounding'],
+                                    lower=0, upper=40, step_increment=1)
+        radius_spin = Gtk.SpinButton(adjustment=radius_adj, digits=0)
+        radius_spin.set_valign(Gtk.Align.CENTER)
+        radius_spin.connect('value-changed',
+                            lambda w: self._lnf.__setitem__('lnf_rounding', int(w.get_value())))
+        radius_row = Adw.ActionRow(title='Border Radius', subtitle='Corner rounding (px)')
+        radius_row.add_suffix(radius_spin)
+        lnf_group.add(radius_row)
+
+        bsize_adj = Gtk.Adjustment(value=self._lnf['lnf_border_size'],
+                                   lower=0, upper=10, step_increment=1)
+        bsize_spin = Gtk.SpinButton(adjustment=bsize_adj, digits=0)
+        bsize_spin.set_valign(Gtk.Align.CENTER)
+        bsize_spin.connect('value-changed',
+                           lambda w: self._lnf.__setitem__('lnf_border_size', int(w.get_value())))
+        bsize_row = Adw.ActionRow(title='Border Size', subtitle='Window border thickness (px)')
+        bsize_row.add_suffix(bsize_spin)
+        lnf_group.add(bsize_row)
+        page.add(lnf_group)
 
         # ── Startup Apps ──────────────────────────────────────────────────────
         self._apps_group = Adw.PreferencesGroup(title='Startup Apps')
@@ -279,6 +312,10 @@ class HyprlandPage(Gtk.Box):
                                  generate_autostart_section(self._daemons, self._apps))
         content = _write_section(content, 'WINDOWRULES',
                                  generate_windowrules_section(self._float_pat, self._opacity_pat))
+        content = ensure_lookandfeel_section(content)
+        content = _write_section(content, 'LOOKANDFEEL',
+                                 generate_lookandfeel_section(
+                                     self._lnf['lnf_rounding'], self._lnf['lnf_border_size']))
         write_user_settings(content)
         self._content = content
         subprocess.Popen(['hyprctl', 'reload'])

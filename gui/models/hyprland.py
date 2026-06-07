@@ -185,6 +185,33 @@ def build_rule_pattern(names: list) -> str:
     return '(' + '|'.join(toks) + ')' if toks else ''
 
 
+# ── Look and Feel (overrides for hypr.lua defaults) ──────────────────────────
+# Defaults must mirror hypr.lua/modules/look_and_feel.lua so an un-set value
+# shows the same number the config would use.
+LNF_DEFAULTS = {'lnf_rounding': 10, 'lnf_border_size': 2}
+
+
+def parse_lookandfeel(content: str) -> dict:
+    return _parse_kv(_read_section(content, 'LOOKANDFEEL'))
+
+
+def generate_lookandfeel_section(rounding: int, border_size: int) -> str:
+    return (f'\nlnf_rounding     = {int(rounding)}\n'
+            f'lnf_border_size  = {int(border_size)}\n')
+
+
+def ensure_lookandfeel_section(content: str) -> str:
+    """Append the LOOKANDFEEL markers if an older user_settings.lua lacks them,
+    so _write_section can target the section."""
+    if '<<<LOOKANDFEEL-START>>>' in content:
+        return content
+    return content.rstrip('\n') + (
+        '\n\n\n-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
+        '-- Look and Feel — overrides for hypr.lua defaults.\n'
+        '-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+        '-- <<<LOOKANDFEEL-START>>>\n-- <<<LOOKANDFEEL-END>>>\n')
+
+
 def read_user_settings() -> str:
     with open(USER_SETTINGS) as f:
         return f.read()

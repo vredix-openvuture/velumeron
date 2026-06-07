@@ -789,6 +789,15 @@ start_apps = {
 floating_window = "(.*kitty.*|.*ark.*|.*bitwarden.*)"
 opacity_window  = "(.*obsidian.*)"
 -- <<<WINDOWRULES-END>>>
+
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- Look and Feel — overrides for hypr.lua defaults. Leave a value unset
+-- (commented / absent) to fall back to the default in look_and_feel.lua.
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- <<<LOOKANDFEEL-START>>>
+-- <<<LOOKANDFEEL-END>>>
 EOF
     ok "Created new user_settings.lua"
 }

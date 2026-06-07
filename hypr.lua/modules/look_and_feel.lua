@@ -8,10 +8,11 @@ hl.config({
     general = {
         gaps_in                 = 8,
         gaps_out                = 14,
-        border_size             = 2,
+        -- lnf_border_size is set by the GUI in user_settings.lua; nil = use default
+        border_size             = lnf_border_size or 2,
         col = {
             active_border   = color5,      -- from colors.lua
-            inactive_border = background,
+            inactive_border = color6,
         },
         extend_border_grab_area = 20,
         resize_on_border        = true,
@@ -25,7 +26,8 @@ hl.config({
     },
 
     decoration = {
-        rounding  = 10,
+        -- lnf_rounding is set by the GUI in user_settings.lua; nil = use default
+        rounding  = lnf_rounding or 10,
         rounding_power = 2,
         dim_modal = true,
         border_part_of_window = false,
@@ -51,9 +53,10 @@ hl.config({
         },
 
         glow = {
+            enabled      = true,
             range        = 20,
-            render_power = 4,
-            color        = color1,
+            render_power = 6,
+            color        = color5,
         }
     },
 

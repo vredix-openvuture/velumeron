@@ -304,6 +304,19 @@ See [gui.md](gui.md).
 Newest first. Each entry: what changed, why, and the commit.
 
 ### 2026-06-07
+- **Hyprland page: Look and Feel category** (`<pending>`). New group with Border
+  Radius / Border Size; written to a `LOOKANDFEEL` section in user_settings.lua as
+  `lnf_rounding` / `lnf_border_size`, which look_and_feel.lua reads with a fallback
+  (`lnf_rounding or 10`, `lnf_border_size or 2`) — unset = hypr.lua default.
+  `ensure_lookandfeel_section` adds the section to older user_settings.lua files.
+- **Window rules as an in-panel list editor** (`51691ad`). Floating/Opacity rules
+  are activatable rows opening a subpage that lists matched apps as plain names
+  (+ add, alphabetical); `parse_rule_entries`/`build_rule_pattern` convert
+  names↔regex (`kitty` ↔ `.*[Kk]itty.*`). HyprlandPage is now a `Gtk.Box` + stack.
+- **Fixed: user_settings section markers kept their "-- " prefix** (`8d52de3`).
+  `_write_section` stripped the comment prefix off the END marker, producing
+  invalid Lua (`<<<PERIPHERALS-END>>>` without `--`) that broke the config when
+  the GUI saved (e.g. the function-key bindings).
 - **This document created** — comprehensive architecture reference + living change
   log.
 - **Bundled fonts auto-installed on sync** (`<pending>`). `assets/fonts/` now ships
