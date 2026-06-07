@@ -372,3 +372,39 @@ preferencespage entryrow,
 preferencespage switchrow {
     background-color: @bg-element;
 }
+
+
+/* ───────────────────────────────────────────────────────────────
+   TOGGLES & SLIDERS — keep the knobs perfectly round (the default
+   theme renders them slightly oval). 9999px = fully rounded.
+   ─────────────────────────────────────────────────────────────── */
+
+switch {
+    border-radius: 9999px;
+    min-height:    26px;
+    min-width:     48px;
+}
+
+switch > slider {
+    border-radius: 9999px;
+    min-width:     20px;
+    min-height:    20px;
+}
+
+scale > trough,
+scale > trough > highlight,
+scale > trough > fill {
+    border-radius: 9999px;
+}
+
+scale > trough > slider {
+    border-radius: 9999px;
+    min-width:     18px;
+    min-height:    18px;
+}
+
+spinbutton,
+spinbutton button,
+spinbutton entry {
+    border-radius: 9999px;
+}
