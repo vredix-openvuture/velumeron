@@ -278,13 +278,15 @@ window.background {
 }
 
 .nav-btn:hover {
-    background-color: alpha(@bg-active, 0.25);
+    background-color: alpha(@bg-active, 0.12);
     color:            @fg-primary;
 }
 
+/* Selected item: a soft accent tint instead of a solid saturated block, so the
+   panel reads calmer when it follows the (often vivid) wallust accent colour. */
 .nav-btn:checked {
-    background-color: @bg-active;
-    color:            @fg-bright;
+    background-color: alpha(@bg-active, 0.28);
+    color:            @fg-primary;
 }
 
 
@@ -337,9 +339,9 @@ actionbar > revealer > box {
 }
 
 .session-btn:hover {
-    background-color: alpha(@bg-active, 0.25);
-    border-color:     @bo-active;
-    color:            @fg-bright;
+    background-color: alpha(@bg-active, 0.15);
+    border-color:     alpha(@bo-active, 0.5);
+    color:            @fg-primary;
 }
 
 
