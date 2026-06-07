@@ -6,7 +6,7 @@ gi.require_version('GdkPixbuf', '2.0')
 
 from gi.repository import Gtk, Adw, GLib, Gdk, GdkPixbuf
 
-import os, subprocess, threading, shutil, json
+import os, re, subprocess, threading, shutil, json
 
 from models.waybar import active_bar_for_monitor
 
@@ -30,11 +30,16 @@ def _vtl() -> str:
         os.path.join(os.path.dirname(__file__), '../..'))
 
 
-class HomePage(Adw.PreferencesPage):
+class HomePage(Gtk.Box):
     def __init__(self):
-        super().__init__()
+        super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self._apply_cb = None
-        self._build_ui()
+        # Stack so Network/Bluetooth open as in-panel subpages (a separate window
+        # can't be used under the layer-shell panel).
+        self._stack = Gtk.Stack()
+        self._stack.set_vexpand(True)
+        self._stack.add_named(self._build_main(), 'main')
+        self.append(self._stack)
         GLib.idle_add(self._refresh_status)
 
     def set_apply_callback(self, cb):
@@ -121,9 +126,10 @@ class HomePage(Adw.PreferencesPage):
 
     # ── UI ────────────────────────────────────────────────────────────────────
 
-    def _build_ui(self):
+    def _build_main(self) -> Adw.PreferencesPage:
+        page = Adw.PreferencesPage()
         # ── Current look: active waybar style + wallpaper preview ──
-        self.add(self._build_current_group())
+        page.add(self._build_current_group())
 
         # Connectivity group
         conn = Adw.PreferencesGroup(title='Connectivity')
@@ -137,8 +143,10 @@ class HomePage(Adw.PreferencesPage):
         net_btn = Gtk.Button(label='Open')
         net_btn.add_css_class('flat')
         net_btn.set_valign(Gtk.Align.CENTER)
-        net_btn.connect('clicked', self._on_open_network)
+        net_btn.connect('clicked', lambda _: self._open_network_page())
         self._net_row.add_suffix(net_btn)
+        self._net_row.set_activatable(True)
+        self._net_row.connect('activated', lambda r: self._open_network_page())
         conn.add(self._net_row)
 
         # Bluetooth row
@@ -153,10 +161,10 @@ class HomePage(Adw.PreferencesPage):
         bt_btn = Gtk.Button(label='Open')
         bt_btn.add_css_class('flat')
         bt_btn.set_valign(Gtk.Align.CENTER)
-        bt_btn.connect('clicked', self._on_open_bluetooth)
+        bt_btn.connect('clicked', lambda _: self._open_bluetooth_page())
         self._bt_row.add_suffix(bt_btn)
         conn.add(self._bt_row)
-        self.add(conn)
+        page.add(conn)
 
         # Session group
         session = Adw.PreferencesGroup(title='Session')
@@ -187,7 +195,8 @@ class HomePage(Adw.PreferencesPage):
             grid.append(btn)
         grid_row.set_child(grid)
         session.add(grid_row)
-        self.add(session)
+        page.add(session)
+        return page
 
     # ── Status polling ───────────────────────────────────────────────────────
 
@@ -253,19 +262,330 @@ class HomePage(Adw.PreferencesPage):
             GLib.idle_add(self._refresh_status)
         threading.Thread(target=_do, daemon=False).start()
 
-    def _on_open_network(self, _):
-        if shutil.which('nm-connection-editor'):
-            if self._apply_cb: self._apply_cb()
-            _run_async(['nm-connection-editor'])
-        elif shutil.which('kitty'):
-            if self._apply_cb: self._apply_cb()
-            _run_async(['kitty', '--class', 'no_float', '-e', 'nmtui'])
+    # ── In-panel subpage helpers ───────────────────────────────────────────────
 
-    def _on_open_bluetooth(self, _):
-        path = os.path.join(_vtl(), 'rofi', 'assets', 'bluetooth.sh')
-        if os.path.exists(path):
-            if self._apply_cb: self._apply_cb()
-            _run_async(['bash', path])
+    def _stack_set(self, name: str, widget):
+        old = self._stack.get_child_by_name(name)
+        if old is not None:
+            self._stack.remove(old)
+        self._stack.add_named(widget, name)
+        self._stack.set_visible_child_name(name)
+
+    def _subpage_header(self, title: str, on_refresh=None) -> Gtk.Box:
+        h = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                    margin_start=12, margin_end=12, margin_top=10, margin_bottom=6)
+        back = Gtk.Button(icon_name='go-previous-symbolic')
+        back.add_css_class('flat')
+        back.connect('clicked', lambda _: (self._stack.set_visible_child_name('main'),
+                                           self._refresh_status()))
+        h.append(back)
+        lbl = Gtk.Label(label=title)
+        lbl.add_css_class('title-4')
+        lbl.set_hexpand(True)
+        lbl.set_halign(Gtk.Align.START)
+        h.append(lbl)
+        if on_refresh is not None:
+            rb = Gtk.Button(icon_name='view-refresh-symbolic')
+            rb.add_css_class('flat')
+            rb.connect('clicked', lambda _: on_refresh())
+            h.append(rb)
+        return h
+
+    @staticmethod
+    def _nm_split(line: str) -> list[str]:
+        # nmcli -t escapes ':' inside fields as '\:'
+        return [f.replace('\\:', ':') for f in re.split(r'(?<!\\):', line)]
+
+    # ══ Network subpage ════════════════════════════════════════════════════════
+
+    def _open_network_page(self):
+        self._wifi_rows, self._vpn_rows = [], []
+        page = Adw.PreferencesPage()
+
+        cur = Adw.PreferencesGroup(title='Current connection')
+        self._net_cur_row = Adw.ActionRow(title=self._net_status_text() or '—')
+        cur.add(self._net_cur_row)
+        page.add(cur)
+
+        self._wifi_group = Adw.PreferencesGroup(title='Wi-Fi')
+        page.add(self._wifi_group)
+        self._vpn_group = Adw.PreferencesGroup(title='VPN')
+        page.add(self._vpn_group)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.append(self._subpage_header('Network', on_refresh=self._refresh_network))
+        box.append(page)
+        self._stack_set('network', box)
+        self._refresh_network()
+
+    def _refresh_network(self):
+        for r in self._wifi_rows:
+            self._wifi_group.remove(r)
+        for r in self._vpn_rows:
+            self._vpn_group.remove(r)
+        self._wifi_rows, self._vpn_rows = [], []
+        if not shutil.which('nmcli'):
+            self._add_info(self._wifi_group, self._wifi_rows, 'nmcli not installed')
+            return
+        self._add_info(self._wifi_group, self._wifi_rows, 'Scanning…')
+
+        def _work():
+            wifi = self._scan_wifi()
+            vpns = self._list_vpn()
+            cur  = self._net_status_text()
+            GLib.idle_add(self._populate_network, wifi, vpns, cur)
+        threading.Thread(target=_work, daemon=True).start()
+
+    @staticmethod
+    def _add_info(group, rows, text):
+        row = Adw.ActionRow(title=text)
+        group.add(row)
+        rows.append(row)
+
+    def _populate_network(self, wifi, vpns, cur):
+        self._net_cur_row.set_title(cur or '—')
+        for r in self._wifi_rows:
+            self._wifi_group.remove(r)
+        self._wifi_rows = []
+        for net in wifi:
+            row = self._wifi_row(net)
+            self._wifi_group.add(row)
+            self._wifi_rows.append(row)
+        if not wifi:
+            self._add_info(self._wifi_group, self._wifi_rows, 'No networks found')
+        for v in vpns:
+            row = self._vpn_row(v)
+            self._vpn_group.add(row)
+            self._vpn_rows.append(row)
+        if not vpns:
+            self._add_info(self._vpn_group, self._vpn_rows, 'No VPN connections')
+        return False
+
+    def _scan_wifi(self) -> list:
+        try:
+            r = subprocess.run(
+                ['nmcli', '-t', '-f', 'ACTIVE,SSID,SIGNAL,SECURITY',
+                 'dev', 'wifi', 'list', '--rescan', 'yes'],
+                capture_output=True, text=True, timeout=25, env=_clean_env())
+        except Exception:
+            return []
+        best = {}
+        for line in r.stdout.splitlines():
+            p = self._nm_split(line)
+            if len(p) < 4 or not p[1]:
+                continue
+            ssid, sig = p[1], p[2]
+            try:
+                sig = int(sig)
+            except ValueError:
+                sig = 0
+            net = {'ssid': ssid, 'signal': sig,
+                   'secured': bool(p[3].strip()) and p[3].strip() != '--',
+                   'active': p[0] == 'yes'}
+            if ssid not in best or net['signal'] > best[ssid]['signal'] or net['active']:
+                best[ssid] = net
+        return sorted(best.values(), key=lambda n: (not n['active'], -n['signal']))
+
+    def _wifi_row(self, net):
+        sub = f"Signal {net['signal']}% · " + ('secured' if net['secured'] else 'open')
+        if net['active']:
+            row = Adw.ActionRow(title=net['ssid'], subtitle='Connected')
+            row.add_suffix(Gtk.Image.new_from_icon_name('emblem-ok-symbolic'))
+            return row
+        row = Adw.ExpanderRow(title=net['ssid'], subtitle=sub)
+        pw = None
+        if net['secured']:
+            try:
+                pw = Adw.PasswordEntryRow(title='Password')
+            except Exception:
+                pw = Adw.EntryRow(title='Password')
+            row.add_row(pw)
+        action = Adw.ActionRow()
+        btn = Gtk.Button(label='Connect')
+        btn.add_css_class('suggested-action')
+        btn.set_valign(Gtk.Align.CENTER)
+        btn.connect('clicked', lambda _, s=net['ssid'], e=pw:
+                    self._wifi_connect(s, e.get_text() if e else None))
+        action.add_suffix(btn)
+        row.add_row(action)
+        return row
+
+    def _wifi_connect(self, ssid, password):
+        def _do():
+            args = ['nmcli', 'dev', 'wifi', 'connect', ssid]
+            if password:
+                args += ['password', password]
+            try:
+                subprocess.run(args, capture_output=True, env=_clean_env(), timeout=40)
+            except Exception:
+                pass
+            GLib.idle_add(self._refresh_network)
+            GLib.idle_add(self._refresh_status)
+        threading.Thread(target=_do, daemon=True).start()
+
+    def _list_vpn(self) -> list:
+        try:
+            r = subprocess.run(
+                ['nmcli', '-t', '-f', 'NAME,TYPE,STATE', 'connection', 'show'],
+                capture_output=True, text=True, timeout=8, env=_clean_env())
+        except Exception:
+            return []
+        out = []
+        for line in r.stdout.splitlines():
+            p = self._nm_split(line)
+            if len(p) < 2:
+                continue
+            if p[1] in ('vpn', 'wireguard'):
+                out.append({'name': p[0],
+                            'up': len(p) > 2 and p[2] == 'activated'})
+        return sorted(out, key=lambda v: v['name'].lower())
+
+    def _vpn_row(self, v):
+        row = Adw.ActionRow(title=v['name'], subtitle='VPN')
+        sw = Gtk.Switch(valign=Gtk.Align.CENTER)
+        sw.set_active(v['up'])
+        sw.connect('notify::active', lambda s, _p, n=v['name']: self._vpn_toggle(n, s.get_active()))
+        row.add_suffix(sw)
+        return row
+
+    def _vpn_toggle(self, name, up):
+        def _do():
+            try:
+                subprocess.run(['nmcli', 'connection', 'up' if up else 'down', name],
+                               capture_output=True, env=_clean_env(), timeout=30)
+            except Exception:
+                pass
+            GLib.idle_add(self._refresh_status)
+        threading.Thread(target=_do, daemon=True).start()
+
+    # ══ Bluetooth subpage ══════════════════════════════════════════════════════
+
+    def _open_bluetooth_page(self):
+        self._bt_rows = []
+        page = Adw.PreferencesPage()
+
+        ctrl = Adw.PreferencesGroup(title='Bluetooth')
+        pwr = Adw.ActionRow(title='Power')
+        self._bt_page_switch = Gtk.Switch(valign=Gtk.Align.CENTER)
+        self._bt_page_switch.set_active(self._bt_powered())
+        self._bt_page_switch.connect('notify::active', self._on_bt_page_power)
+        pwr.add_suffix(self._bt_page_switch)
+        ctrl.add(pwr)
+        scan = Adw.ActionRow(title='Scan for devices', subtitle='Discovers nearby devices for ~10s')
+        scan_btn = Gtk.Button(label='Scan')
+        scan_btn.set_valign(Gtk.Align.CENTER)
+        scan_btn.connect('clicked', lambda _: self._bt_scan())
+        scan.add_suffix(scan_btn)
+        ctrl.add(scan)
+        page.add(ctrl)
+
+        self._bt_group = Adw.PreferencesGroup(title='Devices')
+        page.add(self._bt_group)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.append(self._subpage_header('Bluetooth', on_refresh=self._refresh_bt))
+        box.append(page)
+        self._stack_set('bluetooth', box)
+        self._refresh_bt()
+
+    def _on_bt_page_power(self, switch, _):
+        target = 'on' if switch.get_active() else 'off'
+        def _do():
+            subprocess.run(['bluetoothctl', 'power', target],
+                           capture_output=True, env=_clean_env())
+            GLib.idle_add(self._refresh_bt)
+            GLib.idle_add(self._refresh_status)
+        threading.Thread(target=_do, daemon=True).start()
+
+    def _refresh_bt(self):
+        for r in self._bt_rows:
+            self._bt_group.remove(r)
+        self._bt_rows = []
+        if not shutil.which('bluetoothctl'):
+            self._add_info(self._bt_group, self._bt_rows, 'bluetoothctl not installed')
+            return
+        self._add_info(self._bt_group, self._bt_rows, 'Loading…')
+        def _work():
+            devices = self._list_bt_devices()
+            GLib.idle_add(self._populate_bt, devices)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _populate_bt(self, devices):
+        for r in self._bt_rows:
+            self._bt_group.remove(r)
+        self._bt_rows = []
+        for d in devices:
+            row = self._bt_device_row(d)
+            self._bt_group.add(row)
+            self._bt_rows.append(row)
+        if not devices:
+            self._add_info(self._bt_group, self._bt_rows, 'No devices — try Scan')
+        return False
+
+    def _list_bt_devices(self) -> list:
+        def _names(arg):
+            try:
+                r = subprocess.run(['bluetoothctl', 'devices', arg] if arg
+                                   else ['bluetoothctl', 'devices'],
+                                   capture_output=True, text=True, timeout=4, env=_clean_env())
+                out = {}
+                for ln in r.stdout.splitlines():
+                    m = re.match(r'Device (\S+) (.+)', ln)
+                    if m:
+                        out[m.group(1)] = m.group(2)
+                return out
+            except Exception:
+                return {}
+        alld = _names('')
+        connected = set(_names('Connected').keys())
+        paired = set(_names('Paired').keys())
+        result = []
+        for mac, name in sorted(alld.items(), key=lambda kv: kv[1].lower()):
+            result.append({'mac': mac, 'name': name,
+                           'connected': mac in connected, 'paired': mac in paired})
+        return result
+
+    def _bt_device_row(self, d):
+        sub = 'Connected' if d['connected'] else ('Paired' if d['paired'] else 'Available')
+        row = Adw.ActionRow(title=d['name'], subtitle=sub)
+        btn = Gtk.Button(label='Disconnect' if d['connected'] else 'Connect')
+        btn.set_valign(Gtk.Align.CENTER)
+        if not d['connected']:
+            btn.add_css_class('suggested-action')
+        btn.connect('clicked', lambda _, m=d['mac'], c=d['connected'], p=d['paired']:
+                    self._bt_action(m, c, p))
+        row.add_suffix(btn)
+        return row
+
+    def _bt_action(self, mac, connected, paired):
+        def _do():
+            try:
+                if connected:
+                    subprocess.run(['bluetoothctl', 'disconnect', mac],
+                                   capture_output=True, env=_clean_env(), timeout=15)
+                else:
+                    if not paired:
+                        subprocess.run(['bluetoothctl', 'pair', mac],
+                                       capture_output=True, env=_clean_env(), timeout=20)
+                        subprocess.run(['bluetoothctl', 'trust', mac],
+                                       capture_output=True, env=_clean_env(), timeout=5)
+                    subprocess.run(['bluetoothctl', 'connect', mac],
+                                   capture_output=True, env=_clean_env(), timeout=20)
+            except Exception:
+                pass
+            GLib.idle_add(self._refresh_bt)
+            GLib.idle_add(self._refresh_status)
+        threading.Thread(target=_do, daemon=True).start()
+
+    def _bt_scan(self):
+        def _do():
+            try:
+                subprocess.run(['bluetoothctl', '--timeout', '10', 'scan', 'on'],
+                               capture_output=True, env=_clean_env(), timeout=15)
+            except Exception:
+                pass
+            GLib.idle_add(self._refresh_bt)
+        threading.Thread(target=_do, daemon=True).start()
 
     def _on_lock(self, _):
         if self._apply_cb: self._apply_cb()
