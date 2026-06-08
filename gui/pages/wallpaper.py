@@ -593,9 +593,10 @@ class WallpaperPage(Gtk.Box):
         self._flows: dict = {}
         self._apply_cb = None
         self._monitors = get_monitor_names()
+        self._filter_mode = 'all'   # all | image | video (chosen in Settings)
 
         # Sets are only for multi-monitor fixed combos; Vertical only when a
-        # vertical monitor exists. Order: Horizontal, Vertical, Sets, Colors.
+        # vertical monitor exists. Order: Horizontal, Vertical, Sets.
         mcount, has_vertical = self._detect_monitors()
         self._has_sets = mcount > 1
         tabs = [('hor', 'Horizontal', 'object-flip-horizontal-symbolic')]
@@ -603,46 +604,41 @@ class WallpaperPage(Gtk.Box):
             tabs.append(('ver', 'Vertical', 'object-flip-vertical-symbolic'))
         if self._has_sets:
             tabs.append(('set', 'Sets', 'view-grid-symbolic'))
-        self._filter = {k: 'all' for k, _, _ in tabs}
+        self._tabs = tabs
 
         for key, label, icon in tabs:
             inner.add_titled(self._make_tab(key), key, label).set_icon_name(icon)
-        inner.add_titled(WallustPage(), 'colors', 'Colors').set_icon_name('color-select-symbolic')
         inner.set_hexpand(True)
         inner.set_vexpand(True)
 
-        # Vertical switcher on the right (frees up the crowded bottom bar).
-        switcher = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        switcher.add_css_class('wp-switcher')
-        switcher.set_valign(Gtk.Align.START)
+        # Top bar: tab switcher (left) + a settings gear (right).
+        topbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6,
+                         margin_start=14, margin_end=14, margin_top=10, margin_bottom=4)
+        sw = Gtk.Box(spacing=0)
+        sw.add_css_class('linked')
         self._switch_btns = {}
         self._switch_updating = False
-        for key, label, icon in tabs + [('colors', 'Colors', 'color-select-symbolic')]:
-            b = Gtk.ToggleButton()
-            b.add_css_class('flat')
-            b.add_css_class('wp-switch-btn')
-            bx = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-            img = Gtk.Image.new_from_icon_name(icon)
-            img.set_pixel_size(18)
-            bx.append(img)
-            lb = Gtk.Label(label=label)
-            lb.add_css_class('caption')
-            bx.append(lb)
-            b.set_child(bx)
+        for key, label, icon in tabs:
+            b = Gtk.ToggleButton(label=label)
             b.connect('toggled', self._on_switch_toggled, key)
-            switcher.append(b)
+            sw.append(b)
             self._switch_btns[key] = b
+        topbar.append(sw)
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        topbar.append(spacer)
+        gear = Gtk.Button(icon_name='emblem-system-symbolic')
+        gear.add_css_class('flat')
+        gear.set_tooltip_text('Settings')
+        gear.connect('clicked', lambda _: self._open_settings())
+        topbar.append(gear)
         inner.connect('notify::visible-child-name', self._sync_switcher)
         self._switch_btns[tabs[0][0]].set_active(True)
 
-        content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        content.set_vexpand(True)
-        content.append(inner)
-        content.append(switcher)
-
         main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         main.set_vexpand(True)
-        main.append(content)
+        main.append(topbar)
+        main.append(inner)
 
         bar = Gtk.ActionBar()
         self._spinner = Gtk.Spinner()
@@ -659,10 +655,6 @@ class WallpaperPage(Gtk.Box):
             btn_new_set = Gtk.Button(label='New Set')
             btn_new_set.connect('clicked', lambda _: self._on_new_set())
             bar.pack_end(btn_new_set)
-
-        btn_folders = Gtk.Button(label='Folders')
-        btn_folders.connect('clicked', lambda _: self._open_folders())
-        bar.pack_end(btn_folders)
 
         btn_add = Gtk.Button(label='Add …')
         btn_add.add_css_class('suggested-action')
@@ -709,6 +701,98 @@ class WallpaperPage(Gtk.Box):
             for k, b in self._switch_btns.items():
                 b.set_active(k == name)
             self._switch_updating = False
+
+    # ── Settings subpage (gear) ───────────────────────────────────────────────
+
+    def _subheader(self, title, back='main'):
+        h = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                    margin_start=12, margin_end=12, margin_top=10, margin_bottom=6)
+        b = Gtk.Button(icon_name='go-previous-symbolic')
+        b.add_css_class('flat')
+        b.connect('clicked', lambda _: self._pstack.set_visible_child_name(back))
+        h.append(b)
+        lbl = Gtk.Label(label=title)
+        lbl.add_css_class('title-4')
+        h.append(lbl)
+        return h
+
+    def _open_settings(self):
+        try:
+            with open(GUI_SETTINGS) as f:
+                settings = json.load(f)
+        except Exception:
+            settings = {}
+
+        page = Adw.PreferencesPage()
+
+        g1 = Adw.PreferencesGroup(title='Show')
+        flt = Adw.ComboRow(title='Wallpaper type')
+        flt.set_model(Gtk.StringList.new(['All', 'Images', 'Videos']))
+        flt.set_selected({'all': 0, 'image': 1, 'video': 2}.get(self._filter_mode, 0))
+        flt.connect('notify::selected', lambda r, _:
+                    self._set_filter_mode(['all', 'image', 'video'][r.get_selected()]))
+        g1.add(flt)
+        page.add(g1)
+
+        g2 = Adw.PreferencesGroup(title='Appearance')
+        colors = Adw.ActionRow(title='Colors', subtitle='Wallust colour generation')
+        colors.add_suffix(Gtk.Image.new_from_icon_name('go-next-symbolic'))
+        colors.set_activatable(True)
+        colors.connect('activated', lambda r: self._open_colors())
+        g2.add(colors)
+        folders = Adw.ActionRow(title='Wallpaper folders', subtitle='Custom image paths')
+        folders.add_suffix(Gtk.Image.new_from_icon_name('go-next-symbolic'))
+        folders.set_activatable(True)
+        folders.connect('activated', lambda r: self._open_folders())
+        g2.add(folders)
+        page.add(g2)
+
+        g3 = Adw.PreferencesGroup(title='Wallpaper switcher (rofi)')
+        rofi = Adw.ComboRow(title='Rofi shows')
+        rofi.set_model(Gtk.StringList.new(['Wallpapers', 'Sets']))
+        rofi.set_selected(1 if settings.get('rofi_source', 'wallpaper') == 'sets' else 0)
+        rofi.set_sensitive(self._has_sets)
+        if not self._has_sets:
+            rofi.set_subtitle('Define a set first')
+        rofi.connect('notify::selected', lambda r, _:
+                     self._save_rofi_source('sets' if r.get_selected() == 1 else 'wallpaper'))
+        g3.add(rofi)
+        page.add(g3)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.append(self._subheader('Settings', back='main'))
+        box.append(page)
+        old = self._pstack.get_child_by_name('settings')
+        if old is not None:
+            self._pstack.remove(old)
+        self._pstack.add_named(box, 'settings')
+        self._pstack.set_visible_child_name('settings')
+
+    def _open_colors(self):
+        wp = WallustPage()
+        wp.set_vexpand(True)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.append(self._subheader('Colors', back='settings'))
+        box.append(wp)
+        old = self._pstack.get_child_by_name('colors')
+        if old is not None:
+            self._pstack.remove(old)
+        self._pstack.add_named(box, 'colors')
+        self._pstack.set_visible_child_name('colors')
+
+    def _save_rofi_source(self, value):
+        try:
+            with open(GUI_SETTINGS) as f:
+                settings = json.load(f)
+        except Exception:
+            settings = {}
+        settings['rofi_source'] = value
+        try:
+            os.makedirs(os.path.dirname(GUI_SETTINGS), exist_ok=True)
+            with open(GUI_SETTINGS, 'w') as f:
+                json.dump(settings, f, indent=2)
+        except OSError:
+            pass
 
     # ── In-panel set editor ─────────────────────────────────────────────────
 
@@ -921,7 +1005,7 @@ class WallpaperPage(Gtk.Box):
                          margin_start=12, margin_end=12, margin_top=10, margin_bottom=6)
         back = Gtk.Button(icon_name='go-previous-symbolic')
         back.add_css_class('flat')
-        back.connect('clicked', lambda _: self._pstack.set_visible_child_name('main'))
+        back.connect('clicked', lambda _: self._pstack.set_visible_child_name('settings'))
         header.append(back)
         title = Gtk.Label(label='Wallpaper folders'); title.add_css_class('title-4')
         header.append(title)
@@ -952,7 +1036,7 @@ class WallpaperPage(Gtk.Box):
         save.add_css_class('suggested-action')
         save.connect('clicked', lambda _: self._save_folders())
         cancel = Gtk.Button(label='Cancel')
-        cancel.connect('clicked', lambda _: self._pstack.set_visible_child_name('main'))
+        cancel.connect('clicked', lambda _: self._pstack.set_visible_child_name('settings'))
         btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
                           margin_start=12, margin_end=12, margin_top=8, margin_bottom=12)
         btn_row.set_halign(Gtk.Align.END)
@@ -1065,28 +1149,15 @@ class WallpaperPage(Gtk.Box):
 
     def _make_tab(self, key: str) -> Gtk.Box:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-
-        fbar = Gtk.Box(spacing=0, margin_top=10, margin_start=14, margin_bottom=4)
-        fbar.add_css_class('linked')
-        btns: dict[str, Gtk.ToggleButton] = {}
-        for fkey, flabel in [('all', 'All'), ('image', 'Image'), ('video', 'Video')]:
-            btn = Gtk.ToggleButton(label=flabel)
-            btn.connect('toggled', self._on_filter_toggled, key, fkey, btns)
-            fbar.append(btn)
-            btns[fkey] = btn
         flow, scroll = self._make_flow(key)
         self._flows[key] = flow
         flow.set_filter_func(self._make_filter_func(key))
-
-        btns['all'].set_active(True)
-
-        box.append(fbar)
         box.append(scroll)
         return box
 
     def _make_filter_func(self, key: str):
         def _f(child):
-            f = self._filter.get(key, 'all')
+            f = self._filter_mode          # global filter set in Settings
             if f == 'all':
                 return True
             card = child.get_child()
@@ -1106,23 +1177,18 @@ class WallpaperPage(Gtk.Box):
             return is_vid if f == 'video' else not is_vid
         return _f
 
-    def _on_filter_toggled(self, btn, tab_key: str, filter_key: str, btns: dict):
-        if not btn.get_active():
-            if all(not b.get_active() for b in btns.values()):
-                btn.set_active(True)
-            return
-        self._filter[tab_key] = filter_key
-        for fk, b in btns.items():
-            if fk != filter_key and b.get_active():
-                b.set_active(False)
-        self._flows[tab_key].invalidate_filter()
+    def _set_filter_mode(self, mode: str):
+        self._filter_mode = mode
+        for flow in self._flows.values():
+            flow.invalidate_filter()
 
     def _make_flow(self, key: str):
+        per_line = {'set': 2, 'hor': 2, 'ver': 3}[key]
         flow = Gtk.FlowBox()
         flow.set_valign(Gtk.Align.START)
-        flow.set_homogeneous(False)
-        flow.set_max_children_per_line({'set': 2, 'hor': 4, 'ver': 6}[key])
-        flow.set_min_children_per_line(1)
+        flow.set_homogeneous(True)
+        flow.set_max_children_per_line(per_line)
+        flow.set_min_children_per_line(per_line)
         flow.set_selection_mode(Gtk.SelectionMode.SINGLE)
         flow.set_row_spacing(12)
         flow.set_column_spacing(12)

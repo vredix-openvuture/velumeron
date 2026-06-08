@@ -326,6 +326,18 @@ keeps a `themes/<design>` file; the current look is shipped as **`miboro`**.
 Newest first. Each entry: what changed, why, and the commit.
 
 ### 2026-06-08
+- **Wallpaper page re-layout** — removed the grey frame around thumbnails; fixed
+  grid density (Horizontal = 2/row, Vertical = 3/row, homogeneous). Dropped the
+  top `All / Image / Video` filter bar and the inner Colors tab. The top bar is
+  now a left-aligned `Horizontal / Vertical / Sets` switcher (tabs appear only
+  when relevant: Vertical needs a vertical monitor, Sets needs >1 monitor) plus a
+  right-aligned gear → Settings subpage. Settings holds the image/video/all
+  filter, Colors, Folders, and a **"Rofi shows: Wallpapers / Sets"** toggle
+  (greyed out until at least one set exists, persisted as `rofi_source` in
+  `gui/settings.json`). `rofi-wallpaper.sh` honours the toggle: when `sets` and
+  sets exist it lists sets (selection → `wallpaper-set.sh --set`), otherwise it
+  lists the wallpapers from the (custom) horizontal folder as before. Sets are
+  now an opt-in multi-monitor combination, not the default.
 - **Cross-app theming (D)** — waybar design selection now also themes hyprland,
   swaync and the GUI via per-app `themes/<design>` files + an `active-theme`
   record. See §11. Current look shipped as `miboro` (no visible change yet).
