@@ -279,9 +279,44 @@ window.background {
 /* Hintergrund hinter allem — Fensterfarbe */
 .root-area {
     background-color: @bg-primary;
-    border-top-right-radius: 12px;
+}
+
+/* Placement variants — the rounded/bordered edges face the screen interior
+   (away from the screen edges the panel is anchored against). Driven from
+   MainWindow._apply_placement (.place-<side>-<vpos>). */
+.root-area.place-left-bottom {
     border-top:   1.4px solid alpha(@bo-normal, 0.35);
     border-right: 1.4px solid alpha(@bo-normal, 0.35);
+    border-top-right-radius: 12px;
+}
+.root-area.place-left-top {
+    border-bottom: 1.4px solid alpha(@bo-normal, 0.35);
+    border-right:  1.4px solid alpha(@bo-normal, 0.35);
+    border-bottom-right-radius: 12px;
+}
+.root-area.place-left-center {
+    border-top:    1.4px solid alpha(@bo-normal, 0.35);
+    border-right:  1.4px solid alpha(@bo-normal, 0.35);
+    border-bottom: 1.4px solid alpha(@bo-normal, 0.35);
+    border-top-right-radius:    12px;
+    border-bottom-right-radius: 12px;
+}
+.root-area.place-right-bottom {
+    border-top:  1.4px solid alpha(@bo-normal, 0.35);
+    border-left: 1.4px solid alpha(@bo-normal, 0.35);
+    border-top-left-radius: 12px;
+}
+.root-area.place-right-top {
+    border-bottom: 1.4px solid alpha(@bo-normal, 0.35);
+    border-left:   1.4px solid alpha(@bo-normal, 0.35);
+    border-bottom-left-radius: 12px;
+}
+.root-area.place-right-center {
+    border-top:    1.4px solid alpha(@bo-normal, 0.35);
+    border-left:   1.4px solid alpha(@bo-normal, 0.35);
+    border-bottom: 1.4px solid alpha(@bo-normal, 0.35);
+    border-top-left-radius:    12px;
+    border-bottom-left-radius: 12px;
 }
 
 /* Body-Box trägt bg-element — damit der Innenradius sichtbar wird */

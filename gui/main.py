@@ -309,6 +309,11 @@ class MainWindow(Gtk.ApplicationWindow):
                     self._apply_logo,
                     initial=self._settings.get('logo_variant', 'full'),
                 )
+                page.set_placement_callback(
+                    self._apply_placement,
+                    side=self._settings.get('panel_side', 'left'),
+                    valign=self._settings.get('panel_valign', 'bottom'),
+                )
             if isinstance(page, NotificationsPage):
                 page.set_values_callback(
                     self._apply_notifications,
@@ -338,6 +343,7 @@ class MainWindow(Gtk.ApplicationWindow):
         content_wrap.set_hexpand(True)
         content_wrap.set_vexpand(True)
         content_wrap.set_child(content_inner)
+        self._content_wrap = content_wrap
 
         # ── Left sidebar ──────────────────────────────────────────────
         self._sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
@@ -383,6 +389,7 @@ class MainWindow(Gtk.ApplicationWindow):
         body.set_vexpand(True)
         body.append(self._sidebar)
         body.append(content_wrap)
+        self._body = body
 
         # ── Root: panel content (banner + body). Positioned bottom-left in
         # the fullscreen overlay; size driven directly by _apply_size().
@@ -418,6 +425,9 @@ class MainWindow(Gtk.ApplicationWindow):
             max(20, min(90, _PANEL_WIDTH * 100 // self._monitor_w)))
         self._apply_size(w_pct, self._settings.get('panel_height_pct', 100),
                          save=False)
+        self._apply_placement(self._settings.get('panel_side', 'left'),
+                              self._settings.get('panel_valign', 'bottom'),
+                              save=False)
         if self._settings.get('opacity_enabled', False):
             self._root.set_opacity(
                 self._settings.get('opacity_value', _OPACITY_DIM))
@@ -560,6 +570,40 @@ class MainWindow(Gtk.ApplicationWindow):
             self._settings['menu_theme'] = theme
             _save_settings(self._settings)
 
+    _PLACE_CLASSES = [
+        'place-left-top', 'place-left-center', 'place-left-bottom',
+        'place-right-top', 'place-right-center', 'place-right-bottom',
+    ]
+
+    def _apply_placement(self, side: str, valign: str, save: bool = True):
+        """Move the panel to one of six spots: {left,right} × {top,center,bottom}.
+        The window itself stays a fullscreen layer surface; only the inner panel
+        (`_root`) is re-aligned, its interior-facing border/rounding swapped, and
+        the nav sidebar mirrored to sit against the screen edge."""
+        side   = side if side in ('left', 'right') else 'left'
+        valign = valign if valign in ('top', 'center', 'bottom') else 'bottom'
+
+        self._root.set_halign(Gtk.Align.START if side == 'left' else Gtk.Align.END)
+        self._root.set_valign({'top': Gtk.Align.START,
+                               'center': Gtk.Align.CENTER,
+                               'bottom': Gtk.Align.END}[valign])
+
+        for cls in self._PLACE_CLASSES:
+            self._root.remove_css_class(cls)
+        self._root.add_css_class(f'place-{side}-{valign}')
+
+        # Mirror the nav sidebar so it stays against the anchored screen edge:
+        # left placement → sidebar first (left), right placement → sidebar last.
+        if side == 'left':
+            self._body.reorder_child_after(self._sidebar, None)
+        else:
+            self._body.reorder_child_after(self._sidebar, self._content_wrap)
+
+        if save:
+            self._settings['panel_side']   = side
+            self._settings['panel_valign'] = valign
+            _save_settings(self._settings)
+
     def _apply_size(self, w_pct: int, h_pct: int, save: bool = True):
         w = int(self._monitor_w * w_pct / 100)
         h = int(self._monitor_h * h_pct / 100)
@@ -689,7 +733,9 @@ class VuturelandSettings(Adw.Application):
         # ── Layer shell setup (must happen before present()) ──────────
         Gtk4LayerShell.init_for_window(win)
         Gtk4LayerShell.set_namespace(win, 'vutureland-settings')
-        Gtk4LayerShell.set_layer(win, Gtk4LayerShell.Layer.TOP)
+        # OVERLAY (above the TOP layer where waybar lives) so the panel is always
+        # the topmost layer — it shows over waybar even when one is in the way.
+        Gtk4LayerShell.set_layer(win, Gtk4LayerShell.Layer.OVERLAY)
         # Fullscreen layer so we can detect clicks outside the panel.
         # The actual panel content is positioned bottom-left inside an overlay.
         Gtk4LayerShell.set_anchor(win, Gtk4LayerShell.Edge.LEFT,   True)

@@ -16,6 +16,15 @@ class SettingsPage(Adw.PreferencesPage):
         ('simple', 'Simple'),
         ('none',   'None'),
     ]
+    _SIDES = [
+        ('left',  'Left'),
+        ('right', 'Right'),
+    ]
+    _VPOS = [
+        ('top',    'Top'),
+        ('center', 'Center'),
+        ('bottom', 'Bottom'),
+    ]
 
     def __init__(self):
         super().__init__()
@@ -24,6 +33,7 @@ class SettingsPage(Adw.PreferencesPage):
         self._size_cb            = None
         self._sidebar_labels_cb  = None
         self._logo_cb            = None
+        self._placement_cb       = None
         self._size_apply_id      = None  # debounce id for size sliders
         self._build_ui()
 
@@ -54,6 +64,13 @@ class SettingsPage(Adw.PreferencesPage):
         self._width_scale.set_value(w_pct)
         self._height_scale.set_value(h_pct)
         self._size_cb = cb
+
+    def set_placement_callback(self, cb, side: str = 'left', valign: str = 'bottom'):
+        s_idx = next((i for i, (k, _) in enumerate(self._SIDES) if k == side), 0)
+        v_idx = next((i for i, (k, _) in enumerate(self._VPOS) if k == valign), 2)
+        self._side_combo.set_selected(s_idx)
+        self._vpos_combo.set_selected(v_idx)
+        self._placement_cb = cb
 
     # ── Build ────────────────────────────────────────────────────────────────
 
@@ -122,6 +139,24 @@ class SettingsPage(Adw.PreferencesPage):
         transparency.add(self._opacity_slider_row)
         self.add(transparency)
 
+        # Placement
+        placement = Adw.PreferencesGroup(
+            title='Placement',
+            description='Which screen edge the panel attaches to, and where along it.')
+        self._side_combo = Adw.ComboRow(
+            title='Side',
+            model=Gtk.StringList.new([label for _, label in self._SIDES]),
+        )
+        self._side_combo.connect('notify::selected', self._on_placement_changed)
+        placement.add(self._side_combo)
+        self._vpos_combo = Adw.ComboRow(
+            title='Vertical position',
+            model=Gtk.StringList.new([label for _, label in self._VPOS]),
+        )
+        self._vpos_combo.connect('notify::selected', self._on_placement_changed)
+        placement.add(self._vpos_combo)
+        self.add(placement)
+
         # Panel Size
         panel = Adw.PreferencesGroup(title='Panel Size')
 
@@ -168,6 +203,13 @@ class SettingsPage(Adw.PreferencesPage):
     def _on_opacity_scale(self, scale: Gtk.Scale):
         if self._opacity_switch.get_active() and self._opacity_cb:
             self._opacity_cb(scale.get_value())
+
+    def _on_placement_changed(self, _combo, _):
+        s_idx = self._side_combo.get_selected()
+        v_idx = self._vpos_combo.get_selected()
+        if 0 <= s_idx < len(self._SIDES) and 0 <= v_idx < len(self._VPOS) \
+                and self._placement_cb:
+            self._placement_cb(self._SIDES[s_idx][0], self._VPOS[v_idx][0])
 
     def _on_size_changed(self, _):
         # Debounce — only apply 250 ms after the user stops moving the slider,

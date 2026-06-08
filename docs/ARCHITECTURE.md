@@ -326,6 +326,14 @@ keeps a `themes/<design>` file; the current look is shipped as **`miboro`**.
 Newest first. Each entry: what changed, why, and the commit.
 
 ### 2026-06-08
+- **Panel placement (Settings → Placement)** — the panel can now sit at any of
+  six spots: Side {Left, Right} × Vertical {Top, Center, Bottom}
+  (`panel_side` / `panel_valign`). The window stays a fullscreen layer surface;
+  `MainWindow._apply_placement` only re-aligns the inner `_root` (halign/valign),
+  swaps the interior-facing border/rounding (`.place-<side>-<vpos>` CSS), and
+  mirrors the nav sidebar so it stays against the anchored screen edge. The
+  layer was raised from `TOP` to `OVERLAY`, so the panel is always the topmost
+  layer — it shows over waybar even when one is in the way.
 - **Design selection moved from Waybar to the Home preview** — the waybar page's
   "Design" dropdown is gone; clicking the theme name overlaid on the Home
   wallpaper preview now opens a design picker. Choosing a design records it in
