@@ -6,7 +6,7 @@ from gi.repository import Gtk, Adw, GLib
 import os, re, json, subprocess, threading, time
 from constants import (
     VTL, HYPRLOCK_THEMES, HYPRLOCK_CONF, HYPRLOCK_THUMB, HYPRLOCK_BLACK_WP,
-    HYPRIDLE_CONF, POWERMODE_SH,
+    HYPRIDLE_CONF,
 )
 
 
@@ -112,21 +112,6 @@ def _restart_hypridle() -> None:
     subprocess.Popen(['hypridle'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-# ── Power mode helpers ────────────────────────────────────────────────────────
-
-def _read_power_profile() -> str:
-    try:
-        gm = subprocess.run(['bash', POWERMODE_SH, '--gamemode'],
-                            capture_output=True, text=True).stdout.strip()
-        if gm == 'active':
-            return 'gamemode'
-        prof = subprocess.run(['bash', POWERMODE_SH, '--active'],
-                              capture_output=True, text=True).stdout.strip()
-        return prof if prof else 'balanced'
-    except Exception:
-        return 'balanced'
-
-
 # ── Widgets ───────────────────────────────────────────────────────────────────
 
 class ThemeCard(Gtk.Box):
@@ -161,9 +146,7 @@ class ThemeCard(Gtk.Box):
 class LockscreenPage(Gtk.Box):
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
-        self._updating_power = False
         self._build_ui()
-        self._load_power_profile()
         self._load_idle_settings()
         self._reload()
 
@@ -177,7 +160,6 @@ class LockscreenPage(Gtk.Box):
         main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         main.set_margin_bottom(16)
 
-        main.append(self._build_power_section())
         main.append(self._build_idle_section())
         main.append(self._build_theme_section())
 
@@ -202,33 +184,6 @@ class LockscreenPage(Gtk.Box):
         bar.pack_end(btn_apply)
 
         self.append(bar)
-
-    def _build_power_section(self) -> Gtk.Widget:
-        grp = Adw.PreferencesGroup()
-        grp.set_title('Power Mode')
-        grp.set_margin_top(16)
-        grp.set_margin_start(16)
-        grp.set_margin_end(16)
-
-        btn_box = Gtk.Box(spacing=0, margin_top=4, margin_bottom=8)
-        btn_box.add_css_class('linked')
-        btn_box.set_hexpand(True)
-
-        self._power_btns: dict[str, Gtk.ToggleButton] = {}
-        for key, label in [
-            ('power-saver', 'Power Saver'),
-            ('balanced',    'Balanced'),
-            ('performance', 'Performance'),
-            ('gamemode',    'Game Mode'),
-        ]:
-            btn = Gtk.ToggleButton(label=label)
-            btn.set_hexpand(True)
-            btn.connect('toggled', self._on_power_toggled, key)
-            btn_box.append(btn)
-            self._power_btns[key] = btn
-
-        grp.add(btn_box)
-        return grp
 
     def _build_idle_section(self) -> Gtk.Widget:
         grp = Adw.PreferencesGroup()
@@ -283,43 +238,6 @@ class LockscreenPage(Gtk.Box):
 
         grp.add(self._flow)
         return grp
-
-    # ── Power mode ────────────────────────────────────────────────────────────
-
-    def _load_power_profile(self):
-        def _work():
-            profile = _read_power_profile()
-            GLib.idle_add(self._apply_power_ui, profile)
-        threading.Thread(target=_work, daemon=True).start()
-
-    def _apply_power_ui(self, profile: str):
-        self._updating_power = True
-        for key, btn in self._power_btns.items():
-            btn.set_active(key == profile)
-        self._updating_power = False
-        return False
-
-    def _on_power_toggled(self, btn, key: str):
-        if not btn.get_active() or self._updating_power:
-            return
-        self._updating_power = True
-        for k, b in self._power_btns.items():
-            if k != key and b.get_active():
-                b.set_active(False)
-        self._updating_power = False
-
-        flag = {
-            'power-saver': '--set_powersaver',
-            'balanced':    '--set_balanced',
-            'performance': '--set_performance',
-            'gamemode':    '--set_gamemode',
-        }.get(key)
-        if flag:
-            threading.Thread(
-                target=lambda: subprocess.run(['bash', POWERMODE_SH, flag], capture_output=True),
-                daemon=True,
-            ).start()
-        self._status.set_text(f'Power mode: {key}')
 
     # ── Idle settings ─────────────────────────────────────────────────────────
 

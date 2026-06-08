@@ -73,6 +73,17 @@ flowboxchild:selected > .wp-card {
     margin-bottom:  0px;
 }
 
+/* Theme name centred on the Home wallpaper preview — white with a heavy black
+   drop shadow so it stays readable on any wallpaper. */
+.theme-overlay-name {
+    font-size:    16px;
+    font-weight:  800;
+    color:        #ffffff;
+    text-shadow:  0 1px 2px #000000,
+                  0 0 6px #000000,
+                  0 1px 4px #000000;
+}
+
 
 /* ───────────────────────────────────────────────────────────────
    WALLPAPER — „+"-Schaltfläche (fehlendes Gegenstück hinzufügen)

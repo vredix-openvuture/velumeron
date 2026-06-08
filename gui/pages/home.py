@@ -9,6 +9,7 @@ from gi.repository import Gtk, Adw, GLib, Gdk, GdkPixbuf
 import os, re, subprocess, threading, shutil, json
 
 from models.waybar import active_bar_for_monitor
+from constants import POWERMODE_SH
 
 
 def _clean_env() -> dict:
@@ -40,6 +41,7 @@ class HomePage(Gtk.Box):
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self._apply_cb = None
+        self._updating_power = False
         # Stack so Network/Bluetooth open as in-panel subpages (a separate window
         # can't be used under the layer-shell panel).
         self._stack = Gtk.Stack()
@@ -47,9 +49,11 @@ class HomePage(Gtk.Box):
         self._stack.add_named(self._build_main(), 'main')
         self.append(self._stack)
         GLib.idle_add(self._refresh_status)
+        GLib.idle_add(self._load_power_profile)
         # Refresh the active-style label + wallpaper preview every time the page
         # is shown, so it tracks live theme/wallpaper changes.
-        self.connect('map', lambda _w: self._refresh_current())
+        self.connect('map', lambda _w: (self._refresh_current(),
+                                        self._load_power_profile()) and False)
 
     def set_apply_callback(self, cb):
         self._apply_cb = cb
@@ -90,9 +94,9 @@ class HomePage(Gtk.Box):
             pass
         return None
 
-    # Preview size — 80% of the previous 520×150.
-    _PREVIEW_W = 416
-    _PREVIEW_H = 120
+    # Preview size — roughly half of the previous 416×120.
+    _PREVIEW_W = 208
+    _PREVIEW_H = 64
 
     def _build_current_group(self) -> Adw.PreferencesGroup:
         grp = Adw.PreferencesGroup()
@@ -104,8 +108,8 @@ class HomePage(Gtk.Box):
         return grp
 
     def _refresh_current(self):
-        """Rebuild the active-style label + wallpaper preview (called on show so
-        it tracks the live theme)."""
+        """Rebuild the wallpaper preview with the theme name overlaid on it
+        (called on show so it tracks the live theme)."""
         box = getattr(self, '_current_box', None)
         if box is None:
             return
@@ -116,10 +120,6 @@ class HomePage(Gtk.Box):
             child = nxt
 
         style = self._active_style()
-        lbl = Gtk.Label(label=style or 'No active bar')
-        lbl.add_css_class('title-3')
-        lbl.set_halign(Gtk.Align.START)
-        box.append(lbl)
 
         pic = None
         wp = self._active_wallpaper()
@@ -134,16 +134,103 @@ class HomePage(Gtk.Box):
                 pic = None
         if pic is None:
             pic = Gtk.Image.new_from_icon_name('image-x-generic')
-            pic.set_pixel_size(48)
+            pic.set_pixel_size(32)
             pic.set_size_request(-1, self._PREVIEW_H)
 
         frame = Gtk.Frame()
         frame.add_css_class('wp-frame')
         frame.set_overflow(Gtk.Overflow.HIDDEN)
         frame.set_child(pic)
-        frame.set_halign(Gtk.Align.CENTER)
         frame.set_size_request(self._PREVIEW_W, self._PREVIEW_H)
-        box.append(frame)
+
+        # Theme name overlaid in the centre of the image — white with a black
+        # drop shadow so it stays legible on any wallpaper.
+        overlay = Gtk.Overlay()
+        overlay.set_child(frame)
+        overlay.set_halign(Gtk.Align.CENTER)
+        name_lbl = Gtk.Label(label=style or 'No active bar')
+        name_lbl.add_css_class('theme-overlay-name')
+        name_lbl.set_halign(Gtk.Align.CENTER)
+        name_lbl.set_valign(Gtk.Align.CENTER)
+        overlay.add_overlay(name_lbl)
+        box.append(overlay)
+
+    # ── Power mode ──────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _read_power_profile() -> str:
+        try:
+            gm = subprocess.run(['bash', POWERMODE_SH, '--gamemode'],
+                                capture_output=True, text=True).stdout.strip()
+            if gm == 'active':
+                return 'gamemode'
+            prof = subprocess.run(['bash', POWERMODE_SH, '--active'],
+                                  capture_output=True, text=True).stdout.strip()
+            return prof if prof else 'balanced'
+        except Exception:
+            return 'balanced'
+
+    def _build_power_group(self) -> Adw.PreferencesGroup:
+        grp = Adw.PreferencesGroup(title='Power Mode')
+
+        btn_box = Gtk.Box(spacing=0, margin_top=4, margin_bottom=8,
+                          margin_start=8, margin_end=8)
+        btn_box.add_css_class('linked')
+        btn_box.set_hexpand(True)
+
+        self._power_btns: dict[str, Gtk.ToggleButton] = {}
+        for key, label in [
+            ('power-saver', 'Power Saver'),
+            ('balanced',    'Balanced'),
+            ('performance', 'Performance'),
+            ('gamemode',    'Game Mode'),
+        ]:
+            btn = Gtk.ToggleButton(label=label)
+            btn.set_hexpand(True)
+            btn.connect('toggled', self._on_power_toggled, key)
+            btn_box.append(btn)
+            self._power_btns[key] = btn
+
+        row = Adw.PreferencesRow()
+        row.set_activatable(False)
+        row.set_child(btn_box)
+        grp.add(row)
+        return grp
+
+    def _load_power_profile(self):
+        def _work():
+            profile = self._read_power_profile()
+            GLib.idle_add(self._apply_power_ui, profile)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _apply_power_ui(self, profile: str):
+        self._updating_power = True
+        for key, btn in self._power_btns.items():
+            btn.set_active(key == profile)
+        self._updating_power = False
+        return False
+
+    def _on_power_toggled(self, btn, key: str):
+        if not btn.get_active() or getattr(self, '_updating_power', False):
+            return
+        self._updating_power = True
+        for k, b in self._power_btns.items():
+            if k != key and b.get_active():
+                b.set_active(False)
+        self._updating_power = False
+
+        flag = {
+            'power-saver': '--set_powersaver',
+            'balanced':    '--set_balanced',
+            'performance': '--set_performance',
+            'gamemode':    '--set_gamemode',
+        }.get(key)
+        if flag:
+            threading.Thread(
+                target=lambda: subprocess.run(['bash', POWERMODE_SH, flag],
+                                              capture_output=True),
+                daemon=True,
+            ).start()
 
     # ── UI ────────────────────────────────────────────────────────────────────
 
@@ -186,6 +273,9 @@ class HomePage(Gtk.Box):
         self._bt_row.add_suffix(bt_btn)
         conn.add(self._bt_row)
         page.add(conn)
+
+        # Power mode group (moved here from the Lock Screen page)
+        page.add(self._build_power_group())
 
         # Session group
         session = Adw.PreferencesGroup(title='Session')

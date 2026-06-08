@@ -89,7 +89,7 @@ _BANNER        = os.path.join(
 )
 _LOGO_PATHS = {
     'full':   _BANNER,
-    'simple': os.path.join(os.path.dirname(_BANNER), 'vuturland-simple.png'),
+    'simple': os.path.join(os.path.dirname(_BANNER), 'vuture.png'),
     'none':   None,
 }
 _SETTINGS_FILE = os.path.join(
@@ -368,6 +368,11 @@ class MainWindow(Gtk.ApplicationWindow):
             nav_btns.append(btn)
 
         nav_btns[0].set_active(True)
+        # Keep refs so the window can always reopen on the Home page (the daemon
+        # only hides/shows, so the last-viewed page would otherwise persist).
+        self._stack = stack
+        self._nav_btns = nav_btns
+        self._home_page = _PAGES[0][0]
         self._apply_sidebar_labels(self._settings.get('sidebar_labels', False),
                                    save=False)
 
@@ -468,6 +473,14 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def slide_in(self):
         return False
+
+    def reset_to_home(self):
+        """Always show the Home page (called whenever the window is shown)."""
+        stack = getattr(self, '_stack', None)
+        if stack is not None:
+            stack.set_visible_child_name(getattr(self, '_home_page', 'home'))
+        for i, b in enumerate(getattr(self, '_nav_btns', [])):
+            b.set_active(i == 0)
 
     def close_animated(self):
         self.hide()
@@ -686,9 +699,15 @@ class VuturelandSettings(Adw.Application):
         Gtk4LayerShell.set_exclusive_zone(win, -1)
         Gtk4LayerShell.set_keyboard_mode(win, Gtk4LayerShell.KeyboardMode.ON_DEMAND)
 
-        # SIGUSR1: toggle window visibility (sent by --toggle)
-        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1,
-                             lambda: (win.set_visible(not win.get_visible()), GLib.SOURCE_CONTINUE)[1])
+        # SIGUSR1: toggle window visibility (sent by --toggle). Reset to the Home
+        # page whenever the window becomes visible.
+        def _toggle():
+            show = not win.get_visible()
+            if show:
+                win.reset_to_home()
+            win.set_visible(show)
+            return GLib.SOURCE_CONTINUE
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, _toggle)
 
         # SIGTERM: actually quit the process
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM,

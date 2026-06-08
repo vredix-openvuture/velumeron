@@ -326,6 +326,17 @@ keeps a `themes/<design>` file; the current look is shipped as **`miboro`**.
 Newest first. Each entry: what changed, why, and the commit.
 
 ### 2026-06-08
+- **GUI always reopens on the Home page** — the daemon only hides/shows the
+  window, so the last-viewed page used to persist. `MainWindow.reset_to_home()`
+  now switches the stack + nav back to Home whenever the window becomes visible
+  (SIGUSR1 toggle).
+- **Power Mode moved to the Home page** — the Power Saver / Balanced /
+  Performance / Game Mode switcher now lives in a Home group (was on the Lock
+  Screen page); the Lock Screen page keeps only Idle settings + lock themes.
+- **Home preview: half size + name overlaid** — the wallpaper preview shrank to
+  ~half (208×64) and the theme name (e.g. *Miboro*) is now centred *on* the
+  image, white with a heavy black drop shadow (`.theme-overlay-name`) instead of
+  a label above it.
 - **Wallpaper grid is responsive again** — the fixed `2 / 3` columns made the
   panel un-shrinkable (min column count == max). The flow now reflows down to a
   single column when the window is narrower than the content needs, while still
