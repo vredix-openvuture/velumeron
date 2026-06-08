@@ -319,13 +319,14 @@ class HomePage(Gtk.Box):
         self._net_status_lbl.set_wrap(True)
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        box.append(self._subpage_header('Network', on_refresh=self._refresh_network))
+        box.append(self._subpage_header('Network',
+                                        on_refresh=lambda: self._refresh_network(rescan=True)))
         box.append(self._net_status_lbl)
         box.append(page)
         self._stack_set('network', box)
-        self._refresh_network()
+        self._refresh_network()              # cached on open — only Reload rescans
 
-    def _refresh_network(self):
+    def _refresh_network(self, rescan=False):
         for r in self._wifi_rows:
             self._wifi_group.remove(r)
         for r in self._vpn_rows:
@@ -334,10 +335,11 @@ class HomePage(Gtk.Box):
         if not shutil.which('nmcli'):
             self._add_info(self._wifi_group, self._wifi_rows, 'nmcli not installed')
             return
-        self._add_info(self._wifi_group, self._wifi_rows, 'Scanning…')
+        if rescan:
+            self._add_info(self._wifi_group, self._wifi_rows, 'Scanning…')
 
         def _work():
-            wifi = self._scan_wifi()
+            wifi = self._scan_wifi(rescan)
             vpns = self._list_vpn()
             cur  = self._net_status_text()
             GLib.idle_add(self._populate_network, wifi, vpns, cur)
@@ -368,14 +370,31 @@ class HomePage(Gtk.Box):
             self._add_info(self._vpn_group, self._vpn_rows, 'No VPN connections')
         return False
 
-    def _scan_wifi(self) -> list:
+    def _active_wifi(self) -> str | None:
+        """Name (≈ SSID) of the active wireless connection, or None. More reliable
+        than the ACTIVE column of `dev wifi list`, which can be empty when wired
+        is the default route."""
+        try:
+            r = subprocess.run(['nmcli', '-t', '-f', 'NAME,TYPE', 'connection', 'show', '--active'],
+                               capture_output=True, text=True, timeout=6, env=_clean_env())
+            for line in r.stdout.splitlines():
+                p = self._nm_split(line)
+                if len(p) >= 2 and 'wireless' in p[1]:
+                    return p[0]
+        except Exception:
+            pass
+        return None
+
+    def _scan_wifi(self, rescan=False) -> list:
         try:
             r = subprocess.run(
                 ['nmcli', '-t', '-f', 'ACTIVE,SSID,SIGNAL,SECURITY',
-                 'dev', 'wifi', 'list', '--rescan', 'yes'],
-                capture_output=True, text=True, timeout=25, env=_clean_env())
+                 'dev', 'wifi', 'list', '--rescan', 'yes' if rescan else 'no'],
+                capture_output=True, text=True,
+                timeout=25 if rescan else 8, env=_clean_env())
         except Exception:
             return []
+        active_name = self._active_wifi()
         best = {}
         for line in r.stdout.splitlines():
             p = self._nm_split(line)
@@ -388,8 +407,16 @@ class HomePage(Gtk.Box):
                 sig = 0
             net = {'ssid': ssid, 'signal': sig,
                    'secured': bool(p[3].strip()) and p[3].strip() != '--',
-                   'active': p[0] == 'yes'}
-            if ssid not in best or net['signal'] > best[ssid]['signal'] or net['active']:
+                   'active': p[0] == 'yes' or (active_name is not None and ssid == active_name)}
+            # Dedup by SSID across multiple APs: the active one always wins;
+            # otherwise keep the strongest signal. (Bug fix: a stronger inactive
+            # BSSID must not overwrite the active one, or "Connected" is lost.)
+            cur = best.get(ssid)
+            if cur is None:
+                best[ssid] = net
+            elif net['active'] and not cur['active']:
+                best[ssid] = net
+            elif not cur['active'] and net['signal'] > cur['signal']:
                 best[ssid] = net
         return sorted(best.values(), key=lambda n: (not n['active'], -n['signal']))
 
