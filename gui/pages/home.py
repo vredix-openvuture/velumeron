@@ -427,8 +427,9 @@ class HomePage(Gtk.Box):
         if net['active']:
             row = Adw.ActionRow(title=net['ssid'], subtitle='Connected')
             row.add_prefix(Gtk.Image.new_from_icon_name('emblem-ok-symbolic'))
+            # Shows the state ("Connected"), default colour like the Bluetooth
+            # connected button (no accent); clicking it disconnects.
             btn = Gtk.Button(label='Connected', valign=Gtk.Align.CENTER)
-            btn.add_css_class('suggested-action')
             btn.connect('clicked', lambda b, s=net['ssid']: self._wifi_disconnect(s, b))
             row.add_suffix(btn)
             return row

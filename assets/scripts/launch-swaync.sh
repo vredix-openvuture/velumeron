@@ -15,8 +15,12 @@ SW_COLORS="$VUTURELAND_USER_DIR/assets/colors_gtk.css"
 
 # Active app theme (set by the waybar design picker). The matching swaync theme
 # is swaync/themes/<active>.css; fall back to the legacy style.css if absent.
-SW_THEME="$(cat "$VUTURELAND_USER_DIR/active-theme" 2>/dev/null | tr -d '[:space:]')"
-[[ -z "$SW_THEME" ]] && SW_THEME="miboro"
+# Read defensively: a missing active-theme file must not abort under `set -e`.
+SW_THEME="miboro"
+if [[ -f "$VUTURELAND_USER_DIR/active-theme" ]]; then
+    SW_THEME="$(tr -d '[:space:]' < "$VUTURELAND_USER_DIR/active-theme")"
+    [[ -z "$SW_THEME" ]] && SW_THEME="miboro"
+fi
 SRC_STYLE="$VUTURELAND_USER_DIR/swaync/themes/$SW_THEME.css"
 [[ -f "$SRC_STYLE" ]] || SRC_STYLE="$VUTURELAND_USER_DIR/swaync/themes/miboro.css"
 [[ -f "$SRC_STYLE" ]] || SRC_STYLE="$VUTURELAND_USER_DIR/swaync/style.css"
