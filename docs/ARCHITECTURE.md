@@ -326,6 +326,14 @@ keeps a `themes/<design>` file; the current look is shipped as **`miboro`**.
 Newest first. Each entry: what changed, why, and the commit.
 
 ### 2026-06-08
+- **Design selection moved from Waybar to the Home preview** — the waybar page's
+  "Design" dropdown is gone; clicking the theme name overlaid on the Home
+  wallpaper preview now opens a design picker. Choosing a design records it in
+  `active-theme`, rebuilds + restarts Waybar for that design, and reloads
+  hyprland/swaync/the GUI — i.e. every app adopts it, exactly as selecting it on
+  the waybar page used to. New shared module `gui/design.py`
+  (`list_designs` / `current_design` / `apply_design`); the waybar page now reads
+  the active design via `current_design()` and only edits bars within it.
 - **GUI always reopens on the Home page** — the daemon only hides/shows the
   window, so the last-viewed page used to persist. `MainWindow.reset_to_home()`
   now switches the stack + nav back to Home whenever the window becomes visible

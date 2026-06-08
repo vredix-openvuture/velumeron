@@ -10,6 +10,7 @@ import os, re, subprocess, threading, shutil, json
 
 from models.waybar import active_bar_for_monitor
 from constants import POWERMODE_SH
+from design import list_designs, current_design, apply_design
 
 
 def _clean_env() -> dict:
@@ -119,7 +120,7 @@ class HomePage(Gtk.Box):
             box.remove(child)
             child = nxt
 
-        style = self._active_style()
+        style = current_design() or self._active_style()
 
         pic = None
         wp = self._active_wallpaper()
@@ -144,16 +145,50 @@ class HomePage(Gtk.Box):
         frame.set_size_request(self._PREVIEW_W, self._PREVIEW_H)
 
         # Theme name overlaid in the centre of the image — white with a black
-        # drop shadow so it stays legible on any wallpaper.
+        # drop shadow so it stays legible on any wallpaper. Clicking it opens a
+        # design picker; choosing a design themes every app (waybar/hypr/swaync/
+        # gui), exactly as selecting it on the waybar page used to.
         overlay = Gtk.Overlay()
         overlay.set_child(frame)
         overlay.set_halign(Gtk.Align.CENTER)
+
         name_lbl = Gtk.Label(label=style or 'No active bar')
         name_lbl.add_css_class('theme-overlay-name')
-        name_lbl.set_halign(Gtk.Align.CENTER)
-        name_lbl.set_valign(Gtk.Align.CENTER)
-        overlay.add_overlay(name_lbl)
+
+        btn = Gtk.MenuButton()
+        btn.add_css_class('flat')
+        btn.add_css_class('theme-overlay-btn')
+        btn.set_child(name_lbl)
+        btn.set_halign(Gtk.Align.CENTER)
+        btn.set_valign(Gtk.Align.CENTER)
+        btn.set_tooltip_text('Choose design')
+        btn.set_popover(self._design_popover(style))
+        overlay.add_overlay(btn)
         box.append(overlay)
+
+    def _design_popover(self, current: str | None) -> Gtk.Popover:
+        pop = Gtk.Popover()
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        box.set_margin_top(4); box.set_margin_bottom(4)
+        box.set_margin_start(4); box.set_margin_end(4)
+        designs = list_designs()
+        if not designs:
+            box.append(Gtk.Label(label='No designs found'))
+        for d in designs:
+            b = Gtk.Button(label=d)
+            b.add_css_class('flat')
+            b.set_halign(Gtk.Align.FILL)
+            if d == current:
+                b.add_css_class('suggested-action')
+            b.connect('clicked',
+                      lambda _w, dd=d, p=pop: (p.popdown(), self._choose_design(dd)))
+            box.append(b)
+        pop.set_child(box)
+        return pop
+
+    def _choose_design(self, design: str):
+        apply_design(design)
+        self._refresh_current()
 
     # ── Power mode ──────────────────────────────────────────────────────────────
 

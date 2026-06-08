@@ -18,6 +18,7 @@ from models.waybar import (
     build_bar_config, refresh_groups_includes, remove_other_bar_configs,
     active_bar_for_monitor, _known_monitors,
 )
+from design import current_design
 
 _INVALID = Gtk.INVALID_LIST_POSITION
 
@@ -190,12 +191,12 @@ class WaybarPage(Gtk.Box):
     # ── data helpers ────────────────────────────────────────────────────────
 
     def _cur_design(self) -> str:
+        # The design is chosen on the Home page now (overlaid on the wallpaper
+        # preview); the waybar page just edits bars for the active design.
         if not self._design_styles:
             return ""
-        idx = self._design_combo.get_selected()
-        if idx == _INVALID or idx >= len(self._design_styles):
-            return self._design_styles[0]
-        return self._design_styles[idx]
+        active = current_design()
+        return active if active in self._design_styles else self._design_styles[0]
 
     def _type_names(self) -> list[str]:
         seen, result = set(), []
@@ -288,14 +289,8 @@ class WaybarPage(Gtk.Box):
             row.set_visible(visible)
             return row
 
-        # ── Design-Zeile ─────────────────────────────────────────────────
-        self._design_row = _sel_row('Design', margin_top=12,
-                                    visible=bool(self._design_styles))
-        self._design_combo = Gtk.DropDown.new_from_strings(self._design_styles)
-        self._design_combo.set_hexpand(True)
-        self._design_combo.connect('notify::selected', self._on_design_changed)
-        self._design_row.append(self._design_combo)
-        self.append(self._design_row)
+        # The design is selected on the Home page (theme name on the wallpaper
+        # preview); this page only edits bars within the active design.
 
         # ── Monitor-Zeile ─────────────────────────────────────────────────
         mon_row = _sel_row('Monitor')
@@ -441,25 +436,9 @@ class WaybarPage(Gtk.Box):
         self._updating_bars = False
         self._resolve_bar()
 
-    def _on_design_changed(self, combo, _):
-        design = self._cur_design()
-        self._bar_styles = scan_bar_styles(design)
-        self._sections_h  = scan_modules_by_section('horizontal',     design)
-        self._sections_vl = scan_modules_by_section('vertical-left',  design)
-        self._sections_vr = scan_modules_by_section('vertical-right', design)
-        self._map_h   = _build_key_map(self._sections_h)
-        self._map_vl  = _build_key_map(self._sections_vl)
-        self._map_vr  = _build_key_map(self._sections_vr)
-        self._desc_h  = _build_desc_map(self._sections_h)
-        self._desc_vl = _build_desc_map(self._sections_vl)
-        self._desc_vr = _build_desc_map(self._sections_vr)
-        self._cur_bar = None
-        self._left, self._center, self._right = [], [], []
-        self._populate_styles()
-
     def _set_wants_for_monitor(self, monitor: str | None) -> str | None:
-        """Queue the active bar's type/variant/position for `monitor`; return its
-        design (so the caller can switch the design combo). None if no active bar."""
+        """Queue the active bar's type/variant/position for `monitor` so the page
+        opens on the running bar. Returns its design, or None if no active bar."""
         self._want_type = self._want_variant = self._want_position = None
         active = active_bar_for_monitor(monitor) if monitor else None
         if not active:
@@ -476,14 +455,7 @@ class WaybarPage(Gtk.Box):
     def _on_monitor_changed(self, combo, _):
         mon_idx = self._mon_combo.get_selected()
         monitor = self._monitors[mon_idx] if (mon_idx != _INVALID and self._monitors) else None
-        design = self._set_wants_for_monitor(monitor)
-        if design and design in self._design_styles:
-            d_idx = self._design_styles.index(design)
-            if self._design_combo.get_selected() != d_idx:
-                # switching design re-runs _on_design_changed -> _populate_styles,
-                # which consumes the queued wants
-                self._design_combo.set_selected(d_idx)
-                return
+        self._set_wants_for_monitor(monitor)
         self._populate_styles()
 
     def _on_style_changed(self, combo, _):
@@ -693,14 +665,7 @@ class WaybarPage(Gtk.Box):
     # ── actions ──────────────────────────────────────────────────────────────
 
     def _on_reload(self, _):
-        new_designs = scan_config_styles()
-        if new_designs != self._design_styles:
-            self._design_styles = new_designs
-            strings = Gtk.StringList()
-            for ds in new_designs:
-                strings.append(ds)
-            self._design_combo.set_model(strings)
-            self._design_row.set_visible(bool(new_designs))
+        self._design_styles = scan_config_styles()
         design = self._cur_design()
         self._bar_styles = scan_bar_styles(design)
         self._sections_h  = scan_modules_by_section('horizontal',     design)

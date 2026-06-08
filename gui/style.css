@@ -84,6 +84,26 @@ flowboxchild:selected > .wp-card {
                   0 1px 4px #000000;
 }
 
+/* The clickable wrapper around the overlaid theme name — invisible chrome so
+   only the text (with its shadow) shows over the wallpaper. */
+.theme-overlay-btn,
+.theme-overlay-btn:hover,
+.theme-overlay-btn:active,
+.theme-overlay-btn:checked {
+    background:    none;
+    background-color: transparent;
+    border:        none;
+    box-shadow:    none;
+    outline:       none;
+    min-height:    0;
+    min-width:     0;
+    padding:       4px 10px;
+}
+
+.theme-overlay-btn:hover .theme-overlay-name {
+    text-decoration: underline;
+}
+
 
 /* ───────────────────────────────────────────────────────────────
    WALLPAPER — „+"-Schaltfläche (fehlendes Gegenstück hinzufügen)
