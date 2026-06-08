@@ -395,6 +395,36 @@ preferencespage switchrow {
 
 
 /* ───────────────────────────────────────────────────────────────
+   WALLPAPER PAGE — vertical switcher on the right
+   ─────────────────────────────────────────────────────────────── */
+
+.wp-switcher {
+    padding:       4px;
+    margin-right:  4px;
+}
+
+.wp-switch-btn {
+    min-width:     58px;
+    min-height:    0px;
+    padding:       8px 2px;
+    border-radius: 8px;
+    color:         @fg-muted;
+    background:    transparent;
+    transition:    background-color 120ms ease, color 120ms ease;
+}
+
+.wp-switch-btn:hover {
+    background-color: alpha(@bg-active, 0.12);
+    color:            @fg-primary;
+}
+
+.wp-switch-btn:checked {
+    background-color: alpha(@bg-active, 0.28);
+    color:            @fg-primary;
+}
+
+
+/* ───────────────────────────────────────────────────────────────
    TOGGLES & SLIDERS — keep the knobs perfectly round (the default
    theme renders them slightly oval). 9999px = fully rounded.
    ─────────────────────────────────────────────────────────────── */

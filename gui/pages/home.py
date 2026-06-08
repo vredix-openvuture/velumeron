@@ -426,7 +426,7 @@ class HomePage(Gtk.Box):
         # (chevron) to type/replace the password.
         if net['active']:
             row = Adw.ActionRow(title=net['ssid'], subtitle='Connected')
-            row.add_prefix(Gtk.Image.new_from_icon_name('emblem-ok-symbolic'))
+            row.add_prefix(Gtk.Image.new_from_icon_name('object-select-symbolic'))
             # Shows the state ("Connected"), default colour like the Bluetooth
             # connected button (no accent); clicking it disconnects.
             btn = Gtk.Button(label='Connected', valign=Gtk.Align.CENTER)

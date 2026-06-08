@@ -611,33 +611,58 @@ class WallpaperPage(Gtk.Box):
         inner = Adw.ViewStack()
         self._inner = inner
         self._flows: dict = {}
-        self._filter: dict = {k: 'all' for k, _ in self.TABS}
         self._apply_cb = None
+        self._monitors = get_monitor_names()
 
-        _icons = {
-            'set': 'view-grid-symbolic',
-            'hor': 'object-flip-horizontal-symbolic',
-            'ver': 'object-flip-vertical-symbolic',
-        }
-        for key, label in self.TABS:
-            page = inner.add_titled(self._make_tab(key), key, label)
-            page.set_icon_name(_icons[key])
+        # Sets are only for multi-monitor fixed combos; Vertical only when a
+        # vertical monitor exists. Order: Horizontal, Vertical, Sets, Colors.
+        mcount, has_vertical = self._detect_monitors()
+        self._has_sets = mcount > 1
+        tabs = [('hor', 'Horizontal', 'object-flip-horizontal-symbolic')]
+        if has_vertical:
+            tabs.append(('ver', 'Vertical', 'object-flip-vertical-symbolic'))
+        if self._has_sets:
+            tabs.append(('set', 'Sets', 'view-grid-symbolic'))
+        self._filter = {k: 'all' for k, _, _ in tabs}
 
+        for key, label, icon in tabs:
+            inner.add_titled(self._make_tab(key), key, label).set_icon_name(icon)
         inner.add_titled(WallustPage(), 'colors', 'Colors').set_icon_name('color-select-symbolic')
-
-        switcher = Adw.ViewSwitcherBar()
-        switcher.set_stack(inner)
-        switcher.set_reveal(True)
+        inner.set_hexpand(True)
         inner.set_vexpand(True)
 
-        # Everything lives inside a Stack so the set editor and its image picker
-        # can be shown *in-panel* rather than as a separate window — a separate
-        # window renders under the fullscreen layer-shell panel and can't be used.
-        self._monitors = get_monitor_names()
+        # Vertical switcher on the right (frees up the crowded bottom bar).
+        switcher = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        switcher.add_css_class('wp-switcher')
+        switcher.set_valign(Gtk.Align.START)
+        self._switch_btns = {}
+        self._switch_updating = False
+        for key, label, icon in tabs + [('colors', 'Colors', 'color-select-symbolic')]:
+            b = Gtk.ToggleButton()
+            b.add_css_class('flat')
+            b.add_css_class('wp-switch-btn')
+            bx = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            img = Gtk.Image.new_from_icon_name(icon)
+            img.set_pixel_size(18)
+            bx.append(img)
+            lb = Gtk.Label(label=label)
+            lb.add_css_class('caption')
+            bx.append(lb)
+            b.set_child(bx)
+            b.connect('toggled', self._on_switch_toggled, key)
+            switcher.append(b)
+            self._switch_btns[key] = b
+        inner.connect('notify::visible-child-name', self._sync_switcher)
+        self._switch_btns[tabs[0][0]].set_active(True)
+
+        content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        content.set_vexpand(True)
+        content.append(inner)
+        content.append(switcher)
+
         main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         main.set_vexpand(True)
-        main.append(inner)
-        main.append(switcher)
+        main.append(content)
 
         bar = Gtk.ActionBar()
         self._spinner = Gtk.Spinner()
@@ -650,9 +675,10 @@ class WallpaperPage(Gtk.Box):
         btn_refresh.connect('clicked', lambda _: self._reload())
         bar.pack_end(btn_refresh)
 
-        btn_new_set = Gtk.Button(label='New Set')
-        btn_new_set.connect('clicked', lambda _: self._on_new_set())
-        bar.pack_end(btn_new_set)
+        if self._has_sets:
+            btn_new_set = Gtk.Button(label='New Set')
+            btn_new_set.connect('clicked', lambda _: self._on_new_set())
+            bar.pack_end(btn_new_set)
 
         btn_folders = Gtk.Button(label='Folders')
         btn_folders.connect('clicked', lambda _: self._open_folders())
@@ -670,6 +696,39 @@ class WallpaperPage(Gtk.Box):
         self._pstack.add_named(main, 'main')
         self.append(self._pstack)
         self._reload()
+
+    @staticmethod
+    def _detect_monitors():
+        try:
+            mons = json.loads(subprocess.run(
+                ['hyprctl', 'monitors', '-j'], capture_output=True, text=True).stdout)
+        except Exception:
+            mons = []
+        count = len(mons)
+        vert = any((m.get('transform') in (1, 3, 5, 7))
+                   or (m.get('height', 0) > m.get('width', 0)) for m in mons)
+        return count, vert
+
+    def _on_switch_toggled(self, btn, key):
+        if self._switch_updating:
+            return
+        if btn.get_active():
+            self._switch_updating = True
+            for k, b in self._switch_btns.items():
+                if k != key:
+                    b.set_active(False)
+            self._switch_updating = False
+            self._inner.set_visible_child_name(key)
+        elif not any(b.get_active() for b in self._switch_btns.values()):
+            btn.set_active(True)
+
+    def _sync_switcher(self, *_):
+        name = self._inner.get_visible_child_name()
+        if name in self._switch_btns:
+            self._switch_updating = True
+            for k, b in self._switch_btns.items():
+                b.set_active(k == name)
+            self._switch_updating = False
 
     # ── In-panel set editor ─────────────────────────────────────────────────
 
@@ -894,8 +953,16 @@ class WallpaperPage(Gtk.Box):
                         '"Add …" button saves new images.')
         self._fld_hor = Adw.EntryRow(title='Horizontal folder')
         self._fld_hor.set_text(str(settings.get('wallpaper_dir_hor', '') or ''))
+        bh = Gtk.Button(icon_name='folder-open-symbolic', valign=Gtk.Align.CENTER)
+        bh.add_css_class('flat')
+        bh.connect('clicked', lambda _: self._browse_folder(self._fld_hor))
+        self._fld_hor.add_suffix(bh)
         self._fld_ver = Adw.EntryRow(title='Vertical folder')
         self._fld_ver.set_text(str(settings.get('wallpaper_dir_ver', '') or ''))
+        bv = Gtk.Button(icon_name='folder-open-symbolic', valign=Gtk.Align.CENTER)
+        bv.add_css_class('flat')
+        bv.connect('clicked', lambda _: self._browse_folder(self._fld_ver))
+        self._fld_ver.add_suffix(bv)
         group.add(self._fld_hor)
         group.add(self._fld_ver)
         page = Adw.PreferencesPage()
@@ -921,6 +988,29 @@ class WallpaperPage(Gtk.Box):
             self._pstack.remove(old)
         self._pstack.add_named(box, 'folders')
         self._pstack.set_visible_child_name('folders')
+
+    def _browse_folder(self, entry):
+        d = Gtk.FileDialog(title='Choose a folder')
+        cur = os.path.expanduser(entry.get_text().strip())
+        if cur and os.path.isdir(cur):
+            try:
+                d.set_initial_folder(Gio.File.new_for_path(cur))
+            except Exception:
+                pass
+        root = self.get_root()
+        if root is not None:
+            root.set_visible(False)   # layer-shell: hide panel for the portal dialog
+        def _done(dialog, result):
+            r = self.get_root()
+            try:
+                f = dialog.select_folder_finish(result)
+                if f:
+                    entry.set_text(f.get_path())
+            except Exception:
+                pass
+            if r is not None:
+                r.set_visible(True)
+        d.select_folder(None, None, _done)
 
     def _save_folders(self):
         try:
@@ -1044,21 +1134,26 @@ class WallpaperPage(Gtk.Box):
     def _populate(self, sets: dict, entries: list):
         self._spinner.stop()
 
-        for ws in sets.values():
-            self._flows['set'].append(
-                NewSetCard(ws, on_change=self._reload, on_edit=self.open_set_editor))
+        if 'set' in self._flows:
+            for ws in sets.values():
+                self._flows['set'].append(
+                    NewSetCard(ws, on_change=self._reload, on_edit=self.open_set_editor))
 
         hor_count = ver_count = 0
         for e in entries:
-            if e.hor_file:
+            if e.hor_file and 'hor' in self._flows:
                 self._flows['hor'].append(HorCard(e, on_change=self._reload))
                 hor_count += 1
-            if e.ver_file:
+            if e.ver_file and 'ver' in self._flows:
                 self._flows['ver'].append(VerCard(e, on_change=self._reload))
                 ver_count += 1
 
-        self._status.set_text(
-            f'{len(sets)} Sets · {hor_count} Horizontal · {ver_count} Vertical')
+        parts = [f'{hor_count} Horizontal']
+        if 'ver' in self._flows:
+            parts.append(f'{ver_count} Vertical')
+        if 'set' in self._flows:
+            parts.insert(0, f'{len(sets)} Sets')
+        self._status.set_text(' · '.join(parts))
         return False
 
     def _on_activated(self, child, tab_key: str):
@@ -1138,14 +1233,21 @@ class WallpaperPage(Gtk.Box):
             threading.Thread(target=self._import, args=(paths,), daemon=True).start()
 
     def _import(self, paths: list):
-        # Copy into the effective dirs (custom path if set, else bundled). With a
-        # custom writable folder this is also what makes Add work on clients.
-        os.makedirs(wallpaper_dir('hor'), exist_ok=True)
-        os.makedirs(wallpaper_dir('ver'), exist_ok=True)
+        # Copy into the effective dirs (custom path if set, else bundled). The
+        # bundled dir is read-only on clients (AUR package), so adding only works
+        # into a writable custom folder — surface that instead of failing silently.
+        errors = 0
         for path in paths:
             is_hor = is_horizontal_file(path)
             is_vid = os.path.splitext(path)[1].lower() in VIDEO_EXTS
-            self._copy_file(path, is_hor, is_vid, gen_id())
+            try:
+                self._copy_file(path, is_hor, is_vid, gen_id())
+            except OSError:
+                errors += 1
+        if errors:
+            GLib.idle_add(lambda: self._status.set_text(
+                'Could not save here (read-only). Set a writable folder under "Folders".')
+                or False)
         GLib.idle_add(self._reload)
 
     def _copy_file(self, path: str, is_hor: bool, is_vid: bool, wp_id: str):
