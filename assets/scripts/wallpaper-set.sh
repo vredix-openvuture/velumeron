@@ -30,15 +30,29 @@ if [[ -z "$set_id" && -z "$hor_file" && -z "$ver_file" ]]; then
     exit 1
 fi
 
-# ── Wallust source (prefer hor for color extraction) ──────────────────────
+# ── Wallust source — derive the colour theme from the MAIN (focused) monitor's
+# wallpaper, so the theme only changes when the main monitor's wallpaper is
+# swapped (changing a secondary monitor leaves the theme untouched). ──────────
+_main_mon=$(hyprctl monitors -j 2>/dev/null | jq -r '[.[] | select(.focused)][0].name' 2>/dev/null)
+[[ -z "$_main_mon" || "$_main_mon" == "null" ]] && \
+    _main_mon=$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].name' 2>/dev/null)
+_main_vertical=$(hyprctl monitors -j 2>/dev/null | jq -r \
+    --arg m "$_main_mon" '[.[] | select(.name==$m)][0] | ((.transform%2)==1) or (.height > .width)' 2>/dev/null)
+
 if [[ -n "$set_id" && -f "$SETS_JSON" ]]; then
-    wf=$(jq -r --arg sid "$set_id" \
-        '.[$sid].images[] | select(.file | contains("_hor")) | .file' \
-        "$SETS_JSON" 2>/dev/null | head -1)
-    [[ -z "$wf" ]] && wf=$(jq -r --arg sid "$set_id" '.[$sid].images[0].file' "$SETS_JSON" 2>/dev/null)
+    # the file the set assigns to the main monitor (explicit, else by orientation)
+    wf=$(jq -r --arg sid "$set_id" --arg m "$_main_mon" \
+        '.[$sid].images[] | select(.monitor==$m) | .file' "$SETS_JSON" 2>/dev/null | head -1)
+    if [[ -z "$wf" ]]; then
+        if [[ "$_main_vertical" == "true" ]]; then _o="_ver"; else _o="_hor"; fi
+        wf=$(jq -r --arg sid "$set_id" --arg o "$_o" \
+            '.[$sid].images[] | select(.file | contains($o)) | .file' "$SETS_JSON" 2>/dev/null | head -1)
+    fi
     [[ -n "$wf" ]] && wallust_src=$(find "$WP_H" "$WP_V" -maxdepth 1 -name "$wf" 2>/dev/null | head -1)
+elif [[ "$_main_vertical" == "true" ]]; then
+    wallust_src="$ver_file"   # main is vertical → theme from the vertical wallpaper
 else
-    wallust_src="${hor_file:-$ver_file}"
+    wallust_src="$hor_file"   # main is horizontal → theme from the horizontal one
 fi
 
 # ── Showcase: save workspaces ─────────────────────────────────────────────
