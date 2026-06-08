@@ -85,18 +85,24 @@ def _write_alias(wp_key: str, name: str) -> None:
 
 # ── Pool cards (Horizontal / Vertical) ────────────────────────────────────────
 
+def _clean_name(wp_id: str) -> str:
+    """Custom-folder files carry a synthetic 'h:'/'v:' id — show the bare name."""
+    return wp_id.split(':', 1)[1] if wp_id[:2] in ('h:', 'v:') else wp_id
+
+
 class WallpaperCard(Gtk.Box):
     """Base for single-orientation pool cards."""
 
-    def __init__(self, entry: WallpaperEntry, on_change=None):
+    def __init__(self, entry: WallpaperEntry, on_change=None, on_alias=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self.set_halign(Gtk.Align.CENTER)
         self.add_css_class('wp-card')
         self.entry = entry
         self._on_change = on_change
+        self._on_alias = on_alias
         self._build()
 
-        display_name = _THEME_NAMES.get(f'wp_{entry.id}', entry.id)
+        display_name = _THEME_NAMES.get(f'wp_{entry.id}', _clean_name(entry.id))
         lbl = Gtk.Label(label=display_name)
         lbl.add_css_class('wp-name')
         lbl.set_max_width_chars(24)
@@ -148,36 +154,10 @@ class WallpaperCard(Gtk.Box):
         popover.popup()
 
     def _show_alias_dialog(self):
-        current = _THEME_NAMES.get(f'wp_{self.entry.id}', '')
-        entry_w = Gtk.Entry()
-        entry_w.set_text(current)
-        entry_w.set_placeholder_text('Display name…')
-        entry_w.set_activates_default(True)
-        entry_w.set_margin_top(8)
-        entry_w.set_margin_bottom(4)
-
-        dlg = Adw.AlertDialog(heading='Set Alias',
-                              body=f'Display name for {self.entry.id}')
-        dlg.set_extra_child(entry_w)
-        dlg.add_response('cancel', 'Cancel')
-        dlg.add_response('save', 'Save')
-        dlg.set_default_response('save')
-        dlg.set_close_response('cancel')
-        dlg.set_response_appearance('save', Adw.ResponseAppearance.SUGGESTED)
-        dlg.connect('response', lambda d, r: self._on_alias_response(r, entry_w.get_text()))
-        dlg.present(self.get_root())
-
-    def _on_alias_response(self, response, name):
-        if response != 'save':
-            return
-        name = name.strip()
-        key = f'wp_{self.entry.id}'
-        if name:
-            _THEME_NAMES[key] = name
-        else:
-            _THEME_NAMES.pop(key, None)
-        _write_alias(key, name)
-        self._name_label.set_text(name or self.entry.id)
+        # Routed to the page so the rename happens in-panel (a separate dialog
+        # window can't be used under the fullscreen layer-shell panel).
+        if self._on_alias is not None:
+            self._on_alias(self.entry)
 
     def _add_to_set(self):
         f = self._file_to_move
@@ -1029,6 +1009,57 @@ class WallpaperPage(Gtk.Box):
         self._pstack.set_visible_child_name('main')
         self._reload()
 
+    # ── In-panel rename / alias ───────────────────────────────────────────────
+
+    def _open_alias(self, entry):
+        self._alias_entry = entry
+        cur = _THEME_NAMES.get(f'wp_{entry.id}', '')
+
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                         margin_start=12, margin_end=12, margin_top=10, margin_bottom=6)
+        back = Gtk.Button(icon_name='go-previous-symbolic')
+        back.add_css_class('flat')
+        back.connect('clicked', lambda _: self._pstack.set_visible_child_name('main'))
+        header.append(back)
+        title = Gtk.Label(label='Rename'); title.add_css_class('title-4')
+        header.append(title)
+
+        group = Adw.PreferencesGroup(
+            title='Display name', description=f'Alias for {_clean_name(entry.id)}')
+        self._alias_field = Adw.EntryRow(title='Name')
+        self._alias_field.set_text(cur)
+        group.add(self._alias_field)
+        page = Adw.PreferencesPage()
+        page.add(group)
+
+        save = Gtk.Button(label='Save'); save.add_css_class('suggested-action')
+        save.connect('clicked', lambda _: self._save_alias())
+        cancel = Gtk.Button(label='Cancel')
+        cancel.connect('clicked', lambda _: self._pstack.set_visible_child_name('main'))
+        btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                          margin_start=12, margin_end=12, margin_top=8, margin_bottom=12)
+        btn_row.set_halign(Gtk.Align.END)
+        btn_row.append(cancel); btn_row.append(save)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.append(header); box.append(page); box.append(btn_row)
+        old = self._pstack.get_child_by_name('alias')
+        if old is not None:
+            self._pstack.remove(old)
+        self._pstack.add_named(box, 'alias')
+        self._pstack.set_visible_child_name('alias')
+
+    def _save_alias(self):
+        name = self._alias_field.get_text().strip()
+        key = f'wp_{self._alias_entry.id}'
+        if name:
+            _THEME_NAMES[key] = name
+        else:
+            _THEME_NAMES.pop(key, None)
+        _write_alias(key, name)
+        self._pstack.set_visible_child_name('main')
+        self._reload()
+
     def set_apply_callback(self, cb):
         self._apply_cb = cb
 
@@ -1142,10 +1173,12 @@ class WallpaperPage(Gtk.Box):
         hor_count = ver_count = 0
         for e in entries:
             if e.hor_file and 'hor' in self._flows:
-                self._flows['hor'].append(HorCard(e, on_change=self._reload))
+                self._flows['hor'].append(
+                    HorCard(e, on_change=self._reload, on_alias=self._open_alias))
                 hor_count += 1
             if e.ver_file and 'ver' in self._flows:
-                self._flows['ver'].append(VerCard(e, on_change=self._reload))
+                self._flows['ver'].append(
+                    VerCard(e, on_change=self._reload, on_alias=self._open_alias))
                 ver_count += 1
 
         parts = [f'{hor_count} Horizontal']
