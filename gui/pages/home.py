@@ -30,6 +30,12 @@ def _vtl() -> str:
         os.path.join(os.path.dirname(__file__), '../..'))
 
 
+def _user_dir() -> str:
+    return os.environ.get('VUTURELAND_USER_DIR') or os.path.join(
+        os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config')),
+        'vutureland')
+
+
 class HomePage(Gtk.Box):
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
@@ -41,6 +47,9 @@ class HomePage(Gtk.Box):
         self._stack.add_named(self._build_main(), 'main')
         self.append(self._stack)
         GLib.idle_add(self._refresh_status)
+        # Refresh the active-style label + wallpaper preview every time the page
+        # is shown, so it tracks live theme/wallpaper changes.
+        self.connect('map', lambda _w: self._refresh_current())
 
     def set_apply_callback(self, cb):
         self._apply_cb = cb
@@ -67,31 +76,44 @@ class HomePage(Gtk.Box):
         return None
 
     def _active_wallpaper(self) -> str | None:
-        names = self._monitor_names()
+        """The theme's main image — the wallpaper wallust last themed from,
+        recorded in the generated colors.lua. This is always the main monitor's
+        wallpaper and stays stable regardless of which monitor is focused."""
+        colors = os.path.join(_user_dir(), 'hypr.lua', 'colors.lua')
         try:
-            lines = subprocess.run(['awww', 'query'], capture_output=True,
-                                   text=True).stdout.splitlines()
-        except Exception:
-            return None
-        def _img(line):
-            return line.split('image:', 1)[1].strip() if 'image:' in line else None
-        for mon in names:                      # prefer the focused monitor
-            for line in lines:
-                if f'{mon}:' in line:
-                    p = _img(line)
-                    if p:
-                        return p
-        for line in lines:                     # otherwise any image
-            p = _img(line)
-            if p:
-                return p
+            with open(colors) as f:
+                for line in f:
+                    m = re.match(r'\s*wallpaper\s*=\s*"(.+)"', line)
+                    if m:
+                        return m.group(1)
+        except OSError:
+            pass
         return None
+
+    # Preview size — 80% of the previous 520×150.
+    _PREVIEW_W = 416
+    _PREVIEW_H = 120
 
     def _build_current_group(self) -> Adw.PreferencesGroup:
         grp = Adw.PreferencesGroup()
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        box.set_margin_top(4); box.set_margin_bottom(8)
-        box.set_margin_start(4); box.set_margin_end(4)
+        self._current_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self._current_box.set_margin_top(4); self._current_box.set_margin_bottom(8)
+        self._current_box.set_margin_start(4); self._current_box.set_margin_end(4)
+        grp.add(self._current_box)
+        self._refresh_current()
+        return grp
+
+    def _refresh_current(self):
+        """Rebuild the active-style label + wallpaper preview (called on show so
+        it tracks the live theme)."""
+        box = getattr(self, '_current_box', None)
+        if box is None:
+            return
+        child = box.get_first_child()
+        while child:
+            nxt = child.get_next_sibling()
+            box.remove(child)
+            child = nxt
 
         style = self._active_style()
         lbl = Gtk.Label(label=style or 'No active bar')
@@ -99,30 +121,29 @@ class HomePage(Gtk.Box):
         lbl.set_halign(Gtk.Align.START)
         box.append(lbl)
 
-        child = None
+        pic = None
         wp = self._active_wallpaper()
         if wp and os.path.exists(wp):
             try:
-                pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(wp, 520, -1, True)
+                pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                    wp, self._PREVIEW_W, -1, True)
                 pic = Gtk.Picture.new_for_paintable(Gdk.Texture.new_for_pixbuf(pb))
                 pic.set_content_fit(Gtk.ContentFit.COVER)
-                pic.set_size_request(-1, 150)
-                child = pic
+                pic.set_size_request(-1, self._PREVIEW_H)
             except Exception:
-                child = None
-        if child is None:
-            child = Gtk.Image.new_from_icon_name('image-x-generic')
-            child.set_pixel_size(48)
-            child.set_size_request(-1, 150)
+                pic = None
+        if pic is None:
+            pic = Gtk.Image.new_from_icon_name('image-x-generic')
+            pic.set_pixel_size(48)
+            pic.set_size_request(-1, self._PREVIEW_H)
 
         frame = Gtk.Frame()
         frame.add_css_class('wp-frame')
         frame.set_overflow(Gtk.Overflow.HIDDEN)
-        frame.set_child(child)
+        frame.set_child(pic)
+        frame.set_halign(Gtk.Align.CENTER)
+        frame.set_size_request(self._PREVIEW_W, self._PREVIEW_H)
         box.append(frame)
-
-        grp.add(box)
-        return grp
 
     # ── UI ────────────────────────────────────────────────────────────────────
 

@@ -645,6 +645,7 @@ class WallpaperPage(Gtk.Box):
         bar.pack_start(self._spinner)
         self._status = Gtk.Label(label='')
         self._status.add_css_class('caption')
+        self._status.set_valign(Gtk.Align.CENTER)
         bar.pack_start(self._status)
 
         btn_refresh = Gtk.Button(label='Refresh')
@@ -1187,8 +1188,10 @@ class WallpaperPage(Gtk.Box):
         flow = Gtk.FlowBox()
         flow.set_valign(Gtk.Align.START)
         flow.set_homogeneous(True)
+        # Cap the columns (2 horizontal / 3 vertical) but let the grid reflow down
+        # to a single column when the window is narrower than the content needs.
         flow.set_max_children_per_line(per_line)
-        flow.set_min_children_per_line(per_line)
+        flow.set_min_children_per_line(1)
         flow.set_selection_mode(Gtk.SelectionMode.SINGLE)
         flow.set_row_spacing(12)
         flow.set_column_spacing(12)

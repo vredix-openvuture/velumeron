@@ -190,8 +190,21 @@ flowboxchild:selected > .wp-card {
    RECHTSKLICK-MENÜ — Popover-Container
    ─────────────────────────────────────────────────────────────── */
 
-/* Popovers (right-click menus, dropdowns) — theme the default black background */
-popover > contents {
+/* Popovers (right-click menus, dropdowns) — theme the default black background.
+   The popover toplevel itself must be transparent, otherwise the theme paints a
+   black rectangle behind the rounded `contents` node. */
+popover,
+popover.background,
+popover.menu,
+popover.background.menu {
+    background:       none;
+    background-color: transparent;
+    box-shadow:       none;
+    border:           none;
+}
+
+popover > contents,
+popover.menu > contents {
     background-color: @bg-element;
     color:            @fg-primary;
     border:           1px solid alpha(@bo-normal, 0.45);
@@ -328,7 +341,14 @@ actionbar {
 actionbar > revealer > box {
     background-color:   transparent;
     border-top:         1px solid alpha(@bo-normal, 0.18);
-    padding:            4px 8px;
+    /* Extra bottom room so the caption status text isn't clipped at the baseline */
+    padding:            6px 8px 8px;
+    min-height:         30px;
+}
+
+/* Status caption in the bottom bar — give descenders room, don't clip */
+actionbar label.caption {
+    padding-bottom: 2px;
 }
 
 

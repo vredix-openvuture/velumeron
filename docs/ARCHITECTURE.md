@@ -326,6 +326,20 @@ keeps a `themes/<design>` file; the current look is shipped as **`miboro`**.
 Newest first. Each entry: what changed, why, and the commit.
 
 ### 2026-06-08
+- **Wallpaper grid is responsive again** — the fixed `2 / 3` columns made the
+  panel un-shrinkable (min column count == max). The flow now reflows down to a
+  single column when the window is narrower than the content needs, while still
+  capping at 2 (horizontal) / 3 (vertical) when there's room.
+- **Home preview tracks the live theme** — the "current look" group now rebuilds
+  on every show (`map`), so the wallpaper/style preview is no longer stale. The
+  preview image is always the theme's main wallpaper (read from the `wallpaper`
+  field of the generated `colors.lua`, stable regardless of which monitor is
+  focused — never the secondary monitor's). Preview shrunk to 80% (416×120).
+- **Popover/right-click menus** — the popover toplevel is now transparent so the
+  theme no longer paints a black rectangle behind the rounded `contents`; covers
+  the `.menu` variant too.
+- **Bottom status caption no longer clipped** — extra bottom padding + min-height
+  on the action bar and a vertically-centred caption give descenders room.
 - **Wallpaper page re-layout** — removed the grey frame around thumbnails; fixed
   grid density (Horizontal = 2/row, Vertical = 3/row, homogeneous). Dropped the
   top `All / Image / Video` filter bar and the inner Colors tab. The top bar is
