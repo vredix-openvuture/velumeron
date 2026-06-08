@@ -394,24 +394,42 @@ class HomePage(Gtk.Box):
         return sorted(best.values(), key=lambda n: (not n['active'], -n['signal']))
 
     def _wifi_row(self, net):
-        # Like the Bluetooth rows: a plain row with a visible Connect/Disconnect
-        # button (no expander). Secured networks that need a password get an
-        # in-panel password prompt only when the password-less attempt fails.
-        row = Adw.ActionRow(title=net['ssid'])
-        btn = Gtk.Button(valign=Gtk.Align.CENTER)
+        # Visible Connect/Disconnect button (like Bluetooth). The active network
+        # shows ✓ + "Connected". Secured networks keep an expandable "edit" area
+        # (chevron) to type/replace the password.
         if net['active']:
-            row.set_subtitle('Connected')
+            row = Adw.ActionRow(title=net['ssid'], subtitle='Connected')
             row.add_prefix(Gtk.Image.new_from_icon_name('emblem-ok-symbolic'))
-            btn.set_label('Disconnect')
-            btn.connect('clicked', lambda b, s=net['ssid']: self._wifi_disconnect(s, b))
-        else:
-            row.set_subtitle(f"Signal {net['signal']}% · "
-                             + ('secured' if net['secured'] else 'open'))
-            btn.set_label('Connect')
+            btn = Gtk.Button(label='Connected', valign=Gtk.Align.CENTER)
             btn.add_css_class('suggested-action')
-            btn.connect('clicked', lambda b, s=net['ssid'], sec=net['secured']:
-                        self._wifi_connect(s, sec, b))
+            btn.connect('clicked', lambda b, s=net['ssid']: self._wifi_disconnect(s, b))
+            row.add_suffix(btn)
+            return row
+
+        if not net['secured']:
+            row = Adw.ActionRow(title=net['ssid'], subtitle=f"Signal {net['signal']}% · open")
+            btn = Gtk.Button(label='Connect', valign=Gtk.Align.CENTER)
+            btn.add_css_class('suggested-action')
+            btn.connect('clicked', lambda b, s=net['ssid'], r=row: self._wifi_connect(s, False, b, r))
+            row.add_suffix(btn)
+            return row
+
+        row = Adw.ExpanderRow(title=net['ssid'], subtitle=f"Signal {net['signal']}% · secured")
+        btn = Gtk.Button(label='Connect', valign=Gtk.Align.CENTER)
+        btn.add_css_class('suggested-action')
+        btn.connect('clicked', lambda b, s=net['ssid'], r=row: self._wifi_connect(s, True, b, r))
         row.add_suffix(btn)
+        try:
+            pw = Adw.PasswordEntryRow(title='Password')
+        except Exception:
+            pw = Adw.EntryRow(title='Password')
+        row.add_row(pw)
+        act = Adw.ActionRow(subtitle='Connect using this password')
+        pbtn = Gtk.Button(label='Connect', valign=Gtk.Align.CENTER)
+        pbtn.add_css_class('suggested-action')
+        pbtn.connect('clicked', lambda b, s=net['ssid'], e=pw: self._wifi_connect_pw(s, e.get_text(), b))
+        act.add_suffix(pbtn)
+        row.add_row(act)
         return row
 
     def _busy(self, btn, _text='…'):
@@ -421,6 +439,12 @@ class HomePage(Gtk.Box):
             sp = Gtk.Spinner()
             sp.start()
             btn.set_child(sp)
+
+    def _unbusy(self, btn, label):
+        if btn is not None:
+            btn.set_child(None)
+            btn.set_label(label)
+            btn.set_sensitive(True)
 
     def _net_set_status(self, text):
         if getattr(self, '_net_status_lbl', None):
@@ -440,7 +464,7 @@ class HomePage(Gtk.Box):
         except Exception as e:
             return {'ok': False, 'msg': str(e)}
 
-    def _wifi_connect(self, ssid, secured, btn=None):
+    def _wifi_connect(self, ssid, secured, btn=None, row=None):
         self._busy(btn)
         self._net_set_status(f'Connecting to {ssid}…')
         def _do():
@@ -448,47 +472,26 @@ class HomePage(Gtk.Box):
             if r['ok']:
                 GLib.idle_add(self._net_done, 'Connected to ' + ssid)
             elif secured:
-                GLib.idle_add(self._wifi_password_prompt, ssid)   # needs a password
+                GLib.idle_add(self._wifi_need_pw, btn, row)   # needs a password
             else:
                 GLib.idle_add(self._net_done, r['msg'] or 'Connection failed')
         threading.Thread(target=_do, daemon=True).start()
 
-    def _wifi_password_prompt(self, ssid):
-        page = Adw.PreferencesPage()
-        grp = Adw.PreferencesGroup(title=ssid, description='Enter the Wi-Fi password.')
-        try:
-            self._wifi_pw_entry = Adw.PasswordEntryRow(title='Password')
-        except Exception:
-            self._wifi_pw_entry = Adw.EntryRow(title='Password')
-        grp.add(self._wifi_pw_entry)
-        act = Adw.ActionRow()
-        cbtn = Gtk.Button(label='Connect', valign=Gtk.Align.CENTER)
-        cbtn.add_css_class('suggested-action')
-        cbtn.connect('clicked', lambda b, s=ssid: self._wifi_connect_pw(s, b))
-        act.add_suffix(cbtn)
-        grp.add(act)
-        page.add(grp)
-
-        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
-                         margin_start=12, margin_end=12, margin_top=10, margin_bottom=6)
-        back = Gtk.Button(icon_name='go-previous-symbolic')
-        back.add_css_class('flat')
-        back.connect('clicked', lambda _: self._stack.set_visible_child_name('network'))
-        header.append(back)
-        ttl = Gtk.Label(label='Wi-Fi password'); ttl.add_css_class('title-4')
-        header.append(ttl)
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        box.append(header)
-        box.append(page)
-        self._stack_set('wifi-pw', box)
-        self._net_set_status('')
+    def _wifi_need_pw(self, btn, row):
+        self._net_set_status('This network needs a password — enter it, then Connect.')
+        self._unbusy(btn, 'Connect')
+        if row is not None:
+            try:
+                row.set_expanded(True)
+            except Exception:
+                pass
         return False
 
-    def _wifi_connect_pw(self, ssid, btn=None):
+    def _wifi_connect_pw(self, ssid, pw, btn=None):
         self._busy(btn)
-        pw = self._wifi_pw_entry.get_text() if getattr(self, '_wifi_pw_entry', None) else ''
+        self._net_set_status(f'Connecting to {ssid}…')
         def _do():
-            r = self._nm_connect(ssid, pw)
+            r = self._nm_connect(ssid, pw or None)
             GLib.idle_add(self._net_done,
                           'Connected to ' + ssid if r['ok'] else (r['msg'] or 'Connection failed'))
         threading.Thread(target=_do, daemon=True).start()
@@ -508,9 +511,6 @@ class HomePage(Gtk.Box):
 
     def _net_done(self, msg):
         self._net_set_status(msg)
-        # we may be on the password subpage — return to the network list
-        if self._stack.get_visible_child_name() == 'wifi-pw':
-            self._stack.set_visible_child_name('network')
         self._refresh_network()
         self._refresh_status()
         return False

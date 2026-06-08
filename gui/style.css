@@ -182,6 +182,21 @@ flowboxchild:selected > .wp-card {
    RECHTSKLICK-MENÜ — Popover-Container
    ─────────────────────────────────────────────────────────────── */
 
+/* Popovers (right-click menus, dropdowns) — theme the default black background */
+popover > contents {
+    background-color: @bg-element;
+    color:            @fg-primary;
+    border:           1px solid alpha(@bo-normal, 0.45);
+    border-radius:    10px;
+    box-shadow:       0 4px 18px alpha(#000000, 0.45);
+    padding:          4px;
+}
+
+popover > arrow {
+    background-color: @bg-element;
+    border:           1px solid alpha(@bo-normal, 0.45);
+}
+
 .ctx-menu {
     padding:   4px;
     min-width: 140px;
@@ -244,7 +259,8 @@ window.background {
 
 .content-area {
     background-color: @bg-primary;
-    padding: 32px;
+    /* Less side padding so text isn't clipped in a narrow panel. */
+    padding: 18px;
 }
 
 
