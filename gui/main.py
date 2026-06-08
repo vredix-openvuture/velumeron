@@ -142,6 +142,8 @@ _THEME_CSS: dict[str, str] = {
 # Base style.css provider lives at module scope so `_apply_theme` can reload it
 # after the @define-color overrides change — @color refs only resolve at parse.
 _BASE_CSS_PROVIDER   = None
+# Provider for the active design's GUI theme overrides (gui/themes/<active>.css).
+_DESIGN_CSS_PROVIDER = None
 # Provider for the wallust-generated color palette. Reloaded when the file
 # changes on disk so the GUI follows wallpaper theme switches automatically.
 _COLORS_CSS_PROVIDER = None
@@ -187,6 +189,32 @@ def _save_settings(data: dict) -> None:
         os.makedirs(os.path.dirname(_SETTINGS_FILE), exist_ok=True)
         with open(_SETTINGS_FILE, 'w') as f:
             json.dump(data, f, indent=2)
+    except Exception:
+        pass
+
+
+def _active_theme() -> str:
+    """The active app design (set by the waybar picker). Defaults to 'miboro'."""
+    base = os.environ.get('VUTURELAND_USER_DIR') or os.path.join(
+        os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config')), 'vutureland')
+    try:
+        with open(os.path.join(base, 'active-theme')) as f:
+            return f.read().strip() or 'miboro'
+    except Exception:
+        return 'miboro'
+
+
+def reload_design_theme():
+    """(Re)load gui/themes/<active>.css into the design provider so the panel
+    restyles live after a design switch. No-op if the app isn't up yet."""
+    if _DESIGN_CSS_PROVIDER is None:
+        return
+    css = os.path.join(os.path.dirname(__file__), 'themes', _active_theme() + '.css')
+    try:
+        if os.path.exists(css):
+            _DESIGN_CSS_PROVIDER.load_from_path(css)
+        else:
+            _DESIGN_CSS_PROVIDER.load_from_data(b'')
     except Exception:
         pass
 
@@ -610,7 +638,7 @@ class VuturelandSettings(Adw.Application):
             pass
 
     def _activate(self, _):
-        global _BASE_CSS_PROVIDER, _COLORS_CSS_PROVIDER
+        global _BASE_CSS_PROVIDER, _COLORS_CSS_PROVIDER, _DESIGN_CSS_PROVIDER
         display = Gdk.Display.get_default()
 
         # Force a complete icon theme for our symbolic icons. The user's system
@@ -634,6 +662,14 @@ class VuturelandSettings(Adw.Application):
         Gtk.StyleContext.add_provider_for_display(
             display, _BASE_CSS_PROVIDER,
             Gtk.STYLE_PROVIDER_PRIORITY_USER)
+
+        # Active design's GUI theme overrides (gui/themes/<active>.css), loaded
+        # after the base so it wins. Missing file = no-op (base IS miboro).
+        # Kept in a global provider so a design switch can restyle it live.
+        _DESIGN_CSS_PROVIDER = Gtk.CssProvider()
+        Gtk.StyleContext.add_provider_for_display(
+            display, _DESIGN_CSS_PROVIDER, Gtk.STYLE_PROVIDER_PRIORITY_USER)
+        reload_design_theme()
 
         win = MainWindow(application=self)
 

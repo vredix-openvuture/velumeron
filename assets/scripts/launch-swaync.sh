@@ -10,9 +10,16 @@ source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh"
 
 SRC_CFG="$VUTURELAND_USER_DIR/swaync/config.json"
 DST_CFG="$HOME/.config/swaync/config.json"
-SRC_STYLE="$VUTURELAND_USER_DIR/swaync/style.css"
 DST_STYLE="$HOME/.config/swaync/style.css"
 SW_COLORS="$VUTURELAND_USER_DIR/assets/colors_gtk.css"
+
+# Active app theme (set by the waybar design picker). The matching swaync theme
+# is swaync/themes/<active>.css; fall back to the legacy style.css if absent.
+SW_THEME="$(cat "$VUTURELAND_USER_DIR/active-theme" 2>/dev/null | tr -d '[:space:]')"
+[[ -z "$SW_THEME" ]] && SW_THEME="miboro"
+SRC_STYLE="$VUTURELAND_USER_DIR/swaync/themes/$SW_THEME.css"
+[[ -f "$SRC_STYLE" ]] || SRC_STYLE="$VUTURELAND_USER_DIR/swaync/themes/miboro.css"
+[[ -f "$SRC_STYLE" ]] || SRC_STYLE="$VUTURELAND_USER_DIR/swaync/style.css"
 GUI_SETTINGS="$VUTURELAND_USER_DIR/gui/settings.json"
 
 # ── Read user preferences (with defaults) ────────────────────────────────────

@@ -1,0 +1,234 @@
+@import url("../assets/colors_gtk.css");
+
+/* Semantic aliases (bg-primary, bg-active, bo-normal, fg-primary, …) come from colors_gtk.css */
+@define-color bg-primary-blur   alpha(alpha(alpha(@bg-secondary, 0.4), 0.8), 0.7);
+
+
+/* ── Global ──────────────────────────────── */
+
+* {
+  font-family: "FantasqueSansM Nerd Font";
+  font-weight: 600;
+  box-shadow: none;
+}
+
+scrolledwindow,
+viewport,
+list,
+list row,
+list row:selected,
+list row:focus,
+.notifications-group,
+.notifications-group-headers {
+  background: transparent;
+}
+
+
+/* ── Control Center Panel ────────────────── */
+
+.control-center {
+  background: alpha(@bg-primary, 0.8);
+  color: @fg-primary;
+  border-radius: 10px 0 0 0;
+  border: 1.4px solid @bo-normal;
+  border-right: none;
+  border-bottom: none;
+  padding: 20px;
+}
+
+.widget {
+  margin: 8px;
+  padding: 8px;
+  background: none;
+  color: @fg-primary;
+  border: none;
+}
+
+
+/* ── Notification Card ───────────────────── */
+
+.notification-row,
+.notification-row:focus,
+.notification-row:focus-within {
+  background: transparent;
+  margin: 0px;
+}
+
+.notification-row .notification-background {
+  background: transparent;
+}
+
+.notification-row .notification-background:focus,
+.notification-row .notification-background:active {
+  background: alpha(@bg-active, 0.2);
+  padding: 6px;
+}
+
+.notification-row .notification-background .notification {
+  background: alpha(@bg-secondary, 0.8);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 0px;
+  margin: 0px;
+  min-height: 50px;
+  box-shadow: none;
+  transition: 120ms ease;
+}
+
+.notification-default-action {
+  padding: 4px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  color: @fg-primary;
+  box-shadow: none;
+}
+
+.notification-default-action:hover {
+  background: @bg-hover;
+  color: @fg-hover;
+}
+
+.summary,
+.time {
+  font-size: 1rem;
+  font-weight: bold;
+  background: transparent;
+  color: @fg-hover;
+  text-shadow: none;
+}
+
+.body {
+  font-size: 0.9rem;
+  font-weight: normal;
+  background: transparent;
+  color: @fg-primary;
+  text-shadow: none;
+  opacity: 0.9;
+}
+
+
+/* ── MPRIS ───────────────────────────────── */
+
+.widget-mpris {
+  background-color: alpha(alpha(@bg-secondary, 0.4), 0.8);
+  border: 1px solid @bo-normal;
+  padding: 1px;
+}
+
+.widget-mpris-player {
+  background: transparent;
+  padding: 0px;
+  margin: 0px;
+}
+
+.widget-mpris-title {
+  font-weight: bold;
+  font-size: 1rem;
+  color: @fg-hover;
+}
+
+.widget-mpris-subtitle {
+  font-size: 0.85rem;
+  color: @fg-primary;
+  opacity: 0.85;
+}
+
+.widget-mpris button {
+  background: transparent;
+  border: none;
+  color: @fg-primary;
+  border-radius: 6px;
+  padding: 4px 8px;
+  min-width: 28px;
+  min-height: 28px;
+}
+
+.widget-mpris button:first-child {
+  margin-left: 120px;
+}
+
+.widget-mpris button:hover {
+  background: @bg-hover;
+  color: @fg-hover;
+  transition: 120ms ease;
+}
+
+
+
+.widget-buttons-grid {
+  font-size: 16px;
+  background: alpha(alpha(@bg-secondary, 0.4), 0.8);
+  padding: 4px;
+  border-radius: 10px 10px 0px 0px;
+  border: 1px solid @bo-normal;
+  border-bottom: none;
+  margin-bottom: 0px;
+
+}
+
+.widget-buttons-grid button {
+  background: @bg-active;
+  min-width: 20px;
+  border: 1px solid @bo-normal;
+  border-radius: 10px;
+  padding: 2px;
+}
+
+.widget-buttons-grid button:focus,
+.widget-buttons-grid button:focus-within,
+.widget-buttons-grid button:hover,
+.widget-buttons-grid button:active {
+  background: @bg-hover;
+  border-radius: 10px;
+}
+
+
+.widget-volume {
+  background: alpha(alpha(@bg-secondary, 0.4), 0.8);
+  border-radius: 0px 0px 10px 10px;
+  border: 1px solid @bo-normal;
+  border-top: none;
+  margin-top: 0px;
+}
+
+.widget-inhibitor,
+.widget-title {
+  background: alpha(alpha(@bg-secondary, 0.4), 0.8);
+  margin-top: 20px;
+  margin-bottom: 0px;
+  border-radius: 10px 10px 0px 0px;
+  border: 1px solid @bo-normal;
+  border-bottom: none;
+}
+.widget-notifications {
+  background: alpha(alpha(@bg-secondary, 0.4), 0.8);
+  margin-top: 0px;
+  margin-bottom: 20px;
+  border-radius: 0px 0px 10px 10px;
+  border: 1px solid @bo-normal;
+  border-top: none;
+}
+
+/* ── Close Button ────────────────────────── */
+
+.close-button {
+  background: @bg-active;
+  color: @fg-primary;
+  border: 1px solid @bo-normal;
+  border-radius: 10px;
+  padding: 0;
+  margin-top: 8px;
+  margin-right: 8px;
+  min-width: 24px;
+  min-height: 24px;
+  text-shadow: none;
+  box-shadow: none;
+}
+
+.close-button:hover {
+  background: @bg-active;
+  color: @fg-hover;
+  border-color: transparent;
+  transition: 120ms ease;
+}

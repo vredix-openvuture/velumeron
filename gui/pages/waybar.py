@@ -750,6 +750,43 @@ class WaybarPage(Gtk.Box):
 
             self._status.set_text('Saved — restarting Waybar…')
             subprocess.Popen(['bash', LAUNCH_WAYBAR], env=_clean_env())
+            # The chosen design also themes hyprland/swaync/gui.
+            if self._cur_bar.design:
+                self._apply_app_theme(self._cur_bar.design)
             GLib.timeout_add(2500, lambda: self._status.set_text('') or False)
         except Exception as e:
             self._status.set_text(f'Error: {e}')
+
+    def _apply_app_theme(self, design: str):
+        """Record the active design and reload the apps that theme off it:
+        swaync, hyprland, and the running GUI (live)."""
+        base = os.environ.get('VUTURELAND_USER_DIR') or os.path.join(
+            os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config')), 'vutureland')
+        try:
+            with open(os.path.join(base, 'active-theme'), 'w') as f:
+                f.write(design + '\n')
+        except OSError:
+            pass
+        # GUI: restyle live (function lives in the running app's main module)
+        import sys
+        for modname in ('__main__', 'main'):
+            m = sys.modules.get(modname)
+            fn = getattr(m, 'reload_design_theme', None) if m else None
+            if fn:
+                try:
+                    fn()
+                except Exception:
+                    pass
+                break
+        # swaync (re-reads active-theme) + hyprland (hyprctl reload re-runs the config)
+        vtl = os.environ.get('VUTURELAND_DIR') or os.path.realpath(
+            os.path.join(os.path.dirname(__file__), '..', '..'))
+        try:
+            subprocess.Popen(['bash', os.path.join(vtl, 'assets', 'scripts', 'launch-swaync.sh')],
+                             env=_clean_env())
+        except Exception:
+            pass
+        try:
+            subprocess.Popen(['hyprctl', 'reload'], env=_clean_env())
+        except Exception:
+            pass

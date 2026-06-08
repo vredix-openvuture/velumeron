@@ -1,0 +1,4 @@
+-- Hyprland look overrides for the "miboro" design.
+-- miboro is the base look (see modules/look_and_feel.lua), so this is empty.
+-- Other designs override design-specific look here via hl.config({ ... }),
+-- EXCEPT rounding/border_size which stay user-controlled (Look and Feel page).

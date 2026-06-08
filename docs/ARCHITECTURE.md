@@ -274,7 +274,29 @@ See [gui.md](gui.md).
 
 ---
 
-## 11. Known issues / open design decisions
+## 11. Cross-app theming (designs)
+
+Selecting a waybar **design** also themes hyprland, swaync and the GUI. Each app
+keeps a `themes/<design>` file; the current look is shipped as **`miboro`**.
+
+- **Active design record:** `~/.config/vutureland/active-theme` (a file holding
+  the name, e.g. `miboro`). Default when absent = `miboro`.
+- **Per-app theme files:**
+  - `swaync/themes/<design>.css` — `launch-swaync.sh` writes the active one to
+    `~/.config/swaync/style.css` (palette `@import` rewritten to absolute).
+  - `hypr.lua/themes/<design>.lua` — `hyprland.lua` `dofile`s the active one
+    **after** `look_and_feel` (overrides design-specific look). It must **not**
+    set `rounding`/`border_size` — those stay user-controlled via the Look and
+    Feel page. `miboro.lua` is empty (miboro = the look_and_feel default).
+  - `gui/themes/<design>.css` — `main.py` loads the active one into a global
+    provider after the base `style.css` (so it wins); `reload_design_theme()`
+    restyles it live.
+- **Switch:** applying a bar design in the GUI (`waybar._apply_app_theme`) writes
+  `active-theme`, restyles the GUI live, and reloads swaync + `hyprctl reload`.
+- **Fallback:** a missing per-app theme file is a no-op (the base/default stands),
+  so adding a new waybar design never breaks the other apps.
+
+## 12. Known issues / open design decisions
 
 - **Adding wallpapers on clients (copy target).** The panel-dismiss bug is fixed
   (see Change Log `a38b246`), so the Add dialog now opens correctly. But the copy
@@ -302,6 +324,23 @@ See [gui.md](gui.md).
 ## Change Log
 
 Newest first. Each entry: what changed, why, and the commit.
+
+### 2026-06-08
+- **Cross-app theming (D)** — waybar design selection now also themes hyprland,
+  swaync and the GUI via per-app `themes/<design>` files + an `active-theme`
+  record. See §11. Current look shipped as `miboro` (no visible change yet).
+- **Home: Network & Bluetooth in-panel subpages (C1)** — `nmcli`/`bluetoothctl`,
+  Wi-Fi scan/connect (in-row password), VPN toggles, BT connect/disconnect.
+- **Home: active waybar style + wallpaper preview (C2)**.
+- **Custom wallpaper folders (A2)** — per-client hor/ver paths
+  (`gui/settings.json`), resolver in GUI + shell; arbitrary filenames supported;
+  custom folder also receives "Add". **Sets are client-side now (A1)** — not
+  shipped.
+- **GUI polish** — round toggles/sliders (B2); sidebar = window bg + ~10% accent,
+  fewer accent blocks (B1).
+- **hypremoji** added to dependencies (E).
+- Backup before this batch: `~/DEV/vutureland-backup-2026-06-07_2029` (HEAD
+  `24739a1`).
 
 ### 2026-06-07
 - **Hyprland page: Look and Feel category** (`<pending>`). New group with Border
