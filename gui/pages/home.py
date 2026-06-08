@@ -312,12 +312,18 @@ class HomePage(Gtk.Box):
         # Power mode group (moved here from the Lock Screen page)
         page.add(self._build_power_group())
 
-        # Session group
+        # Session group — a wrapping FlowBox so the buttons reflow to fewer
+        # columns as the panel narrows (instead of pinning a wide minimum width).
         session = Adw.PreferencesGroup(title='Session')
         grid_row = Adw.PreferencesRow()
         grid_row.set_activatable(False)
-        grid = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
-                       spacing=10, homogeneous=True)
+        grid = Gtk.FlowBox()
+        grid.set_selection_mode(Gtk.SelectionMode.NONE)
+        grid.set_homogeneous(True)
+        grid.set_min_children_per_line(1)
+        grid.set_max_children_per_line(5)
+        grid.set_row_spacing(8)
+        grid.set_column_spacing(8)
         grid.set_margin_start(8);  grid.set_margin_end(8)
         grid.set_margin_top(8);    grid.set_margin_bottom(8)
         for label, icon, handler in [
@@ -329,6 +335,7 @@ class HomePage(Gtk.Box):
         ]:
             btn = Gtk.Button()
             btn.add_css_class('session-btn')
+            btn.set_hexpand(True)
             inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
             inner.set_margin_top(12); inner.set_margin_bottom(12)
             img = Gtk.Image.new_from_icon_name(icon)
@@ -338,7 +345,7 @@ class HomePage(Gtk.Box):
             inner.append(lbl)
             btn.set_child(inner)
             btn.connect('clicked', handler)
-            grid.append(btn)
+            grid.insert(btn, -1)
         grid_row.set_child(grid)
         session.add(grid_row)
         page.add(session)

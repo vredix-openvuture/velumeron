@@ -352,6 +352,13 @@ window.background {
     padding: 18px;
 }
 
+/* Scroll wrapper paints the panel colour behind the viewport so a panel taller
+   than its content stays fully painted (no transparent gap to the desktop). */
+.content-scroll,
+.content-scroll > viewport {
+    background-color: @bg-primary;
+}
+
 
 /* ───────────────────────────────────────────────────────────────
    NAVIGATION — Linke Sidebar

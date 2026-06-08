@@ -326,6 +326,14 @@ keeps a `themes/<design>` file; the current look is shipped as **`miboro`**.
 Newest first. Each entry: what changed, why, and the commit.
 
 ### 2026-06-08
+- **Full-height panel no longer looks half-empty** — at 100% height the panel
+  *was* laid out full-height, but the scroll viewport below the content wasn't
+  painted, so over a dark wallpaper the empty area blended into the desktop and
+  looked like the panel only filled half. The scroll wrapper now paints the
+  panel background (`.content-scroll`/`> viewport`). Also: the Session buttons
+  are now a wrapping FlowBox and the header logo may scale down
+  (`set_can_shrink`, height-only size request), so the panel degrades gracefully
+  as it narrows. (The width floor is still content-bound at ~24%.)
 - **Panel placement (Settings → Placement)** — the panel can now sit at any of
   six spots: Side {Left, Right} × Vertical {Top, Center, Bottom}
   (`panel_side` / `panel_valign`). The window stays a fullscreen layer surface;

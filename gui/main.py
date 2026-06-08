@@ -343,6 +343,11 @@ class MainWindow(Gtk.ApplicationWindow):
         content_wrap.set_hexpand(True)
         content_wrap.set_vexpand(True)
         content_wrap.set_child(content_inner)
+        # Paint the panel background behind the scroll viewport too, so when the
+        # panel is taller than its content the empty area below still shows the
+        # panel colour (not the desktop) — otherwise a full-height panel looks
+        # half-empty over a dark wallpaper.
+        content_wrap.add_css_class('content-scroll')
         self._content_wrap = content_wrap
 
         # ── Left sidebar ──────────────────────────────────────────────
@@ -655,7 +660,10 @@ class MainWindow(Gtk.ApplicationWindow):
         pic.set_valign(Gtk.Align.CENTER)
         pic.set_hexpand(True)
         pic.set_vexpand(False)
-        pic.set_size_request(pb.get_width(), pb.get_height())
+        # Only pin the height; let the width scale down (SCALE_DOWN) so the logo
+        # doesn't force a wide minimum on the whole panel.
+        pic.set_can_shrink(True)
+        pic.set_size_request(-1, pb.get_height())
         self._banner.append(pic)
 
     def _apply_logo(self, variant: str, save: bool = True):
