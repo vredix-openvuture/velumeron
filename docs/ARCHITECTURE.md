@@ -337,9 +337,12 @@ Newest first. Each entry: what changed, why, and the commit.
   focused — never the secondary monitor's). Preview shrunk to 80% (416×120).
 - **Popover/right-click menus** — the popover toplevel is now transparent so the
   theme no longer paints a black rectangle behind the rounded `contents`; covers
-  the `.menu` variant too.
-- **Bottom status caption no longer clipped** — extra bottom padding + min-height
-  on the action bar and a vertically-centred caption give descenders room.
+  the `.menu` variant too. Follow-up: the soft `0 4px 18px` shadow left a large
+  translucent region that the compositor blurred into a halo around the menu, so
+  it's now a tight `0 1px 3px`.
+- **Bottom status caption no longer clipped** — the action bar's bottom is square
+  (not rounded), so the clip was internal to the label; fixed with explicit
+  top/bottom margins on the status label (CSS padding alone wasn't enough).
 - **Wallpaper page re-layout** — removed the grey frame around thumbnails; fixed
   grid density (Horizontal = 2/row, Vertical = 3/row, homogeneous). Dropped the
   top `All / Image / Video` filter bar and the inner Colors tab. The top bar is

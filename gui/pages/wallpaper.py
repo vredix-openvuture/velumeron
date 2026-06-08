@@ -646,6 +646,9 @@ class WallpaperPage(Gtk.Box):
         self._status = Gtk.Label(label='')
         self._status.add_css_class('caption')
         self._status.set_valign(Gtk.Align.CENTER)
+        # Breathing room so the glyphs aren't clipped at the bottom of the bar.
+        self._status.set_margin_top(4)
+        self._status.set_margin_bottom(6)
         bar.pack_start(self._status)
 
         btn_refresh = Gtk.Button(label='Refresh')

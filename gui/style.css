@@ -209,7 +209,9 @@ popover.menu > contents {
     color:            @fg-primary;
     border:           1px solid alpha(@bo-normal, 0.45);
     border-radius:    10px;
-    box-shadow:       0 4px 18px alpha(#000000, 0.45);
+    /* Tight shadow only — a large soft shadow leaves a big translucent region
+       that the compositor blurs into a weird halo around the menu. */
+    box-shadow:       0 1px 3px alpha(#000000, 0.30);
     padding:          4px;
 }
 
