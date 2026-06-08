@@ -309,6 +309,7 @@ _bar_layout() {
 # one of these is an untouched default and may be refreshed to the latest; newest
 # entry first. Anything else is a user customisation and is left alone.
 _default_bar_layouts=(
+    "L:clock,custom/separator,group/performance_drawer,custom/separator,custom/actionuser|C:hyprland/workspaces,hyprland/submap|R:group/audio_drawer,custom/separator,group/tray_drawer"
     "L:clock,custom/separator,group/performance_drawer,custom/separator,custom/actionuser|C:hyprland/workspaces,hyprland/submap|R:custom/cava,group/audio_drawer,custom/separator,group/tray_drawer"
     "L:clock|C:hyprland/workspaces|R:pulseaudio,tray,custom/notification"
 )
@@ -351,7 +352,6 @@ apply_default_bar() {
         a-left-drawer-performance performance temperature-gpu temperature-cpu memory cpu
         actionuser
         workspaces submap
-        cava
         a-right-drawer-audio pulseaudio mpris bluetooth
         a-right-drawer-tray notification tray
     )
@@ -364,7 +364,7 @@ apply_default_bar() {
     local includes; includes=$(IFS=,; echo "${_inc[*]}")
 
     # Right group: battery only appended when the device has one.
-    local right='"custom/cava", "group/audio_drawer", "custom/separator", "group/tray_drawer"'
+    local right='"group/audio_drawer", "custom/separator", "group/tray_drawer"'
     $has_battery && right+=', "battery"'
 
     cat > "$dest/groups.json" <<EOF
@@ -482,7 +482,7 @@ say "Package installation"
 REQUIRED_PKGS=(
     hypridle hyprlock hyprpolkitagent
     waybar rofi-wayland kitty
-    swaync cava
+    swaync
     awww wallust hypremoji
     playerctl jq socat fastfetch tmux
     network-manager-applet gnome-keyring

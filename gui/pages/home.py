@@ -95,9 +95,9 @@ class HomePage(Gtk.Box):
             pass
         return None
 
-    # Preview size — roughly half of the previous 416×120.
-    _PREVIEW_W = 208
-    _PREVIEW_H = 64
+    # Preview size — a bit smaller again.
+    _PREVIEW_W = 168
+    _PREVIEW_H = 52
 
     def _build_current_group(self) -> Adw.PreferencesGroup:
         grp = Adw.PreferencesGroup()

@@ -18,7 +18,7 @@ entries() {
 choice=$(entries | rofi -dmenu -p "" -theme "$THEME")
 
 case "$choice" in
-    Settings) "$VUTURELAND_DIR/bin/vutureland" ;;
+    Settings) setsid "$VUTURELAND_DIR/bin/vutureland" -t >/dev/null 2>&1 & ;;
     Suspend)  "$VUTURELAND_DIR/assets/scripts/launch-hyprlock.sh" & sleep 4 && systemctl suspend ;;
     Shutdown) systemctl poweroff ;;
     Logout)   hyprctl dispatch exit ;;

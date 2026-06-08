@@ -4,7 +4,6 @@ submap
 workspaces
 
 # Media
-cava
 mpris
 pulseaudio
 
