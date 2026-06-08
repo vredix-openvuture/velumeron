@@ -312,8 +312,15 @@ class HomePage(Gtk.Box):
         self._vpn_group = Adw.PreferencesGroup(title='VPN')
         page.add(self._vpn_group)
 
+        self._net_status_lbl = Gtk.Label(label='', xalign=0)
+        self._net_status_lbl.add_css_class('dim-label')
+        self._net_status_lbl.set_margin_start(14)
+        self._net_status_lbl.set_margin_end(14)
+        self._net_status_lbl.set_wrap(True)
+
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         box.append(self._subpage_header('Network', on_refresh=self._refresh_network))
+        box.append(self._net_status_lbl)
         box.append(page)
         self._stack_set('network', box)
         self._refresh_network()
@@ -404,24 +411,47 @@ class HomePage(Gtk.Box):
         btn = Gtk.Button(label='Connect')
         btn.add_css_class('suggested-action')
         btn.set_valign(Gtk.Align.CENTER)
-        btn.connect('clicked', lambda _, s=net['ssid'], e=pw:
-                    self._wifi_connect(s, e.get_text() if e else None))
+        btn.connect('clicked', lambda b, s=net['ssid'], e=pw:
+                    self._wifi_connect(s, e.get_text() if e else None, b))
         action.add_suffix(btn)
         row.add_row(action)
         return row
 
-    def _wifi_connect(self, ssid, password):
+    def _busy(self, btn, text='Connecting…'):
+        """Replace a button's label with a spinner while an action runs."""
+        if btn is not None:
+            btn.set_sensitive(False)
+            sp = Gtk.Spinner()
+            sp.start()
+            btn.set_child(sp)
+
+    def _wifi_connect(self, ssid, password, btn=None):
+        self._busy(btn)
+        if getattr(self, '_net_status_lbl', None):
+            self._net_status_lbl.set_text(f'Connecting to {ssid}…')
         def _do():
             args = ['nmcli', 'dev', 'wifi', 'connect', ssid]
             if password:
                 args += ['password', password]
             try:
-                subprocess.run(args, capture_output=True, env=_clean_env(), timeout=40)
-            except Exception:
-                pass
-            GLib.idle_add(self._refresh_network)
-            GLib.idle_add(self._refresh_status)
+                r = subprocess.run(args, capture_output=True, text=True,
+                                   env=_clean_env(), timeout=60)
+                ok = r.returncode == 0
+                msg = ('Connected to ' + ssid) if ok else \
+                      (r.stderr.strip() or r.stdout.strip() or 'Connection failed')
+            except subprocess.TimeoutExpired:
+                ok, msg = False, 'Timed out — check the password'
+            except Exception as e:
+                ok, msg = False, str(e)
+            GLib.idle_add(self._net_done, msg)
         threading.Thread(target=_do, daemon=True).start()
+
+    def _net_done(self, msg):
+        if getattr(self, '_net_status_lbl', None):
+            self._net_status_lbl.set_text(msg)
+        self._refresh_network()
+        self._refresh_status()
+        return False
 
     def _list_vpn(self) -> list:
         try:
@@ -482,8 +512,15 @@ class HomePage(Gtk.Box):
         self._bt_group = Adw.PreferencesGroup(title='Devices')
         page.add(self._bt_group)
 
+        self._bt_status_lbl = Gtk.Label(label='', xalign=0)
+        self._bt_status_lbl.add_css_class('dim-label')
+        self._bt_status_lbl.set_margin_start(14)
+        self._bt_status_lbl.set_margin_end(14)
+        self._bt_status_lbl.set_wrap(True)
+
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         box.append(self._subpage_header('Bluetooth', on_refresh=self._refresh_bt))
+        box.append(self._bt_status_lbl)
         box.append(page)
         self._stack_set('bluetooth', box)
         self._refresh_bt()
@@ -552,30 +589,46 @@ class HomePage(Gtk.Box):
         btn.set_valign(Gtk.Align.CENTER)
         if not d['connected']:
             btn.add_css_class('suggested-action')
-        btn.connect('clicked', lambda _, m=d['mac'], c=d['connected'], p=d['paired']:
-                    self._bt_action(m, c, p))
+        btn.connect('clicked', lambda b, m=d['mac'], c=d['connected'], p=d['paired'], n=d['name']:
+                    self._bt_action(m, c, p, n, b))
         row.add_suffix(btn)
         return row
 
-    def _bt_action(self, mac, connected, paired):
-        def _do():
+    def _bt_action(self, mac, connected, paired, name='', btn=None):
+        self._busy(btn, 'Disconnecting…' if connected else 'Connecting…')
+        if getattr(self, '_bt_status_lbl', None):
+            self._bt_status_lbl.set_text(
+                ('Disconnecting from ' if connected else 'Connecting to ') + (name or mac) + '…')
+        def _run(args, t):
             try:
-                if connected:
-                    subprocess.run(['bluetoothctl', 'disconnect', mac],
-                                   capture_output=True, env=_clean_env(), timeout=15)
-                else:
-                    if not paired:
-                        subprocess.run(['bluetoothctl', 'pair', mac],
-                                       capture_output=True, env=_clean_env(), timeout=20)
-                        subprocess.run(['bluetoothctl', 'trust', mac],
-                                       capture_output=True, env=_clean_env(), timeout=5)
-                    subprocess.run(['bluetoothctl', 'connect', mac],
-                                   capture_output=True, env=_clean_env(), timeout=20)
-            except Exception:
-                pass
-            GLib.idle_add(self._refresh_bt)
-            GLib.idle_add(self._refresh_status)
+                return subprocess.run(['bluetoothctl', *args], capture_output=True,
+                                      text=True, env=_clean_env(), timeout=t)
+            except Exception as e:
+                class _R: returncode = 1; stdout = ''; stderr = str(e)
+                return _R()
+        def _do():
+            if connected:
+                r = _run(['disconnect', mac], 15)
+                ok = 'Successful' in (r.stdout or '') or r.returncode == 0
+                msg = ('Disconnected' if ok else
+                       (r.stderr.strip() or r.stdout.strip() or 'Disconnect failed'))
+            else:
+                if not paired:
+                    _run(['pair', mac], 25)
+                    _run(['trust', mac], 5)
+                r = _run(['connect', mac], 25)
+                ok = 'Connection successful' in (r.stdout or '')
+                msg = ('Connected' if ok else
+                       (r.stderr.strip() or (r.stdout.strip().splitlines() or ['Connection failed'])[-1]))
+            GLib.idle_add(self._bt_done, msg)
         threading.Thread(target=_do, daemon=True).start()
+
+    def _bt_done(self, msg):
+        if getattr(self, '_bt_status_lbl', None):
+            self._bt_status_lbl.set_text(msg)
+        self._refresh_bt()
+        self._refresh_status()
+        return False
 
     def _bt_scan(self):
         def _do():
