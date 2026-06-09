@@ -30,3 +30,4 @@ local lid = "Lid Switch"
 
 hl.bind("switch:on:"  .. lid, hl.dsp.exec_cmd(on_sleep), { locked = true })
 hl.bind("switch:off:" .. lid, hl.dsp.exec_cmd(on_lock),  { locked = true })
+ 

@@ -113,6 +113,14 @@ hl.window_rule({
     center = true,
     size   = { "(monitor_w*0.5)", "(monitor_h*0.6)" },
 })
+hl.window_rule({
+    name   = "emoji_picker",
+    match  = { title = "HyprEmoji" },
+    float  = true,
+    tile   = false,
+    move   = { "(monitor_w*0.7)", "(monitor_h*0.1)" },
+    size   = { "(monitor_w*0.2)", "(monitor_h*0.2)" },
+})
 
 -- ── Full opacity (no transparency) ────────────────────
 hl.window_rule({
@@ -178,23 +186,34 @@ hl.window_rule({
     tile  = true,
 })
 
--- ── Manual toggle (dispatched via keybind) ────────────
+hl.window_rule({
+    name    = "system-monitoring",
+    match   = { title = "sysmon" },
+    opacity = 0.8,
+    no_blur = true,
+})
+
+
+
+
+
+-- /// DYNAMICALLY APPLIED RULES /// 
+
 hl.window_rule({
     name    = "force_opaque",
-    match   = { tag = "opacity_off" },
+    match   = { tag = "keybind_opaque" },
     opacity = 1,
     opaque  = true,
     no_blur = true,
 })
 
-
--- ══════════════════════════════════════════════════════
--- Workspace rules
--- ══════════════════════════════════════════════════════
-
-hl.workspace_rule({
-    workspace   = "99",
-    border_size = 4,
-    gaps_out    = 44,
-    gaps_in     = 44,
+hl.window_rule({
+    name    = "dyn_focus",
+    match   = { tag = "dyn_focus" },
+    no_blur = true,
+    opacity = 1,
+    opaque  = true,
+    dim_around = true,
+    float   = true,
+    center  = true, 
 })

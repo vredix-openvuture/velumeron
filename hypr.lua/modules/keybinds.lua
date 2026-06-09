@@ -32,6 +32,7 @@ hl.bind(MOD .. " + T",           hl.dsp.exec_cmd(terminal))
 hl.bind(MOD .. " + S",           hl.dsp.exec_cmd(notifications))
 hl.bind(MOD .. " + V",           hl.dsp.exec_cmd(clipboard))
 hl.bind(MOD .. " + X",           hl.dsp.exec_cmd(VTL_DIR .. "/bin/vutureland -t"))
+hl.bind(MOD .. " + PERIOD",      hl.dsp.exec_cmd("hypremoji"))
 
 
 -- ── Window management ────────────────────────────────
@@ -112,15 +113,38 @@ hl.define_submap("window", function()
     hl.bind("J", hl.dsp.window.resize({ x =   0, y =  50, relative = true }), { repeating = true })
     hl.bind("K", hl.dsp.window.resize({ x =   0, y = -50, relative = true }), { repeating = true })
 
+    hl.bind("RIGHT", hl.dsp.window.resize({ x =  50, y =   0, relative = true }), { repeating = true })
+    hl.bind("LEFT",  hl.dsp.window.resize({ x = -50, y =   0, relative = true }), { repeating = true })
+    hl.bind("UP",    hl.dsp.window.resize({ x =   0, y =  50, relative = true }), { repeating = true })
+    hl.bind("DOWN",  hl.dsp.window.resize({ x =   0, y = -50, relative = true }), { repeating = true })
+
+
+    -- Move active window
+    hl.bind("CONTROL + H", hl.dsp.window.move({ x = -50, y =   0, relative = true }), { repeating = true })
+    hl.bind("CONTROL + L", hl.dsp.window.move({ x =  50, y =   0, relative = true }), { repeating = true })
+    hl.bind("CONTROL + J", hl.dsp.window.move({ x =   0, y = -50, relative = true }), { repeating = true })
+    hl.bind("CONTROL + K", hl.dsp.window.move({ x =   0, y =  50, relative = true }), { repeating = true })
+    
+    hl.bind("CONTROL + RIGHT", hl.dsp.window.move({ x = -50, y =   0, relative = true }), { repeating = true })
+    hl.bind("CONTROL + LEFT",  hl.dsp.window.move({ x =  50, y =   0, relative = true }), { repeating = true })
+    hl.bind("CONTROL + UP",    hl.dsp.window.move({ x =   0, y = -50, relative = true }), { repeating = true })
+    hl.bind("CONTROL + DOWN",  hl.dsp.window.move({ x =   0, y =  50, relative = true }), { repeating = true })
+
+
     -- Window state toggles (stay in submap)
     hl.bind("F", hl.dsp.window.float({ action = "toggle" }))
-    hl.bind("Q", hl.dsp.window.fullscreen({ mode = "maximized", action = "toggle" }))
-    hl.bind("O", hl.dsp.window.tag({ tag = "opacity_off" }))
+
+    hl.bind("O", hl.dsp.window.tag({ tag = "keybind_opaque" }))
+
+    hl.bind("B",           hl.dsp.window.fullscreen({ mode = "maximized",  action = "toggle" }))
+    hl.bind("CONTROL + B", hl.dsp.window.fullscreen({ mode = "fullscreen", action = "toggle" }))
+
 
     -- Move to workspace (stay in submap)
     for i = 1, 9 do
-        hl.bind(tostring(i), hl.dsp.window.move({ workspace = i }))
+        hl.bind(MOD .. " + " .. tostring(i), hl.dsp.window.move({ workspace = i }))
     end
+
 
     -- Exit
     hl.bind("ESCAPE", exit_submap)
@@ -183,21 +207,21 @@ hl.define_submap("quickstart", "reset", function()
 end)
 
 
--- ── Developer submap ──────────────────────────────────
+-- ── Navigate submap (workspace / window focus) ────────
 
-hl.bind(MOD .. " + D", function()
-    hl.dispatch(hl.dsp.exec_cmd("echo 'developer' > /tmp/hypr-submap"))
-    hl.dispatch(hl.dsp.submap("developer"))
+hl.bind(MOD .. " + CONTROL + S", function()
+    hl.dispatch(hl.dsp.exec_cmd("echo 'windostyle' > /tmp/hypr-submap"))
+    hl.dispatch(hl.dsp.submap("windowstyle"))
 end)
 
-hl.define_submap("developer", "reset", function()
-    hl.bind("W", function()
-        hl.dispatch(hl.dsp.exec_cmd("echo 'normal' > /tmp/hypr-submap"))
-        hl.dispatch(hl.dsp.exec_cmd("killall waybar && " .. VTL_DIR .. "/assets/scripts/launcher.sh --waybar"))
-    end)
+hl.define_submap("windowstyle", function()
+    -- Toggle the dyn_blur tag on the active window (enables the blur window rule)
+    hl.bind("L", hl.dsp.window.tag({ tag = "dyn_blur" }))
 
+    hl.bind("F", hl.dsp.window.float({ action = "toggle" }))
+    hl.bind("F", hl.dsp.window.tag({ tag = "dyn_focus" }))    
+
+    -- Exit
     hl.bind("ESCAPE", exit_submap)
     hl.bind("RETURN", exit_submap)
 end)
-
-
