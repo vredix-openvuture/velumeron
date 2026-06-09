@@ -325,6 +325,14 @@ keeps a `themes/<design>` file; the current look is shipped as **`miboro`**.
 
 Newest first. Each entry: what changed, why, and the commit.
 
+### 2026-06-09
+- **Faster panel open** — the Home page rebuilt its "current look" group on every
+  show, which re-decoded and re-scaled the full wallpaper PNG on the UI thread —
+  a clearly felt delay when opening the panel on clients with large wallpapers.
+  `_refresh_current` now caches by (design, wallpaper path, mtime) and skips the
+  rebuild when nothing changed; the one decode happens at daemon startup while
+  hidden, so user-opens are instant.
+
 ### 2026-06-08
 - **Full-height panel no longer looks half-empty** — at 100% height the panel
   *was* laid out full-height, but the scroll viewport below the content wasn't

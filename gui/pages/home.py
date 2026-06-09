@@ -110,20 +110,31 @@ class HomePage(Gtk.Box):
 
     def _refresh_current(self):
         """Rebuild the wallpaper preview with the theme name overlaid on it
-        (called on show so it tracks the live theme)."""
+        (called on show so it tracks the live theme). Skipped when nothing
+        changed — decoding the wallpaper PNG every open is what made the panel
+        slow to appear on clients with large wallpapers."""
         box = getattr(self, '_current_box', None)
         if box is None:
             return
+
+        style = current_design() or self._active_style()
+        wp = self._active_wallpaper()
+        try:
+            mtime = os.path.getmtime(wp) if wp else 0
+        except OSError:
+            mtime = 0
+        key = (style, wp, mtime)
+        if key == getattr(self, '_current_key', None) and box.get_first_child():
+            return                       # unchanged — keep the built preview
+        self._current_key = key
+
         child = box.get_first_child()
         while child:
             nxt = child.get_next_sibling()
             box.remove(child)
             child = nxt
 
-        style = current_design() or self._active_style()
-
         pic = None
-        wp = self._active_wallpaper()
         if wp and os.path.exists(wp):
             try:
                 pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(
