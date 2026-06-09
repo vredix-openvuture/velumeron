@@ -326,6 +326,17 @@ keeps a `themes/<design>` file; the current look is shipped as **`miboro`**.
 Newest first. Each entry: what changed, why, and the commit.
 
 ### 2026-06-09
+- **Zero-setup monitor + workspaces on a fresh client** — a client that installed
+  `vutureland-git` without running the setup now auto-configures itself:
+  - `modules/variables.lua` provides `or`-fallbacks for every device-specific
+    global normally written by the setup (`exec_once_daemons`, `start_apps`,
+    `quick_app`, `cur_theme`/`cur_size`, the `fn_*` media keys), so the Hyprland
+    config never errors when `user_settings.lua` is absent.
+  - `modules/autostart.lua` runs `.setup/hyprland.sh --autostart` on first boot
+    when `user_settings.lua` has no `hl.monitor` — it detects the primary monitor
+    (focused, else first), sets scale 1 / best resolution / position `0x0`, and
+    assigns persistent workspaces 1–5 to it, then writes `user_settings.lua` and
+    reloads (so it only runs once). Workspace 1 is now marked `default = true`.
 - **Faster panel open** — the Home page rebuilt its "current look" group on every
   show, which re-decoded and re-scaled the full wallpaper PNG on the UI thread —
   a clearly felt delay when opening the panel on clients with large wallpapers.

@@ -5,6 +5,24 @@
 
 hl.on("hyprland.start", function()
 
+    -- First-boot auto-config: if no monitor has been configured yet (the setup
+    -- was never run, so user_settings.lua has no hl.monitor), detect the primary
+    -- monitor and assign it scale 1 / best resolution / position 0x0 plus
+    -- persistent workspaces 1–5 (ws 1 = default). Writes user_settings.lua and
+    -- reloads, so it only runs once — no need to run the setup manually.
+    do
+        local us = VTL_USER_DIR .. "/hypr.lua/user_settings.lua"
+        local configured = false
+        local f = io.open(us, "r")
+        if f then
+            local content = f:read("*a"); f:close()
+            if content:find("hl%.monitor") then configured = true end
+        end
+        if not configured then
+            hl.exec_cmd("bash " .. VTL_DIR .. "/.setup/hyprland.sh --autostart")
+        end
+    end
+
     -- Initialize submap state tracker
     hl.exec_cmd("echo 'normal' > /tmp/hypr-submap")
 

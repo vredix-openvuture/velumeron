@@ -870,11 +870,15 @@ autostart_config() {
     {
         echo "-- mon1"
         for ws in 1 2 3 4 5; do
-            echo "hl.workspace_rule({ workspace = \"$ws\", monitor = mon1, persistent = true })"
+            if [[ "$ws" == "1" ]]; then
+                echo "hl.workspace_rule({ workspace = \"$ws\", monitor = mon1, persistent = true, default = true })"
+            else
+                echo "hl.workspace_rule({ workspace = \"$ws\", monitor = mon1, persistent = true })"
+            fi
         done
     } | write_section "WORKSPACES"
 
-    ok "Workspaces 1–5 → mon1 ($mon1), persistent"
+    ok "Workspaces 1–5 → mon1 ($mon1), persistent (ws 1 = default)"
 
     # ── 3) Autostart: empty ───────────────────────────────────────────────────
     say "── AUTOSTART ──"
