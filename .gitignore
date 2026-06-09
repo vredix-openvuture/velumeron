@@ -7,8 +7,11 @@ hypr.lua/user_settings.lua
 # Hyprland/Waybar can start before the first wallpaper has been applied.
 # The actual runtime versions live in ~/.config/vutureland/ — created by
 # welcome_to_vutureland.sh on first run.
-# (kept tracked: assets/colors_gtk.css, hypr.lua/colors.lua, kitty/colors.conf,
+# (kept tracked: assets/colors_gtk.css, kitty/colors.conf,
 #  rofi/assets/colors.rasi, assets/colors_hyprland.conf)
+# colors.lua is NOT tracked — it kept showing machine-specific churn; hyprland.lua
+# loads it via a guarded _try_dofile and welcome_to_vutureland.sh regenerates it.
+hypr.lua/colors.lua
 
 # Per-user GUI preferences
 gui/settings.json
