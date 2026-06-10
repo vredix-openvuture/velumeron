@@ -134,7 +134,12 @@ list row:focus,
   opacity: 0.85;
 }
 
-.widget-mpris button {
+/* Track controls (shuffle / prev / play / next / repeat). swaync already
+   centres this row (halign: center on its box), so no manual margin hack —
+   the old `button:first-child { margin-left: 120px }` also matched the left
+   carousel arrow and the first control button, shoving the whole row right
+   once a second player appeared. */
+.widget-mpris .mpris-overlay > box > button {
   background: transparent;
   border: none;
   color: @fg-primary;
@@ -144,12 +149,25 @@ list row:focus,
   min-height: 28px;
 }
 
-.widget-mpris button:first-child {
-  margin-left: 120px;
+.widget-mpris .mpris-overlay > box > button:hover {
+  background: @bg-hover;
+  color: @fg-hover;
+  transition: 120ms ease;
 }
 
-.widget-mpris button:hover {
-  background: @bg-hover;
+/* Player-switch arrows on the sides (only shown with 2+ players). They span
+   the full player height, so a solid hover fill would render as a big block —
+   tint only the arrow colour on hover. */
+.widget-mpris > box > button {
+  background: transparent;
+  border: none;
+  color: @fg-primary;
+  padding: 0 6px;
+  min-width: 24px;
+}
+
+.widget-mpris > box > button:hover {
+  background: transparent;
   color: @fg-hover;
   transition: 120ms ease;
 }
