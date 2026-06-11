@@ -20,6 +20,30 @@ def _output_dir() -> str:
     return os.path.join(_vtl_user(), "waybar-modular", "output")
 
 
+def _hover_flag_path() -> str:
+    """Flag file that toggles Waybar's hover-to-show mode. Its mere presence is
+    read by launch-waybar.sh (drops the exclusive zone + starts the cursor
+    daemon), so it stays decoupled from gui/settings.json (which main.py rewrites
+    wholesale and would otherwise clobber the key)."""
+    return os.path.join(_vtl_user(), "waybar-modular", ".hover-hide")
+
+
+def hover_hide_enabled() -> bool:
+    return os.path.exists(_hover_flag_path())
+
+
+def set_hover_hide(enabled: bool) -> None:
+    path = _hover_flag_path()
+    if enabled:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        open(path, "w").close()
+    else:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+
+
 def _modules_dir() -> str:
     return os.path.join(_vtl_user(), "waybar-modular", "modules")
 

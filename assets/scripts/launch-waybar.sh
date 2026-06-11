@@ -5,8 +5,10 @@
 
 set -euo pipefail
 
-source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh"
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+source "$SCRIPT_DIR/lib/env.sh"
 OUTPUT_DIR="$VUTURELAND_USER_DIR/waybar-modular/output"
+HOVER_FLAG="$VUTURELAND_USER_DIR/waybar-modular/.hover-hide"
 
 # Alle per-Monitor config.json finden (output/{style}/{position}/{monitor}/config.json)
 declare -a CONFIG_FILES=()
@@ -19,9 +21,14 @@ if [[ ${#CONFIG_FILES[@]} -eq 0 ]]; then
     exit 1
 fi
 
-# Merge all configs into a single array
+# Merge all configs into a single array. In hover-to-show mode the bars must not
+# reserve an exclusive zone, otherwise every reveal/hide would reflow all windows.
 MERGED_CONFIG="/tmp/waybar-merged-config.json"
-jq -s '.' "${CONFIG_FILES[@]}" > "$MERGED_CONFIG"
+if [[ -f "$HOVER_FLAG" ]]; then
+    jq -s 'map(. + {"exclusive": false, "layer": "top"})' "${CONFIG_FILES[@]}" > "$MERGED_CONFIG"
+else
+    jq -s '.' "${CONFIG_FILES[@]}" > "$MERGED_CONFIG"
+fi
 
 # Build merged style.css from all per-monitor style.css files
 MERGED_STYLE="/tmp/waybar-merged-style.css"
@@ -34,6 +41,9 @@ MERGED_STYLE="/tmp/waybar-merged-style.css"
     done
 } > "$MERGED_STYLE"
 
+# Stop any previous hover daemon first — it would fight the fresh Waybar instance.
+pkill -f "$SCRIPT_DIR/waybar-hover.sh" 2>/dev/null || true
+
 # Kill and restart Waybar
 if pgrep -x waybar &>/dev/null; then
     pkill -x waybar || true
@@ -44,3 +54,11 @@ waybar -c "$MERGED_CONFIG" -s "$MERGED_STYLE" > /tmp/waybar-launch.log 2>&1 &
 disown
 
 echo "Waybar started – ${#CONFIG_FILES[@]} bar(s) active"
+
+# Hover-to-show: start the cursor daemon that hides the bar and reveals it on
+# hovering the top screen edge.
+if [[ -f "$HOVER_FLAG" ]]; then
+    setsid bash "$SCRIPT_DIR/waybar-hover.sh" "$MERGED_CONFIG" > /tmp/waybar-hover.log 2>&1 &
+    disown
+    echo "Hover-to-show active"
+fi

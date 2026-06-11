@@ -2,7 +2,7 @@
 -- Window Rules
 -- ═══════════════════════════════════════════════════════
 
-local file_dialogs = table.concat({
+local popup_dialogs = table.concat({
     ".*[Uu]mbenennen.*", ".*[Rr]ename.*",
     ".*[Ll]öschen.*", ".*[Dd]elete.*",
     ".*[Ee]igenschaften.*", ".*[Pp]roperties.*",
@@ -13,8 +13,9 @@ local file_dialogs = table.concat({
     ".*[Ff]ehler.*", ".*[Ee]rror.*",
     ".*[Ww]arnung.*", ".*[Ww]arning.*",
     ".*[Kk]alender.*", ".*[Cc]alendar.*", -- // Calendar same as popups
+    ".*[Bb]itwarden.*",
 }, "|")
-file_dialogs = "(" .. file_dialogs .. ")"
+popup_dialogs = "(" .. popup_dialogs .. ")"
 
 
 -- ══════════════════════════════════════════════════════
@@ -30,7 +31,7 @@ hl.window_rule({ name="messaging",   match={class="(Element|discord|telegram|sla
 hl.window_rule({ name="media",       match={class="(mpv|vlc|celluloid|totem|clapper)"},              tag="+media"       })
 hl.window_rule({ name="steam",       match={class="(steam|Steam|steamwebhelper)"},                   tag="+steam"       })
 hl.window_rule({ name="tiled_apps",  match={class="no_float"},                                       tag="+tiled"       })
-hl.window_rule({ name="vuture",      match={class=".*[Vv]uture.*"},                                  tag="+vuture"       })
+hl.window_rule({ name="vuture_tag",  match={class=".*[Vv]uture.*"},                                  tag="+vuture"       })
 
 
 -- ══════════════════════════════════════════════════════
@@ -72,35 +73,35 @@ hl.window_rule({
     size   = float_size,
 })
 hl.window_rule({
-    name   = "file_dialogs",
-    match  = { title = file_dialogs },
+    name   = "popup_dialogs_title",
+    match  = { title = popup_dialogs },
     float  = true,
     center = true,
     size   = float_size,
 })
 hl.window_rule({
-    name   = "file_dialogs",
-    match  = { class = file_dialogs },
+    name   = "popup_dialogs_class",
+    match  = { class = popup_dialogs },
     float  = true,
     center = true,
     size   = float_size,
 })
 hl.window_rule({
-    name   = "user_popups",
+    name   = "user_popups_title",
     match  = { title = floating_window },
     float  = true,
     center = true,
     size   = { "(monitor_w*0.5)", "(monitor_h*0.6)" },
 })
 hl.window_rule({
-    name   = "user_popups",
+    name   = "user_popups_class",
     match  = { class = floating_window },
     float  = true,
     center = true,
     size   = { "(monitor_w*0.5)", "(monitor_h*0.6)" },
 })
 hl.window_rule({
-    name   = "vuture",
+    name   = "vuture_float",
     match  = { title = "(.*[Vv]utureland.*)" },
     float  = true,
     center = true,
@@ -112,14 +113,6 @@ hl.window_rule({
     float  = true,
     center = true,
     size   = { "(monitor_w*0.5)", "(monitor_h*0.6)" },
-})
-hl.window_rule({
-    name   = "emoji_picker",
-    match  = { title = "HyprEmoji" },
-    float  = true,
-    tile   = false,
-    move   = { "(monitor_w*0.7)", "(monitor_h*0.1)" },
-    size   = { "(monitor_w*0.2)", "(monitor_h*0.2)" },
 })
 
 -- ── Full opacity (no transparency) ────────────────────
@@ -138,14 +131,14 @@ hl.window_rule({
     no_blur = true,
 })
 hl.window_rule({
-    name    = "user_opaque",
+    name    = "user_opaque_class",
     match   = { class = opacity_window },
     opacity = 1,
     opaque  = true,
     no_blur = true,
 })
 hl.window_rule({
-    name    = "user_opaque",
+    name    = "user_opaque_title",
     match   = { title = opacity_window },
     opacity = 1,
     opaque  = true,

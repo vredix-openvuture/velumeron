@@ -650,7 +650,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self._banner.set_visible(True)
 
         path = _LOGO_PATHS.get(variant, _LOGO_PATHS['full'])
-        pb = _load_logo(path, height=96) if path else None
+        pb = _load_logo(path, height=64) if path else None
         if not pb:
             return
         texture = Gdk.Texture.new_for_pixbuf(pb)

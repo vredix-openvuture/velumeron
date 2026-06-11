@@ -4,6 +4,7 @@ gi.require_version('Adw', '1')
 
 from gi.repository import Gtk, Adw
 import subprocess
+import osd_config
 from constants import TRANSFORM_LABELS
 from models.hyprland import (
     parse_monitors, generate_monitors_section,
@@ -104,22 +105,9 @@ class HyprlandPage(Gtk.Box):
         page.add(mon_group)
 
         # ── Peripherals ───────────────────────────────────────────────────────
-        per_group = Adw.PreferencesGroup(title='Keys and Cursor')
-        for var, label in [
-            ('fn_brightness_up',   'Brightness +'),
-            ('fn_brightness_down', 'Brightness −'),
-            ('fn_volume_up',       'Volume +'),
-            ('fn_volume_down',     'Volume −'),
-            ('fn_volume_mute',     'Mute'),
-            ('fn_play_stop_play',  'Play / Pause'),
-            ('fn_play_next',       'Next Track'),
-            ('fn_play_prev',       'Previous Track'),
-        ]:
-            row = Adw.EntryRow(title=label)
-            row.set_text(str(self._periph.get(var, '')))
-            row.connect('changed', lambda r, v=var: self._periph.__setitem__(v, r.get_text()))
-            per_group.add(row)
-
+        # Media/brightness keys are bound to their standard XF86 keysyms directly
+        # (see keybinds.lua), so there's nothing per-device to configure here.
+        per_group = Adw.PreferencesGroup(title='Cursor')
         cur_row = Adw.EntryRow(title='Cursor-Theme')
         cur_row.set_text(str(self._periph.get('cur_theme', '')))
         cur_row.connect('changed',
@@ -184,6 +172,9 @@ class HyprlandPage(Gtk.Box):
         lnf_group.add(bsize_row)
         page.add(lnf_group)
 
+        # ── On-Screen Display (brightness/volume banner) ──────────────────────
+        page.add(self._build_osd_group())
+
         # ── Startup Apps ──────────────────────────────────────────────────────
         self._apps_group = Adw.PreferencesGroup(title='Startup Apps')
         for app_entry in self._apps:
@@ -204,6 +195,50 @@ class HyprlandPage(Gtk.Box):
         apply_group.add(apply_btn)
         page.add(apply_group)
         return page
+
+    # ── On-Screen Display settings ────────────────────────────────────────────
+
+    def _build_osd_group(self) -> Adw.PreferencesGroup:
+        cfg = osd_config.load()
+        group = Adw.PreferencesGroup(
+            title='On-Screen Display',
+            description='Brightness/volume banner shown on the media keys. '
+                        'Changes apply the next time it appears.')
+
+        def _spin_row(title, subtitle, value, lo, hi, step, digits, on_change):
+            adj = Gtk.Adjustment(value=value, lower=lo, upper=hi, step_increment=step)
+            spin = Gtk.SpinButton(adjustment=adj, digits=digits)
+            spin.set_valign(Gtk.Align.CENTER)
+            spin.connect('value-changed', lambda w: on_change(w.get_value()))
+            row = Adw.ActionRow(title=title, subtitle=subtitle)
+            row.add_suffix(spin)
+            row.set_activatable_widget(spin)
+            group.add(row)
+
+        _spin_row('Display Duration', 'How long the banner stays (seconds)',
+                  cfg['duration_ms'] / 1000.0, 0.5, 6.0, 0.1, 1,
+                  lambda v: osd_config.save({'duration_ms': int(round(v * 1000))}))
+        _spin_row('Bottom Margin', 'Gap from the bottom screen edge (px)',
+                  cfg['margin_px'], 0, 600, 10, 0,
+                  lambda v: osd_config.save({'margin_px': int(v)}))
+        _spin_row('Width', 'Banner width (px)',
+                  cfg['width_px'], 200, 900, 10, 0,
+                  lambda v: osd_config.save({'width_px': int(v)}))
+        _spin_row('Height', 'Banner height (px)',
+                  cfg['height_px'], 32, 160, 4, 0,
+                  lambda v: osd_config.save({'height_px': int(v)}))
+
+        dev_row = Adw.ActionRow(title='Show Device Name',
+                                subtitle='Show which output device is being adjusted')
+        dev_switch = Gtk.Switch()
+        dev_switch.set_valign(Gtk.Align.CENTER)
+        dev_switch.set_active(bool(cfg['show_device']))
+        dev_switch.connect('notify::active',
+                           lambda s, _: osd_config.save({'show_device': s.get_active()}))
+        dev_row.add_suffix(dev_switch)
+        dev_row.set_activatable_widget(dev_switch)
+        group.add(dev_row)
+        return group
 
     # ── Window-rule list editor (in-panel subpage) ────────────────────────────
 

@@ -10,7 +10,7 @@ hl.env("VUTURELAND_USER_DIR", VTL_USER_DIR)
 -- QT
 hl.env("QT_QPA_PLATFORM",                    "wayland;xcb")
 hl.env("QT_QPA_PLATFORMTHEME",               "qt5ct")
-hl.env("QT_STYLE_OVERRIDE",                  "kvantum")
+--hl.env("QT_STYLE_OVERRIDE",                  "kvantum")
 hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION","1")
 
 -- Toolkit backends

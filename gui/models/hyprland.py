@@ -106,15 +106,6 @@ def generate_peripherals_section(p: dict) -> str:
     lines = [
         f'cur_theme = "{p.get("cur_theme", "breeze_cursors")}"',
         f'cur_size  = {p.get("cur_size", 20)}',
-        '',
-        f'fn_brightness_up   = "{p.get("fn_brightness_up",   "F2")}"',
-        f'fn_brightness_down = "{p.get("fn_brightness_down", "F1")}"',
-        f'fn_play_stop_play  = "{p.get("fn_play_stop_play",  "F8")}"',
-        f'fn_play_next       = "{p.get("fn_play_next",       "F9")}"',
-        f'fn_play_prev       = "{p.get("fn_play_prev",       "F7")}"',
-        f'fn_volume_up       = "{p.get("fn_volume_up",       "F12")}"',
-        f'fn_volume_down     = "{p.get("fn_volume_down",     "F11")}"',
-        f'fn_volume_mute     = "{p.get("fn_volume_mute",     "F10")}"',
     ]
     return '\n' + '\n'.join(lines) + '\n'
 

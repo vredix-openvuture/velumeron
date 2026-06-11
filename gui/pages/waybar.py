@@ -17,6 +17,7 @@ from models.waybar import (
     scan_modules_by_section, BarConfig, BarStyle, init_groups_json,
     build_bar_config, refresh_groups_includes, remove_other_bar_configs,
     active_bar_for_monitor, _known_monitors,
+    hover_hide_enabled, set_hover_hide,
 )
 from design import current_design
 
@@ -324,6 +325,22 @@ class WaybarPage(Gtk.Box):
         self._subbar_combo.connect('notify::selected', self._on_subbar_changed)
         self._subbar_row.append(self._subbar_combo)
         self.append(self._subbar_row)
+
+        # ── Auto-hide-Zeile: Waybar nur beim Hovern am Rand zeigen ─────────
+        hover_row = _sel_row('Auto-hide')
+        hover_row.set_margin_bottom(6)
+        self._hover_switch = Gtk.Switch()
+        self._hover_switch.set_valign(Gtk.Align.CENTER)
+        self._hover_switch.set_active(hover_hide_enabled())
+        self._hover_switch.connect('notify::active', self._on_hover_toggled)
+        hover_row.append(self._hover_switch)
+        hover_hint = Gtk.Label(label='Waybar ausblenden, am oberen Rand einblenden')
+        hover_hint.add_css_class('dim-label')
+        hover_hint.add_css_class('caption')
+        hover_hint.set_halign(Gtk.Align.START)
+        hover_hint.set_hexpand(True)
+        hover_row.append(hover_hint)
+        self.append(hover_row)
 
         self.append(Gtk.Separator())
 
@@ -683,6 +700,14 @@ class WaybarPage(Gtk.Box):
         self._status.set_text('')
         self._populate_monitors()
         self._populate_styles()
+
+    def _on_hover_toggled(self, switch, _):
+        enabled = switch.get_active()
+        set_hover_hide(enabled)
+        self._status.set_text(
+            'Auto-hide an — Waybar neu…' if enabled else 'Auto-hide aus — Waybar neu…')
+        subprocess.Popen(['bash', LAUNCH_WAYBAR], env=_clean_env())
+        GLib.timeout_add(2500, lambda: self._status.set_text('') or False)
 
     def _on_apply(self, _):
         if self._cur_bar is None:

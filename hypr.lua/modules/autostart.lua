@@ -35,6 +35,8 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("systemctl --user start hyprpolkitagent")
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
     hl.exec_cmd(VTL_DIR .. "/assets/scripts/launch-swaync.sh")
+    hl.exec_cmd(VTL_DIR .. "/assets/scripts/launch-osd.sh")
+    hl.exec_cmd(VTL_DIR .. "/assets/scripts/brightness.sh warm")
     hl.exec_cmd("wl-paste --watch clipvault store")
     hl.exec_cmd(VTL_DIR .. "/assets/scripts/float-cascade.sh")
 

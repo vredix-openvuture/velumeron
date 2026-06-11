@@ -18,7 +18,6 @@ hl.bind(MOD .. " + 0", hl.dsp.focus({ workspace = 10 }))
 -- ── Session management ───────────────────────────────
 
 hl.bind(MOD .. " + CONTROL + ALT + RETURN", hl.dsp.exit())
-hl.bind(MOD .. " + P",      hl.dsp.exec_cmd(on_sleep))
 hl.bind(MOD .. " + L",      hl.dsp.exec_cmd(on_lock))
 hl.bind(MOD .. " + O",      hl.dsp.exec_cmd(session_menu))
 
@@ -29,6 +28,7 @@ hl.bind(MOD .. " + SHIFT + S",   hl.dsp.exec_cmd(screenshot_cmd))
 hl.bind(MOD .. " + SPACE",       hl.dsp.exec_cmd(launcher))
 hl.bind(MOD .. " + ALT + SPACE", hl.dsp.exec_cmd(theme_switch))
 hl.bind(MOD .. " + T",           hl.dsp.exec_cmd(terminal))
+hl.bind(MOD .. " + R",           hl.dsp.exec_cmd(browser))
 hl.bind(MOD .. " + S",           hl.dsp.exec_cmd(notifications))
 hl.bind(MOD .. " + V",           hl.dsp.exec_cmd(clipboard))
 hl.bind(MOD .. " + X",           hl.dsp.exec_cmd(VTL_DIR .. "/bin/vutureland -t"))
@@ -42,6 +42,7 @@ hl.bind(MOD .. " + F",         hl.dsp.window.float({ action = "toggle" }))
 hl.bind(MOD .. " + B",         hl.dsp.window.fullscreen({ mode = "maximized" }))
 hl.bind(MOD .. " + ALT + B",   hl.dsp.window.fullscreen({ mode = "fullscreen" }))       -- Fullscreen active window
 hl.bind(MOD .. " + N",         hl.dsp.window.cycle_next())                              -- Activate next window on current monitor
+hl.bind(MOD .. " + mouse_up",  hl.dsp.window.cycle_next())  
 hl.bind(MOD .. " + ALT + M",   hl.dsp.window.move({ monitor = "+1", follow = true }))   -- Move window to the next monitor
 
 
@@ -50,43 +51,53 @@ hl.bind(MOD .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })
 hl.bind(MOD .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
 hl.bind(MOD .. " + mouse:274", hl.dsp.window.float({ action = "toggle" }))
 
--- Click outside rofi closes it (non-consuming → click still reaches the app)
-hl.bind("mouse:272",
-    hl.dsp.exec_cmd(VTL_DIR .. "/rofi/assets/close-on-click.sh"),
-    { mouse = true, non_consuming = true, release = true })
+
 
 
 -- ── Workspaces and Monitors ─────────────────────────
 
-hl.bind(MOD .. " + mouse_up",   hl.dsp.focus({ workspace = "e+1" }))
-hl.bind(MOD .. " + mouse_down", hl.dsp.focus({ workspace = "e-1" }))
-
-hl.bind(MOD .. " + LEFT",       hl.dsp.focus({ workspace = "e-1" })) 
-hl.bind(MOD .. " + RIGHT",      hl.dsp.focus({ workspace = "e+1" })) 
+hl.bind(MOD .. " + CONTROL + mouse_up",   hl.dsp.focus({ workspace = "e+1" }))
+hl.bind(MOD .. " + CONTROL + mouse_down", hl.dsp.focus({ workspace = "e-1" }))
+hl.bind(MOD .. " + CONTROL + LEFT",       hl.dsp.focus({ workspace = "e-1" })) 
+hl.bind(MOD .. " + CONTROL + RIGHT",      hl.dsp.focus({ workspace = "e+1" })) 
 
 hl.bind(MOD .. " + M",          hl.dsp.focus({ monitor = "+1" }))       -- Switch to next monitor
 
 
 -- ── Function keys: Monitor brightness ────────────────
 
-hl.bind(MOD .. " + " .. fn_brightness_down,
-    hl.dsp.exec_cmd("ddcutil --display 1 setvcp 10 50 && ddcutil --display 2 setvcp 10 50"))
-hl.bind(MOD .. " + " .. fn_brightness_up,
-    hl.dsp.exec_cmd("ddcutil --display 1 setvcp 10 100 && ddcutil --display 2 setvcp 10 100"))
+-- These use the standardised XF86 multimedia keysyms directly (no modifier), so
+-- the dedicated media keys just work on any keyboard without per-device mapping.
+-- Each key also pokes the OSD daemon (osd-show.sh) for a bottom-centre banner.
+local osd = VTL_DIR .. "/assets/scripts/osd-show.sh"
+
+-- Brightness in 5% steps (0–100). brightness.sh uses brightnessctl when a
+-- backlight device exists, else ddcutil (bus-direct) for external monitors,
+-- and pops the OSD itself.
+hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd(VTL_DIR .. "/assets/scripts/brightness.sh down"), { repeating = true })
+hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd(VTL_DIR .. "/assets/scripts/brightness.sh up"),   { repeating = true })
 
 
 -- ── Function keys: Media control ─────────────────────
 
-hl.bind(MOD .. " + " .. fn_play_prev,     hl.dsp.exec_cmd("playerctl previous"))
-hl.bind(MOD .. " + " .. fn_play_stop_play,hl.dsp.exec_cmd("playerctl play-pause"))
-hl.bind(MOD .. " + " .. fn_play_next,     hl.dsp.exec_cmd("playerctl next"))
+hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"))
+hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("playerctl play-pause"))
+hl.bind("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"))
 
 
 -- ── Function keys: Volume ────────────────────────────
 
-hl.bind(MOD .. " + " .. fn_volume_mute,  hl.dsp.exec_cmd("pactl set-sink-mute @DEFAULT_SINK@ toggle"))
-hl.bind(MOD .. " + " .. fn_volume_down,  hl.dsp.exec_cmd("pactl set-sink-volume @DEFAULT_SINK@ -5%"))
-hl.bind(MOD .. " + " .. fn_volume_up,    hl.dsp.exec_cmd("pactl set-sink-volume @DEFAULT_SINK@ +5%"))
+hl.bind("XF86AudioMute",        hl.dsp.exec_cmd("pactl set-sink-mute @DEFAULT_SINK@ toggle && "  .. osd .. " volume"))
+hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("pactl set-sink-volume @DEFAULT_SINK@ -5% && " .. osd .. " volume"), { repeating = true })
+hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("pactl set-sink-volume @DEFAULT_SINK@ +5% && " .. osd .. " volume"), { repeating = true })
+
+
+-- ── Click outside rofi closes it (non-consuming → click still reaches the app) ────────────────────────────
+
+hl.bind("mouse:272",
+    hl.dsp.exec_cmd(VTL_DIR .. "/rofi/assets/close-on-click.sh"),
+    { mouse = true, non_consuming = true, release = true })
+
 
 
 -- ════════════════════════════════════════════════════════════════════════
@@ -142,8 +153,10 @@ hl.define_submap("window", function()
 
     -- Move to workspace (stay in submap)
     for i = 1, 9 do
-        hl.bind(MOD .. " + " .. tostring(i), hl.dsp.window.move({ workspace = i }))
+        hl.bind(tostring(i), hl.dsp.window.move({ workspace = i }))
     end
+
+    hl.bind("0", hl.dsp.focus({ workspace = 10 }))
 
 
     -- Exit
@@ -207,7 +220,7 @@ hl.define_submap("quickstart", "reset", function()
 end)
 
 
--- ── Navigate submap (workspace / window focus) ────────
+-- ── Navigate submap (workspace / window focus) // work in progress ────────
 
 hl.bind(MOD .. " + CONTROL + S", function()
     hl.dispatch(hl.dsp.exec_cmd("echo 'windostyle' > /tmp/hypr-submap"))

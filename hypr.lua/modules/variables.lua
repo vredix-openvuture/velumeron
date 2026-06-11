@@ -14,6 +14,7 @@ clipboard      = VTL_USER_DIR .. "/rofi/assets/clipvault.sh"
 launcher       = "rofi -show drun -config "      .. VTL_USER_DIR .. "/rofi/launcher.rasi"
 theme_switch   = "rofi -show wallpaper -config " .. VTL_USER_DIR .. "/rofi/wallpaper-switcher.rasi"
 terminal       = "kitty -c "                     .. VTL_USER_DIR .. "/kitty/kitty.conf"
+browser        = "librewolf"
 notifications  = "swaync-client -R -rs -t"
 screenshot_cmd = "hyprshot -z --mode region --output-folder ~/Bilder/Screenshots"
 
@@ -33,11 +34,5 @@ start_apps         = start_apps         or {}
 quick_app          = quick_app          or {}
 cur_theme          = cur_theme          or "Oxygen"
 cur_size           = cur_size           or 24
-fn_brightness_up   = fn_brightness_up   or "XF86MonBrightnessUp"
-fn_brightness_down = fn_brightness_down or "XF86MonBrightnessDown"
-fn_play_prev       = fn_play_prev       or "XF86AudioPrev"
-fn_play_stop_play  = fn_play_stop_play  or "XF86AudioPlay"
-fn_play_next       = fn_play_next       or "XF86AudioNext"
-fn_volume_mute     = fn_volume_mute     or "XF86AudioMute"
-fn_volume_down     = fn_volume_down     or "XF86AudioLowerVolume"
-fn_volume_up       = fn_volume_up       or "XF86AudioRaiseVolume"
+-- Media/brightness keys are bound directly to their XF86 keysyms in
+-- keybinds.lua, so no per-device fn_* overrides are needed anymore.

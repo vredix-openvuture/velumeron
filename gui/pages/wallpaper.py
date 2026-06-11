@@ -93,13 +93,15 @@ def _clean_name(wp_id: str) -> str:
 class WallpaperCard(Gtk.Box):
     """Base for single-orientation pool cards."""
 
-    def __init__(self, entry: WallpaperEntry, on_change=None, on_alias=None):
+    def __init__(self, entry: WallpaperEntry, on_change=None, on_alias=None,
+                 on_remove=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self.set_halign(Gtk.Align.CENTER)
         self.add_css_class('wp-card')
         self.entry = entry
         self._on_change = on_change
         self._on_alias = on_alias
+        self._on_remove = on_remove
         self._build()
 
         display_name = _THEME_NAMES.get(f'wp_{entry.id}', _clean_name(entry.id))
@@ -212,20 +214,14 @@ class WallpaperCard(Gtk.Box):
             self._on_change()
 
     def _confirm_remove(self):
-        fname = os.path.basename(self._file_to_move or '')
-        dlg = Adw.AlertDialog(heading='Remove Wallpaper',
-                              body=f'Move {fname} to old_wallpaper?')
-        dlg.add_response('cancel', 'Cancel')
-        dlg.add_response('remove', 'Remove')
-        dlg.set_default_response('cancel')
-        dlg.set_close_response('cancel')
-        dlg.set_response_appearance('remove', Adw.ResponseAppearance.DESTRUCTIVE)
-        dlg.connect('response', lambda d, r: self._on_remove_response(r))
-        dlg.present(self.get_root())
-
-    def _on_remove_response(self, response):
-        if response != 'remove':
+        if self._on_remove is None:
             return
+        fname = os.path.basename(self._file_to_move or '')
+        self._on_remove('Remove Wallpaper',
+                        f'Move {fname} to old_wallpaper?',
+                        self._do_remove)
+
+    def _do_remove(self):
         f = self._file_to_move
         if f and os.path.exists(f):
             remove_file_from_sets(os.path.basename(f))
@@ -264,13 +260,15 @@ class NewSetCard(Gtk.Box):
     HOR_W   = int(400 * 2 / 3)
     VER_W   = 400 - int(400 * 2 / 3) - 2
 
-    def __init__(self, ws: WallpaperSet, on_change=None, on_edit=None):
+    def __init__(self, ws: WallpaperSet, on_change=None, on_edit=None,
+                 on_remove=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self.set_halign(Gtk.Align.CENTER)
         self.add_css_class('wp-card')
         self.ws = ws
         self._on_change = on_change
         self._on_edit = on_edit
+        self._on_remove = on_remove
         self._build()
 
         self._name_label = Gtk.Label(label=ws.name)
@@ -377,21 +375,13 @@ class NewSetCard(Gtk.Box):
         self._name_label.set_text(name)
 
     def _confirm_remove(self):
-        dlg = Adw.AlertDialog(
-            heading='Remove Set',
-            body=f'Remove "{self.ws.name}"? Images stay in the pool.',
-        )
-        dlg.add_response('cancel', 'Cancel')
-        dlg.add_response('remove', 'Remove')
-        dlg.set_default_response('cancel')
-        dlg.set_close_response('cancel')
-        dlg.set_response_appearance('remove', Adw.ResponseAppearance.DESTRUCTIVE)
-        dlg.connect('response', lambda d, r: self._on_remove(r))
-        dlg.present(self.get_root())
-
-    def _on_remove(self, response):
-        if response != 'remove':
+        if self._on_remove is None:
             return
+        self._on_remove('Remove Set',
+                        f'Remove "{self.ws.name}"? Images stay in the pool.',
+                        self._do_remove)
+
+    def _do_remove(self):
         sets = load_sets()
         sets.pop(self.ws.set_id, None)
         save_sets(sets)
@@ -1148,6 +1138,41 @@ class WallpaperPage(Gtk.Box):
         self._pstack.set_visible_child_name('main')
         self._reload()
 
+    def _open_confirm(self, heading, body, on_confirm, confirm_label='Remove'):
+        # In-panel confirmation: a separate AlertDialog window can't sit on top of
+        # the fullscreen layer-shell panel, so we swap a subpage into _pstack.
+        header = self._subheader(heading)
+
+        msg = Gtk.Label(label=body, wrap=True, xalign=0)
+        msg.set_margin_start(16)
+        msg.set_margin_end(16)
+        msg.set_margin_top(8)
+
+        cancel = Gtk.Button(label='Cancel')
+        cancel.connect('clicked', lambda _: self._pstack.set_visible_child_name('main'))
+        confirm = Gtk.Button(label=confirm_label)
+        confirm.add_css_class('destructive-action')
+        confirm.connect('clicked', lambda _: self._do_confirm(on_confirm))
+        btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+                          margin_start=12, margin_end=12, margin_top=12, margin_bottom=12)
+        btn_row.set_halign(Gtk.Align.END)
+        btn_row.append(cancel)
+        btn_row.append(confirm)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.append(header)
+        box.append(msg)
+        box.append(btn_row)
+        old = self._pstack.get_child_by_name('confirm')
+        if old is not None:
+            self._pstack.remove(old)
+        self._pstack.add_named(box, 'confirm')
+        self._pstack.set_visible_child_name('confirm')
+
+    def _do_confirm(self, on_confirm):
+        self._pstack.set_visible_child_name('main')
+        on_confirm()
+
     def set_apply_callback(self, cb):
         self._apply_cb = cb
 
@@ -1240,17 +1265,20 @@ class WallpaperPage(Gtk.Box):
         if 'set' in self._flows:
             for ws in sets.values():
                 self._flows['set'].append(
-                    NewSetCard(ws, on_change=self._reload, on_edit=self.open_set_editor))
+                    NewSetCard(ws, on_change=self._reload, on_edit=self.open_set_editor,
+                               on_remove=self._open_confirm))
 
         hor_count = ver_count = 0
         for e in entries:
             if e.hor_file and 'hor' in self._flows:
                 self._flows['hor'].append(
-                    HorCard(e, on_change=self._reload, on_alias=self._open_alias))
+                    HorCard(e, on_change=self._reload, on_alias=self._open_alias,
+                            on_remove=self._open_confirm))
                 hor_count += 1
             if e.ver_file and 'ver' in self._flows:
                 self._flows['ver'].append(
-                    VerCard(e, on_change=self._reload, on_alias=self._open_alias))
+                    VerCard(e, on_change=self._reload, on_alias=self._open_alias,
+                            on_remove=self._open_confirm))
                 ver_count += 1
 
         parts = [f'{hor_count} Horizontal']
