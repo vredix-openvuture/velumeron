@@ -104,9 +104,16 @@ def parse_peripherals(content: str) -> dict:
 
 def generate_peripherals_section(p: dict) -> str:
     lines = [
-        f'cur_theme = "{p.get("cur_theme", "breeze_cursors")}"',
-        f'cur_size  = {p.get("cur_size", 20)}',
+        f'cur_theme  = "{p.get("cur_theme", "breeze_cursors")}"',
+        f'cur_size   = {p.get("cur_size", 20)}',
+        f'kb_layout  = "{p.get("kb_layout", "eu")}"',
+        f'sys_locale = "{p.get("sys_locale", "en_US.UTF-8")}"',
     ]
+    # Only write terminal/browser when non-empty so Lua's `or` fallback still works
+    if p.get('terminal'):
+        lines.append(f'terminal   = "{p["terminal"]}"')
+    if p.get('browser'):
+        lines.append(f'browser    = "{p["browser"]}"')
     return '\n' + '\n'.join(lines) + '\n'
 
 

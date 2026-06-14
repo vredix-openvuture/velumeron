@@ -72,12 +72,10 @@ hl.layer_rule({
     dim_around   = true,
 })
 
--- Vutureland OSD (brightness/volume banner). Overrides the global popin/blur:
--- slide-fade up from the bottom, no blur so the rounded banner stays crisp.
-hl.layer_rule({
-    name         = "vutureland-osd",
-    match        = { namespace = "(.*vutureland-osd.*)" },
-    blur         = false,
-    animation    = "slidefade bottom 80%",
-    xray         = true,
-})
+-- Vutureland OSD — one rule per slide direction.
+-- The daemon sets the namespace to vutureland-osd-{bottom|top|left|right}
+-- based on the position chosen in the OSD settings page.
+hl.layer_rule({ name = "vutureland-osd-bottom", match = { namespace = "vutureland-osd-bottom" }, blur = false, animation = "slidefade bottom 80%", xray = true })
+hl.layer_rule({ name = "vutureland-osd-top",    match = { namespace = "vutureland-osd-top"    }, blur = false, animation = "slidefade top 80%",    xray = true })
+hl.layer_rule({ name = "vutureland-osd-left",   match = { namespace = "vutureland-osd-left"   }, blur = false, animation = "slidefade left 80%",   xray = true })
+hl.layer_rule({ name = "vutureland-osd-right",  match = { namespace = "vutureland-osd-right"  }, blur = false, animation = "slidefade right 80%",  xray = true })

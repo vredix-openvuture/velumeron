@@ -25,9 +25,14 @@ fi
 # reserve an exclusive zone, otherwise every reveal/hide would reflow all windows.
 MERGED_CONFIG="/tmp/waybar-merged-config.json"
 if [[ -f "$HOVER_FLAG" ]]; then
+    # Auto-hide mode: bar floats above windows, exclusive zone disabled so
+    # windows fill the full screen while the bar is hidden.
     jq -s 'map(. + {"exclusive": false, "layer": "top"})' "${CONFIG_FILES[@]}" > "$MERGED_CONFIG"
 else
-    jq -s '.' "${CONFIG_FILES[@]}" > "$MERGED_CONFIG"
+    # Always-visible mode: standard waybar behaviour — layer "top" with the
+    # default exclusive zone (bar height).  Explicitly delete any "exclusive"
+    # key that may linger in the saved config so the default is restored.
+    jq -s '[.[] | del(.exclusive) + {"layer": "top"}]' "${CONFIG_FILES[@]}" > "$MERGED_CONFIG"
 fi
 
 # Build merged style.css from all per-monitor style.css files

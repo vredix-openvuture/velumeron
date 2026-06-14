@@ -24,26 +24,29 @@ hl.bind(MOD .. " + O",      hl.dsp.exec_cmd(session_menu))
 
 -- ── Utilities ────────────────────────────────────────
 
-hl.bind(MOD .. " + SHIFT + S",   hl.dsp.exec_cmd(screenshot_cmd))
-hl.bind(MOD .. " + SPACE",       hl.dsp.exec_cmd(launcher))
-hl.bind(MOD .. " + ALT + SPACE", hl.dsp.exec_cmd(theme_switch))
-hl.bind(MOD .. " + T",           hl.dsp.exec_cmd(terminal))
-hl.bind(MOD .. " + R",           hl.dsp.exec_cmd(browser))
-hl.bind(MOD .. " + S",           hl.dsp.exec_cmd(notifications))
-hl.bind(MOD .. " + V",           hl.dsp.exec_cmd(clipboard))
-hl.bind(MOD .. " + X",           hl.dsp.exec_cmd(VTL_DIR .. "/bin/vutureland -t"))
-hl.bind(MOD .. " + PERIOD",      hl.dsp.exec_cmd("hypremoji"))
+hl.bind(MOD .. " + SHIFT + S",   hl.dsp.exec_cmd(screenshot_cmd)) -- make a "S"creenshot
+hl.bind(MOD .. " + SPACE",       hl.dsp.exec_cmd(launcher)) -- open rofi as launcher
+hl.bind(MOD .. " + ALT + SPACE", hl.dsp.exec_cmd(theme_switch)) -- open rofi for theme switch (wallpaper or set)
+hl.bind(MOD .. " + T",           hl.dsp.exec_cmd(terminal)) -- open default "T"erminal application
+hl.bind(MOD .. " + R",           hl.dsp.exec_cmd(browser)) -- open default "B"rowser
+hl.bind(MOD .. " + S",           hl.dsp.exec_cmd(notifications)) -- open "S"way notification center
+hl.bind(MOD .. " + V",           hl.dsp.exec_cmd(clipboard)) -- open rofi for clipboard history
+hl.bind(MOD .. " + X",           hl.dsp.exec_cmd(VTL_DIR .. "/bin/vutureland -t")) -- open vutureland settings
+hl.bind(MOD .. " + PERIOD",      hl.dsp.exec_cmd("hypremoji")) -- open hypremoji as emoji picker
+hl.bind(MOD .. " + P",           hl.dsp.exec_cmd(VTL_DIR .. "/assets/scripts/waybar-toggle-hover.sh")) -- "P"eak at waybar
 
 
 -- ── Window management ────────────────────────────────
 
-hl.bind(MOD .. " + C",         hl.dsp.window.close())
-hl.bind(MOD .. " + F",         hl.dsp.window.float({ action = "toggle" }))
-hl.bind(MOD .. " + B",         hl.dsp.window.fullscreen({ mode = "maximized" }))
-hl.bind(MOD .. " + ALT + B",   hl.dsp.window.fullscreen({ mode = "fullscreen" }))       -- Fullscreen active window
-hl.bind(MOD .. " + N",         hl.dsp.window.cycle_next())                              -- Activate next window on current monitor
-hl.bind(MOD .. " + mouse_up",  hl.dsp.window.cycle_next())  
-hl.bind(MOD .. " + ALT + M",   hl.dsp.window.move({ monitor = "+1", follow = true }))   -- Move window to the next monitor
+hl.bind(MOD .. " + TAB",         hl.dsp.exec_cmd(window_switch)) 
+hl.bind(MOD .. " + C",           hl.dsp.window.close())
+hl.bind(MOD .. " + CONTROL + C", hl.dsp.window.kill())
+hl.bind(MOD .. " + F",           hl.dsp.window.float({ action = "toggle" }))
+hl.bind(MOD .. " + B",           hl.dsp.window.fullscreen({ mode = "maximized" }))
+hl.bind(MOD .. " + ALT + B",     hl.dsp.window.fullscreen({ mode = "fullscreen" }))       -- Fullscreen active window
+hl.bind(MOD .. " + N",           hl.dsp.window.cycle_next())                              -- Activate next window on current monitor
+hl.bind(MOD .. " + mouse_up",    hl.dsp.window.cycle_next())  
+hl.bind(MOD .. " + ALT + M",     hl.dsp.window.move({ monitor = "+1", follow = true }))   -- Move window to the next monitor
 
 
 -- Click to float, hold to drag/resize
@@ -89,7 +92,7 @@ hl.bind("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"))
 
 hl.bind("XF86AudioMute",        hl.dsp.exec_cmd("pactl set-sink-mute @DEFAULT_SINK@ toggle && "  .. osd .. " volume"))
 hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("pactl set-sink-volume @DEFAULT_SINK@ -5% && " .. osd .. " volume"), { repeating = true })
-hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("pactl set-sink-volume @DEFAULT_SINK@ +5% && " .. osd .. " volume"), { repeating = true })
+hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd(VTL_DIR .. "/assets/scripts/volume-up.sh && " .. osd .. " volume"), { repeating = true })
 
 
 -- ── Click outside rofi closes it (non-consuming → click still reaches the app) ────────────────────────────

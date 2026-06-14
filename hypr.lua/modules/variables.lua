@@ -12,9 +12,10 @@ notify_service = "swaync"
 clipboard      = VTL_USER_DIR .. "/rofi/assets/clipvault.sh"
 
 launcher       = "rofi -show drun -config "      .. VTL_USER_DIR .. "/rofi/launcher.rasi"
+window_switch  = "rofi -show window -config "    .. VTL_USER_DIR .. "/rofi/window-switcher.rasi"
 theme_switch   = "rofi -show wallpaper -config " .. VTL_USER_DIR .. "/rofi/wallpaper-switcher.rasi"
-terminal       = "kitty -c "                     .. VTL_USER_DIR .. "/kitty/kitty.conf"
-browser        = "librewolf"
+terminal       = terminal or ("kitty -c "        .. VTL_USER_DIR .. "/kitty/kitty.conf")
+browser        = browser  or "librewolf"
 notifications  = "swaync-client -R -rs -t"
 screenshot_cmd = "hyprshot -z --mode region --output-folder ~/Bilder/Screenshots"
 
@@ -34,5 +35,6 @@ start_apps         = start_apps         or {}
 quick_app          = quick_app          or {}
 cur_theme          = cur_theme          or "Oxygen"
 cur_size           = cur_size           or 24
+kb_layout          = kb_layout          or "eu"
 -- Media/brightness keys are bound directly to their XF86 keysyms in
 -- keybinds.lua, so no per-device fn_* overrides are needed anymore.

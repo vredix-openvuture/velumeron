@@ -5,7 +5,7 @@
 
 hl.config({
     input = {
-        kb_layout          = "eu",
+        kb_layout          = kb_layout or "eu",
         follow_mouse       = 1,
         sensitivity        = 0,   -- -1.0 to 1.0, 0 = no modification
         mouse_refocus      = true,

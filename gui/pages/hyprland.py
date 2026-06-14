@@ -3,8 +3,90 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 
 from gi.repository import Gtk, Adw
-import subprocess
-import osd_config
+import os, shutil, subprocess
+
+# ── Keyboard layouts (XKB codes + display names) ─────────────────────────────
+
+_KB_LAYOUTS: list[tuple[str, str]] = [
+    ('eu',    'EurKey (eu)'),
+    ('us',    'English US (us)'),
+    ('gb',    'English UK (gb)'),
+    ('de',    'Deutsch (de)'),
+    ('at',    'Deutsch – Österreich (at)'),
+    ('ch',    'Deutsch – Schweiz (ch)'),
+    ('fr',    'Français / AZERTY (fr)'),
+    ('be',    'Belgique / AZERTY (be)'),
+    ('es',    'Español (es)'),
+    ('latam', 'Español – Latam (latam)'),
+    ('it',    'Italiano (it)'),
+    ('pt',    'Português (pt)'),
+    ('br',    'Português – Brasil (br)'),
+    ('nl',    'Nederlands (nl)'),
+    ('pl',    'Polski (pl)'),
+    ('ru',    'Русский (ru)'),
+    ('tr',    'Türkçe (tr)'),
+    ('se',    'Svenska (se)'),
+    ('no',    'Norsk (no)'),
+    ('dk',    'Dansk (dk)'),
+    ('fi',    'Suomi (fi)'),
+    ('cz',    'Čeština (cz)'),
+    ('sk',    'Slovenčina (sk)'),
+    ('hu',    'Magyar (hu)'),
+    ('ro',    'Română (ro)'),
+    ('hr',    'Hrvatski (hr)'),
+    ('jp',    'Japanese (jp)'),
+    ('kr',    'Korean (kr)'),
+    ('cn',    'Chinese (cn)'),
+    ('ara',   'Arabic (ara)'),
+    ('il',    'Hebrew (il)'),
+]
+
+_KB_CODES    = [c for c, _ in _KB_LAYOUTS]
+_KB_LABELS   = [l for _, l in _KB_LAYOUTS]
+
+# ── System locales ─────────────────────────────────────────────────────────────
+
+_LOCALES: list[tuple[str, str]] = [
+    ('en_US.UTF-8', 'English – US (en_US)'),
+    ('en_GB.UTF-8', 'English – UK (en_GB)'),
+    ('de_DE.UTF-8', 'Deutsch – Deutschland (de_DE)'),
+    ('de_AT.UTF-8', 'Deutsch – Österreich (de_AT)'),
+    ('de_CH.UTF-8', 'Deutsch – Schweiz (de_CH)'),
+    ('fr_FR.UTF-8', 'Français – France (fr_FR)'),
+    ('fr_BE.UTF-8', 'Français – Belgique (fr_BE)'),
+    ('fr_CH.UTF-8', 'Français – Suisse (fr_CH)'),
+    ('es_ES.UTF-8', 'Español – España (es_ES)'),
+    ('es_MX.UTF-8', 'Español – México (es_MX)'),
+    ('it_IT.UTF-8', 'Italiano (it_IT)'),
+    ('pt_PT.UTF-8', 'Português – Portugal (pt_PT)'),
+    ('pt_BR.UTF-8', 'Português – Brasil (pt_BR)'),
+    ('nl_NL.UTF-8', 'Nederlands (nl_NL)'),
+    ('pl_PL.UTF-8', 'Polski (pl_PL)'),
+    ('ru_RU.UTF-8', 'Русский (ru_RU)'),
+    ('tr_TR.UTF-8', 'Türkçe (tr_TR)'),
+    ('sv_SE.UTF-8', 'Svenska (sv_SE)'),
+    ('nb_NO.UTF-8', 'Norsk (nb_NO)'),
+    ('da_DK.UTF-8', 'Dansk (da_DK)'),
+    ('fi_FI.UTF-8', 'Suomi (fi_FI)'),
+    ('cs_CZ.UTF-8', 'Čeština (cs_CZ)'),
+    ('sk_SK.UTF-8', 'Slovenčina (sk_SK)'),
+    ('hu_HU.UTF-8', 'Magyar (hu_HU)'),
+    ('ro_RO.UTF-8', 'Română (ro_RO)'),
+    ('hr_HR.UTF-8', 'Hrvatski (hr_HR)'),
+    ('ja_JP.UTF-8', 'Japanese (ja_JP)'),
+    ('ko_KR.UTF-8', 'Korean (ko_KR)'),
+    ('zh_CN.UTF-8', 'Chinese Simplified (zh_CN)'),
+    ('zh_TW.UTF-8', 'Chinese Traditional (zh_TW)'),
+    ('ar_EG.UTF-8', 'Arabic (ar_EG)'),
+]
+
+_LOCALE_CODES  = [c for c, _ in _LOCALES]
+_LOCALE_LABELS = [l for _, l in _LOCALES]
+
+_LOCALE_ENV_FILE = os.path.join(
+    os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config')),
+    'environment.d', '50-vutureland-locale.conf'
+)
 from constants import TRANSFORM_LABELS
 from models.hyprland import (
     parse_monitors, generate_monitors_section,
@@ -17,6 +99,74 @@ from models.hyprland import (
     read_user_settings, write_user_settings,
     _write_section,
 )
+
+
+# ── Cursor theme discovery ────────────────────────────────────────────────────
+
+def _find_cursor_themes() -> list[str]:
+    seen = set()
+    themes = []
+    dirs = [
+        '/usr/share/icons',
+        os.path.expanduser('~/.local/share/icons'),
+    ]
+    for d in dirs:
+        if not os.path.isdir(d):
+            continue
+        for name in sorted(os.listdir(d)):
+            if name in seen:
+                continue
+            if os.path.isdir(os.path.join(d, name, 'cursors')):
+                seen.add(name)
+                themes.append(name)
+    return themes or ['default']
+
+
+# ── Installed app discovery ───────────────────────────────────────────────────
+
+_KNOWN_TERMINALS = [
+    ('kitty',     'Kitty'),
+    ('alacritty', 'Alacritty'),
+    ('foot',      'Foot'),
+    ('wezterm',   'WezTerm'),
+    ('ghostty',   'Ghostty'),
+    ('konsole',   'Konsole'),
+    ('gnome-terminal', 'GNOME Terminal'),
+]
+
+_KNOWN_BROWSERS = [
+    ('librewolf', 'LibreWolf'),
+    ('firefox',   'Firefox'),
+    ('chromium',  'Chromium'),
+    ('brave',     'Brave'),
+    ('vivaldi',   'Vivaldi'),
+    ('google-chrome-stable', 'Google Chrome'),
+]
+
+_BROWSER_DESKTOP = {
+    'librewolf': 'librewolf.desktop',
+    'firefox':   'firefox.desktop',
+    'chromium':  'chromium.desktop',
+    'brave':     'brave-browser.desktop',
+    'vivaldi':   'vivaldi-stable.desktop',
+    'google-chrome-stable': 'google-chrome.desktop',
+}
+
+
+def _installed_apps(candidates: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    result = [(b, l) for b, l in candidates if shutil.which(b)]
+    return result or [candidates[0]]
+
+
+def _vtl_user_dir() -> str:
+    xdg = os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config'))
+    return os.environ.get('VUTURELAND_USER_DIR', os.path.join(xdg, 'vutureland'))
+
+
+def _terminal_cmd(binary: str) -> str:
+    if binary == 'kitty':
+        return f'kitty -c {_vtl_user_dir()}/kitty/kitty.conf'
+    return binary
 
 
 class MonitorRow(Adw.ExpanderRow):
@@ -104,26 +254,71 @@ class HyprlandPage(Gtk.Box):
             mon_group.add(MonitorRow(mon))
         page.add(mon_group)
 
-        # ── Peripherals ───────────────────────────────────────────────────────
-        # Media/brightness keys are bound to their standard XF86 keysyms directly
-        # (see keybinds.lua), so there's nothing per-device to configure here.
+        # ── Cursor ────────────────────────────────────────────────────────────
         per_group = Adw.PreferencesGroup(title='Cursor')
-        cur_row = Adw.EntryRow(title='Cursor-Theme')
-        cur_row.set_text(str(self._periph.get('cur_theme', '')))
-        cur_row.connect('changed',
-                        lambda r: self._periph.__setitem__('cur_theme', r.get_text()))
-        per_group.add(cur_row)
 
-        cur_size_adj = Gtk.Adjustment(
-            value=self._periph.get('cur_size', 20), lower=8, upper=128, step_increment=2)
-        cur_size_spin = Gtk.SpinButton(adjustment=cur_size_adj, digits=0)
-        cur_size_spin.set_valign(Gtk.Align.CENTER)
-        cur_size_spin.connect('value-changed',
-                              lambda w: self._periph.__setitem__('cur_size', int(w.get_value())))
-        cur_size_row = Adw.ActionRow(title='Cursor Size')
-        cur_size_row.add_suffix(cur_size_spin)
+        cursor_themes = _find_cursor_themes()
+        cur_theme_val = self._periph.get('cur_theme', 'breeze_cursors')
+        cur_theme_idx = cursor_themes.index(cur_theme_val) if cur_theme_val in cursor_themes else 0
+        cur_theme_row = Adw.ComboRow(title='Cursor Theme')
+        cur_theme_row.set_model(Gtk.StringList.new(cursor_themes))
+        cur_theme_row.set_selected(cur_theme_idx)
+        cur_theme_row.connect('notify::selected',
+                              lambda r, _: self._periph.__setitem__(
+                                  'cur_theme', cursor_themes[r.get_selected()]))
+        per_group.add(cur_theme_row)
+
+        _CURSOR_SIZES = [16, 20, 24, 28, 32, 40, 48, 64]
+        cur_size_val = self._periph.get('cur_size', 24)
+        cur_size_idx = _CURSOR_SIZES.index(cur_size_val) if cur_size_val in _CURSOR_SIZES else 2
+        cur_size_row = Adw.ComboRow(title='Cursor Size')
+        cur_size_row.set_model(Gtk.StringList.new([str(s) for s in _CURSOR_SIZES]))
+        cur_size_row.set_selected(cur_size_idx)
+        cur_size_row.connect('notify::selected',
+                             lambda r, _: self._periph.__setitem__(
+                                 'cur_size', _CURSOR_SIZES[r.get_selected()]))
         per_group.add(cur_size_row)
         page.add(per_group)
+
+        # ── Default Apps ──────────────────────────────────────────────────────
+        apps_group = Adw.PreferencesGroup(
+            title='Default Apps',
+            description='Changes apply after "Apply & Reload Hyprland". '
+                        'The browser is also set as the system XDG default.')
+
+        installed_terms = _installed_apps(_KNOWN_TERMINALS)
+        term_binaries   = [b for b, _ in installed_terms]
+        term_labels     = [l for _, l in installed_terms]
+        stored_term_cmd = self._periph.get('terminal', '')
+        cur_term_binary = stored_term_cmd.split()[0] if stored_term_cmd else ''
+        cur_term_idx    = (term_binaries.index(cur_term_binary)
+                           if cur_term_binary in term_binaries else 0)
+        # Ensure a default is always set so Apply never writes an empty terminal
+        self._periph['terminal'] = _terminal_cmd(term_binaries[cur_term_idx])
+        term_row = Adw.ComboRow(title='Terminal')
+        term_row.set_model(Gtk.StringList.new(term_labels))
+        term_row.set_selected(cur_term_idx)
+        def _on_term(r, _):
+            self._periph['terminal'] = _terminal_cmd(term_binaries[r.get_selected()])
+        term_row.connect('notify::selected', _on_term)
+        apps_group.add(term_row)
+
+        installed_brows = _installed_apps(_KNOWN_BROWSERS)
+        brow_binaries   = [b for b, _ in installed_brows]
+        brow_labels     = [l for _, l in installed_brows]
+        stored_browser  = self._periph.get('browser', '')
+        cur_brow_idx    = (brow_binaries.index(stored_browser)
+                           if stored_browser in brow_binaries else 0)
+        # Ensure a default is always set
+        self._periph['browser'] = brow_binaries[cur_brow_idx]
+        brow_row = Adw.ComboRow(title='Browser')
+        brow_row.set_model(Gtk.StringList.new(brow_labels))
+        brow_row.set_selected(cur_brow_idx)
+        brow_row.connect('notify::selected',
+                         lambda r, _: self._periph.__setitem__(
+                             'browser', brow_binaries[r.get_selected()]))
+        apps_group.add(brow_row)
+        page.add(apps_group)
 
         # ── Window Rules (open a list editor subpage) ─────────────────────────
         wr_group = Adw.PreferencesGroup(title='Window Rules')
@@ -172,8 +367,33 @@ class HyprlandPage(Gtk.Box):
         lnf_group.add(bsize_row)
         page.add(lnf_group)
 
-        # ── On-Screen Display (brightness/volume banner) ──────────────────────
-        page.add(self._build_osd_group())
+        # ── Keyboard & Language ───────────────────────────────────────────────
+        kb_group = Adw.PreferencesGroup(
+            title='Keyboard & Language',
+            description='Keyboard layout takes effect immediately after "Apply". '
+                        'The system locale is written to ~/.config/environment.d/ '
+                        'and applies on next login.')
+
+        cur_kb  = self._periph.get('kb_layout',  'eu')
+        kb_idx  = _KB_CODES.index(cur_kb) if cur_kb in _KB_CODES else 0
+        kb_row  = Adw.ComboRow(title='Keyboard Layout')
+        kb_row.set_model(Gtk.StringList.new(_KB_LABELS))
+        kb_row.set_selected(kb_idx)
+        kb_row.connect('notify::selected',
+                       lambda r, _: self._periph.__setitem__(
+                           'kb_layout', _KB_CODES[r.get_selected()]))
+        kb_group.add(kb_row)
+
+        cur_loc  = self._periph.get('sys_locale', 'en_US.UTF-8')
+        loc_idx  = _LOCALE_CODES.index(cur_loc) if cur_loc in _LOCALE_CODES else 0
+        loc_row  = Adw.ComboRow(title='System Language')
+        loc_row.set_model(Gtk.StringList.new(_LOCALE_LABELS))
+        loc_row.set_selected(loc_idx)
+        loc_row.connect('notify::selected',
+                        lambda r, _: self._periph.__setitem__(
+                            'sys_locale', _LOCALE_CODES[r.get_selected()]))
+        kb_group.add(loc_row)
+        page.add(kb_group)
 
         # ── Startup Apps ──────────────────────────────────────────────────────
         self._apps_group = Adw.PreferencesGroup(title='Startup Apps')
@@ -195,50 +415,6 @@ class HyprlandPage(Gtk.Box):
         apply_group.add(apply_btn)
         page.add(apply_group)
         return page
-
-    # ── On-Screen Display settings ────────────────────────────────────────────
-
-    def _build_osd_group(self) -> Adw.PreferencesGroup:
-        cfg = osd_config.load()
-        group = Adw.PreferencesGroup(
-            title='On-Screen Display',
-            description='Brightness/volume banner shown on the media keys. '
-                        'Changes apply the next time it appears.')
-
-        def _spin_row(title, subtitle, value, lo, hi, step, digits, on_change):
-            adj = Gtk.Adjustment(value=value, lower=lo, upper=hi, step_increment=step)
-            spin = Gtk.SpinButton(adjustment=adj, digits=digits)
-            spin.set_valign(Gtk.Align.CENTER)
-            spin.connect('value-changed', lambda w: on_change(w.get_value()))
-            row = Adw.ActionRow(title=title, subtitle=subtitle)
-            row.add_suffix(spin)
-            row.set_activatable_widget(spin)
-            group.add(row)
-
-        _spin_row('Display Duration', 'How long the banner stays (seconds)',
-                  cfg['duration_ms'] / 1000.0, 0.5, 6.0, 0.1, 1,
-                  lambda v: osd_config.save({'duration_ms': int(round(v * 1000))}))
-        _spin_row('Bottom Margin', 'Gap from the bottom screen edge (px)',
-                  cfg['margin_px'], 0, 600, 10, 0,
-                  lambda v: osd_config.save({'margin_px': int(v)}))
-        _spin_row('Width', 'Banner width (px)',
-                  cfg['width_px'], 200, 900, 10, 0,
-                  lambda v: osd_config.save({'width_px': int(v)}))
-        _spin_row('Height', 'Banner height (px)',
-                  cfg['height_px'], 32, 160, 4, 0,
-                  lambda v: osd_config.save({'height_px': int(v)}))
-
-        dev_row = Adw.ActionRow(title='Show Device Name',
-                                subtitle='Show which output device is being adjusted')
-        dev_switch = Gtk.Switch()
-        dev_switch.set_valign(Gtk.Align.CENTER)
-        dev_switch.set_active(bool(cfg['show_device']))
-        dev_switch.connect('notify::active',
-                           lambda s, _: osd_config.save({'show_device': s.get_active()}))
-        dev_row.add_suffix(dev_switch)
-        dev_row.set_activatable_widget(dev_switch)
-        group.add(dev_row)
-        return group
 
     # ── Window-rule list editor (in-panel subpage) ────────────────────────────
 
@@ -353,4 +529,20 @@ class HyprlandPage(Gtk.Box):
                                      self._lnf['lnf_rounding'], self._lnf['lnf_border_size']))
         write_user_settings(content)
         self._content = content
+        # Set system browser default
+        browser = self._periph.get('browser', '')
+        desktop = _BROWSER_DESKTOP.get(browser, '')
+        if desktop:
+            subprocess.Popen(['xdg-settings', 'set', 'default-web-browser', desktop])
+        # Apply keyboard layout immediately (no reload needed)
+        kb_layout = self._periph.get('kb_layout', 'eu')
+        subprocess.Popen(['hyprctl', 'keyword', 'input:kb_layout', kb_layout])
+        # Write system locale to environment.d (takes effect on next login)
+        sys_locale = self._periph.get('sys_locale', 'en_US.UTF-8')
+        try:
+            os.makedirs(os.path.dirname(_LOCALE_ENV_FILE), exist_ok=True)
+            with open(_LOCALE_ENV_FILE, 'w') as _f:
+                _f.write(f'LANG={sys_locale}\nLC_ALL={sys_locale}\n')
+        except OSError:
+            pass
         subprocess.Popen(['hyprctl', 'reload'])

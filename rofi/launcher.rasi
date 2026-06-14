@@ -16,6 +16,7 @@
 */
 
 configuration {
+    modi:                   "drun";
     show-icons:             true;
     font-family:            "FantasqueSansM Nerd Font";
     font-weight:            800;

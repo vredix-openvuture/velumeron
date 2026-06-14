@@ -79,7 +79,9 @@ from pages.hyprland      import HyprlandPage
 from pages.waybar        import WaybarPage
 from pages.lockscreen    import LockscreenPage
 from pages.notifications import NotificationsPage
+from pages.osd           import OsdPage
 from pages.settings      import SettingsPage
+from pages.info          import InfoPage
 
 _CSS           = os.path.join(os.path.dirname(__file__), 'style.css')
 _BANNER        = os.path.join(
@@ -170,8 +172,10 @@ _PAGES = [
     ('wallpaper',     WallpaperPage,     'image-x-generic-symbolic',                  'Theme'),
     ('lockscreen',    LockscreenPage,    'system-lock-screen-symbolic',               'Power & Lock'),
     ('notifications', NotificationsPage, 'preferences-system-notifications-symbolic', 'Notifications'),
+    ('osd',           OsdPage,           'audio-volume-high-symbolic',                'OSD'),
 ]
 _BOTTOM_PAGES = [
+    ('info',       InfoPage,       'dialog-information-symbolic',           'Info'),
     ('settings',   SettingsPage,   'preferences-system-symbolic',          'Settings'),
 ]
 

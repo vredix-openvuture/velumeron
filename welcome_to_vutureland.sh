@@ -314,6 +314,11 @@ _default_bar_layouts=(
     "L:clock|C:hyprland/workspaces|R:pulseaudio,tray,custom/notification"
 )
 
+# Default layout for side monitors (minimal: workspaces+submap left, clock right).
+_default_side_bar_layouts=(
+    "L:hyprland/workspaces,hyprland/submap|C:|R:clock"
+)
+
 # Generate a minimal but useful waybar config inline — no external template
 # files needed. The user can switch styles / add modules later through the
 # settings GUI (Super + X → Bar). Defined here so --sync can call it too.
@@ -418,6 +423,85 @@ EOF
     ok "Created default bar for $monitor"
 }
 
+# Minimal bar for side monitors: workspaces+submap left, clock right.
+apply_side_bar() {
+    local monitor="$1"
+    local dest="$VUTURELAND_USER_DIR/waybar-modular/output/miboro/bar/top/$monitor"
+    if [[ -f "$dest/style.css" ]] && grep -q "$VUTURELAND_USER_DIR" "$dest/style.css"; then
+        local _cur _l _is_default=false
+        _cur=$(_bar_layout "$dest/groups.json")
+        for _l in "${_default_side_bar_layouts[@]}"; do
+            [[ -n "$_cur" && "$_cur" == "$_l" ]] && { _is_default=true; break; }
+        done
+        if [[ "$_is_default" != true ]]; then
+            ok "Side bar config for $monitor is customised — keeping it."
+            return
+        fi
+    fi
+    rm -rf "$dest"
+    mkdir -p "$dest"
+
+    local mods="$VUTURELAND_USER_DIR/waybar-modular/config/miboro/modules/horizontal"
+    local base="$VUTURELAND_USER_DIR/waybar-modular/config/miboro/base/base-top"
+
+    local module_dirs=(clock workspaces submap)
+
+    local _inc=()
+    local m
+    for m in "${module_dirs[@]}"; do _inc+=("\"$mods/$m/config.json\""); done
+    local includes; includes=$(IFS=,; echo "${_inc[*]}")
+
+    cat > "$dest/groups.json" <<EOF
+{
+    "include": [ $includes ],
+    "group/left":   { "orientation": "horizontal",
+                      "modules": ["hyprland/workspaces", "hyprland/submap"] },
+    "group/center": { "orientation": "horizontal",
+                      "modules": [] },
+    "group/right":  { "orientation": "horizontal",
+                      "modules": ["clock"] }
+}
+EOF
+
+    if [[ -f "$base/bar.config.json" ]]; then
+        jq --arg mon "$monitor" \
+           --arg id "bar-top-$monitor" \
+           --arg groups "$dest/groups.json" \
+           '. + {
+                output: $mon,
+                id: $id,
+                include: [$groups],
+                "modules-left":   ["group/left"],
+                "modules-center": ["group/center"],
+                "modules-right":  ["group/right"]
+            }' "$base/bar.config.json" > "$dest/config.json"
+    else
+        warn "$base/bar.config.json missing — using minimal config"
+        cat > "$dest/config.json" <<EOF
+{
+    "name": "topbar-$monitor",
+    "output": "$monitor",
+    "layer": "top",
+    "position": "top",
+    "include": ["$dest/groups.json"],
+    "modules-left":   ["group/left"],
+    "modules-center": ["group/center"],
+    "modules-right":  ["group/right"]
+}
+EOF
+    fi
+
+    {
+        echo "@import url(\"$base/bar.css\");"
+        for m in "${module_dirs[@]}"; do
+            local css="$mods/$m/style.css"
+            [[ -f "$css" ]] && echo "@import url(\"$css\");"
+        done
+    } > "$dest/style.css"
+
+    ok "Created side bar for $monitor"
+}
+
 # ─── --sync: refresh package templates and exit ──────────────────────────────
 if [[ "$SYNC_MODE" == true ]]; then
     echo ""
@@ -429,10 +513,19 @@ if [[ "$SYNC_MODE" == true ]]; then
     sync_templates
     ok "Templates synced."
 
-    # Regenerate any bar configs that still point at the package dir
+    # Regenerate any bar configs that still point at the package dir.
+    # Primary monitor gets the full bar; all others get the minimal side bar.
     if command -v hyprctl >/dev/null 2>&1 && hyprctl monitors -j >/dev/null 2>&1; then
+        _sync_primary=$(grep -oP '^mon1\s*=\s*"\K[^"]+' "$USER_SETTINGS" 2>/dev/null | head -1 || true)
+        [[ -z "$_sync_primary" ]] && _sync_primary=$(hyprctl monitors -j \
+            | jq -r 'first(.[] | select(.focused==true) | .name) // .[0].name' 2>/dev/null || true)
         while IFS= read -r _mon; do
-            [[ -n "$_mon" ]] && apply_default_bar "$_mon"
+            [[ -z "$_mon" ]] && continue
+            if [[ "$_mon" == "$_sync_primary" ]]; then
+                apply_default_bar "$_mon"
+            else
+                apply_side_bar "$_mon"
+            fi
         done < <(hyprctl monitors -j | jq -r '.[].name')
     fi
 
@@ -455,6 +548,9 @@ if [[ "$SYNC_MODE" == true ]]; then
         "$VUTURELAND_DIR/bin/vutureland" --daemon >/dev/null 2>&1 &
         ok "Settings panel restarted"
     fi
+    # OSD daemon: restart so updated config (position, display modes) takes effect.
+    "$VUTURELAND_DIR/assets/scripts/launch-osd.sh" >/dev/null 2>&1 &
+    ok "OSD daemon restarted"
     # Pre-generate wallpaper thumbnails for the picker.
     if [[ -x "$VUTURELAND_DIR/rofi/assets/generate-thumbnail.sh" ]]; then
         ( "$VUTURELAND_DIR/rofi/assets/generate-thumbnail.sh" >/dev/null 2>&1 ) &
@@ -749,7 +845,7 @@ fi
 say "Generating default Waybar layout"
 
 apply_default_bar "$mon1"
-[[ -n "$mon2" ]] && apply_default_bar "$mon2"
+[[ -n "$mon2" ]] && apply_side_bar "$mon2"
 
 # ─── 8) Launch Waybar ────────────────────────────────────────────────────────
 say "Starting Waybar"

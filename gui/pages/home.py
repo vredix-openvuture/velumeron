@@ -81,17 +81,61 @@ class HomePage(Gtk.Box):
         return None
 
     def _active_wallpaper(self) -> str | None:
-        """The theme's main image — the wallpaper wallust last themed from,
-        recorded in the generated colors.lua. This is always the main monitor's
-        wallpaper and stays stable regardless of which monitor is focused."""
+        """Return a path suitable for the preview image.
+        For static wallpapers this is the file itself; for live (video)
+        wallpapers wallust writes a deleted /tmp frame, so we fall back to the
+        pre-generated thumbnail from the wallpaper-thumbs cache."""
         colors = os.path.join(_user_dir(), 'hypr.lua', 'colors.lua')
+        wp = None
         try:
             with open(colors) as f:
                 for line in f:
                     m = re.match(r'\s*wallpaper\s*=\s*"(.+)"', line)
                     if m:
-                        return m.group(1)
+                        wp = m.group(1)
+                        break
         except OSError:
+            pass
+
+        if wp and os.path.exists(wp):
+            return wp
+
+        # colors.lua holds a temp path that was deleted (video wallpaper).
+        # Find the video currently shown by mpvpaper and use its cached thumb.
+        thumb = self._video_wallpaper_thumb()
+        return thumb if thumb else wp
+
+    @staticmethod
+    def _video_wallpaper_thumb() -> str | None:
+        """Return the cached thumbnail for the video wallpaper on the focused monitor."""
+        cache = os.path.join(
+            os.environ.get('XDG_CACHE_HOME', os.path.expanduser('~/.cache')),
+            'vutureland', 'wallpaper-thumbs')
+        try:
+            focused_mon = None
+            mons = subprocess.run(['hyprctl', 'monitors', '-j'],
+                                  capture_output=True, text=True, timeout=2).stdout
+            for mon in json.loads(mons):
+                if mon.get('focused'):
+                    focused_mon = mon['name']
+                    break
+
+            r = subprocess.run(['pgrep', '-fa', 'mpvpaper'],
+                               capture_output=True, text=True, timeout=2)
+            for line in r.stdout.splitlines():
+                parts = line.split()
+                # mpvpaper ... MONITOR /path/to/video.ext — file is always last
+                for i, part in enumerate(parts):
+                    if re.search(r'\.(mp4|webm|mkv|avi|mov)$', part, re.IGNORECASE):
+                        video = part
+                        monitor = parts[i - 1] if i > 0 else None
+                        if focused_mon and monitor and monitor != focused_mon:
+                            continue
+                        stem = os.path.splitext(os.path.basename(video))[0]
+                        t = os.path.join(cache, stem + '.png')
+                        if os.path.exists(t):
+                            return t
+        except Exception:
             pass
         return None
 
@@ -120,7 +164,7 @@ class HomePage(Gtk.Box):
         style = current_design() or self._active_style()
         wp = self._active_wallpaper()
         try:
-            mtime = os.path.getmtime(wp) if wp else 0
+            mtime = os.path.getmtime(wp) if wp and os.path.exists(wp) else 0
         except OSError:
             mtime = 0
         key = (style, wp, mtime)

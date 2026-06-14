@@ -19,4 +19,4 @@ for lib in /usr/lib/libgtk4-layer-shell.so /usr/lib64/libgtk4-layer-shell.so; do
     [[ -e "$lib" ]] && { export LD_PRELOAD="$lib"; break; }
 done
 
-exec python "$OSD_PY" > /tmp/vutureland-osd.log 2>&1
+exec python -u "$OSD_PY" > /tmp/vutureland-osd.log 2>&1

@@ -25,3 +25,4 @@ battery
 # Other
 separator
 tray
+vuture-icon

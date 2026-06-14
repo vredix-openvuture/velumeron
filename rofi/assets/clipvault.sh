@@ -7,4 +7,8 @@ selected=$(clipvault list | rofi -dmenu -p "󰅍 " -config "$THEME")
 
 [[ -z "$selected" ]] && exit 0
 
-clipvault get "$selected" | wl-copy
+printf '%s' "$(clipvault get "$selected")" | wl-copy
+
+# Show OSD confirmation
+_FIFO="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/vutureland-osd.fifo"
+[[ -p "$_FIFO" ]] && printf 'notify edit-copy-symbolic Copied to clipboard\n' > "$_FIFO"

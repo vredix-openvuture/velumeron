@@ -561,3 +561,74 @@ spinbutton button,
 spinbutton entry {
     border-radius: 9999px;
 }
+
+
+/* ───────────────────────────────────────────────────────────────
+   UFW MANAGER — ColumnView table
+   ─────────────────────────────────────────────────────────────── */
+
+/* Column header buttons */
+.ufw-cv > header,
+columnview.ufw-cv > header {
+    background-color: alpha(@bg-element, 0.75);
+    border-bottom:    1px solid alpha(@bo-normal, 0.28);
+}
+
+columnview.ufw-cv > header > button {
+    border-radius:  0;
+    padding:        5px 8px;
+    font-size:      10px;
+    font-weight:    700;
+    color:          @fg-muted;
+    letter-spacing: 0.06em;
+    min-height:     0;
+    background:     none;
+    border-right:   1px solid alpha(@bo-normal, 0.12);
+}
+
+columnview.ufw-cv > header > button:hover {
+    background-color: alpha(@bg-active, 0.08);
+    color:            @fg-primary;
+}
+
+/* Data rows — explicit background so Adwaita doesn't leave it black */
+columnview.ufw-cv listview {
+    background-color: @bg-primary;
+    color:            @fg-primary;
+}
+
+columnview.ufw-cv listview row {
+    background-color: transparent;
+    border-bottom:    1px solid alpha(@bo-normal, 0.10);
+}
+
+columnview.ufw-cv listview row:hover {
+    background-color: alpha(@bg-element, 0.35);
+}
+
+/* Cells — flat buttons styled as table cells */
+.ufw-cell {
+    border-radius:  4px;
+    padding:        7px 8px;
+    min-height:     0;
+    color:          @fg-primary;
+    -gtk-icon-size: 16px;
+}
+
+.ufw-cell label {
+    font-size: 13px;
+    color:     @fg-primary;
+}
+
+.ufw-cell.flat {
+    background: none;
+}
+
+.ufw-cell.flat:hover {
+    background-color: alpha(@bg-active, 0.14);
+}
+
+.ufw-cell-empty {
+    color:   @fg-muted;
+    opacity: 0.45;
+}
