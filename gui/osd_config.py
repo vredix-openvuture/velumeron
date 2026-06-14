@@ -5,11 +5,25 @@ from __future__ import annotations
 import json, os
 
 DEFAULTS = {
-    'duration_ms': 1600,    # how long the banner lingers after the last update
-    'margin_px':   140,     # gap from the bottom screen edge
-    'width_px':    400,     # banner width
-    'height_px':   56,      # banner height
-    'show_device': False,   # show the audio output device name on volume changes
+    'duration_ms':    1600,  # how long the banner lingers after the last update
+    'margin_px':       140,  # gap from the screen edge (direction depends on position)
+    'width_px':        400,  # banner width  (long axis for horizontal, long axis for vertical)
+    'height_px':        56,  # banner height (short axis for horizontal, short axis for vertical)
+    'show_device':   False,  # show the audio output device name on volume changes
+    'osd_volume':              True,
+    'volume_display':         'bar_and_value',   # 'bar_and_value' | 'bar_only' | 'value_only'
+    'osd_brightness':          True,
+    'brightness_display':     'bar_and_value',   # 'bar_and_value' | 'bar_only' | 'value_only'
+    'osd_workspace':           True,
+    'osd_workspace_local_only': True,
+    'workspace_display':      'dots_only',        # 'dots_only' | 'number_only' | 'dots_and_number'
+    # Position: 'bottom-left' | 'bottom-center' | 'bottom-right'
+    #           'top-left'    | 'top-center'    | 'top-right'
+    #           'center-left' | 'center-right'   (vertical layout)
+    'osd_position': 'bottom-center',
+    # Style: 'float' — inset from the edge by margin_px (current default)
+    #        'dock'  — flush against the screen edge, slides out like a drawer
+    'osd_style': 'float',
 }
 
 
