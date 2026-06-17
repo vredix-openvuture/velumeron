@@ -40,8 +40,6 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("wl-paste --watch clipvault store")
     hl.exec_cmd(VTL_DIR .. "/assets/scripts/float-cascade.sh")
 
-    hl.exec_cmd("[workspace 99 silent] kitty --class no_float --title sysmon -e btop")
-
 
     -- ── Device-specific daemons (from user_settings) ──
     for _, cmd in ipairs(exec_once_daemons) do

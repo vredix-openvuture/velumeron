@@ -63,14 +63,16 @@ hl.layer_rule({
 -- Vutureland settings panel
 hl.layer_rule({
     name         = "vutureland-settings",
-    match        = { namespace = "(.*vutureland-settings.*)" },
+    match        = { namespace = "(.*vutureland-settings.*|.*vutureland-keybind-help.*)" },
     blur         = true,
     blur_popups  = true,
     ignore_alpha = 0.1,
-    animation    = "slidefade bottom 80%",
+    animation    = "slidefade bottom 90%",
     xray         = true,
     dim_around   = true,
 })
+
+
 
 -- Vutureland OSD — one rule per slide direction.
 -- The daemon sets the namespace to vutureland-osd-{bottom|top|left|right}
@@ -79,3 +81,5 @@ hl.layer_rule({ name = "vutureland-osd-bottom", match = { namespace = "vuturelan
 hl.layer_rule({ name = "vutureland-osd-top",    match = { namespace = "vutureland-osd-top"    }, blur = false, animation = "slidefade top 80%",    xray = true })
 hl.layer_rule({ name = "vutureland-osd-left",   match = { namespace = "vutureland-osd-left"   }, blur = false, animation = "slidefade left 80%",   xray = true })
 hl.layer_rule({ name = "vutureland-osd-right",  match = { namespace = "vutureland-osd-right"  }, blur = false, animation = "slidefade right 80%",  xray = true })
+
+
