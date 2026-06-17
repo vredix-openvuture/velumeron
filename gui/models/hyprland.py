@@ -43,12 +43,22 @@ def _write_section(content: str, name: str, new_body: str) -> str:
     )
 
 
+def _lua_unescape(s: str) -> str:
+    """Unescape Lua string escape sequences after stripping outer quotes."""
+    return s.replace('\\"', '"').replace("\\'", "'").replace('\\\\', '\\')
+
+
+def _lua_escape(s: str) -> str:
+    """Escape a Python string for embedding inside Lua double-quoted string."""
+    return s.replace('\\', '\\\\').replace('"', '\\"')
+
+
 def _parse_kv(text: str) -> dict:
     result = {}
     for m in re.finditer(r'(\w+)\s*=\s*("(?:[^"\\]|\\.)*"|\d+(?:\.\d+)?|true|false)', text):
         k, v = m.group(1), m.group(2)
         if v.startswith('"'):
-            result[k] = v[1:-1]
+            result[k] = _lua_unescape(v[1:-1])
         elif v == 'true':
             result[k] = True
         elif v == 'false':
@@ -235,7 +245,7 @@ def generate_roleapps_section(data: dict) -> str:
     lines = []
     for key in _ROLEAPPS_KEYS:
         val = data.get(key, _ROLEAPPS_DEFAULTS.get(key, ''))
-        lines.append(f'{key:<16} = "{val}"')
+        lines.append(f'{key:<16} = "{_lua_escape(val)}"')
     return '\n' + '\n'.join(lines) + '\n'
 
 

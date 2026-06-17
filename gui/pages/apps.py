@@ -48,25 +48,37 @@ _ROLE_APPS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ('slack',            'Slack'),
     ]),
     ('player',       'Music Player',   'audio-x-generic-symbolic', [
-        ('strawberry',   'Strawberry'),
-        ('rhythmbox',    'Rhythmbox'),
-        ('lollypop',     'Lollypop'),
-        ('clementine',   'Clementine'),
-        ('elisa',        'Elisa'),
+        ('strawberry',    'Strawberry'),
+        ('rhythmbox',     'Rhythmbox'),
+        ('lollypop',      'Lollypop'),
+        ('clementine',    'Clementine'),
+        ('elisa',         'Elisa'),
+        ('spotify',       'Spotify'),
+        ('audacious',     'Audacious'),
+        ('deadbeef',      'DeaDBeeF'),
+        ('musikcube',     'musikCube'),
+        ('vlc',           'VLC'),
     ]),
     ('notes_app',    'Notes',          'text-editor-symbolic', [
-        ('obsidian', 'Obsidian'),
-        ('logseq',   'Logseq'),
-        ('joplin',   'Joplin'),
+        ('obsidian',  'Obsidian'),
+        ('logseq',    'Logseq'),
+        ('joplin',    'Joplin'),
+        ('cherrytree','CherryTree'),
+        ('zettlr',    'Zettlr'),
+        ('rnote',     'Rnote'),
     ]),
     ('mail_app',     'Mail',           'mail-read-symbolic', [
+        ('betterbird',  'Betterbird'),
         ('thunderbird', 'Thunderbird'),
         ('evolution',   'Evolution'),
         ('geary',       'Geary'),
+        ('neomutt',     'NeoMutt'),
+        ('aerc',        'Aerc'),
     ]),
     ('calendar_app', 'Calendar',       'calendar-symbolic', [
         ('gnome-calendar', 'GNOME Calendar'),
         ('korganizer',     'KOrganizer'),
+        ('calcurse',       'Calcurse'),
     ]),
     ('clock_app',    'Clock',          'alarm-symbolic', [
         ('gnome-clocks', 'GNOME Clocks'),
@@ -75,25 +87,32 @@ _ROLE_APPS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ('tasks_app',    'Tasks',          'view-list-symbolic', [
         ('planify',    'Planify'),
         ('gnome-todo', 'GNOME To Do'),
+        ('endeavour',  'Endeavour'),
+        ('korganizer', 'KOrganizer'),
     ]),
     ('editor_app',   'Text Editor',    'text-x-generic-symbolic', [
-        ('neovide',  'Neovide'),
-        ('codium',   'VSCodium'),
-        ('zeditor',  'Zed'),
-        ('kate',     'Kate'),
-        ('gedit',    'Gedit'),
-        ('mousepad', 'Mousepad'),
+        ('neovide',    'Neovide'),
+        ('codium',     'VSCodium'),
+        ('code',       'VS Code'),
+        ('zeditor',    'Zed'),
+        ('kate',       'Kate'),
+        ('gedit',      'Gedit'),
+        ('mousepad',   'Mousepad'),
+        ('featherpad', 'FeatherPad'),
+        ('gnome-text-editor', 'GNOME Text Editor'),
     ]),
     ('bitwarden',    'Password Manager', 'dialog-password-symbolic', [
-        ('bitwarden',        'Bitwarden'),
-        ('keepassxc',        'KeePassXC'),
-        ('1password',        '1Password'),
+        ('bitwarden',  'Bitwarden'),
+        ('keepassxc',  'KeePassXC'),
+        ('1password',  '1Password'),
+        ('gopass-ui',  'Gopass UI'),
     ]),
     ('screen_record', 'Screen Recorder', 'media-record-symbolic', [
-        ('kooha',         'Kooha'),
-        ('obs',           'OBS Studio'),
-        ('simplescreenrecorder', 'SimpleScreenRecorder'),
-        ('kazam',         'Kazam'),
+        ('kooha',                  'Kooha'),
+        ('obs',                    'OBS Studio'),
+        ('simplescreenrecorder',   'SimpleScreenRecorder'),
+        ('kazam',                  'Kazam'),
+        ('green-recorder',         'Green Recorder'),
     ]),
 ]
 
@@ -165,12 +184,14 @@ def _icon_for(binary: str) -> str | None:
     return None
 
 
+_NONE_FOUND = ('', '(none installed)')
+
+
 def _installed(candidates: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    """Return only the (binary, label) pairs whose binary exists on PATH,
-    keeping the original order. Always includes at least the first entry
-    so the dropdown is never empty."""
+    """Return only the (binary, label) pairs whose binary exists on PATH.
+    Falls back to a single sentinel entry so the combo is never empty."""
     found = [(b, l) for b, l in candidates if shutil.which(b)]
-    return found if found else [candidates[0]]
+    return found if found else [_NONE_FOUND]
 
 
 # ── Widget helpers ────────────────────────────────────────────────────────────
@@ -281,6 +302,8 @@ class AppsPage(Gtk.Box):
             if _updating[0]:
                 return
             binary = binaries[c.get_selected()]
+            if not binary:          # sentinel "(none installed)" — don't overwrite
+                return
             icon_str = _icon_for(binary)
             prefix_img.set_from_icon_name(icon_str or fallback_icon)
             _updating[0] = True
