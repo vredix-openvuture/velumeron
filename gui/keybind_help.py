@@ -201,7 +201,8 @@ def _build_content(submap: str | None = None) -> Gtk.Widget:
     title_lbl.set_margin_bottom(4)
     root.append(title_lbl)
 
-    hint = Gtk.Label(label='ESC or click outside to close')
+    hint_txt = 'q or click outside to close' if submap else 'ESC / q or click outside to close'
+    hint = Gtk.Label(label=hint_txt)
     hint.add_css_class('dim-label')
     hint.add_css_class('caption')
     hint.set_margin_bottom(16)
@@ -256,6 +257,8 @@ class KeybindHelpApp(Adw.Application):
         gesture.connect('pressed', lambda *_: self.quit())
         click_bg.add_controller(gesture)
 
+        submap = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else None
+
         # Scrollable content card — fixed width, auto height up to screen limit
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -263,7 +266,6 @@ class KeybindHelpApp(Adw.Application):
         scroll.set_max_content_height(920)
         scroll.set_propagate_natural_height(True)
         scroll.set_propagate_natural_width(False)
-        submap = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else None
         scroll.set_child(_build_content(submap))
         scroll.add_css_class('card')
         scroll.set_halign(Gtk.Align.CENTER)
@@ -276,11 +278,21 @@ class KeybindHelpApp(Adw.Application):
         overlay.add_overlay(scroll)
         win.set_child(overlay)
 
-        # ESC closes
+        # In submap context: don't bind ESC — it leaks to Hyprland's submap
+        # bind and exits it. Use q instead; ESC is absorbed by EXCLUSIVE mode
+        # but not acted on (overlay stays open, submap unaffected).
+        # Outside submap context: ESC closes as expected.
+        def _on_key(_ctrl, kv, _kc, _state):
+            if kv == Gdk.KEY_q:
+                self.quit()
+                return True
+            if kv == Gdk.KEY_Escape and submap is None:
+                self.quit()
+                return True
+            return False
+
         key_ctrl = Gtk.EventControllerKey()
-        key_ctrl.connect('key-pressed',
-                         lambda c, kv, *_: (self.quit(), True)[1]
-                         if kv == Gdk.KEY_Escape else False)
+        key_ctrl.connect('key-pressed', _on_key)
         win.add_controller(key_ctrl)
 
         Gtk4LayerShell.init_for_window(win)
