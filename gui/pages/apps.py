@@ -225,32 +225,66 @@ class AppsPage(Gtk.Box):
 
     def _make_app_row(self, key: str, label: str,
                       fallback_icon: str,
-                      candidates: list[tuple[str, str]]) -> Adw.ComboRow:
-        installed = _installed(candidates)
-        binaries  = [b for b, _ in installed]
-        labels    = [l for _, l in installed]
+                      candidates: list[tuple[str, str]]) -> Adw.ExpanderRow:
+        installed  = _installed(candidates)
+        binaries   = [b for b, _ in installed]
+        app_labels = [l for _, l in installed]
 
-        # Current stored value — match by binary name
-        data = {**self._periph, **self._roleapps}
-        stored = data.get(key, '')
+        data       = {**self._periph, **self._roleapps}
+        stored     = data.get(key, '')
         stored_bin = stored.split()[0] if stored else ''
-        cur_idx = binaries.index(stored_bin) if stored_bin in binaries else 0
+        cur_idx    = binaries.index(stored_bin) if stored_bin in binaries else 0
 
         prefix_img = _make_icon(binaries[cur_idx], fallback_icon)
 
-        row = Adw.ComboRow(title=label)
-        row.set_model(Gtk.StringList.new(labels))
-        row.set_selected(cur_idx)
-        row.add_prefix(prefix_img)
+        expander = Adw.ExpanderRow(title=label)
+        expander.set_subtitle(stored)
+        expander.add_prefix(prefix_img)
 
-        def on_change(r, _):
-            binary = binaries[r.get_selected()]
+        # ── Custom command entry (this is the stored value) ──────────────────
+        entry = Adw.EntryRow(title='Custom command')
+        entry.set_text(stored)
+
+        # ── Quick-pick combo (pre-fills the entry) ───────────────────────────
+        combo = Adw.ComboRow(title='Quick pick')
+        combo.set_model(Gtk.StringList.new(app_labels))
+        combo.set_selected(cur_idx)
+
+        _updating = [False]
+
+        def on_entry_changed(e):
+            if _updating[0]:
+                return
+            val = e.get_text().strip()
+            expander.set_subtitle(val)
+            # Sync combo to match binary if possible
+            bin_part = val.split()[0] if val else ''
+            if bin_part in binaries:
+                _updating[0] = True
+                combo.set_selected(binaries.index(bin_part))
+                icon_str = _icon_for(bin_part)
+                prefix_img.set_from_icon_name(icon_str or fallback_icon)
+                _updating[0] = False
+            self._store(key, val)
+
+        def on_combo_changed(c, _):
+            if _updating[0]:
+                return
+            binary = binaries[c.get_selected()]
             icon_str = _icon_for(binary)
-            prefix_img.set_from_icon_name(icon_str if icon_str else fallback_icon)
+            prefix_img.set_from_icon_name(icon_str or fallback_icon)
+            _updating[0] = True
+            entry.set_text(binary)
+            _updating[0] = False
+            expander.set_subtitle(binary)
             self._store(key, binary)
 
-        row.connect('notify::selected', on_change)
-        return row
+        entry.connect('changed', on_entry_changed)
+        combo.connect('notify::selected', on_combo_changed)
+
+        expander.add_row(entry)
+        expander.add_row(combo)
+        return expander
 
     def _make_cmd_row(self, key: str, label: str,
                       icon: str, subtitle: str) -> Adw.EntryRow:
