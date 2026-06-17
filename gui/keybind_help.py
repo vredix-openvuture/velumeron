@@ -244,12 +244,20 @@ class KeybindHelpApp(Adw.Application):
         Gtk.StyleContext.add_provider_for_display(
             display, provider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
 
+        # Extra CSS: give the fullscreen background the window bg colour
+        extra = Gtk.CssProvider()
+        extra.load_from_string(
+            '.overlay-bg { background-color: @window_bg_color; }')
+        Gtk.StyleContext.add_provider_for_display(
+            display, extra, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
+
         win = Gtk.ApplicationWindow(application=self)
         win.set_title('Keybind Help')
         win.set_decorated(False)
 
-        # Transparent click-catcher (fullscreen background → close on click)
+        # Fullscreen background — matches GUI window colour, click-to-close
         click_bg = Gtk.Box()
+        click_bg.add_css_class('overlay-bg')
         click_bg.set_hexpand(True)
         click_bg.set_vexpand(True)
         gesture = Gtk.GestureClick.new()

@@ -1,5 +1,5 @@
 from __future__ import annotations
-import gi, os, shutil, subprocess, re
+import gi, os, shutil, subprocess, re, threading
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 gi.require_version('Gio', '2.0')
@@ -125,21 +125,31 @@ _BROWSER_DESKTOP = {
 }
 
 
-# ── App-info cache (built once per process) ───────────────────────────────────
+# ── App-info cache — preloaded in a background thread at import time ──────────
 
 _gio_cache: dict[str, Gio.AppInfo | None] | None = None
+_gio_ready  = threading.Event()
+
+
+def _load_gio() -> None:
+    global _gio_cache
+    cache: dict[str, Gio.AppInfo | None] = {}
+    for app in Gio.AppInfo.get_all():
+        exe = app.get_executable()
+        if exe:
+            base = os.path.basename(exe)
+            if base not in cache:
+                cache[base] = app
+    _gio_cache = cache
+    _gio_ready.set()
+
+
+threading.Thread(target=_load_gio, daemon=True, name='gio-preload').start()
+
 
 def _gio_cache_get() -> dict[str, Gio.AppInfo | None]:
-    global _gio_cache
-    if _gio_cache is None:
-        _gio_cache = {}
-        for app in Gio.AppInfo.get_all():
-            exe = app.get_executable()
-            if exe:
-                base = os.path.basename(exe)
-                if base not in _gio_cache:
-                    _gio_cache[base] = app
-    return _gio_cache
+    _gio_ready.wait()   # instant if already done, blocks only on first page visit
+    return _gio_cache   # type: ignore[return-value]
 
 
 def _icon_for(binary: str) -> str | None:
