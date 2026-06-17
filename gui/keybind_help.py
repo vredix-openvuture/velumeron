@@ -14,7 +14,7 @@ import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 gi.require_version('Gtk4LayerShell', '1.0')
-from gi.repository import Gtk, Adw, Gdk, Gio, GLib, Gtk4LayerShell, Pango
+from gi.repository import Gtk, Adw, Gdk, Gio, GLib, Gtk4LayerShell
 
 
 # ── Keybind data ─────────────────────────────────────────────────────────────
@@ -130,53 +130,48 @@ _GROUPS: list[list[tuple[str, list[tuple[str, str]]]]] = [
 
 # ── Widget builders ───────────────────────────────────────────────────────────
 
-def _key_chip(key: str) -> Gtk.Label:
-    lbl = Gtk.Label(label=key)
-    lbl.add_css_class('monospace')
-    lbl.add_css_class('module-chip')
-    lbl.set_margin_end(2)
-    lbl.set_valign(Gtk.Align.CENTER)
-    return lbl
-
-
-def _bind_item(key: str, desc: str) -> Gtk.Box:
-    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-    box.set_size_request(140, -1)
-    box.set_margin_end(8)
-    box.set_margin_top(2)
-    box.set_margin_bottom(2)
-    box.append(_key_chip(key))
-    lbl = Gtk.Label(label=desc)
-    lbl.set_xalign(0)
-    lbl.set_valign(Gtk.Align.CENTER)
-    lbl.set_ellipsize(Pango.EllipsizeMode.END)
-    box.append(lbl)
-    return box
-
-
 def _build_block(title: str, binds: list[tuple[str, str]]) -> Gtk.Box:
-    """One block = title row + horizontal flowbox of keybind chips."""
-    vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-    vbox.set_margin_top(6)
+    """One block = heading + boxed-list with one row per keybind."""
+    vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+    vbox.set_margin_top(8)
     vbox.set_margin_bottom(4)
 
     hdr = Gtk.Label(label=title)
     hdr.add_css_class('heading')
     hdr.set_xalign(0)
-    hdr.set_margin_bottom(2)
     vbox.append(hdr)
 
-    flow = Gtk.FlowBox()
-    flow.set_selection_mode(Gtk.SelectionMode.NONE)
-    flow.set_homogeneous(False)
-    flow.set_column_spacing(0)
-    flow.set_row_spacing(0)
-    flow.set_max_children_per_line(4)
-    flow.set_min_children_per_line(1)
+    listbox = Gtk.ListBox()
+    listbox.set_selection_mode(Gtk.SelectionMode.NONE)
+    listbox.add_css_class('boxed-list')
+
     for key, desc in binds:
-        item = _bind_item(key, desc)
-        flow.append(item)
-    vbox.append(flow)
+        row = Gtk.ListBoxRow()
+        row.set_activatable(False)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        box.set_margin_start(12)
+        box.set_margin_end(12)
+        box.set_margin_top(5)
+        box.set_margin_bottom(5)
+
+        key_lbl = Gtk.Label(label=key)
+        key_lbl.add_css_class('monospace')
+        key_lbl.add_css_class('module-chip')
+        key_lbl.set_valign(Gtk.Align.CENTER)
+        key_lbl.set_size_request(110, -1)
+
+        desc_lbl = Gtk.Label(label=desc)
+        desc_lbl.set_xalign(0)
+        desc_lbl.set_valign(Gtk.Align.CENTER)
+        desc_lbl.set_hexpand(True)
+
+        box.append(key_lbl)
+        box.append(desc_lbl)
+        row.set_child(box)
+        listbox.append(row)
+
+    vbox.append(listbox)
     return vbox
 
 
@@ -247,7 +242,7 @@ class KeybindHelpApp(Adw.Application):
         # Scrollable content card — fixed width, auto height up to screen limit
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_size_request(640, -1)
+        scroll.set_size_request(480, -1)
         scroll.set_max_content_height(920)
         scroll.set_propagate_natural_height(True)
         scroll.set_propagate_natural_width(False)
