@@ -14,7 +14,7 @@ import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 gi.require_version('Gtk4LayerShell', '1.0')
-from gi.repository import Gtk, Adw, Gdk, Gio, GLib, Gtk4LayerShell
+from gi.repository import Gtk, Adw, Gdk, Gio, GLib, Gtk4LayerShell, Pango
 
 
 # ── Keybind data ─────────────────────────────────────────────────────────────
@@ -141,13 +141,15 @@ def _key_chip(key: str) -> Gtk.Label:
 
 def _bind_item(key: str, desc: str) -> Gtk.Box:
     box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-    box.set_margin_end(18)
+    box.set_size_request(140, -1)
+    box.set_margin_end(8)
     box.set_margin_top(2)
     box.set_margin_bottom(2)
     box.append(_key_chip(key))
     lbl = Gtk.Label(label=desc)
     lbl.set_xalign(0)
     lbl.set_valign(Gtk.Align.CENTER)
+    lbl.set_ellipsize(Pango.EllipsizeMode.END)
     box.append(lbl)
     return box
 
@@ -169,8 +171,8 @@ def _build_block(title: str, binds: list[tuple[str, str]]) -> Gtk.Box:
     flow.set_homogeneous(False)
     flow.set_column_spacing(0)
     flow.set_row_spacing(0)
-    flow.set_max_children_per_line(20)
-    flow.set_min_children_per_line(2)
+    flow.set_max_children_per_line(4)
+    flow.set_min_children_per_line(1)
     for key, desc in binds:
         item = _bind_item(key, desc)
         flow.append(item)
@@ -242,12 +244,13 @@ class KeybindHelpApp(Adw.Application):
         gesture.connect('pressed', lambda *_: self.quit())
         click_bg.add_controller(gesture)
 
-        # Scrollable content card
+        # Scrollable content card — fixed width, auto height up to screen limit
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_max_content_height(900)
+        scroll.set_size_request(640, -1)
+        scroll.set_max_content_height(920)
         scroll.set_propagate_natural_height(True)
-        scroll.set_propagate_natural_width(True)
+        scroll.set_propagate_natural_width(False)
         scroll.set_child(_build_content())
         scroll.add_css_class('card')
         scroll.set_halign(Gtk.Align.CENTER)
