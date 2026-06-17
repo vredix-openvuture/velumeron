@@ -42,7 +42,7 @@ _GROUPS: list[tuple[str | None, list[tuple[str, list[tuple[str, str]]]]]] = [
             ('Space',    'Launcher'),
             ('Enter',    'Scratchpad'),
             ('.',        'Emoji'),
-            (',',        'Submap leader'),
+            (',',        'Submap leader  → SUPER+W/A/S'),
             ('1 – 9',    'Switch workspace'),
             ('F1 – F12', 'Quick app'),
         ]),
@@ -71,64 +71,64 @@ _GROUPS: list[tuple[str | None, list[tuple[str, list[tuple[str, str]]]]]] = [
     ]),
     # ── Window submap ─────────────────────────────────────────────────────
     ('window', [
-        ('Window submap  (SUPER + , → W)', [
-            ('H / J / K / L', 'Focus direction'),
-            ('C',             'Close'),
-            ('F',             'Float toggle'),
-            ('T',             'Transparency'),
-            ('P',             'Pseudo-tile'),
-            ('G',             'Group toggle'),
-            ('N / SHIFT+N',   'Group next / prev'),
-            ('D / M / O',     'Layout Dwindle / Master / Split'),
-            ('Space',         'Center window'),
-            ('Tab',           'Window switcher'),
-            ('1 – 9',         'Move to workspace'),
-            ('SHIFT + /',     'Submap help'),
-            ('ESC / Enter',   'Exit submap'),
+        ('Window submap  (SUPER + , → SUPER + W)', [
+            ('SUPER + H / J / K / L',       'Focus direction'),
+            ('SUPER + C',                   'Close'),
+            ('SUPER + F',                   'Float toggle'),
+            ('SUPER + T',                   'Transparency'),
+            ('SUPER + P',                   'Pseudo-tile'),
+            ('SUPER + G',                   'Group toggle'),
+            ('SUPER + N / SHIFT + N',       'Group next / prev'),
+            ('SUPER + D / M / O',           'Layout Dwindle / Master / Split'),
+            ('SUPER + Space',               'Center window'),
+            ('SUPER + Tab',                 'Window switcher'),
+            ('SUPER + 1 – 9',               'Move to workspace'),
+            ('SUPER + SHIFT + /',           'Submap help'),
+            ('ESC / Enter',                 'Exit submap'),
         ]),
         ('Window + SHIFT', [
-            ('H / J / K / L', 'Move window in tiling'),
+            ('SUPER + SHIFT + H / J / K / L', 'Move window in tiling'),
         ]),
         ('Window + ALT', [
-            ('H / J / K / L', 'Resize'),
-            ('F',             'Fullscreen'),
-            ('M',             'Maximize'),
-            ('P',             'Pin'),
+            ('SUPER + ALT + H / J / K / L', 'Resize'),
+            ('SUPER + ALT + F',             'Fullscreen'),
+            ('SUPER + ALT + M',             'Maximize'),
+            ('SUPER + ALT + P',             'Pin'),
         ]),
     ]),
     # ── Apps submap ───────────────────────────────────────────────────────
     ('apps', [
-        ('Apps submap  (SUPER + , → A)', [
-            ('T',         'Terminal'),
-            ('W',         'Browser'),
-            ('E',         'File manager'),
-            ('N',         'Notifications'),
-            ('M',         'Messenger'),
-            ('O',         'Notes'),
-            ('P',         'Music player'),
-            ('C',         'Clock'),
-            ('I',         'Mail'),
-            ('K',         'Calendar'),
-            ('D',         'Tasks'),
-            ('V',         'Editor'),
-            ('Space',     'Launcher'),
-            ('SHIFT + /', 'Submap help'),
-            ('ESC / Enter', 'Exit submap'),
+        ('Apps submap  (SUPER + , → SUPER + A)', [
+            ('SUPER + T',         'Terminal'),
+            ('SUPER + W',         'Browser'),
+            ('SUPER + E',         'File manager'),
+            ('SUPER + N',         'Notifications'),
+            ('SUPER + M',         'Messenger'),
+            ('SUPER + O',         'Notes'),
+            ('SUPER + P',         'Music player'),
+            ('SUPER + C',         'Clock'),
+            ('SUPER + I',         'Mail'),
+            ('SUPER + K',         'Calendar'),
+            ('SUPER + D',         'Tasks'),
+            ('SUPER + V',         'Editor'),
+            ('SUPER + Space',     'Launcher'),
+            ('SUPER + SHIFT + /', 'Submap help'),
+            ('ESC / Enter',       'Exit submap'),
         ]),
     ]),
     # ── System submap ─────────────────────────────────────────────────────
     ('system', [
-        ('System submap  (SUPER + , → S)', [
-            ('W',         'Wi-Fi menu'),
-            ('B',         'Bluetooth menu'),
-            ('V',         'VPN toggle'),
-            ('A',         'Audio output'),
-            ('M',         'Mic mute'),
-            ('N',         'Night light'),
-            ('D',         'Do not disturb'),
-            ('X',         'Settings'),
-            ('SHIFT + /', 'Submap help'),
-            ('ESC / Enter', 'Exit submap'),
+        ('System submap  (SUPER + , → SUPER + S)', [
+            ('SUPER + W',         'Wi-Fi menu'),
+            ('SUPER + B',         'Bluetooth menu'),
+            ('SUPER + V',         'VPN toggle'),
+            ('SUPER + A',         'Audio output'),
+            ('SUPER + M',         'Mic mute'),
+            ('SUPER + N',         'Night light'),
+            ('SUPER + D',         'Do not disturb'),
+            ('SUPER + X',         'Settings'),
+            ('SUPER + SHIFT + /', 'Submap help'),
+            ('ESC / Enter',       'Exit submap'),
         ]),
     ]),
 ]
@@ -201,7 +201,7 @@ def _build_content(submap: str | None = None) -> Gtk.Widget:
     title_lbl.set_margin_bottom(4)
     root.append(title_lbl)
 
-    hint_txt = 'q or click outside to close' if submap else 'ESC / q or click outside to close'
+    hint_txt = 'c or click outside to close'
     hint = Gtk.Label(label=hint_txt)
     hint.add_css_class('dim-label')
     hint.add_css_class('caption')
@@ -278,15 +278,8 @@ class KeybindHelpApp(Adw.Application):
         overlay.add_overlay(scroll)
         win.set_child(overlay)
 
-        # In submap context: don't bind ESC — it leaks to Hyprland's submap
-        # bind and exits it. Use q instead; ESC is absorbed by EXCLUSIVE mode
-        # but not acted on (overlay stays open, submap unaffected).
-        # Outside submap context: ESC closes as expected.
         def _on_key(_ctrl, kv, _kc, _state):
-            if kv == Gdk.KEY_q:
-                self.quit()
-                return True
-            if kv == Gdk.KEY_Escape and submap is None:
+            if kv == Gdk.KEY_c:
                 self.quit()
                 return True
             return False
