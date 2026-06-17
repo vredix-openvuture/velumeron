@@ -157,12 +157,10 @@ hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd(VTL_DIR .. "/assets/scripts/volu
 -- ══════════════════════════════════════════════════════
 -- SUBMAPS
 --
--- Leader: SUPER + grave  →  dann W / A / S für den jeweiligen Submap.
--- (Markdown-Notation „SUPER+FN+*"; FN erzeugt auf den meisten Laptops
---  keinen eigenen Keycode — grave dient hier als Submap-Leader.)
+-- Leader: SUPER + COMMA  →  dann W / A / S für den jeweiligen Submap.
 -- ══════════════════════════════════════════════════════
 
-hl.bind(MOD .. " + grave", function()
+hl.bind(MOD .. " + COMMA", function()
     enter_submap("mode")
 end)
 

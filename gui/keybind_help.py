@@ -42,6 +42,7 @@ _GROUPS: list[list[tuple[str, list[tuple[str, str]]]]] = [
             ('Space',    'Launcher'),
             ('Enter',    'Scratchpad'),
             ('.',        'Emoji'),
+            (',',        'Submap leader'),
             ('1 – 9',    'Switch workspace'),
             ('F1 – F12', 'Quick app'),
         ]),
@@ -70,7 +71,7 @@ _GROUPS: list[list[tuple[str, list[tuple[str, str]]]]] = [
     ],
     # ── Window submap ─────────────────────────────────────────────────────
     [
-        ('Window submap  (SUPER + ` → W)', [
+        ('Window submap  (SUPER + , → W)', [
             ('H / J / K / L', 'Focus direction'),
             ('C',             'Close'),
             ('F',             'Float toggle'),
@@ -96,7 +97,7 @@ _GROUPS: list[list[tuple[str, list[tuple[str, str]]]]] = [
     ],
     # ── Apps submap ───────────────────────────────────────────────────────
     [
-        ('Apps submap  (SUPER + ` → A)', [
+        ('Apps submap  (SUPER + , → A)', [
             ('T',     'Terminal'),
             ('W',     'Browser'),
             ('E',     'File manager'),
@@ -114,7 +115,7 @@ _GROUPS: list[list[tuple[str, list[tuple[str, str]]]]] = [
     ],
     # ── System submap ─────────────────────────────────────────────────────
     [
-        ('System submap  (SUPER + ` → S)', [
+        ('System submap  (SUPER + , → S)', [
             ('W',   'Wi-Fi menu'),
             ('B',   'Bluetooth menu'),
             ('V',   'VPN toggle'),
