@@ -244,10 +244,11 @@ class KeybindHelpApp(Adw.Application):
         Gtk.StyleContext.add_provider_for_display(
             display, provider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
 
-        # Extra CSS: give the fullscreen background the window bg colour
+        # Extra CSS: card background matches the GUI's dark window colour
         extra = Gtk.CssProvider()
         extra.load_from_string(
-            '.overlay-bg { background-color: @window_bg_color; }')
+            '.keybind-card { background-color: @window_bg_color;'
+            ' border-radius: 12px; }')
         Gtk.StyleContext.add_provider_for_display(
             display, extra, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
 
@@ -255,9 +256,8 @@ class KeybindHelpApp(Adw.Application):
         win.set_title('Keybind Help')
         win.set_decorated(False)
 
-        # Fullscreen background — matches GUI window colour, click-to-close
+        # Transparent click-catcher (fullscreen background → close on click)
         click_bg = Gtk.Box()
-        click_bg.add_css_class('overlay-bg')
         click_bg.set_hexpand(True)
         click_bg.set_vexpand(True)
         gesture = Gtk.GestureClick.new()
@@ -275,7 +275,7 @@ class KeybindHelpApp(Adw.Application):
         scroll.set_propagate_natural_height(True)
         scroll.set_propagate_natural_width(False)
         scroll.set_child(_build_content(submap))
-        scroll.add_css_class('card')
+        scroll.add_css_class('keybind-card')
         scroll.set_halign(Gtk.Align.CENTER)
         scroll.set_valign(Gtk.Align.CENTER)
         scroll.set_hexpand(False)
