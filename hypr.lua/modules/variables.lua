@@ -14,14 +14,37 @@ clipboard      = VTL_USER_DIR .. "/rofi/assets/clipvault.sh"
 launcher       = "rofi -show drun -config "      .. VTL_USER_DIR .. "/rofi/launcher.rasi"
 window_switch  = "rofi -show window -config "    .. VTL_USER_DIR .. "/rofi/window-switcher.rasi"
 theme_switch   = "rofi -show wallpaper -config " .. VTL_USER_DIR .. "/rofi/wallpaper-switcher.rasi"
-terminal       = terminal or ("kitty -c "        .. VTL_USER_DIR .. "/kitty/kitty.conf")
-browser        = browser  or "librewolf"
+terminal       = terminal      or ("kitty -c "   .. VTL_USER_DIR .. "/kitty/kitty.conf")
+browser        = browser       or "librewolf"
+filemanager    = filemanager   or "thunar"
 notifications  = "swaync-client -R -rs -t"
 screenshot_cmd = "hyprshot -z --mode region --output-folder ~/Bilder/Screenshots"
+screen_record  = screen_record or ""
+bitwarden      = bitwarden     or "bitwarden"
 
 on_sleep       = "systemctl suspend"
 on_lock        = VTL_DIR      .. "/assets/scripts/launch-hyprlock.sh"
 session_menu   = VTL_USER_DIR .. "/rofi/assets/session-menu.sh"
+
+
+-- ── Role-based app variables — set per device in user_settings.lua ─────────
+messenger      = messenger     or ""
+player         = player        or ""
+notes_app      = notes_app     or ""
+clock_app      = clock_app     or ""
+mail_app       = mail_app      or ""
+calendar_app   = calendar_app  or ""
+tasks_app      = tasks_app     or ""
+editor_app     = editor_app    or ""
+
+-- ── System-action variables — set per device in user_settings.lua ──────────
+wifi_menu      = wifi_menu      or ""
+bluetooth_menu = bluetooth_menu or ""
+vpn_toggle     = vpn_toggle     or ""
+audio_switch   = audio_switch   or ""
+mic_mute       = mic_mute       or "pactl set-source-mute @DEFAULT_SOURCE@ toggle"
+night_light    = night_light    or ""
+dnd_toggle     = dnd_toggle     or "swaync-client --toggle-dnd"
 
 
 -- ── Fallback defaults for device-specific globals ──────────────────────
@@ -36,5 +59,3 @@ quick_app          = quick_app          or {}
 cur_theme          = cur_theme          or "Oxygen"
 cur_size           = cur_size           or 24
 kb_layout          = kb_layout          or "eu"
--- Media/brightness keys are bound directly to their XF86 keysyms in
--- keybinds.lua, so no per-device fn_* overrides are needed anymore.

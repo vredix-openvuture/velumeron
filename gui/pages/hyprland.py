@@ -3,7 +3,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 
 from gi.repository import Gtk, Adw
-import os, shutil, subprocess
+import os, subprocess
 
 # ── Keyboard layouts (XKB codes + display names) ─────────────────────────────
 
@@ -98,6 +98,7 @@ from models.hyprland import (
     LNF_DEFAULTS,
     read_user_settings, write_user_settings,
     _write_section,
+    parse_roleapps, generate_roleapps_section, ensure_roleapps_section,
 )
 
 
@@ -122,51 +123,9 @@ def _find_cursor_themes() -> list[str]:
     return themes or ['default']
 
 
-# ── Installed app discovery ───────────────────────────────────────────────────
-
-_KNOWN_TERMINALS = [
-    ('kitty',     'Kitty'),
-    ('alacritty', 'Alacritty'),
-    ('foot',      'Foot'),
-    ('wezterm',   'WezTerm'),
-    ('ghostty',   'Ghostty'),
-    ('konsole',   'Konsole'),
-    ('gnome-terminal', 'GNOME Terminal'),
-]
-
-_KNOWN_BROWSERS = [
-    ('librewolf', 'LibreWolf'),
-    ('firefox',   'Firefox'),
-    ('chromium',  'Chromium'),
-    ('brave',     'Brave'),
-    ('vivaldi',   'Vivaldi'),
-    ('google-chrome-stable', 'Google Chrome'),
-]
-
-_BROWSER_DESKTOP = {
-    'librewolf': 'librewolf.desktop',
-    'firefox':   'firefox.desktop',
-    'chromium':  'chromium.desktop',
-    'brave':     'brave-browser.desktop',
-    'vivaldi':   'vivaldi-stable.desktop',
-    'google-chrome-stable': 'google-chrome.desktop',
-}
-
-
-def _installed_apps(candidates: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    result = [(b, l) for b, l in candidates if shutil.which(b)]
-    return result or [candidates[0]]
-
-
 def _vtl_user_dir() -> str:
     xdg = os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config'))
     return os.environ.get('VUTURELAND_USER_DIR', os.path.join(xdg, 'vutureland'))
-
-
-def _terminal_cmd(binary: str) -> str:
-    if binary == 'kitty':
-        return f'kitty -c {_vtl_user_dir()}/kitty/kitty.conf'
-    return binary
 
 
 class MonitorRow(Adw.ExpanderRow):
@@ -279,46 +238,6 @@ class HyprlandPage(Gtk.Box):
                                  'cur_size', _CURSOR_SIZES[r.get_selected()]))
         per_group.add(cur_size_row)
         page.add(per_group)
-
-        # ── Default Apps ──────────────────────────────────────────────────────
-        apps_group = Adw.PreferencesGroup(
-            title='Default Apps',
-            description='Changes apply after "Apply & Reload Hyprland". '
-                        'The browser is also set as the system XDG default.')
-
-        installed_terms = _installed_apps(_KNOWN_TERMINALS)
-        term_binaries   = [b for b, _ in installed_terms]
-        term_labels     = [l for _, l in installed_terms]
-        stored_term_cmd = self._periph.get('terminal', '')
-        cur_term_binary = stored_term_cmd.split()[0] if stored_term_cmd else ''
-        cur_term_idx    = (term_binaries.index(cur_term_binary)
-                           if cur_term_binary in term_binaries else 0)
-        # Ensure a default is always set so Apply never writes an empty terminal
-        self._periph['terminal'] = _terminal_cmd(term_binaries[cur_term_idx])
-        term_row = Adw.ComboRow(title='Terminal')
-        term_row.set_model(Gtk.StringList.new(term_labels))
-        term_row.set_selected(cur_term_idx)
-        def _on_term(r, _):
-            self._periph['terminal'] = _terminal_cmd(term_binaries[r.get_selected()])
-        term_row.connect('notify::selected', _on_term)
-        apps_group.add(term_row)
-
-        installed_brows = _installed_apps(_KNOWN_BROWSERS)
-        brow_binaries   = [b for b, _ in installed_brows]
-        brow_labels     = [l for _, l in installed_brows]
-        stored_browser  = self._periph.get('browser', '')
-        cur_brow_idx    = (brow_binaries.index(stored_browser)
-                           if stored_browser in brow_binaries else 0)
-        # Ensure a default is always set
-        self._periph['browser'] = brow_binaries[cur_brow_idx]
-        brow_row = Adw.ComboRow(title='Browser')
-        brow_row.set_model(Gtk.StringList.new(brow_labels))
-        brow_row.set_selected(cur_brow_idx)
-        brow_row.connect('notify::selected',
-                         lambda r, _: self._periph.__setitem__(
-                             'browser', brow_binaries[r.get_selected()]))
-        apps_group.add(brow_row)
-        page.add(apps_group)
 
         # ── Window Rules (open a list editor subpage) ─────────────────────────
         wr_group = Adw.PreferencesGroup(title='Window Rules')
@@ -511,7 +430,6 @@ class HyprlandPage(Gtk.Box):
         self._apps_group.add(self._make_app_row(new_entry))
 
     def _apply(self, _):
-        # Rebuild the regexes from the edited name lists (alphabetical, de-duped).
         self._float_pat   = build_rule_pattern(self._float_names)
         self._opacity_pat = build_rule_pattern(self._opacity_names)
         content = self._content
@@ -529,11 +447,6 @@ class HyprlandPage(Gtk.Box):
                                      self._lnf['lnf_rounding'], self._lnf['lnf_border_size']))
         write_user_settings(content)
         self._content = content
-        # Set system browser default
-        browser = self._periph.get('browser', '')
-        desktop = _BROWSER_DESKTOP.get(browser, '')
-        if desktop:
-            subprocess.Popen(['xdg-settings', 'set', 'default-web-browser', desktop])
         # Apply keyboard layout immediately (no reload needed)
         kb_layout = self._periph.get('kb_layout', 'eu')
         subprocess.Popen(['hyprctl', 'keyword', 'input:kb_layout', kb_layout])

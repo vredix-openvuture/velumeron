@@ -76,6 +76,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from pages.home          import HomePage
 from pages.wallpaper     import WallpaperPage
 from pages.hyprland      import HyprlandPage
+from pages.apps          import AppsPage
 from pages.waybar        import WaybarPage
 from pages.lockscreen    import LockscreenPage
 from pages.notifications import NotificationsPage
@@ -168,6 +169,7 @@ _COLORS_CSS_FALLBACK = os.path.join(
 _PAGES = [
     ('home',          HomePage,          'go-home-symbolic',                          'Home'),
     ('hyprland',      HyprlandPage,      'preferences-desktop-display-symbolic',      'Hyprland'),
+    ('apps',          AppsPage,          'application-x-executable-symbolic',         'Apps'),
     ('waybar',        WaybarPage,        'view-grid-symbolic',                        'Bar'),
     ('wallpaper',     WallpaperPage,     'image-x-generic-symbolic',                  'Theme'),
     ('lockscreen',    LockscreenPage,    'system-lock-screen-symbolic',               'Power & Lock'),
@@ -627,9 +629,113 @@ class MainWindow(Gtk.ApplicationWindow):
             _save_settings(self._settings)
 
     def _on_key_pressed(self, ctrl, keyval, keycode, state):
+        mods = state & (Gdk.ModifierType.SHIFT_MASK |
+                        Gdk.ModifierType.CONTROL_MASK |
+                        Gdk.ModifierType.ALT_MASK)
+        no_mod = mods == 0
+
         if keyval == Gdk.KEY_Escape:
             self.close_animated()
             return True
+
+        # Number keys 1–9 → switch to that page (zero-indexed into all pages)
+        if no_mod and Gdk.KEY_1 <= keyval <= Gdk.KEY_9:
+            idx = keyval - Gdk.KEY_1
+            all_pages = _PAGES + _BOTTOM_PAGES
+            if idx < len(all_pages):
+                name = all_pages[idx][0]
+                self._stack.set_visible_child_name(name)
+                for i, b in enumerate(self._nav_btns):
+                    b.set_active(i == idx)
+            return True
+
+        # hjkl vim-style navigation (only when focus is not in a text entry)
+        focused = self.get_focus()
+        in_entry = isinstance(focused, (Gtk.Entry, Gtk.Text, Gtk.SearchEntry))
+        if no_mod and not in_entry:
+            if keyval in (Gdk.KEY_j, Gdk.KEY_n):
+                self._focus_move(forward=True)
+                return True
+            if keyval in (Gdk.KEY_k, Gdk.KEY_p):
+                self._focus_move(forward=False)
+                return True
+            if keyval == Gdk.KEY_h:
+                self._nav_step(-1)
+                return True
+            if keyval == Gdk.KEY_l:
+                self._nav_step(+1)
+                return True
+
+        # Tab → jump to next PreferencesGroup on the current page
+        if keyval == Gdk.KEY_Tab and no_mod and not in_entry:
+            self._focus_next_group(forward=True)
+            return True
+        if keyval == Gdk.KEY_ISO_Left_Tab and not in_entry:
+            self._focus_next_group(forward=False)
+            return True
+
+        return False
+
+    def _nav_step(self, delta: int):
+        """Move to the previous (delta=-1) or next (delta=+1) sidebar page."""
+        all_pages = _PAGES + _BOTTOM_PAGES
+        current   = self._stack.get_visible_child_name()
+        names     = [p[0] for p in all_pages]
+        try:
+            idx = names.index(current)
+        except ValueError:
+            return
+        new_idx = (idx + delta) % len(names)
+        self._stack.set_visible_child_name(names[new_idx])
+        for i, b in enumerate(self._nav_btns):
+            b.set_active(i == new_idx)
+
+    def _focus_move(self, forward: bool):
+        """Move keyboard focus to the next/previous focusable widget."""
+        direction = Gtk.DirectionType.TAB_FORWARD if forward else Gtk.DirectionType.TAB_BACKWARD
+        self.child_focus(direction)
+
+    def _focus_next_group(self, forward: bool):
+        """Jump focus to the first widget of the next/previous PreferencesGroup."""
+        page = self._stack.get_visible_child()
+        if page is None:
+            return
+        groups = self._collect_groups(page)
+        if not groups:
+            self._focus_move(forward)
+            return
+        # Find which group currently has focus
+        focused = self.get_focus()
+        cur_group_idx = -1
+        for i, g in enumerate(groups):
+            if self._is_ancestor_of(g, focused):
+                cur_group_idx = i
+                break
+        if cur_group_idx == -1:
+            next_idx = 0 if forward else len(groups) - 1
+        else:
+            next_idx = (cur_group_idx + (1 if forward else -1)) % len(groups)
+        groups[next_idx].child_focus(Gtk.DirectionType.TAB_FORWARD)
+
+    @staticmethod
+    def _collect_groups(widget: Gtk.Widget) -> list[Gtk.Widget]:
+        """Recursively collect all Adw.PreferencesGroup widgets inside widget."""
+        groups = []
+        if isinstance(widget, Adw.PreferencesGroup):
+            groups.append(widget)
+        child = widget.get_first_child()
+        while child:
+            groups.extend(MainWindow._collect_groups(child))
+            child = child.get_next_sibling()
+        return groups
+
+    @staticmethod
+    def _is_ancestor_of(ancestor: Gtk.Widget, child: Gtk.Widget | None) -> bool:
+        w = child
+        while w:
+            if w is ancestor:
+                return True
+            w = w.get_parent()
         return False
 
     def _build_banner(self):

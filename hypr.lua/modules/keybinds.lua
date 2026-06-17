@@ -5,239 +5,268 @@
 
 local MOD = "SUPER"
 
-
--- ── Workspace jumps ──────────────────────────────────
-
-for i = 1, 9 do
-    hl.bind(MOD .. " + " .. i, hl.dsp.focus({ workspace = i }))
-end
-
-hl.bind(MOD .. " + 0", hl.dsp.focus({ workspace = 10 }))
-
-
--- ── Session management ───────────────────────────────
-
-hl.bind(MOD .. " + CONTROL + ALT + RETURN", hl.dsp.exit())
-hl.bind(MOD .. " + L",      hl.dsp.exec_cmd(on_lock))
-hl.bind(MOD .. " + O",      hl.dsp.exec_cmd(session_menu))
-
-
--- ── Utilities ────────────────────────────────────────
-
-hl.bind(MOD .. " + SHIFT + S",   hl.dsp.exec_cmd(screenshot_cmd)) -- make a "S"creenshot
-hl.bind(MOD .. " + SPACE",       hl.dsp.exec_cmd(launcher)) -- open rofi as launcher
-hl.bind(MOD .. " + ALT + SPACE", hl.dsp.exec_cmd(theme_switch)) -- open rofi for theme switch (wallpaper or set)
-hl.bind(MOD .. " + T",           hl.dsp.exec_cmd(terminal)) -- open default "T"erminal application
-hl.bind(MOD .. " + R",           hl.dsp.exec_cmd(browser)) -- open default "B"rowser
-hl.bind(MOD .. " + S",           hl.dsp.exec_cmd(notifications)) -- open "S"way notification center
-hl.bind(MOD .. " + V",           hl.dsp.exec_cmd(clipboard)) -- open rofi for clipboard history
-hl.bind(MOD .. " + X",           hl.dsp.exec_cmd(VTL_DIR .. "/bin/vutureland -t")) -- open vutureland settings
-hl.bind(MOD .. " + PERIOD",      hl.dsp.exec_cmd("hypremoji")) -- open hypremoji as emoji picker
-hl.bind(MOD .. " + P",           hl.dsp.exec_cmd(VTL_DIR .. "/assets/scripts/waybar-toggle-hover.sh")) -- "P"eak at waybar
-
-
--- ── Window management ────────────────────────────────
-
-hl.bind(MOD .. " + TAB",         hl.dsp.exec_cmd(window_switch)) 
-hl.bind(MOD .. " + C",           hl.dsp.window.close())
-hl.bind(MOD .. " + CONTROL + C", hl.dsp.window.kill())
-hl.bind(MOD .. " + F",           hl.dsp.window.float({ action = "toggle" }))
-hl.bind(MOD .. " + B",           hl.dsp.window.fullscreen({ mode = "maximized" }))
-hl.bind(MOD .. " + ALT + B",     hl.dsp.window.fullscreen({ mode = "fullscreen" }))       -- Fullscreen active window
-hl.bind(MOD .. " + N",           hl.dsp.window.cycle_next())                              -- Activate next window on current monitor
-hl.bind(MOD .. " + mouse_up",    hl.dsp.window.cycle_next())  
-hl.bind(MOD .. " + ALT + M",     hl.dsp.window.move({ monitor = "+1", follow = true }))   -- Move window to the next monitor
-
-
--- Click to float, hold to drag/resize
-hl.bind(MOD .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })
-hl.bind(MOD .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
-hl.bind(MOD .. " + mouse:274", hl.dsp.window.float({ action = "toggle" }))
-
-
-
-
--- ── Workspaces and Monitors ─────────────────────────
-
-hl.bind(MOD .. " + CONTROL + mouse_up",   hl.dsp.focus({ workspace = "e+1" }))
-hl.bind(MOD .. " + CONTROL + mouse_down", hl.dsp.focus({ workspace = "e-1" }))
-hl.bind(MOD .. " + CONTROL + LEFT",       hl.dsp.focus({ workspace = "e-1" })) 
-hl.bind(MOD .. " + CONTROL + RIGHT",      hl.dsp.focus({ workspace = "e+1" })) 
-
-hl.bind(MOD .. " + M",          hl.dsp.focus({ monitor = "+1" }))       -- Switch to next monitor
-
-
--- ── Function keys: Monitor brightness ────────────────
-
--- These use the standardised XF86 multimedia keysyms directly (no modifier), so
--- the dedicated media keys just work on any keyboard without per-device mapping.
--- Each key also pokes the OSD daemon (osd-show.sh) for a bottom-centre banner.
 local osd = VTL_DIR .. "/assets/scripts/osd-show.sh"
 
--- Brightness in 5% steps (0–100). brightness.sh uses brightnessctl when a
--- backlight device exists, else ddcutil (bus-direct) for external monitors,
--- and pops the OSD itself.
-hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd(VTL_DIR .. "/assets/scripts/brightness.sh down"), { repeating = true })
-hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd(VTL_DIR .. "/assets/scripts/brightness.sh up"),   { repeating = true })
 
+-- ── Helpers ──────────────────────────────────────────
 
--- ── Function keys: Media control ─────────────────────
-
-hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"))
-hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("playerctl play-pause"))
-hl.bind("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"))
-
-
--- ── Function keys: Volume ────────────────────────────
-
-hl.bind("XF86AudioMute",        hl.dsp.exec_cmd("pactl set-sink-mute @DEFAULT_SINK@ toggle && "  .. osd .. " volume"))
-hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("pactl set-sink-volume @DEFAULT_SINK@ -5% && " .. osd .. " volume"), { repeating = true })
-hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd(VTL_DIR .. "/assets/scripts/volume-up.sh && " .. osd .. " volume"), { repeating = true })
-
-
--- ── Click outside rofi closes it (non-consuming → click still reaches the app) ────────────────────────────
-
-hl.bind("mouse:272",
-    hl.dsp.exec_cmd(VTL_DIR .. "/rofi/assets/close-on-click.sh"),
-    { mouse = true, non_consuming = true, release = true })
-
-
-
--- ════════════════════════════════════════════════════════════════════════
---  SUBMAPS
--- ════════════════════════════════════════════════════════════════════════
+local function enter_submap(name)
+    hl.dispatch(hl.dsp.exec_cmd("echo '" .. name .. "' > /tmp/hypr-submap"))
+    hl.dispatch(hl.dsp.submap(name))
+end
 
 local function exit_submap()
     hl.dispatch(hl.dsp.exec_cmd("echo 'normal' > /tmp/hypr-submap"))
     hl.dispatch(hl.dsp.submap("reset"))
 end
 
+-- Launch cmd only if non-empty; always exits the active submap.
+local function launch_and_exit(cmd)
+    if cmd and cmd ~= "" then
+        hl.dispatch(hl.dsp.exec_cmd(cmd))
+    end
+    exit_submap()
+end
 
--- ── Window submap (resize, move, float) ──────────────
+-- Launch cmd only if non-empty (no submap change).
+local function launch(cmd)
+    if cmd and cmd ~= "" then
+        hl.dispatch(hl.dsp.exec_cmd(cmd))
+    end
+end
 
-hl.bind(MOD .. " + W", function()
-    hl.dispatch(hl.dsp.exec_cmd("echo 'window' > /tmp/hypr-submap"))
-    hl.dispatch(hl.dsp.submap("window"))
+
+-- ══════════════════════════════════════════════════════
+-- SUPER — Normale Aktionen
+-- ══════════════════════════════════════════════════════
+
+hl.bind(MOD .. " + T",      hl.dsp.exec_cmd(terminal))
+hl.bind(MOD .. " + W",      hl.dsp.exec_cmd(browser))
+hl.bind(MOD .. " + E",      hl.dsp.exec_cmd(filemanager))
+hl.bind(MOD .. " + C",      hl.dsp.window.close())
+hl.bind(MOD .. " + F",      hl.dsp.window.float({ action = "toggle" }))
+hl.bind(MOD .. " + S",      hl.dsp.exec_cmd(notifications))
+hl.bind(MOD .. " + B",      hl.dsp.exec_cmd(VTL_DIR .. "/assets/scripts/waybar-toggle-hover.sh"))
+hl.bind(MOD .. " + X",      hl.dsp.exec_cmd(VTL_DIR .. "/bin/vutureland -t"))
+hl.bind(MOD .. " + V",      hl.dsp.exec_cmd(clipboard))
+hl.bind(MOD .. " + M",      hl.dsp.focus({ monitor = "+1" }))
+hl.bind(MOD .. " + H",      hl.dsp.focus({ workspace = "m-1" }))
+hl.bind(MOD .. " + L",      hl.dsp.focus({ workspace = "m+1" }))
+hl.bind(MOD .. " + J",      hl.dsp.window.cycle_next())
+hl.bind(MOD .. " + K",      hl.dsp.window.cycle_next({ next = false }))
+hl.bind(MOD .. " + TAB",    hl.dsp.exec_cmd(window_switch))
+hl.bind(MOD .. " + SPACE",  hl.dsp.exec_cmd(launcher))
+hl.bind(MOD .. " + RETURN", hl.dsp.workspace.toggle_special("magic"))
+hl.bind(MOD .. " + PERIOD", hl.dsp.exec_cmd("hypremoji"))
+
+-- Quick apps: SUPER + F1–F12 (uses physical function keys, Fn held on most laptops)
+for i = 1, 12 do
+    local app = quick_app[i]
+    if app and app ~= "" then
+        hl.bind(MOD .. " + F" .. i, hl.dsp.exec_cmd(app))
+    end
+end
+
+-- Workspace jumps: SUPER + 1–9
+for i = 1, 9 do
+    hl.bind(MOD .. " + " .. i, hl.dsp.focus({ workspace = i }))
+end
+hl.bind(MOD .. " + 0", hl.dsp.focus({ workspace = 10 }))
+
+
+-- ══════════════════════════════════════════════════════
+-- SUPER+SHIFT — Gleicher Kontext, Gegenteil
+-- ══════════════════════════════════════════════════════
+
+hl.bind(MOD .. " + SHIFT + H", hl.dsp.window.move({ workspace = "m-1" }))
+hl.bind(MOD .. " + SHIFT + L", hl.dsp.window.move({ workspace = "m+1" }))
+hl.bind(MOD .. " + SHIFT + J", hl.dsp.exec_cmd("hyprctl dispatch swapnext"))
+hl.bind(MOD .. " + SHIFT + K", hl.dsp.exec_cmd("hyprctl dispatch swapnext prev"))
+hl.bind(MOD .. " + SHIFT + M", hl.dsp.window.move({ monitor = "+1", follow = true }))
+hl.bind(MOD .. " + SHIFT + S", hl.dsp.exec_cmd(screenshot_cmd))
+hl.bind(MOD .. " + SHIFT + slash", hl.dsp.exec_cmd(VTL_DIR .. "/bin/vutureland --keybind-help"))
+
+if screen_record ~= "" then
+    hl.bind(MOD .. " + SHIFT + R", hl.dsp.exec_cmd(screen_record))
+end
+
+-- Move window to workspace: SUPER+SHIFT + 1–9
+for i = 1, 9 do
+    hl.bind(MOD .. " + SHIFT + " .. i, hl.dsp.window.move({ workspace = i }))
+end
+
+
+-- ══════════════════════════════════════════════════════
+-- SUPER+ALT — Alternative Variante
+-- ══════════════════════════════════════════════════════
+
+hl.bind(MOD .. " + ALT + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
+hl.bind(MOD .. " + ALT + M", hl.dsp.window.fullscreen({ mode = "maximized" }))
+hl.bind(MOD .. " + ALT + P", hl.dsp.exec_cmd("hyprctl dispatch pin"))
+
+hl.bind(MOD .. " + ALT + H", hl.dsp.window.resize({ x = -50, y =   0, relative = true }), { repeating = true })
+hl.bind(MOD .. " + ALT + J", hl.dsp.window.resize({ x =   0, y =  50, relative = true }), { repeating = true })
+hl.bind(MOD .. " + ALT + K", hl.dsp.window.resize({ x =   0, y = -50, relative = true }), { repeating = true })
+hl.bind(MOD .. " + ALT + L", hl.dsp.window.resize({ x =  50, y =   0, relative = true }), { repeating = true })
+
+
+-- ══════════════════════════════════════════════════════
+-- SUPER+CTRL — Systemebene / Destruktiv
+-- ══════════════════════════════════════════════════════
+
+hl.bind(MOD .. " + CONTROL + L",   hl.dsp.exec_cmd(on_lock))
+hl.bind(MOD .. " + CONTROL + Q",   hl.dsp.exec_cmd(session_menu))
+hl.bind(MOD .. " + CONTROL + C",   hl.dsp.window.kill())
+hl.bind(MOD .. " + CONTROL + P",   hl.dsp.exec_cmd(bitwarden))
+hl.bind(MOD .. " + CONTROL + ESCAPE", hl.dsp.exit())
+
+
+-- ══════════════════════════════════════════════════════
+-- Maus
+-- ══════════════════════════════════════════════════════
+
+hl.bind(MOD .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })
+hl.bind(MOD .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
+hl.bind(MOD .. " + mouse:274", hl.dsp.window.float({ action = "toggle" }))
+
+hl.bind(MOD .. " + CONTROL + mouse_up",   hl.dsp.focus({ workspace = "m+1" }))
+hl.bind(MOD .. " + CONTROL + mouse_down", hl.dsp.focus({ workspace = "m-1" }))
+
+-- Click outside rofi closes it (non-consuming → click still reaches the app)
+hl.bind("mouse:272",
+    hl.dsp.exec_cmd(VTL_USER_DIR .. "/rofi/assets/close-on-click.sh"),
+    { mouse = true, non_consuming = true, release = true })
+
+
+-- ══════════════════════════════════════════════════════
+-- Medientasten (XF86)
+-- ══════════════════════════════════════════════════════
+
+hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd(VTL_DIR .. "/assets/scripts/brightness.sh down"), { repeating = true })
+hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd(VTL_DIR .. "/assets/scripts/brightness.sh up"),   { repeating = true })
+
+hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"))
+hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("playerctl play-pause"))
+hl.bind("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"))
+
+hl.bind("XF86AudioMute",        hl.dsp.exec_cmd("pactl set-sink-mute @DEFAULT_SINK@ toggle && "   .. osd .. " volume"))
+hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("pactl set-sink-volume @DEFAULT_SINK@ -5% && "   .. osd .. " volume"), { repeating = true })
+hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd(VTL_DIR .. "/assets/scripts/volume-up.sh && "   .. osd .. " volume"), { repeating = true })
+
+
+-- ══════════════════════════════════════════════════════
+-- SUBMAPS
+--
+-- Leader: SUPER + grave  →  dann W / A / S für den jeweiligen Submap.
+-- (Markdown-Notation „SUPER+FN+*"; FN erzeugt auf den meisten Laptops
+--  keinen eigenen Keycode — grave dient hier als Submap-Leader.)
+-- ══════════════════════════════════════════════════════
+
+hl.bind(MOD .. " + grave", function()
+    enter_submap("mode")
 end)
 
+hl.define_submap("mode", function()
+    hl.bind("W", function() enter_submap("window") end)
+    hl.bind("A", function() enter_submap("apps") end)
+    hl.bind("S", function() enter_submap("system") end)
+    hl.bind("ESCAPE", exit_submap)
+    hl.bind("RETURN", exit_submap)
+end)
+
+
+-- ── Window submap ─────────────────────────────────────────────────────
+
 hl.define_submap("window", function()
-    -- Resize active window
-    hl.bind("H", hl.dsp.window.resize({ x =  50, y =   0, relative = true }), { repeating = true })
-    hl.bind("L", hl.dsp.window.resize({ x = -50, y =   0, relative = true }), { repeating = true })
-    hl.bind("J", hl.dsp.window.resize({ x =   0, y =  50, relative = true }), { repeating = true })
-    hl.bind("K", hl.dsp.window.resize({ x =   0, y = -50, relative = true }), { repeating = true })
 
-    hl.bind("RIGHT", hl.dsp.window.resize({ x =  50, y =   0, relative = true }), { repeating = true })
-    hl.bind("LEFT",  hl.dsp.window.resize({ x = -50, y =   0, relative = true }), { repeating = true })
-    hl.bind("UP",    hl.dsp.window.resize({ x =   0, y =  50, relative = true }), { repeating = true })
-    hl.bind("DOWN",  hl.dsp.window.resize({ x =   0, y = -50, relative = true }), { repeating = true })
+    -- Focus (vim-style directional)
+    hl.bind("H", hl.dsp.focus({ direction = "left" }))
+    hl.bind("J", hl.dsp.focus({ direction = "down" }))
+    hl.bind("K", hl.dsp.focus({ direction = "up" }))
+    hl.bind("L", hl.dsp.focus({ direction = "right" }))
 
+    -- Move window position in tiling layout
+    hl.bind("SHIFT + H", hl.dsp.exec_cmd("hyprctl dispatch movewindow l"))
+    hl.bind("SHIFT + J", hl.dsp.exec_cmd("hyprctl dispatch movewindow d"))
+    hl.bind("SHIFT + K", hl.dsp.exec_cmd("hyprctl dispatch movewindow u"))
+    hl.bind("SHIFT + L", hl.dsp.exec_cmd("hyprctl dispatch movewindow r"))
 
-    -- Move active window
-    hl.bind("CONTROL + H", hl.dsp.window.move({ x = -50, y =   0, relative = true }), { repeating = true })
-    hl.bind("CONTROL + L", hl.dsp.window.move({ x =  50, y =   0, relative = true }), { repeating = true })
-    hl.bind("CONTROL + J", hl.dsp.window.move({ x =   0, y = -50, relative = true }), { repeating = true })
-    hl.bind("CONTROL + K", hl.dsp.window.move({ x =   0, y =  50, relative = true }), { repeating = true })
-    
-    hl.bind("CONTROL + RIGHT", hl.dsp.window.move({ x = -50, y =   0, relative = true }), { repeating = true })
-    hl.bind("CONTROL + LEFT",  hl.dsp.window.move({ x =  50, y =   0, relative = true }), { repeating = true })
-    hl.bind("CONTROL + UP",    hl.dsp.window.move({ x =   0, y = -50, relative = true }), { repeating = true })
-    hl.bind("CONTROL + DOWN",  hl.dsp.window.move({ x =   0, y =  50, relative = true }), { repeating = true })
+    -- Resize
+    hl.bind("ALT + H", hl.dsp.window.resize({ x = -50, y =   0, relative = true }), { repeating = true })
+    hl.bind("ALT + J", hl.dsp.window.resize({ x =   0, y =  50, relative = true }), { repeating = true })
+    hl.bind("ALT + K", hl.dsp.window.resize({ x =   0, y = -50, relative = true }), { repeating = true })
+    hl.bind("ALT + L", hl.dsp.window.resize({ x =  50, y =   0, relative = true }), { repeating = true })
 
+    -- Window state toggles
+    hl.bind("C",     hl.dsp.window.close())
+    hl.bind("F",     hl.dsp.window.float({ action = "toggle" }))
+    hl.bind("T",     hl.dsp.window.tag({ tag = "keybind_opaque" }))  -- transparency toggle
+    hl.bind("P",     hl.dsp.window.pseudo())
 
-    -- Window state toggles (stay in submap)
-    hl.bind("F", hl.dsp.window.float({ action = "toggle" }))
+    -- Group management
+    hl.bind("G",         hl.dsp.exec_cmd("hyprctl dispatch togglegroup"))
+    hl.bind("N",         hl.dsp.exec_cmd("hyprctl dispatch changegroupactive f"))
+    hl.bind("SHIFT + N", hl.dsp.exec_cmd("hyprctl dispatch changegroupactive b"))
 
-    hl.bind("O", hl.dsp.window.tag({ tag = "keybind_opaque" }))
+    -- Layout switching
+    hl.bind("D", hl.dsp.exec_cmd("hyprctl dispatch setlayout dwindle"))
+    hl.bind("M", hl.dsp.exec_cmd("hyprctl dispatch setlayout master"))
+    hl.bind("O", hl.dsp.layout("togglesplit"))  -- monocle via togglesplit (dwindle)
 
-    hl.bind("B",           hl.dsp.window.fullscreen({ mode = "maximized",  action = "toggle" }))
-    hl.bind("CONTROL + B", hl.dsp.window.fullscreen({ mode = "fullscreen", action = "toggle" }))
+    -- Utilities
+    hl.bind("TAB",   hl.dsp.exec_cmd(window_switch))
+    hl.bind("SPACE", hl.dsp.exec_cmd("hyprctl dispatch centerwindow"))
 
+    -- Fullscreen / maximize / pin
+    hl.bind("ALT + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
+    hl.bind("ALT + M", hl.dsp.window.fullscreen({ mode = "maximized" }))
+    hl.bind("ALT + P", hl.dsp.exec_cmd("hyprctl dispatch pin"))
 
     -- Move to workspace (stay in submap)
     for i = 1, 9 do
         hl.bind(tostring(i), hl.dsp.window.move({ workspace = i }))
     end
 
-    hl.bind("0", hl.dsp.focus({ workspace = 10 }))
-
-
-    -- Exit
     hl.bind("ESCAPE", exit_submap)
     hl.bind("RETURN", exit_submap)
 end)
 
 
--- ── Navigate submap (workspace / window focus) ────────
+-- ── Apps submap — launches an app then auto-exits ─────────────────────
 
-hl.bind(MOD .. " + CONTROL + N", function()
-    hl.dispatch(hl.dsp.exec_cmd("echo 'navigate' > /tmp/hypr-submap"))
-    hl.dispatch(hl.dsp.submap("navigate"))
-end)
-
-hl.define_submap("navigate", function()
-    -- Previous / next workspace on current monitor
-    hl.bind("H", hl.dsp.focus({ workspace = "m-1" }))
-    hl.bind("L", hl.dsp.focus({ workspace = "m+1" }))
-
-    -- Cycle windows
-    hl.bind("J", hl.dsp.window.cycle_next({ next = false }))
-    hl.bind("K", hl.dsp.window.cycle_next())
-
-    -- Focus monitor
-    hl.bind("M", hl.dsp.focus({ monitor = "+1" }))
-
-    -- Jump to workspace
-    for i = 1, 9 do
-        hl.bind(tostring(i), hl.dsp.focus({ workspace = i }))
-    end
-
-    -- Exit
+hl.define_submap("apps", function()
+    hl.bind("T",     function() launch_and_exit(terminal) end)
+    hl.bind("W",     function() launch_and_exit(browser) end)
+    hl.bind("E",     function() launch_and_exit(filemanager) end)
+    hl.bind("N",     function() launch_and_exit(notifications) end)
+    hl.bind("M",     function() launch_and_exit(messenger) end)
+    hl.bind("O",     function() launch_and_exit(notes_app) end)
+    hl.bind("P",     function() launch_and_exit(player) end)
+    hl.bind("C",     function() launch_and_exit(clock_app) end)
+    hl.bind("I",     function() launch_and_exit(mail_app) end)
+    hl.bind("K",     function() launch_and_exit(calendar_app) end)
+    hl.bind("D",     function() launch_and_exit(tasks_app) end)
+    hl.bind("V",     function() launch_and_exit(editor_app) end)
+    hl.bind("SPACE", function() launch_and_exit(launcher) end)
     hl.bind("ESCAPE", exit_submap)
     hl.bind("RETURN", exit_submap)
 end)
 
 
--- ── Quickstart submap (launch apps, auto-exit) ────────
+-- ── System submap ─────────────────────────────────────────────────────
 
-hl.bind(MOD .. " + Q", function()
-    hl.dispatch(hl.dsp.exec_cmd("echo 'quickstart' > /tmp/hypr-submap"))
-    hl.dispatch(hl.dsp.submap("quickstart"))
-end)
-
-hl.define_submap("quickstart", "reset", function()
-    -- Key 0 launches quick_app[10], keys 1-9 launch quick_app[1-9]
-    for i = 1, 10 do
-        local key = tostring(i % 10)
-        local app = quick_app[i]
-        if app and app ~= "" then
-            hl.bind(key, function()
-                hl.dispatch(hl.dsp.exec_cmd("echo 'normal' > /tmp/hypr-submap"))
-                hl.dispatch(hl.dsp.exec_cmd(app))
-            end)
-        end
-    end
-
-    hl.bind("ESCAPE", exit_submap)
-    hl.bind("RETURN", exit_submap)
-end)
-
-
--- ── Navigate submap (workspace / window focus) // work in progress ────────
-
-hl.bind(MOD .. " + CONTROL + S", function()
-    hl.dispatch(hl.dsp.exec_cmd("echo 'windostyle' > /tmp/hypr-submap"))
-    hl.dispatch(hl.dsp.submap("windowstyle"))
-end)
-
-hl.define_submap("windowstyle", function()
-    -- Toggle the dyn_blur tag on the active window (enables the blur window rule)
-    hl.bind("L", hl.dsp.window.tag({ tag = "dyn_blur" }))
-
-    hl.bind("F", hl.dsp.window.float({ action = "toggle" }))
-    hl.bind("F", hl.dsp.window.tag({ tag = "dyn_focus" }))    
-
-    -- Exit
+hl.define_submap("system", function()
+    hl.bind("W", function() launch(wifi_menu);      exit_submap() end)
+    hl.bind("B", function() launch(bluetooth_menu); exit_submap() end)
+    hl.bind("V", function() launch(vpn_toggle);     exit_submap() end)
+    hl.bind("A", function() launch(audio_switch);   exit_submap() end)
+    hl.bind("M", function() launch(mic_mute);       exit_submap() end)
+    hl.bind("N", function() launch(night_light);    exit_submap() end)
+    hl.bind("D", function() launch(dnd_toggle);     exit_submap() end)
+    hl.bind("X", function()
+        hl.dispatch(hl.dsp.exec_cmd(VTL_DIR .. "/bin/vutureland -t"))
+        exit_submap()
+    end)
     hl.bind("ESCAPE", exit_submap)
     hl.bind("RETURN", exit_submap)
 end)

@@ -2,5 +2,11 @@
 # Vutureland Settings Panel launcher
 # Symlink to ~/.local/bin/vutureland to use without a path prefix.
 _DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+
+if [[ "$1" == "--keybind-help" ]]; then
+    exec env LD_PRELOAD=/usr/lib/libgtk4-layer-shell.so \
+        python3 "$_DIR/../gui/keybind_help.py"
+fi
+
 exec env LD_PRELOAD=/usr/lib/libgtk4-layer-shell.so \
     python3 "$_DIR/../gui/main.py" "$@"

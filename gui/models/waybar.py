@@ -50,23 +50,40 @@ def _modules_dir() -> str:
 
 def _effective_base_dir(design: str) -> str:
     if design:
-        return os.path.join(_vtl_user(), "waybar-modular", "config", design, "base")
-    return os.path.join(_vtl_user(), "waybar-modular", "base")
+        user_path = os.path.join(_vtl_user(), "waybar-modular", "config", design, "base")
+        if os.path.isdir(user_path):
+            return user_path
+        return os.path.join(_vtl(), "waybar-modular", "config", design, "base")
+    user_path = os.path.join(_vtl_user(), "waybar-modular", "base")
+    if os.path.isdir(user_path):
+        return user_path
+    return os.path.join(_vtl(), "waybar-modular", "base")
 
 
 def _effective_modules_dir(design: str) -> str:
     if design:
-        return os.path.join(_vtl_user(), "waybar-modular", "config", design, "modules")
-    return _modules_dir()
+        user_path = os.path.join(_vtl_user(), "waybar-modular", "config", design, "modules")
+        if os.path.isdir(user_path):
+            return user_path
+        return os.path.join(_vtl(), "waybar-modular", "config", design, "modules")
+    user_path = _modules_dir()
+    if os.path.isdir(user_path):
+        return user_path
+    return os.path.join(_vtl(), "waybar-modular", "modules")
 
 
 def scan_config_styles() -> list[str]:
-    """Return sorted list of design style names from waybar-modular/config/."""
-    config_dir = os.path.join(_vtl_user(), "waybar-modular", "config")
-    if not os.path.isdir(config_dir):
-        return []
-    return sorted(d for d in os.listdir(config_dir)
-                  if os.path.isdir(os.path.join(config_dir, d)))
+    """Return sorted list of design style names from waybar-modular/config/.
+    Checks user dir first, falls back to package dir (for fresh AUR installs)."""
+    for base_root in (_vtl_user(), _vtl()):
+        config_dir = os.path.join(base_root, "waybar-modular", "config")
+        if not os.path.isdir(config_dir):
+            continue
+        designs = sorted(d for d in os.listdir(config_dir)
+                         if os.path.isdir(os.path.join(config_dir, d)))
+        if designs:
+            return designs
+    return []
 
 
 @dataclass
@@ -100,52 +117,92 @@ class BarConfig:
 
 
 def _known_monitors() -> list[str]:
-    """Collect monitor names from existing output tree (both legacy and design structures)."""
+    """Collect monitor names from existing output tree (both legacy and design structures).
+    Falls back to hyprctl monitors on fresh installs where no output exists yet."""
     monitors: set[str] = set()
     out = _output_dir()
-    if not os.path.isdir(out):
-        return []
-    for d1 in os.listdir(out):
-        p1 = os.path.join(out, d1)
-        if not os.path.isdir(p1):
-            continue
-        for d2 in os.listdir(p1):
-            p2 = os.path.join(p1, d2)
-            if not os.path.isdir(p2):
+    if os.path.isdir(out):
+        for d1 in os.listdir(out):
+            p1 = os.path.join(out, d1)
+            if not os.path.isdir(p1):
                 continue
-            if d2 in _POSITIONS:
-                # Legacy: output/{style}/{position}/{monitor}
-                monitors.update(m for m in os.listdir(p2) if os.path.isdir(os.path.join(p2, m)))
-            else:
-                # Design: output/{design}/{style}/{position}/{monitor}
-                for d3 in os.listdir(p2):
-                    p3 = os.path.join(p2, d3)
-                    if os.path.isdir(p3) and d3 in _POSITIONS:
-                        monitors.update(m for m in os.listdir(p3) if os.path.isdir(os.path.join(p3, m)))
+            for d2 in os.listdir(p1):
+                p2 = os.path.join(p1, d2)
+                if not os.path.isdir(p2):
+                    continue
+                if d2 in _POSITIONS:
+                    # Legacy: output/{style}/{position}/{monitor}
+                    monitors.update(m for m in os.listdir(p2) if os.path.isdir(os.path.join(p2, m)))
+                else:
+                    # Design: output/{design}/{style}/{position}/{monitor}
+                    for d3 in os.listdir(p2):
+                        p3 = os.path.join(p2, d3)
+                        if os.path.isdir(p3) and d3 in _POSITIONS:
+                            monitors.update(m for m in os.listdir(p3) if os.path.isdir(os.path.join(p3, m)))
+
+    if not monitors:
+        # Fresh install (no output yet) — detect live monitors from Hyprland
+        try:
+            import subprocess, json as _json
+            result = subprocess.run(
+                ["hyprctl", "monitors", "-j"],
+                capture_output=True, text=True, timeout=3,
+            )
+            if result.returncode == 0:
+                for m in _json.loads(result.stdout):
+                    if name := m.get("name"):
+                        monitors.add(name)
+        except Exception:
+            pass
+
     return sorted(monitors)
 
 
+def _module_orient_dirs(orientation: str, design: str = "") -> list[str]:
+    """Ordered orientation dirs to scan: user dir first, then package dir.
+    Returns both when they differ so new package modules reach existing installs."""
+    dirs: list[str] = []
+    seen: set[str] = set()
+    for base_root in (_vtl_user(), _vtl()):
+        if design:
+            d = os.path.join(base_root, "waybar-modular", "config", design, "modules", orientation)
+        else:
+            d = os.path.join(base_root, "waybar-modular", "modules", orientation)
+        if os.path.isdir(d) and d not in seen:
+            dirs.append(d)
+            seen.add(d)
+    return dirs
+
+
 def _build_includes(orientation: str, design: str = "") -> list[str]:
-    """Collect all module config.json paths for the given orientation."""
-    orient_dir = os.path.join(_effective_modules_dir(design), orientation)
+    """Collect all module config.json paths for the given orientation.
+    Scans user dir then package dir; user dir wins for same folder name."""
     includes = []
-    if os.path.isdir(orient_dir):
+    seen_folders: set[str] = set()
+    for orient_dir in _module_orient_dirs(orientation, design):
         for folder in sorted(os.listdir(orient_dir)):
+            if folder in seen_folders:
+                continue
             cfg = os.path.join(orient_dir, folder, "config.json")
             if os.path.exists(cfg):
                 includes.append(cfg)
+                seen_folders.add(folder)
     return includes
 
 
 def _build_module_css(orientation: str, design: str = "") -> list[str]:
-    """Collect all module style.css paths for the given orientation."""
-    orient_dir = os.path.join(_effective_modules_dir(design), orientation)
+    """Collect all module style.css paths for the given orientation.
+    Scans user dir then package dir; user dir wins for same folder name."""
     css_files = []
-    if os.path.isdir(orient_dir):
+    seen_folders: set[str] = set()
+    for orient_dir in _module_orient_dirs(orientation, design):
         for folder in sorted(os.listdir(orient_dir)):
+            if folder in seen_folders:
+                continue
             css = os.path.join(orient_dir, folder, "style.css")
             if os.path.exists(css):
                 css_files.append(css)
+                seen_folders.add(folder)
     return css_files
 
 
@@ -423,8 +480,11 @@ def scan_bars() -> list[BarConfig]:
         if os.path.isdir(legacy_base):
             _auto_init_from_base(legacy_base, "", monitors, seen, bars)
 
-        config_dir = os.path.join(_vtl_user(), "waybar-modular", "config")
-        if os.path.isdir(config_dir):
+        # Check user dir first, then package dir (for fresh AUR installs)
+        for base_root in (_vtl_user(), _vtl()):
+            config_dir = os.path.join(base_root, "waybar-modular", "config")
+            if not os.path.isdir(config_dir):
+                continue
             for design in sorted(os.listdir(config_dir)):
                 design_base = os.path.join(config_dir, design, "base")
                 if os.path.isdir(design_base):
@@ -491,35 +551,56 @@ def write_bar_slots(bar: BarConfig, left: list, center: list, right: list) -> No
 
 
 def scan_modules_by_section(orientation: str = "horizontal", design: str = "") -> list[tuple[str, list[tuple[str, str, str]]]]:
-    """Return [(section_name, [(waybar_key, display_name, description), ...]), ...] from modules.md order."""
-    mdir = _effective_modules_dir(design)
-    orient_dir = os.path.join(mdir, orientation)
-    modules_md = os.path.join(mdir, "modules.md")
-    containers_md = os.path.join(mdir, "containers.md")
-
+    """Return [(section_name, [(waybar_key, display_name, description), ...]), ...] from modules.md order.
+    Scans user dir then package dir so new package modules appear on existing installs."""
+    # Collect folder metadata from both dirs; user dir takes priority per folder name
     folder_meta: dict[str, dict] = {}
-    if os.path.isdir(orient_dir):
-        for folder in os.listdir(orient_dir):
-            fp = os.path.join(orient_dir, folder)
-            for md_name in ("module.md", "container.md"):
-                md_path = os.path.join(fp, md_name)
-                if not os.path.exists(md_path):
-                    continue
-                content = open(md_path).read()
-                key_m   = re.search(r'^name\s*=\s*"([^"]+)"',        content, re.M)
-                alias_m = re.search(r'^alias\s*=\s*"([^"]+)"',       content, re.M)
-                desc_m  = re.search(r'^description\s*=\s*"([^"]+)"', content, re.M)
-                key     = key_m.group(1)   if key_m   else folder
-                display = alias_m.group(1) if alias_m else folder.replace("-", " ").title()
-                desc    = desc_m.group(1)  if desc_m  else ""
-                folder_meta[folder] = {"key": key, "display": display, "description": desc}
-                break
+    modules_md: str | None = None
+    containers_md: str | None = None
+    seen_roots: set[str] = set()
+
+    for base_root in (_vtl_user(), _vtl()):
+        if base_root in seen_roots:
+            continue
+        seen_roots.add(base_root)
+        mdir = (
+            os.path.join(base_root, "waybar-modular", "config", design, "modules")
+            if design
+            else os.path.join(base_root, "waybar-modular", "modules")
+        )
+        orient_dir = os.path.join(mdir, orientation)
+        if os.path.isdir(orient_dir):
+            for folder in os.listdir(orient_dir):
+                if folder in folder_meta:
+                    continue  # user dir already claimed this folder
+                fp = os.path.join(orient_dir, folder)
+                for md_name in ("module.md", "container.md"):
+                    md_path = os.path.join(fp, md_name)
+                    if not os.path.exists(md_path):
+                        continue
+                    content = open(md_path).read()
+                    key_m   = re.search(r'^name\s*=\s*"([^"]+)"',        content, re.M)
+                    alias_m = re.search(r'^alias\s*=\s*"([^"]+)"',       content, re.M)
+                    desc_m  = re.search(r'^description\s*=\s*"([^"]+)"', content, re.M)
+                    key     = key_m.group(1)   if key_m   else folder
+                    display = alias_m.group(1) if alias_m else folder.replace("-", " ").title()
+                    desc    = desc_m.group(1)  if desc_m  else ""
+                    folder_meta[folder] = {"key": key, "display": display, "description": desc}
+                    break
+        if modules_md is None:
+            candidate = os.path.join(mdir, "modules.md")
+            if os.path.exists(candidate):
+                modules_md = candidate
+        if containers_md is None:
+            candidate = os.path.join(mdir, "containers.md")
+            if os.path.exists(candidate):
+                containers_md = candidate
 
     sections: list[tuple[str, list]] = []
     seen: set[str] = set()
 
     for md_path in (modules_md, containers_md):
-        if not os.path.exists(md_path):
+        if not md_path or not os.path.exists(md_path):
             continue
         cur_section = ""
         cur_mods: list[tuple[str, str, str]] = []

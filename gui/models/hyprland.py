@@ -210,6 +210,45 @@ def ensure_lookandfeel_section(content: str) -> str:
         '-- <<<LOOKANDFEEL-START>>>\n-- <<<LOOKANDFEEL-END>>>\n')
 
 
+# ── Role-based apps (stored in user_settings.lua) ────────────────────────────
+
+_ROLEAPPS_KEYS = [
+    'filemanager', 'messenger', 'player', 'notes_app', 'clock_app',
+    'mail_app', 'calendar_app', 'tasks_app', 'editor_app',
+    'wifi_menu', 'bluetooth_menu', 'vpn_toggle', 'audio_switch',
+    'mic_mute', 'night_light', 'dnd_toggle',
+    'screen_record', 'bitwarden',
+]
+
+_ROLEAPPS_DEFAULTS: dict[str, str] = {
+    'mic_mute':   'pactl set-source-mute @DEFAULT_SOURCE@ toggle',
+    'dnd_toggle': 'swaync-client --toggle-dnd',
+    'bitwarden':  'bitwarden',
+}
+
+
+def parse_roleapps(content: str) -> dict:
+    return _parse_kv(_read_section(content, 'ROLEAPPS'))
+
+
+def generate_roleapps_section(data: dict) -> str:
+    lines = []
+    for key in _ROLEAPPS_KEYS:
+        val = data.get(key, _ROLEAPPS_DEFAULTS.get(key, ''))
+        lines.append(f'{key:<16} = "{val}"')
+    return '\n' + '\n'.join(lines) + '\n'
+
+
+def ensure_roleapps_section(content: str) -> str:
+    if '<<<ROLEAPPS-START>>>' in content:
+        return content
+    return content.rstrip('\n') + (
+        '\n\n\n-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
+        '--  ROLE APPS & SYSTEM COMMANDS — set per device, not in git.\n'
+        '-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+        '-- <<<ROLEAPPS-START>>>\n-- <<<ROLEAPPS-END>>>\n')
+
+
 def read_user_settings() -> str:
     with open(USER_SETTINGS) as f:
         return f.read()

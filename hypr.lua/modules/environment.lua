@@ -40,3 +40,7 @@ hl.config({
         force_zero_scaling = true,
     },
 })
+
+-- Java AWT/Swing: prevents popup menus from spawning at wrong size in
+-- non-reparenting compositors (Hyprland/XWayland)
+hl.env("_JAVA_AWT_WM_NONREPARENTING", "1")

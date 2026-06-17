@@ -753,6 +753,8 @@ quick_app = {
     [8]  = "",
     [9]  = "",
     [10] = "",
+    [11] = "",
+    [12] = "",
 }
 -- <<<QUICKACCESS-END>>>
 
@@ -798,6 +800,32 @@ opacity_window  = "(.*obsidian.*)"
 
 -- <<<LOOKANDFEEL-START>>>
 -- <<<LOOKANDFEEL-END>>>
+
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--  ROLE APPS & SYSTEM COMMANDS — set per device, not in git.
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- <<<ROLEAPPS-START>>>
+filemanager      = ""
+messenger        = ""
+player           = ""
+notes_app        = ""
+clock_app        = ""
+mail_app         = ""
+calendar_app     = ""
+tasks_app        = ""
+editor_app       = ""
+wifi_menu        = ""
+bluetooth_menu   = ""
+vpn_toggle       = ""
+audio_switch     = ""
+mic_mute         = "pactl set-source-mute @DEFAULT_SOURCE@ toggle"
+night_light      = ""
+dnd_toggle       = "swaync-client --toggle-dnd"
+screen_record    = ""
+bitwarden        = "bitwarden"
+-- <<<ROLEAPPS-END>>>
 EOF
     ok "Created new user_settings.lua"
 }

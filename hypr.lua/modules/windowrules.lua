@@ -44,7 +44,6 @@ hl.window_rule({
     match     = { class = "(.*)" },
     animation = "popin 80%",
     opacity   = 0.92,
-    center    = true,
 })
 
 -- Terminals: xray makes the background see-through to the desktop
@@ -108,11 +107,11 @@ hl.window_rule({
     size   = { "(monitor_w*0.7)", "(monitor_h*0.8)" },
 })
 hl.window_rule({
-    name   = "float_cap",
-    match  = { float = true },
-    float  = true,
-    center = true,
-    size   = { "(monitor_w*0.5)", "(monitor_h*0.6)" },
+    name      = "float_cap",
+    match     = { float = true, title = ".+", xwayland = false },
+    float     = true,
+    center    = true,
+    size      = { "(monitor_w*0.5)", "(monitor_h*0.6)" },
 })
 
 -- ── Full opacity (no transparency) ────────────────────
