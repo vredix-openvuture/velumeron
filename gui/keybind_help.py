@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Vutureland Keybind Help — floating cheatsheet (SUPER+SHIFT+/)"""
 
-import os, sys, signal
+import os, sys, signal, atexit
 
 _LIB = '/usr/lib/libgtk4-layer-shell.so'
 if 'libgtk4-layer-shell' not in os.environ.get('LD_PRELOAD', ''):
@@ -313,5 +313,24 @@ class KeybindHelpApp(Adw.Application):
                              lambda: (self.quit(), GLib.SOURCE_REMOVE)[1])
 
 
+def _pid_lock(submap: str | None) -> bool:
+    """Return True if we acquired the lock, False if another instance is alive."""
+    suffix   = f'-{submap}' if submap else ''
+    pid_file = f'/tmp/vutureland-khp{suffix}.pid'
+    try:
+        existing = int(open(pid_file).read())
+        os.kill(existing, 0)        # raises if process gone
+        return False                # already running — bail out
+    except (OSError, ValueError, FileNotFoundError):
+        pass
+    with open(pid_file, 'w') as f:
+        f.write(str(os.getpid()))
+    atexit.register(lambda: os.unlink(pid_file) if os.path.exists(pid_file) else None)
+    return True
+
+
 if __name__ == '__main__':
+    _submap = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else None
+    if not _pid_lock(_submap):
+        sys.exit(0)
     KeybindHelpApp().run()

@@ -57,6 +57,15 @@ if '-t' in sys.argv or '--toggle' in sys.argv:
         os.kill(pid, signal.SIGUSR1)
         sys.exit(0)
 
+# no flag: if already running, bring it to front (same as toggle) instead of
+# spawning a second instance
+if not any(f in sys.argv[1:] for f in ('-d', '--daemon', '-t', '--toggle',
+                                        '-e', '--end', '-h', '--help')):
+    pid = _running_pid()
+    if pid is not None:
+        os.kill(pid, signal.SIGUSR1)
+        sys.exit(0)
+
 _LIB = '/usr/lib/libgtk4-layer-shell.so'
 if 'libgtk4-layer-shell' not in os.environ.get('LD_PRELOAD', ''):
     os.environ['LD_PRELOAD'] = _LIB + ':' + os.environ.get('LD_PRELOAD', '')
