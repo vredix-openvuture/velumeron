@@ -18,13 +18,13 @@ from gi.repository import Gtk, Adw, Gdk, Gio, GLib, Gtk4LayerShell
 
 
 # ── Keybind data ─────────────────────────────────────────────────────────────
-# Structure: list of GROUPS.  Each group is a list of BLOCKS.
-# Groups are separated by a visual divider.
+# Structure: list of (tag, blocks).  tag=None → main layer, else submap name.
+# Groups are separated by a visual divider when showing all.
 # Each block: (title, [(key, desc), ...])
 
-_GROUPS: list[list[tuple[str, list[tuple[str, str]]]]] = [
+_GROUPS: list[tuple[str | None, list[tuple[str, list[tuple[str, str]]]]]] = [
     # ── Main layer ────────────────────────────────────────────────────────
-    [
+    (None, [
         ('SUPER', [
             ('T',        'Terminal'),
             ('W',        'Browser'),
@@ -56,9 +56,9 @@ _GROUPS: list[list[tuple[str, list[tuple[str, str]]]]] = [
             ('/',       'Keybind help'),
         ]),
         ('SUPER + ALT', [
-            ('F',           'Fullscreen'),
-            ('M',           'Maximize'),
-            ('P',           'Pin'),
+            ('F',             'Fullscreen'),
+            ('M',             'Maximize'),
+            ('P',             'Pin'),
             ('H / J / K / L', 'Resize'),
         ]),
         ('SUPER + CTRL', [
@@ -68,9 +68,9 @@ _GROUPS: list[list[tuple[str, list[tuple[str, str]]]]] = [
             ('P',   'Bitwarden'),
             ('ESC', 'Quit Hyprland'),
         ]),
-    ],
+    ]),
     # ── Window submap ─────────────────────────────────────────────────────
-    [
+    ('window', [
         ('Window submap  (SUPER + , → W)', [
             ('H / J / K / L', 'Focus direction'),
             ('C',             'Close'),
@@ -83,6 +83,7 @@ _GROUPS: list[list[tuple[str, list[tuple[str, str]]]]] = [
             ('Space',         'Center window'),
             ('Tab',           'Window switcher'),
             ('1 – 9',         'Move to workspace'),
+            ('SHIFT + /',     'Submap help'),
             ('ESC / Enter',   'Exit submap'),
         ]),
         ('Window + SHIFT', [
@@ -94,38 +95,42 @@ _GROUPS: list[list[tuple[str, list[tuple[str, str]]]]] = [
             ('M',             'Maximize'),
             ('P',             'Pin'),
         ]),
-    ],
+    ]),
     # ── Apps submap ───────────────────────────────────────────────────────
-    [
+    ('apps', [
         ('Apps submap  (SUPER + , → A)', [
-            ('T',     'Terminal'),
-            ('W',     'Browser'),
-            ('E',     'File manager'),
-            ('N',     'Notifications'),
-            ('M',     'Messenger'),
-            ('O',     'Notes'),
-            ('P',     'Music player'),
-            ('C',     'Clock'),
-            ('I',     'Mail'),
-            ('K',     'Calendar'),
-            ('D',     'Tasks'),
-            ('V',     'Editor'),
-            ('Space', 'Launcher'),
+            ('T',         'Terminal'),
+            ('W',         'Browser'),
+            ('E',         'File manager'),
+            ('N',         'Notifications'),
+            ('M',         'Messenger'),
+            ('O',         'Notes'),
+            ('P',         'Music player'),
+            ('C',         'Clock'),
+            ('I',         'Mail'),
+            ('K',         'Calendar'),
+            ('D',         'Tasks'),
+            ('V',         'Editor'),
+            ('Space',     'Launcher'),
+            ('SHIFT + /', 'Submap help'),
+            ('ESC / Enter', 'Exit submap'),
         ]),
-    ],
+    ]),
     # ── System submap ─────────────────────────────────────────────────────
-    [
+    ('system', [
         ('System submap  (SUPER + , → S)', [
-            ('W',   'Wi-Fi menu'),
-            ('B',   'Bluetooth menu'),
-            ('V',   'VPN toggle'),
-            ('A',   'Audio output'),
-            ('M',   'Mic mute'),
-            ('N',   'Night light'),
-            ('D',   'Do not disturb'),
-            ('X',   'Settings'),
+            ('W',         'Wi-Fi menu'),
+            ('B',         'Bluetooth menu'),
+            ('V',         'VPN toggle'),
+            ('A',         'Audio output'),
+            ('M',         'Mic mute'),
+            ('N',         'Night light'),
+            ('D',         'Do not disturb'),
+            ('X',         'Settings'),
+            ('SHIFT + /', 'Submap help'),
+            ('ESC / Enter', 'Exit submap'),
         ]),
-    ],
+    ]),
 ]
 
 
@@ -176,17 +181,25 @@ def _build_block(title: str, binds: list[tuple[str, str]]) -> Gtk.Box:
     return vbox
 
 
-def _build_content() -> Gtk.Widget:
+_SUBMAP_TITLES = {
+    'window': 'Window Submap',
+    'apps':   'Apps Submap',
+    'system': 'System Submap',
+}
+
+
+def _build_content(submap: str | None = None) -> Gtk.Widget:
     root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
     root.set_margin_top(20)
     root.set_margin_bottom(24)
     root.set_margin_start(28)
     root.set_margin_end(28)
 
-    title = Gtk.Label(label='Keybind Reference')
-    title.add_css_class('title-2')
-    title.set_margin_bottom(4)
-    root.append(title)
+    heading = _SUBMAP_TITLES.get(submap, 'Keybind Reference') if submap else 'Keybind Reference'
+    title_lbl = Gtk.Label(label=heading)
+    title_lbl.add_css_class('title-2')
+    title_lbl.set_margin_bottom(4)
+    root.append(title_lbl)
 
     hint = Gtk.Label(label='ESC or click outside to close')
     hint.add_css_class('dim-label')
@@ -194,8 +207,11 @@ def _build_content() -> Gtk.Widget:
     hint.set_margin_bottom(16)
     root.append(hint)
 
+    groups = [(tag, blocks) for tag, blocks in _GROUPS if tag == submap] \
+             if submap else list(_GROUPS)
+
     first_group = True
-    for group in _GROUPS:
+    for _tag, blocks in groups:
         if not first_group:
             sep = Gtk.Separator()
             sep.set_margin_top(12)
@@ -203,7 +219,7 @@ def _build_content() -> Gtk.Widget:
             root.append(sep)
         first_group = False
 
-        for title_txt, binds in group:
+        for title_txt, binds in blocks:
             root.append(_build_block(title_txt, binds))
 
     return root
@@ -247,7 +263,8 @@ class KeybindHelpApp(Adw.Application):
         scroll.set_max_content_height(920)
         scroll.set_propagate_natural_height(True)
         scroll.set_propagate_natural_width(False)
-        scroll.set_child(_build_content())
+        submap = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else None
+        scroll.set_child(_build_content(submap))
         scroll.add_css_class('card')
         scroll.set_halign(Gtk.Align.CENTER)
         scroll.set_valign(Gtk.Align.CENTER)
