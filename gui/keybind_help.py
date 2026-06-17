@@ -248,7 +248,8 @@ class KeybindHelpApp(Adw.Application):
         extra = Gtk.CssProvider()
         extra.load_from_string(
             '.keybind-card { background-color: @window_bg_color;'
-            ' border-radius: 12px; }')
+            ' border-radius: 12px;'
+            ' border: 1px solid @borders; }')
         Gtk.StyleContext.add_provider_for_display(
             display, extra, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
 
