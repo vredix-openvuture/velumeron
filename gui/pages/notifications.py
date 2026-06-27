@@ -3,79 +3,76 @@ import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 
-from gi.repository import Gtk, Adw, GLib
+from gi.repository import Gtk, Adw
 
-import os, subprocess
-
-
-def _clean_env() -> dict:
-    env = dict(os.environ)
-    env.pop('LD_PRELOAD', None)
-    return env
+import os, signal, threading, subprocess
 
 
-def _launch_swaync_script() -> str:
-    vtl = os.environ.get('VUTURELAND_DIR') or os.path.realpath(
+def _vtl() -> str:
+    return os.environ.get('VUTURELAND_DIR') or os.path.realpath(
         os.path.join(os.path.dirname(__file__), '../..'))
-    return os.path.join(vtl, 'assets', 'scripts', 'launch-swaync.sh')
+
+
+def _restart_notify() -> None:
+    try:
+        pid = int(open('/tmp/vutureland-notify.pid').read().strip())
+        os.kill(pid, signal.SIGTERM)
+    except Exception:
+        pass
+    gui = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'main.py')
+    threading.Thread(
+        target=lambda: subprocess.run(
+            ['python3', gui, '--notify', '--daemon'], capture_output=True),
+        daemon=True,
+    ).start()
 
 
 class NotificationsPage(Adw.PreferencesPage):
     def __init__(self):
         super().__init__()
-        self._values_cb = None
+        self._home_cb = None
         self._build_ui()
 
-    def set_values_callback(self, cb, margin_top_pct: int = 10, width_pct: int = 23):
-        self._margin_scale.set_value(margin_top_pct)
-        self._width_scale.set_value(width_pct)
-        self._values_cb = cb
+    def set_home_callback(self, cb):
+        self._home_cb = cb
 
     # ── UI ───────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
+        self.add(self._build_back_group())
+
         group = Adw.PreferencesGroup(
-            title='Control Center',
-            description='Position and size of the notification center, relative to the focused monitor.',
+            title='Notification Daemon',
+            description='Vutureland handles notifications natively. '
+                        'Position and appearance are configured on the OSD page.',
         )
 
-        self._margin_scale = self._add_slider_row(group, 'Top margin (%)', 0, 50, 10)
-        self._width_scale  = self._add_slider_row(group, 'Width (%)',      10, 70, 23)
+        restart_btn = Gtk.Button(label='Restart Notification Daemon')
+        restart_btn.add_css_class('pill')
+        restart_btn.set_halign(Gtk.Align.CENTER)
+        restart_btn.connect('clicked', lambda _: _restart_notify())
+
+        row = Adw.PreferencesRow()
+        row.set_activatable(False)
+        row.add_css_class('flat')
+        row.set_child(restart_btn)
+        group.add(row)
         self.add(group)
 
-        # Apply
-        apply_group = Adw.PreferencesGroup()
-        apply_btn = Gtk.Button(label='Apply & Restart swaync')
-        apply_btn.add_css_class('suggested-action')
-        apply_btn.add_css_class('pill')
-        apply_btn.set_halign(Gtk.Align.CENTER)
-        apply_btn.connect('clicked', self._on_apply)
-        apply_group.add(apply_btn)
-        self.add(apply_group)
+    def _build_back_group(self) -> Adw.PreferencesGroup:
+        img = Gtk.Image.new_from_icon_name('go-up-symbolic')
+        img.set_halign(Gtk.Align.CENTER)
+        img.set_hexpand(True)
 
-    def _add_slider_row(self, group, title, lo, hi, default) -> Gtk.Scale:
-        row = Adw.ActionRow(title=title)
-        sc = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, lo, hi, 1)
-        sc.set_size_request(240, -1)
-        sc.set_draw_value(True)
-        sc.set_value_pos(Gtk.PositionType.RIGHT)
-        sc.set_value(default)
-        sc.set_valign(Gtk.Align.CENTER)
-        sc.set_hexpand(True)
-        sc.connect('value-changed', self._on_slider_changed)
-        row.add_suffix(sc)
+        row = Adw.PreferencesRow()
+        row.set_activatable(False)
+        row.add_css_class('back-btn-row')
+        row.set_child(img)
+        gesture = Gtk.GestureClick()
+        gesture.connect('released', lambda g, n, x, y: self._home_cb and self._home_cb())
+        row.add_controller(gesture)
+
+        group = Adw.PreferencesGroup()
+        group.add_css_class('back-btn-group')
         group.add(row)
-        return sc
-
-    # ── Handlers ─────────────────────────────────────────────────────────────
-
-    def _on_slider_changed(self, _):
-        if self._values_cb:
-            self._values_cb(int(self._margin_scale.get_value()),
-                            int(self._width_scale.get_value()))
-
-    def _on_apply(self, _):
-        try:
-            subprocess.Popen(['bash', _launch_swaync_script()], env=_clean_env())
-        except Exception:
-            pass
+        return group

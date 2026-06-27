@@ -17,10 +17,6 @@ def _run_hooks() -> None:
     subprocess.run(['hyprctl', 'reload'], capture_output=True)
     subprocess.Popen(['bash', '-c', 'pywalfox update'],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.Popen(
-        ['bash', '-c',
-         f'killall -q swaync; {VTL}/assets/scripts/launcher.sh --swaync'],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     # Full restart, not SIGUSR2: waybar's palette lives in an @imported
     # colors_gtk.css and SIGUSR2 only reloads the top-level style.css, so a
     # signal would leave the bar with the old colours.

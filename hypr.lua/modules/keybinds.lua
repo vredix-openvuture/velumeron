@@ -8,6 +8,7 @@ local MOD = "SUPER"
 local osd = VTL_DIR .. "/assets/scripts/osd-show.sh"
 
 
+
 -- ── Helpers ──────────────────────────────────────────
 
 local function enter_submap(name)
@@ -40,9 +41,9 @@ end
 -- SUPER — Normale Aktionen
 -- ══════════════════════════════════════════════════════
 
-hl.bind(MOD .. " + T",      hl.dsp.exec_cmd(terminal))
-hl.bind(MOD .. " + W",      hl.dsp.exec_cmd(browser))
-hl.bind(MOD .. " + E",      hl.dsp.exec_cmd(filemanager))
+hl.bind(MOD .. " + T",      hl.dsp.exec_cmd("[float] " .. terminal))
+hl.bind(MOD .. " + W",      hl.dsp.exec_cmd("[float] " .. browser_float))
+hl.bind(MOD .. " + E",      hl.dsp.exec_cmd("[float] " .. filemanager))
 hl.bind(MOD .. " + C",      hl.dsp.window.close())
 hl.bind(MOD .. " + F",      hl.dsp.window.float({ action = "toggle" }))
 hl.bind(MOD .. " + S",      hl.dsp.exec_cmd(notifications))
@@ -117,7 +118,7 @@ hl.bind(MOD .. " + ALT + L", hl.dsp.window.resize({ x =  50, y =   0, relative =
 hl.bind(MOD .. " + CONTROL + L",   hl.dsp.exec_cmd(on_lock))
 hl.bind(MOD .. " + CONTROL + Q",   hl.dsp.exec_cmd(session_menu))
 hl.bind(MOD .. " + CONTROL + C",   hl.dsp.window.kill())
-hl.bind(MOD .. " + CONTROL + P",   hl.dsp.exec_cmd(bitwarden))
+hl.bind(MOD .. " + CONTROL + P",   hl.dsp.exec_cmd("[float] " .. bitwarden))
 hl.bind(MOD .. " + CONTROL + ESCAPE", hl.dsp.exit())
 
 

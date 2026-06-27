@@ -84,7 +84,7 @@ sync_templates() {
     mkdir -p "$VUTURELAND_USER_DIR"
 
     # Drop stale symlinks left over from older versions of this script
-    for _dir in rofi kitty swaync assets hypr.lua waybar-modular; do
+    for _dir in rofi kitty assets hypr.lua waybar-modular; do
         [[ -L "$VUTURELAND_USER_DIR/$_dir" ]] && rm -f "$VUTURELAND_USER_DIR/$_dir"
     done
 
@@ -103,7 +103,7 @@ sync_templates() {
     }
 
     # Sync these subtrees
-    for _dir in kitty rofi swaync hypr.lua waybar-modular; do
+    for _dir in kitty rofi hypr.lua waybar-modular; do
         local src="$VUTURELAND_DIR/$_dir"
         local dst="$VUTURELAND_USER_DIR/$_dir"
         [[ -d "$src" ]] || continue
@@ -189,23 +189,6 @@ sync_templates() {
         rm -f "$_link"
         ln -sf "$_target" "$_link"
     done
-
-    # swaync gets started by its systemd user unit OR via D-Bus activation,
-    # always without our -c / -s arguments, so it reads ~/.config/swaync/style.css.
-    # We can't just symlink our style.css there: GTK4 resolves its
-    # `@import url("../assets/colors_gtk.css")` against the *symlink's* directory
-    # (~/.config/swaync/), not the real file, so the wallust palette import would
-    # silently fail and swaync would fall back to an unthemed look. Instead write
-    # a real style.css with the import rewritten to the absolute palette path.
-    # (config.json is written here by launch-swaync.sh with dynamic margins.)
-    mkdir -p "$HOME/.config/swaync"
-    local _swstyle="$HOME/.config/swaync/style.css"
-    local _swstyle_src="$VUTURELAND_USER_DIR/swaync/style.css"
-    local _sw_colors="$VUTURELAND_USER_DIR/assets/colors_gtk.css"
-    [[ -L "$_swstyle" ]] && rm -f "$_swstyle"
-    if [[ -f "$_swstyle_src" ]]; then
-        sed "s#\.\./assets/colors_gtk\.css#${_sw_colors}#" "$_swstyle_src" > "$_swstyle"
-    fi
 
     # ── Bundled fonts ─────────────────────────────────────────────────
     # The configs rely on specific fonts (FantasqueSansM Nerd Font, Atomic Age,
@@ -538,15 +521,16 @@ if [[ "$SYNC_MODE" == true ]]; then
         "$VUTURELAND_DIR/assets/scripts/launch-waybar.sh" >/dev/null 2>&1 \
             && ok "Waybar restarted"
     fi
-    if pgrep -x swaync >/dev/null 2>&1; then
-        "$VUTURELAND_DIR/assets/scripts/launch-swaync.sh" >/dev/null 2>&1 \
-            && ok "swaync restarted"
-    fi
-    # Settings-panel daemon: easiest to bounce.
+    # Settings panel + notification daemon: bounce both together.
     if pgrep -f "python3.*gui/main.py" >/dev/null 2>&1; then
         "$VUTURELAND_DIR/bin/vutureland" --end  >/dev/null 2>&1 || true
         "$VUTURELAND_DIR/bin/vutureland" --daemon >/dev/null 2>&1 &
         ok "Settings panel restarted"
+    fi
+    if pgrep -f "python3.*notify_daemon" >/dev/null 2>&1; then
+        kill "$(cat /tmp/vutureland-notify.pid 2>/dev/null)" 2>/dev/null || true
+        "$VUTURELAND_DIR/bin/vutureland" --notify --daemon >/dev/null 2>&1 &
+        ok "Notification daemon restarted"
     fi
     # OSD daemon: restart so updated config (position, display modes) takes effect.
     "$VUTURELAND_DIR/assets/scripts/launch-osd.sh" >/dev/null 2>&1 &
@@ -578,7 +562,6 @@ say "Package installation"
 REQUIRED_PKGS=(
     hypridle hyprlock hyprpolkitagent
     waybar rofi-wayland kitty
-    swaync
     awww wallust hypremoji
     playerctl jq socat fastfetch tmux
     network-manager-applet gnome-keyring
@@ -705,7 +688,6 @@ _start_daemon() {
     # Pick the target process name to look for in pgrep
     case "$binary" in
         launch-waybar.sh) target="waybar" ;;
-        launch-swaync.sh) target="swaync" ;;
         launch-*.sh)      target="${binary#launch-}"; target="${target%.sh}" ;;
         *)                target="$binary" ;;
     esac
@@ -746,7 +728,7 @@ _SYSTEM_DAEMONS=(
     "nm-applet"
     "systemctl --user start hyprpolkitagent"
     "gnome-keyring-daemon --start --components=secrets"
-    "$VUTURELAND_DIR/assets/scripts/launch-swaync.sh"
+    "$VUTURELAND_DIR/bin/vutureland --notify --daemon"
     "wl-paste --watch clipvault store"
     "$VUTURELAND_DIR/assets/scripts/float-cascade.sh"
 )

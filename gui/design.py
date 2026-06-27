@@ -112,13 +112,7 @@ def apply_design(design: str) -> None:
                 pass
             break
 
-    # 4. swaync (re-reads active-theme) + hyprland (hyprctl reload re-runs the config)
-    vtl = _vtl()
-    try:
-        subprocess.Popen(['bash', os.path.join(vtl, 'assets', 'scripts', 'launch-swaync.sh')],
-                         env=_clean_env())
-    except Exception:
-        pass
+    # 4. hyprland (hyprctl reload re-runs the config)
     try:
         subprocess.Popen(['hyprctl', 'reload'], env=_clean_env())
     except Exception:

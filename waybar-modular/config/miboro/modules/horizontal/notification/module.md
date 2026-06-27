@@ -1,5 +1,5 @@
 name = "custom/notification"
-description = "Notifications (SwayNC)"
+description = "Notifications (Vutureland)"
 alias = "Notifications"
-requires = "swaync"
+requires = ""
 system-specific = false

@@ -1,22 +1,8 @@
 {
   "custom/notification": {
-    "tooltip": true,
-    "format": "{icon} ",
-    "return-type": "json",
-    "exec-if": "which swaync-client",
-    "exec": "swaync-client -swb",
-    "on-click": "swaync-client -t -sw",
-    "on-click-right": "swaync-client -d -sw",
-    "escape": true,
-    "format-icons": {
-      "notification": "󱅫",
-      "none": "󰂜",
-      "dnd-notification": "󰂠",
-      "dnd-none": "󰪓",
-      "inhibited-notification": "󰂛",
-      "inhibited-none": "󰪑",
-      "dnd-inhibited-notification": "󰂛",
-      "dnd-inhibited-none": "󰪑"
-    }
+    "tooltip": false,
+    "format": "󰂜 ",
+    "on-click": "$VUTURELAND_DIR/bin/vutureland --panel-toggle",
+    "escape": true
   }
 }

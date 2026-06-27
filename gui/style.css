@@ -365,14 +365,17 @@ window.background {
    ─────────────────────────────────────────────────────────────── */
 
 .nav-sidebar {
-    /* Normal window background with ~10% of the accent mixed in, so the sidebar
-       lifts off the content area subtly instead of using a heavy colour block. */
-    background-color: mix(@bg-primary, @bg-active, 0.10);
+    background-color: @bg-primary;
     min-width:        56px;
     padding-top:      12px;
     padding-bottom:   12px;
     padding-left:     8px;
     padding-right:    8px;
+    transition:       background-color 150ms ease;
+}
+
+.nav-sidebar:hover {
+    background-color: mix(@bg-primary, @bg-active, 0.10);
 }
 
 
@@ -477,6 +480,40 @@ preferencespage > .boxed-list-separate row,
 preferencespage list.boxed-list > row,
 preferencespage list.boxed-list {
     background-color: @bg-element;
+}
+
+/* Back-button group: no card background, border, or shadow */
+.back-btn-group list.boxed-list,
+.back-btn-group list.boxed-list > row {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+/* Back-button row: full-width click target, subtle hover only */
+.back-btn-row:hover {
+    background: alpha(@window_fg_color, 0.06);
+}
+.back-btn-row:focus {
+    box-shadow: none;
+    outline: none;
+}
+
+/* Empty notifications state */
+.notify-empty-row {
+    min-height: 220px;
+}
+.notify-empty-label {
+    font-size: 1.15em;
+}
+
+/* App-stack notification badge */
+.notify-badge {
+    background: alpha(@accent_bg_color, 0.25);
+    border-radius: 99px;
+    padding: 1px 8px;
+    font-size: 0.78em;
+    font-weight: bold;
 }
 
 /* Adwaita's Adw.Clamp inside PreferencesPage enforces a min-width that
@@ -631,4 +668,53 @@ columnview.ufw-cv listview row:hover {
 .ufw-cell-empty {
     color:   @fg-muted;
     opacity: 0.45;
+}
+
+
+/* ───────────────────────────────────────────────────────────────
+   MEDIA PLAYER CARD
+   ─────────────────────────────────────────────────────────────── */
+
+.player-card {
+    border-radius:    12px;
+    min-height:       80px;
+    max-height:       80px;
+    background-color: @bg-element;
+}
+
+.player-scrim {
+    background: linear-gradient(
+        to right,
+        alpha(#000000, 0.70) 0%,
+        alpha(#000000, 0.45) 60%,
+        alpha(#000000, 0.25) 100%
+    );
+}
+
+.player-title {
+    font-size:   1.05em;
+    font-weight: bold;
+    color:       #ffffff;
+}
+
+.player-artist {
+    font-size: 0.88em;
+    color:     alpha(#ffffff, 0.75);
+}
+
+.player-btn {
+    background: alpha(#ffffff, 0.12);
+    color:      #ffffff;
+    min-width:  36px;
+    min-height: 36px;
+    padding:    4px;
+    transition: background 120ms ease;
+}
+
+.player-btn:hover {
+    background: alpha(#ffffff, 0.22);
+}
+
+.player-btn:active {
+    background: alpha(#ffffff, 0.30);
 }

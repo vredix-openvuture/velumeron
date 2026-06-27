@@ -1,0 +1,38 @@
+# Shared singletons
+singleton Colors    1.0 Colors.qml
+singleton VtlConfig 1.0 VtlConfig.qml
+singleton UiState   1.0 UiState.qml
+
+# Bar (dynamic, multi-edge)
+Bar               1.0 bar/Bar.qml
+EdgeExclusiveZone 1.0 bar/EdgeExclusiveZone.qml
+
+# Bar modules
+BarSeparator    1.0 bar/modules/BarSeparator.qml
+Clock           1.0 bar/modules/Clock.qml
+Workspaces      1.0 bar/modules/Workspaces.qml
+Submap          1.0 bar/modules/Submap.qml
+Volume          1.0 bar/modules/Volume.qml
+Battery         1.0 bar/modules/Battery.qml
+Mpris           1.0 bar/modules/Mpris.qml
+Performance     1.0 bar/modules/Performance.qml
+SessionMenu     1.0 bar/modules/SessionMenu.qml
+UserWidget      1.0 bar/modules/UserWidget.qml
+NotifTray       1.0 bar/modules/NotifTray.qml
+VutureIcon      1.0 bar/modules/VutureIcon.qml
+Temperature     1.0 bar/modules/Temperature.qml
+Network         1.0 bar/modules/Network.qml
+Bluetooth       1.0 bar/modules/Bluetooth.qml
+VPN             1.0 bar/modules/VPN.qml
+Tray            1.0 bar/modules/Tray.qml
+NotifButton     1.0 bar/modules/NotifButton.qml
+
+# Settings menu (the corner dropdown) + its pages
+Settings             1.0 settings/Settings.qml
+GuiPanel             1.0 settings/GuiPanel.qml
+BarSection           1.0 settings/bar/BarSection.qml
+AppearanceSection    1.0 settings/theme/AppearanceSection.qml
+WallpaperSection     1.0 settings/theme/WallpaperSection.qml
+ThemeSettingsSection 1.0 settings/theme/ThemeSettingsSection.qml
+BarPage              1.0 settings/submenu-bar/BarPage.qml
+BarZone              1.0 settings/submenu-bar/BarZone.qml

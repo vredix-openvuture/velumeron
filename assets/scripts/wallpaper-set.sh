@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# wallpaper-set.sh [--no-showcase] (--set SET_ID | [--hor FILE] [--ver FILE])
+# wallpaper-set.sh [--no-showcase] [--no-waybar] (--set SET_ID | [--hor FILE] [--ver FILE])
+#   --no-waybar : don't kill/launch/signal waybar (use when quickshell is the active bar)
 source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh"
 
 showcase=true
+no_waybar=false
 set_id=""
 hor_file=""
 ver_file=""
@@ -13,6 +15,7 @@ SETS_JSON="$VUTURELAND_USER_DIR/assets/sets.json"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --no-showcase) showcase=false; shift ;;
+        --no-waybar)   no_waybar=true; shift ;;
         --set)         set_id="$2"; shift 2 ;;
         --hor)         hor_file="$2"; shift 2 ;;
         --ver)         ver_file="$2"; shift 2 ;;
@@ -72,7 +75,7 @@ if [[ "$showcase" == "true" ]]; then
     done
 fi
 
-killall waybar 2>/dev/null || true
+[[ "$no_waybar" == true ]] || killall waybar 2>/dev/null || true
 pkill -f mpvpaper 2>/dev/null || true
 
 # ── Apply wallpaper per monitor ───────────────────────────────────────────
@@ -120,8 +123,7 @@ done < <(hyprctl monitors -j | jq -r '.[] | "\(.name);\(.transform);\(.width);\(
 _run_wallust_hooks() {
     "$VUTURELAND_DIR/assets/scripts/wallust/hyprland_lua-colors.sh" && hyprctl reload
     pywalfox update &>/dev/null &
-    "$VUTURELAND_DIR/assets/scripts/launch-swaync.sh" &
-    { sleep 0.8 && pkill -SIGUSR2 waybar; } &
+    [[ "$no_waybar" == true ]] || { sleep 0.8 && pkill -SIGUSR2 waybar; } &
 }
 
 _color_mode=$(cat "$VUTURELAND_USER_DIR/wallust/color-mode" 2>/dev/null || echo "auto")
@@ -146,13 +148,13 @@ elif [[ "$_color_mode" == fixed:* ]]; then
 fi
 
 # ── Restore workspaces ────────────────────────────────────────────────────
-if [[ "$showcase" != "true" ]]; then
+if [[ "$showcase" != "true" && "$no_waybar" != "true" ]]; then
     "$VUTURELAND_DIR/assets/scripts/launch-waybar.sh" &
 fi
 
 if [[ "$showcase" == "true" ]]; then
     sleep 2
-    "$VUTURELAND_DIR/assets/scripts/launch-waybar.sh"
+    [[ "$no_waybar" == "true" ]] || "$VUTURELAND_DIR/assets/scripts/launch-waybar.sh"
     i=0
     for mon in "${monitors[@]}"; do
         hyprctl dispatch "hl.dsp.focus({monitor=\"${mon}\"})"

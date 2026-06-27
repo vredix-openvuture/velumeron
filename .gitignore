@@ -18,6 +18,7 @@ gui/settings.json
 
 # Editor / IDE
 .vscode/
+.claude/
 
 # Image editor backups
 assets/icons/.*.png
@@ -28,9 +29,8 @@ waybar-modular/output/
 # Node modules (panel)
 panel/node_modules/
 
-# Wallpapers (43 MB – keep local, store separately if needed)
-# Uncomment to exclude:
-# assets/wallpaper/
+# Wallpapers — kept local only, never in git (large, per-user content)
+assets/wallpaper/
 
 # Logs and cache
 **/*.log
@@ -41,3 +41,7 @@ gui/pages/__pycache__/
 
 # Wallpaper sets are per-client now (stored in ~/.config/vutureland/assets/sets.json)
 assets/wallpaper/sets.json
+
+# Archive
+.archive/
+

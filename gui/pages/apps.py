@@ -43,6 +43,7 @@ _ROLE_APPS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ('messenger',    'Messenger',      'user-available-symbolic', [
         ('telegram-desktop', 'Telegram'),
         ('element-desktop',  'Element'),
+        ('cinny',            'Cinny'),
         ('discord',          'Discord'),
         ('signal-desktop',   'Signal'),
         ('slack',            'Slack'),
@@ -131,7 +132,7 @@ _SYS_CMDS: list[tuple[str, str, str, str]] = [
     ('night_light',    'Night Light',         'night-light-symbolic',
      'Command to toggle night light / colour temperature adjustment'),
     ('dnd_toggle',     'Do Not Disturb',      'notifications-disabled-symbolic',
-     'Command to toggle DND (default: swaync-client --toggle-dnd)'),
+     'Command to toggle Do Not Disturb'),
 ]
 
 _BROWSER_DESKTOP = {
@@ -264,6 +265,15 @@ class AppsPage(Gtk.Box):
         data       = {**self._periph, **self._roleapps}
         stored     = data.get(key, '')
         stored_bin = stored.split()[0] if stored else ''
+
+        # If nothing stored yet but a candidate is installed, pre-seed with the
+        # first installed binary so the combo's visible selection matches what
+        # Apply will actually write (otherwise Apply would write an empty string).
+        if not stored_bin and binaries and binaries[0]:
+            stored     = binaries[0]
+            stored_bin = binaries[0]
+            self._store(key, stored)
+
         cur_idx    = binaries.index(stored_bin) if stored_bin in binaries else 0
 
         prefix_img = _make_icon(binaries[cur_idx], fallback_icon)
@@ -341,6 +351,8 @@ class AppsPage(Gtk.Box):
             self._roleapps[key] = value
         else:
             self._periph[key] = value
+        if key == 'browser':
+            self._periph['browser_float'] = (value + ' --class=browser-float') if value else ''
 
     # ── Apply ─────────────────────────────────────────────────────────────────
 

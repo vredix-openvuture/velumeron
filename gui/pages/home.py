@@ -6,11 +6,12 @@ gi.require_version('GdkPixbuf', '2.0')
 
 from gi.repository import Gtk, Adw, GLib, Gdk, GdkPixbuf
 
-import os, re, subprocess, threading, shutil, json
+import os, re, subprocess, threading, shutil, json, time
 
 from models.waybar import active_bar_for_monitor
 from constants import POWERMODE_SH
 from design import list_designs, current_design, apply_design
+from panel_player import PlayerWidget
 
 
 def _clean_env() -> dict:
@@ -38,10 +39,23 @@ def _user_dir() -> str:
         'vutureland')
 
 
+def _notify_history_file() -> str:
+    return os.path.join(_user_dir(), 'gui', 'notify-history.json')
+
+
+def _rel_time(ts: float) -> str:
+    diff = time.time() - ts
+    if diff < 60:    return 'gerade eben'
+    if diff < 3600:  return f'vor {int(diff // 60)} Min.'
+    if diff < 86400: return f'vor {int(diff // 3600)} Std.'
+    return f'vor {int(diff // 86400)} T.'
+
+
 class HomePage(Gtk.Box):
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
-        self._apply_cb = None
+        self._apply_cb  = None
+        self._notify_cb = None
         self._updating_power = False
         # Stack so Network/Bluetooth open as in-panel subpages (a separate window
         # can't be used under the layer-shell panel).
@@ -54,10 +68,56 @@ class HomePage(Gtk.Box):
         # Refresh the active-style label + wallpaper preview every time the page
         # is shown, so it tracks live theme/wallpaper changes.
         self.connect('map', lambda _w: (self._refresh_current(),
-                                        self._load_power_profile()) and False)
+                                        self._load_power_profile(),
+                                        self._refresh_notify()) and False)
 
     def set_apply_callback(self, cb):
         self._apply_cb = cb
+
+    def set_notify_callback(self, cb):
+        self._notify_cb = cb
+
+    # ── Notification panel ───────────────────────────────────────────────────────
+
+    def _build_notify_group(self) -> Adw.PreferencesGroup:
+        grp = Adw.PreferencesGroup()
+        self._notify_row = Adw.ActionRow(
+            title='Keine Benachrichtigungen',
+            icon_name='notification-new-symbolic',
+        )
+        self._notify_row.set_activatable(True)
+        self._notify_row.add_suffix(
+            Gtk.Image.new_from_icon_name('go-next-symbolic'))
+        self._notify_row.connect('activated',
+                                 lambda _r: self._notify_cb and self._notify_cb())
+        grp.add(self._notify_row)
+        return grp
+
+    def _refresh_notify(self):
+        row = getattr(self, '_notify_row', None)
+        if row is None:
+            return False
+        try:
+            with open(_notify_history_file()) as f:
+                history = json.load(f)
+        except Exception:
+            history = []
+
+        if not history:
+            row.set_title('Keine Benachrichtigungen')
+            row.set_subtitle('')
+            return False
+
+        entry   = history[0]
+        summary = entry.get('summary', '') or '(kein Titel)'
+        app     = entry.get('app_name', '') or ''
+        ts      = float(entry.get('timestamp', 0))
+        body    = re.sub(r'<[^>]+>', '', entry.get('body', '') or '')
+
+        row.set_title(summary)
+        sub_parts = [p for p in (app, _rel_time(ts) if ts else '', body) if p]
+        row.set_subtitle(' · '.join(sub_parts[:2]))
+        return False
 
     # ── Current look (waybar style + wallpaper preview) ─────────────────────────
 
@@ -260,9 +320,7 @@ class HomePage(Gtk.Box):
         except Exception:
             return 'balanced'
 
-    def _build_power_group(self) -> Adw.PreferencesGroup:
-        grp = Adw.PreferencesGroup(title='Power Mode')
-
+    def _build_power_row(self) -> Adw.PreferencesRow:
         btn_box = Gtk.Box(spacing=0, margin_top=4, margin_bottom=8,
                           margin_start=8, margin_end=8)
         btn_box.add_css_class('linked')
@@ -284,8 +342,7 @@ class HomePage(Gtk.Box):
         row = Adw.PreferencesRow()
         row.set_activatable(False)
         row.set_child(btn_box)
-        grp.add(row)
-        return grp
+        return row
 
     def _load_power_profile(self):
         def _work():
@@ -329,8 +386,11 @@ class HomePage(Gtk.Box):
         # ── Current look: active waybar style + wallpaper preview ──
         page.add(self._build_current_group())
 
-        # Connectivity group
-        conn = Adw.PreferencesGroup(title='Connectivity')
+        # ── Latest notification ──
+        page.add(self._build_notify_group())
+
+        # Connectivity + power mode (merged, no heading)
+        conn = Adw.PreferencesGroup()
 
         # Network row
         self._net_row = Adw.ActionRow(
@@ -362,14 +422,12 @@ class HomePage(Gtk.Box):
         bt_btn.connect('clicked', lambda _: self._open_bluetooth_page())
         self._bt_row.add_suffix(bt_btn)
         conn.add(self._bt_row)
+        conn.add(self._build_power_row())
         page.add(conn)
-
-        # Power mode group (moved here from the Lock Screen page)
-        page.add(self._build_power_group())
 
         # Session group — a wrapping FlowBox so the buttons reflow to fewer
         # columns as the panel narrows (instead of pinning a wide minimum width).
-        session = Adw.PreferencesGroup(title='Session')
+        session = Adw.PreferencesGroup()
         grid_row = Adw.PreferencesRow()
         grid_row.set_activatable(False)
         grid = Gtk.FlowBox()
@@ -404,6 +462,8 @@ class HomePage(Gtk.Box):
         grid_row.set_child(grid)
         session.add(grid_row)
         page.add(session)
+
+        page.add(PlayerWidget())
         return page
 
     # ── Status polling ───────────────────────────────────────────────────────

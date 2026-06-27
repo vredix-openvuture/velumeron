@@ -13,18 +13,6 @@ hl.layer_rule({
     xray         = true,
 })
 
--- SwayNC notification center
-hl.layer_rule({
-    name         = "swaync",
-    match        = { namespace = "(.*swaync-control-center.*)" },
-    blur         = true,
-    blur_popups  = true,
-    ignore_alpha = 0.1,
-    animation    = "slidefade bottom 80%",
-    xray         = true,
-    dim_around   = true, 
-})
-
 -- Rofi
 hl.layer_rule({
     name         = "rofi",
@@ -71,6 +59,19 @@ hl.layer_rule({
     xray         = true,
     dim_around   = true,
 })
+
+-- Quickshell
+hl.layer_rule({
+    name         = "quickshell",
+    match        = { namespace = "(.*quickshell*)" },
+    blur         = true,
+    blur_popups  = true,
+    ignore_alpha = 0.1,
+    no_anim      = true,
+    xray         = true,
+})
+
+
 
 
 

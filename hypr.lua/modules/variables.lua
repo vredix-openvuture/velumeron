@@ -7,8 +7,8 @@
 -- (kitty.conf, rofi *.rasi) live in the user dir (VTL_USER_DIR), which
 -- welcome_to_vutureland.sh seeds from the package on first run.
 
-desktop_shell  = VTL_DIR      .. "/assets/scripts/launch-waybar.sh"
-notify_service = "swaync"
+desktop_shell  = VTL_DIR      .. "/assets/scripts/launch-shell.sh"
+notify_service = "vutureland-notify"
 clipboard      = VTL_USER_DIR .. "/rofi/assets/clipvault.sh"
 
 launcher       = "rofi -show drun -config "      .. VTL_USER_DIR .. "/rofi/launcher.rasi"
@@ -16,8 +16,9 @@ window_switch  = "rofi -show window -config "    .. VTL_USER_DIR .. "/rofi/windo
 theme_switch   = "rofi -show wallpaper -config " .. VTL_USER_DIR .. "/rofi/wallpaper-switcher.rasi"
 terminal       = terminal      or ("kitty -c "   .. VTL_USER_DIR .. "/kitty/kitty.conf")
 browser        = browser       or "librewolf"
+browser_float  = browser_float or (browser .. " --class=browser-float")
 filemanager    = filemanager   or "thunar"
-notifications  = "swaync-client -R -rs -t"
+notifications  = VTL_DIR .. "/bin/vutureland --panel-toggle"
 screenshot_cmd = "hyprshot -z --mode region --output-folder ~/Bilder/Screenshots"
 screen_record  = screen_record or ""
 bitwarden      = bitwarden     or "bitwarden"
@@ -28,14 +29,27 @@ session_menu   = VTL_USER_DIR .. "/rofi/assets/session-menu.sh"
 
 
 -- ── Role-based app variables — set per device in user_settings.lua ─────────
-messenger      = messenger     or ""
-player         = player        or ""
-notes_app      = notes_app     or ""
-clock_app      = clock_app     or ""
-mail_app       = mail_app      or ""
-calendar_app   = calendar_app  or ""
-tasks_app      = tasks_app     or ""
-editor_app     = editor_app    or ""
+-- Fallback: auto-detect the first installed candidate so keybinds work
+-- on fresh client installs without needing the GUI "Apply & Reload" step.
+local function _first_of(...)
+    for _, cmd in ipairs({...}) do
+        local h = io.popen("command -v " .. cmd .. " 2>/dev/null")
+        if h then
+            local r = h:read("*l"); h:close()
+            if r and r ~= "" then return cmd end
+        end
+    end
+    return ""
+end
+
+messenger      = messenger     or _first_of("telegram-desktop", "element-desktop", "cinny", "discord", "signal-desktop", "slack")
+player         = player        or _first_of("strawberry", "rhythmbox", "lollypop", "clementine", "elisa", "spotify", "audacious", "deadbeef", "musikcube", "vlc")
+notes_app      = notes_app     or _first_of("obsidian", "logseq", "joplin", "cherrytree", "zettlr", "rnote")
+clock_app      = clock_app     or _first_of("gnome-clocks", "kclock")
+mail_app       = mail_app      or _first_of("betterbird", "thunderbird", "evolution", "geary", "neomutt", "aerc")
+calendar_app   = calendar_app  or _first_of("gnome-calendar", "korganizer", "calcurse")
+tasks_app      = tasks_app     or _first_of("planify", "gnome-todo", "endeavour", "korganizer")
+editor_app     = editor_app    or _first_of("neovide", "codium", "code", "zeditor", "kate", "gedit", "mousepad", "featherpad", "gnome-text-editor")
 
 -- ── System-action variables — set per device in user_settings.lua ──────────
 wifi_menu      = wifi_menu      or ""
@@ -44,7 +58,7 @@ vpn_toggle     = vpn_toggle     or ""
 audio_switch   = audio_switch   or ""
 mic_mute       = mic_mute       or "pactl set-source-mute @DEFAULT_SOURCE@ toggle"
 night_light    = night_light    or ""
-dnd_toggle     = dnd_toggle     or "swaync-client --toggle-dnd"
+dnd_toggle     = dnd_toggle     or ""
 
 
 -- ── Fallback defaults for device-specific globals ──────────────────────

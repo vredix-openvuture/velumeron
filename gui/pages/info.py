@@ -4,7 +4,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 
 from gi.repository import Gtk, Adw, GLib
-import os, re, subprocess, platform
+import os, re, stat, subprocess, platform
 
 from constants import VTL, VTL_USER
 
@@ -120,6 +120,32 @@ def _os_name() -> str:
     return platform.system()
 
 
+def _pid_file_alive(path: str) -> bool:
+    try:
+        pid = int(open(path).read().strip())
+        os.kill(pid, 0)
+        return True
+    except Exception:
+        return False
+
+
+def _osd_alive() -> bool:
+    runtime = os.environ.get('XDG_RUNTIME_DIR', '/tmp')
+    fifo = os.path.join(runtime, 'vutureland-osd.fifo')
+    try:
+        return os.path.exists(fifo) and stat.S_ISFIFO(os.stat(fifo).st_mode)
+    except Exception:
+        return False
+
+
+# (display_name, alive_checker)
+_DAEMON_DEFS: list[tuple[str, object]] = [
+    ('Settings Panel',      lambda: _pid_file_alive('/tmp/vutureland-settings.pid')),
+    ('OSD',                 _osd_alive),
+    ('Notification Daemon', lambda: _pid_file_alive('/tmp/vutureland-notify.pid')),
+]
+
+
 def _wm_version() -> str:
     out = _run('hyprctl', 'version')
     for line in out.splitlines():
@@ -131,10 +157,65 @@ def _wm_version() -> str:
 
 # ── InfoPage ──────────────────────────────────────────────────────────────────
 
+def _vtl_resources() -> str:
+    """Sum RSS and CPU% of the actual vutureland GUI daemons only.
+
+    Uses PID files / FIFO rather than pgrep so that terminals or scripts that
+    merely reference a vutureland config path are not counted.
+    """
+    try:
+        runtime = os.environ.get('XDG_RUNTIME_DIR', '/tmp')
+        pid_sources = [
+            '/tmp/vutureland-settings.pid',
+            '/tmp/vutureland-notify.pid',
+        ]
+        pids: list[str] = []
+        for path in pid_sources:
+            try:
+                pid = int(open(path).read().strip())
+                os.kill(pid, 0)   # check alive
+                pids.append(str(pid))
+            except Exception:
+                pass
+
+        # OSD has no PID file — find via its FIFO owner
+        fifo = os.path.join(runtime, 'vutureland-osd.fifo')
+        if os.path.exists(fifo):
+            r = subprocess.run(['fuser', fifo], capture_output=True, text=True)
+            for p in r.stdout.split():
+                p = p.strip()
+                if p.isdigit():
+                    pids.append(p)
+
+        if not pids:
+            return '—'
+
+        total_rss_kb = 0
+        for pid in pids:
+            try:
+                with open(f'/proc/{pid}/status') as f:
+                    for line in f:
+                        if line.startswith('VmRSS:'):
+                            total_rss_kb += int(line.split()[1])
+                            break
+            except Exception:
+                pass
+
+        r2 = subprocess.run(
+            ['ps', '-p', ','.join(pids), '-o', 'pcpu', '--no-headers'],
+            capture_output=True, text=True)
+        total_cpu = sum(float(v) for v in r2.stdout.splitlines() if v.strip())
+
+        return f'{total_rss_kb / 1024:.0f} MiB  ·  CPU {total_cpu:.1f} %'
+    except Exception:
+        return '—'
+
+
 class InfoPage(Gtk.Box):
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self._stat_labels: dict[str, Gtk.Label] = {}
+        self._daemon_dots: dict[str, Gtk.Label] = {}
         self._build_ui()
         self._refresh_stats()
         GLib.timeout_add_seconds(5, self._refresh_stats)
@@ -166,6 +247,33 @@ class InfoPage(Gtk.Box):
             vtl_group.add(row)
 
         page.add(vtl_group)
+
+        # ── Daemons ───────────────────────────────────────────────────────────
+        daemon_group = Adw.PreferencesGroup(
+            title='Daemons',
+            description='Vutureland background processes. Refreshes every 5 seconds.')
+
+        # combined resource row
+        res_row = Adw.ActionRow(title='Combined usage')
+        res_lbl = Gtk.Label(label='—')
+        res_lbl.add_css_class('dim-label')
+        res_lbl.set_selectable(True)
+        res_row.add_suffix(res_lbl)
+        daemon_group.add(res_row)
+        self._stat_labels['vtl_res'] = res_lbl
+
+        # one row per daemon
+        for name, _checker in _DAEMON_DEFS:
+            row = Adw.ActionRow(title=name)
+            dot = Gtk.Label()
+            dot.set_use_markup(True)
+            dot.set_valign(Gtk.Align.CENTER)
+            dot.set_margin_end(2)
+            row.add_suffix(dot)
+            daemon_group.add(row)
+            self._daemon_dots[name] = dot
+
+        page.add(daemon_group)
 
         # ── System Stats ─────────────────────────────────────────────────────
         stats_group = Adw.PreferencesGroup(
@@ -203,4 +311,17 @@ class InfoPage(Gtk.Box):
         self._stat_labels['uptime'].set_label(_uptime())
         self._stat_labels['ram'].set_label(_ram_info())
         self._stat_labels['disk'].set_label(_disk_usage())
+
+        # daemon dots
+        for name, checker in _DAEMON_DEFS:
+            dot = self._daemon_dots.get(name)
+            if dot is None:
+                continue
+            alive = checker()
+            color = '#57e389' if alive else '#e01b24'
+            dot.set_markup(f'<span foreground="{color}">●</span>')
+
+        # combined vutureland resource usage
+        self._stat_labels['vtl_res'].set_label(_vtl_resources())
+
         return True  # keep the timeout alive

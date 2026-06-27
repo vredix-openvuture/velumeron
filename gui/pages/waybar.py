@@ -768,14 +768,7 @@ class WaybarPage(Gtk.Box):
                 except Exception:
                     pass
                 break
-        # swaync (re-reads active-theme) + hyprland (hyprctl reload re-runs the config)
-        vtl = os.environ.get('VUTURELAND_DIR') or os.path.realpath(
-            os.path.join(os.path.dirname(__file__), '..', '..'))
-        try:
-            subprocess.Popen(['bash', os.path.join(vtl, 'assets', 'scripts', 'launch-swaync.sh')],
-                             env=_clean_env())
-        except Exception:
-            pass
+        # hyprland (hyprctl reload re-runs the config)
         try:
             subprocess.Popen(['hyprctl', 'reload'], env=_clean_env())
         except Exception:

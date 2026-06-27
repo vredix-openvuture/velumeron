@@ -136,8 +136,9 @@ _GROUPS: list[tuple[str | None, list[tuple[str, list[tuple[str, str]]]]]] = [
 
 # ── Widget builders ───────────────────────────────────────────────────────────
 
-def _build_block(title: str, binds: list[tuple[str, str]]) -> Gtk.Box:
-    """One block = heading + boxed-list with one row per keybind."""
+def _build_block(
+    title: str, binds: list[tuple[str, str]]
+) -> tuple[Gtk.Box, list[tuple[str, str, Gtk.ListBoxRow]]]:
     vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
     vbox.set_margin_top(8)
     vbox.set_margin_bottom(4)
@@ -151,6 +152,7 @@ def _build_block(title: str, binds: list[tuple[str, str]]) -> Gtk.Box:
     listbox.set_selection_mode(Gtk.SelectionMode.NONE)
     listbox.add_css_class('boxed-list')
 
+    rows_data: list[tuple[str, str, Gtk.ListBoxRow]] = []
     for key, desc in binds:
         row = Gtk.ListBoxRow()
         row.set_activatable(False)
@@ -176,9 +178,10 @@ def _build_block(title: str, binds: list[tuple[str, str]]) -> Gtk.Box:
         box.append(desc_lbl)
         row.set_child(box)
         listbox.append(row)
+        rows_data.append((key.lower(), desc.lower(), row))
 
     vbox.append(listbox)
-    return vbox
+    return vbox, rows_data
 
 
 _SUBMAP_TITLES = {
@@ -187,8 +190,13 @@ _SUBMAP_TITLES = {
     'system': 'System Submap',
 }
 
+# all_rows entry: (key_lower, desc_lower, row, block_vbox, group_container)
+_RowEntry = tuple[str, str, Gtk.ListBoxRow, Gtk.Box, Gtk.Box]
 
-def _build_content(submap: str | None = None) -> Gtk.Widget:
+
+def _build_content(
+    submap: str | None = None,
+) -> tuple[Gtk.Widget, list[_RowEntry]]:
     root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
     root.set_margin_top(20)
     root.set_margin_bottom(24)
@@ -201,8 +209,7 @@ def _build_content(submap: str | None = None) -> Gtk.Widget:
     title_lbl.set_margin_bottom(4)
     root.append(title_lbl)
 
-    hint_txt = 'c or click outside to close'
-    hint = Gtk.Label(label=hint_txt)
+    hint = Gtk.Label(label='c or click outside to close  ·  ? to search')
     hint.add_css_class('dim-label')
     hint.add_css_class('caption')
     hint.set_margin_bottom(16)
@@ -211,19 +218,25 @@ def _build_content(submap: str | None = None) -> Gtk.Widget:
     groups = [(tag, blocks) for tag, blocks in _GROUPS if tag == submap] \
              if submap else list(_GROUPS)
 
-    first_group = True
-    for _tag, blocks in groups:
-        if not first_group:
+    all_rows: list[_RowEntry] = []
+    for group_idx, (_tag, blocks) in enumerate(groups):
+        group_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        if group_idx > 0:
             sep = Gtk.Separator()
             sep.set_margin_top(12)
             sep.set_margin_bottom(4)
-            root.append(sep)
-        first_group = False
+            group_container.append(sep)
 
         for title_txt, binds in blocks:
-            root.append(_build_block(title_txt, binds))
+            block_vbox, rows_data = _build_block(title_txt, binds)
+            group_container.append(block_vbox)
+            for k, d, r in rows_data:
+                all_rows.append((k, d, r, block_vbox, group_container))
 
-    return root
+        root.append(group_container)
+
+    return root, all_rows
 
 
 # ── Application ───────────────────────────────────────────────────────────────
@@ -244,7 +257,6 @@ class KeybindHelpApp(Adw.Application):
         Gtk.StyleContext.add_provider_for_display(
             display, provider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
 
-        # Extra CSS: card background matches the GUI's dark window colour
         extra = Gtk.CssProvider()
         extra.load_from_string(
             '.keybind-card { background-color: @window_bg_color;'
@@ -257,7 +269,6 @@ class KeybindHelpApp(Adw.Application):
         win.set_title('Keybind Help')
         win.set_decorated(False)
 
-        # Transparent click-catcher (fullscreen background → close on click)
         click_bg = Gtk.Box()
         click_bg.set_hexpand(True)
         click_bg.set_vexpand(True)
@@ -268,29 +279,77 @@ class KeybindHelpApp(Adw.Application):
 
         submap = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else None
 
-        # Scrollable content card — fixed width, auto height up to screen limit
+        content_widget, all_rows = _build_content(submap)
+
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroll.set_size_request(480, -1)
-        scroll.set_max_content_height(920)
+        scroll.set_max_content_height(860)
         scroll.set_propagate_natural_height(True)
         scroll.set_propagate_natural_width(False)
-        scroll.set_child(_build_content(submap))
-        scroll.add_css_class('keybind-card')
-        scroll.set_halign(Gtk.Align.CENTER)
-        scroll.set_valign(Gtk.Align.CENTER)
-        scroll.set_hexpand(False)
-        scroll.set_vexpand(False)
+        scroll.set_child(content_widget)
+
+        search_entry = Gtk.SearchEntry()
+        search_entry.set_placeholder_text('Search keybinds…')
+        search_entry.set_margin_start(16)
+        search_entry.set_margin_end(16)
+        search_entry.set_margin_top(10)
+        search_entry.set_margin_bottom(8)
+
+        search_revealer = Gtk.Revealer()
+        search_revealer.set_child(search_entry)
+        search_revealer.set_reveal_child(False)
+        search_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        search_revealer.set_transition_duration(150)
+
+        card_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        card_box.add_css_class('keybind-card')
+        card_box.set_halign(Gtk.Align.CENTER)
+        card_box.set_valign(Gtk.Align.CENTER)
+        card_box.set_hexpand(False)
+        card_box.set_vexpand(False)
+        card_box.append(search_revealer)
+        card_box.append(scroll)
 
         overlay = Gtk.Overlay()
         overlay.set_child(click_bg)
-        overlay.add_overlay(scroll)
+        overlay.add_overlay(card_box)
         win.set_child(overlay)
 
+        def _filter(text: str) -> None:
+            q = text.strip().lower()
+            block_match: dict[Gtk.Box, bool] = {}
+            group_match: dict[Gtk.Box, bool] = {}
+            for k, d, row, bv, gc in all_rows:
+                m = not q or q in k or q in d
+                row.set_visible(m)
+                block_match[bv] = block_match.get(bv, False) or m
+                group_match[gc] = group_match.get(gc, False) or m
+            for bv, vis in block_match.items():
+                bv.set_visible(vis)
+            for gc, vis in group_match.items():
+                gc.set_visible(vis)
+
+        def _open_search() -> None:
+            search_revealer.set_reveal_child(True)
+            search_entry.grab_focus()
+
+        def _close_search() -> None:
+            search_revealer.set_reveal_child(False)
+            search_entry.set_text('')
+            _filter('')
+
+        search_entry.connect('search-changed', lambda e: _filter(e.get_text()))
+        search_entry.connect('stop-search', lambda _: _close_search())
+
         def _on_key(_ctrl, kv, _kc, _state):
-            if kv == Gdk.KEY_c:
-                self.quit()
+            if kv == Gdk.KEY_question:
+                _open_search()
                 return True
+            if not search_revealer.get_reveal_child():
+                if kv in (Gdk.KEY_c, Gdk.KEY_Escape):
+                    self.quit()
+                    return True
             return False
 
         key_ctrl = Gtk.EventControllerKey()

@@ -121,9 +121,11 @@ def generate_peripherals_section(p: dict) -> str:
     ]
     # Only write terminal/browser when non-empty so Lua's `or` fallback still works
     if p.get('terminal'):
-        lines.append(f'terminal   = "{p["terminal"]}"')
+        lines.append(f'terminal      = "{p["terminal"]}"')
     if p.get('browser'):
-        lines.append(f'browser    = "{p["browser"]}"')
+        lines.append(f'browser       = "{p["browser"]}"')
+    if p.get('browser_float'):
+        lines.append(f'browser_float = "{_lua_escape(p["browser_float"])}"')
     return '\n' + '\n'.join(lines) + '\n'
 
 
@@ -232,7 +234,7 @@ _ROLEAPPS_KEYS = [
 
 _ROLEAPPS_DEFAULTS: dict[str, str] = {
     'mic_mute':   'pactl set-source-mute @DEFAULT_SOURCE@ toggle',
-    'dnd_toggle': 'swaync-client --toggle-dnd',
+    'dnd_toggle': '',
     'bitwarden':  'bitwarden',
 }
 
@@ -245,7 +247,8 @@ def generate_roleapps_section(data: dict) -> str:
     lines = []
     for key in _ROLEAPPS_KEYS:
         val = data.get(key, _ROLEAPPS_DEFAULTS.get(key, ''))
-        lines.append(f'{key:<16} = "{_lua_escape(val)}"')
+        if val:  # skip empty values — Lua `or` fallbacks in variables.lua must stay active
+            lines.append(f'{key:<16} = "{_lua_escape(val)}"')
     return '\n' + '\n'.join(lines) + '\n'
 
 

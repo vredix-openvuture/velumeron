@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Vutureland Settings — GTK4/Adwaita layer-shell panel"""
 
-import os, sys, signal, json
+import os, sys, signal, json, subprocess
 
 # ── Flag handling (before GTK / LD_PRELOAD) ───────────────────────────────────
 _PID_FILE = '/tmp/vutureland-settings.pid'
@@ -20,6 +20,22 @@ def _running_pid() -> int | None:
     except (OSError, ValueError):
         return None
 
+# --notify: delegate to the notification daemon
+if '--notify' in sys.argv:
+    sys.argv.remove('--notify')
+    _nd = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'notify_daemon.py')
+    os.execv(sys.executable, [sys.executable, _nd] + sys.argv[1:])
+
+# --panel-toggle: toggle the settings GUI on the notification history page.
+# Sends SIGUSR2 to a running daemon (which toggles); starts if not running.
+if '--panel-toggle' in sys.argv:
+    sys.argv.remove('--panel-toggle')
+    pid = _running_pid()
+    if pid is not None:
+        os.kill(pid, signal.SIGUSR2)
+        sys.exit(0)
+    os.environ['VUTURELAND_OPEN_PAGE'] = 'notify_history'
+
 # -h / --help
 if '-h' in sys.argv or '--help' in sys.argv:
     print(
@@ -27,11 +43,17 @@ if '-h' in sys.argv or '--help' in sys.argv:
         "\n"
         "  (no flag)      Start the panel and show the window\n"
         "  -d, --daemon   Start as background daemon (window hidden);\n"
-        "                 no-op if the daemon is already running\n"
+        "                 no-op if the daemon is already running.\n"
+        "                 Also starts the notification daemon automatically.\n"
         "  -t, --toggle   Show the panel if hidden, hide it if visible;\n"
         "                 starts the daemon if it is not running yet\n"
         "  -e, --end      Stop the running daemon\n"
         "  -h, --help     Show this help message\n"
+        "\n"
+        "  --notify       Start the notification daemon;\n"
+        "                 combine with -d / -e for daemon/stop control\n"
+        "  --panel-toggle Toggle the notification history page;\n"
+        "                 shows if hidden, hides if visible (SIGUSR2)\n"
     )
     sys.exit(0)
 
@@ -88,7 +110,8 @@ from pages.hyprland      import HyprlandPage
 from pages.apps          import AppsPage
 from pages.waybar        import WaybarPage
 from pages.lockscreen    import LockscreenPage
-from pages.notifications import NotificationsPage
+from pages.notifications      import NotificationsPage
+from pages.notify_history     import NotifyHistoryPage
 from pages.osd           import OsdPage
 from pages.settings      import SettingsPage
 from pages.info          import InfoPage
@@ -176,18 +199,23 @@ _COLORS_CSS_FALLBACK = os.path.join(
 )
 
 _PAGES = [
-    ('home',          HomePage,          'go-home-symbolic',                          'Home'),
-    ('hyprland',      HyprlandPage,      'preferences-desktop-display-symbolic',      'Hyprland'),
-    ('apps',          AppsPage,          'application-x-executable-symbolic',         'Apps'),
-    ('waybar',        WaybarPage,        'view-grid-symbolic',                        'Bar'),
-    ('wallpaper',     WallpaperPage,     'image-x-generic-symbolic',                  'Theme'),
-    ('lockscreen',    LockscreenPage,    'system-lock-screen-symbolic',               'Power & Lock'),
-    ('notifications', NotificationsPage, 'preferences-system-notifications-symbolic', 'Notifications'),
-    ('osd',           OsdPage,           'audio-volume-high-symbolic',                'OSD'),
+    ('home',       HomePage,      'go-home-symbolic',                     'Home'),
+    ('hyprland',   HyprlandPage,  'preferences-desktop-display-symbolic', 'Hyprland'),
+    ('apps',       AppsPage,      'application-x-executable-symbolic',    'Apps'),
+    ('waybar',     WaybarPage,    'view-grid-symbolic',                   'Bar'),
+    ('wallpaper',  WallpaperPage, 'image-x-generic-symbolic',             'Theme'),
+    ('lockscreen', LockscreenPage,'system-lock-screen-symbolic',          'Power & Lock'),
+    ('osd',        OsdPage,       'audio-volume-high-symbolic',           'OSD'),
 ]
 _BOTTOM_PAGES = [
-    ('info',       InfoPage,       'dialog-information-symbolic',           'Info'),
-    ('settings',   SettingsPage,   'preferences-system-symbolic',          'Settings'),
+    ('info',     InfoPage,     'dialog-information-symbolic', 'Info'),
+    ('settings', SettingsPage, 'preferences-system-symbolic', 'Settings'),
+]
+# Hidden pages — added to the stack but NOT to the sidebar.
+# Reachable only via vutureland --panel-toggle (SIGUSR2 / VUTURELAND_OPEN_PAGE).
+_HIDDEN_PAGES = [
+    ('notifications',  NotificationsPage),
+    ('notify_history', NotifyHistoryPage),
 ]
 
 
@@ -294,10 +322,13 @@ class MainWindow(Gtk.ApplicationWindow):
 
         # ── Content stack ─────────────────────────────────────────────
         stack = Adw.ViewStack()
-        for name, cls, _, _ in _PAGES + _BOTTOM_PAGES:
+        for entry in _PAGES + _BOTTOM_PAGES + [(n, c, None, None) for n, c in _HIDDEN_PAGES]:
+            name, cls = entry[0], entry[1]
             page = cls()
             if hasattr(page, 'set_apply_callback'):
                 page.set_apply_callback(self.close_animated)
+            if hasattr(page, 'set_notify_callback'):
+                page.set_notify_callback(lambda: self.reset_to_page('notify_history'))
             if isinstance(page, SettingsPage):
                 page.set_opacity_callback(
                     self._apply_opacity,
@@ -329,12 +360,20 @@ class MainWindow(Gtk.ApplicationWindow):
                     side=self._settings.get('panel_side', 'left'),
                     valign=self._settings.get('panel_valign', 'bottom'),
                 )
-            if isinstance(page, NotificationsPage):
-                page.set_values_callback(
-                    self._apply_notifications,
-                    margin_top_pct=self._settings.get('swaync_margin_top_pct', 10),
-                    width_pct     =self._settings.get('swaync_width_pct',      23),
+                page.set_low_memory_callback(
+                    self._apply_low_memory,
+                    initial=self._settings.get('low_memory_mode', False),
                 )
+                page.set_sidebar_autohide_callback(
+                    self._apply_sidebar_autohide,
+                    initial=self._settings.get('sidebar_autohide', False),
+                )
+                page.set_shell_backend_callback(
+                    self._apply_shell_backend,
+                    initial=self._settings.get('shell_backend', 'waybar'),
+                )
+            if hasattr(page, 'set_home_callback'):
+                page.set_home_callback(self.reset_to_home)
             stack.add_named(page, name)
         stack.set_hexpand(True)
         stack.set_vexpand(True)
@@ -399,17 +438,48 @@ class MainWindow(Gtk.ApplicationWindow):
         self._stack = stack
         self._nav_btns = nav_btns
         self._home_page = _PAGES[0][0]
+
+        self._sidebar_width = 56
+        self._panel_side    = 'left'
         self._apply_sidebar_labels(self._settings.get('sidebar_labels', False),
                                    save=False)
 
         # ── Body ──────────────────────────────────────────────────────
-        body = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        body.add_css_class('body-area')
+        # Sidebar lives as an Overlay child so it can either sit alongside
+        # content (autohide=OFF, margin reserves the space) or slide over it
+        # (autohide=ON, no margin).
+        body_inner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        body_inner.add_css_class('body-area')
+        body_inner.set_hexpand(True)
+        body_inner.set_vexpand(True)
+        body_inner.append(content_wrap)
+
+        body = Gtk.Overlay()
         body.set_hexpand(True)
         body.set_vexpand(True)
-        body.append(self._sidebar)
-        body.append(content_wrap)
-        self._body = body
+        body.set_child(body_inner)
+        body.add_overlay(self._sidebar)
+        self._sidebar.set_halign(Gtk.Align.START)
+        self._sidebar.set_valign(Gtk.Align.FILL)
+        self._body       = body
+        self._body_inner = body_inner
+
+        # ── Hover-to-show sidebar ─────────────────────────────────────
+        self._sidebar_autohide   = self._settings.get('sidebar_autohide', False)
+        self._sidebar_hide_timer = None
+
+        body_motion = Gtk.EventControllerMotion()
+        body_motion.connect('motion', self._on_body_motion)
+        body.add_controller(body_motion)
+
+        sidebar_motion = Gtk.EventControllerMotion()
+        sidebar_motion.connect('leave', self._on_sidebar_leave)
+        self._sidebar.add_controller(sidebar_motion)
+
+        if self._sidebar_autohide:
+            self._sidebar.set_visible(False)
+        else:
+            content_wrap.set_margin_start(self._sidebar_width)
 
         # ── Root: panel content (banner + body). Positioned bottom-left in
         # the fullscreen overlay; size driven directly by _apply_size().
@@ -506,11 +576,52 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def reset_to_home(self):
         """Always show the Home page (called whenever the window is shown)."""
+        self.reset_to_page(getattr(self, '_home_page', 'home'))
+
+    def reset_to_page(self, name: str):
+        """Navigate to any registered page by name."""
+        hidden = {n for n, _ in _HIDDEN_PAGES}
+        all_pages = _PAGES + _BOTTOM_PAGES
+        names = [p[0] for p in all_pages]
         stack = getattr(self, '_stack', None)
+
+        w_pct = self._settings.get(
+            'panel_width_pct',
+            max(20, min(90, _PANEL_WIDTH * 100 // self._monitor_w)))
+        h_pct = self._settings.get('panel_height_pct', 100)
+
+        cw = getattr(self, '_content_wrap', None)
+
+        if name in hidden:
+            if stack is not None:
+                stack.set_visible_child_name(name)
+            self._sidebar.set_visible(False)
+            if cw is not None:
+                cw.set_margin_start(0)
+                cw.set_margin_end(0)
+            for b in getattr(self, '_nav_btns', []):
+                if b.get_active():
+                    b.set_active(False)
+            self._apply_size(w_pct, max(20, h_pct // 2), save=False)
+            return
+
+        idx = names.index(name) if name in names else 0
         if stack is not None:
-            stack.set_visible_child_name(getattr(self, '_home_page', 'home'))
+            stack.set_visible_child_name(names[idx])
+        autohide = getattr(self, '_sidebar_autohide', False)
+        if not autohide:
+            sw = getattr(self, '_sidebar_width', 56)
+            self._sidebar.set_visible(True)
+            if cw is not None:
+                if getattr(self, '_panel_side', 'left') == 'right':
+                    cw.set_margin_start(0)
+                    cw.set_margin_end(sw)
+                else:
+                    cw.set_margin_start(sw)
+                    cw.set_margin_end(0)
         for i, b in enumerate(getattr(self, '_nav_btns', [])):
-            b.set_active(i == 0)
+            b.set_active(i == idx)
+        self._apply_size(w_pct, h_pct, save=False)
 
     def close_animated(self):
         self.hide()
@@ -538,6 +649,54 @@ class MainWindow(Gtk.ApplicationWindow):
         btn.connect('toggled', self._on_nav_toggled, name, stack, nav_btns)
         return btn
 
+    def _apply_sidebar_autohide(self, enabled: bool, save: bool = True):
+        self._sidebar_autohide = enabled
+        if save:
+            self._settings['sidebar_autohide'] = enabled
+            _save_settings(self._settings)
+        hidden_names = {n for n, _ in _HIDDEN_PAGES}
+        current = self._stack.get_visible_child_name() if hasattr(self, '_stack') else ''
+        if current in hidden_names:
+            return
+        cw = getattr(self, '_content_wrap', None)
+        w  = getattr(self, '_sidebar_width', 56)
+        if enabled:
+            if cw is not None:
+                cw.set_margin_start(0)
+                cw.set_margin_end(0)
+            self._sidebar.set_visible(False)
+        else:
+            if cw is not None:
+                if getattr(self, '_panel_side', 'left') == 'right':
+                    cw.set_margin_start(0)
+                    cw.set_margin_end(w)
+                else:
+                    cw.set_margin_start(w)
+                    cw.set_margin_end(0)
+            self._sidebar.set_visible(True)
+
+    def _on_body_motion(self, _ctrl, x, _y):
+        if not self._sidebar_autohide:
+            return
+        if x < 8:
+            if self._sidebar_hide_timer is not None:
+                GLib.source_remove(self._sidebar_hide_timer)
+                self._sidebar_hide_timer = None
+            self._sidebar.set_visible(True)
+
+    def _on_sidebar_leave(self, _ctrl):
+        if not self._sidebar_autohide:
+            return
+        if self._sidebar_hide_timer is not None:
+            GLib.source_remove(self._sidebar_hide_timer)
+        self._sidebar_hide_timer = GLib.timeout_add(200, self._hide_sidebar_delayed)
+
+    def _hide_sidebar_delayed(self):
+        self._sidebar_hide_timer = None
+        if self._sidebar_autohide:
+            self._sidebar.set_visible(False)
+        return False
+
     def _apply_sidebar_labels(self, show: bool, save: bool = True):
         for img, lbl in zip(self._nav_icons, self._nav_labels):
             lbl.set_visible(show)
@@ -551,15 +710,34 @@ class MainWindow(Gtk.ApplicationWindow):
                 img.set_hexpand(True)
                 img.set_margin_start(0)
                 lbl.set_hexpand(False)
-        self._sidebar.set_size_request(160 if show else 56, -1)
+        w = 160 if show else 56
+        self._sidebar.set_size_request(w, -1)
+        self._sidebar_width = w
+        if not getattr(self, '_sidebar_autohide', False):
+            cw = getattr(self, '_content_wrap', None)
+            if cw is not None:
+                if getattr(self, '_panel_side', 'left') == 'right':
+                    cw.set_margin_end(w)
+                else:
+                    cw.set_margin_start(w)
         if save:
             self._settings['sidebar_labels'] = show
             _save_settings(self._settings)
 
-    def _apply_notifications(self, margin_top_pct: int, width_pct: int):
-        self._settings['swaync_margin_top_pct'] = margin_top_pct
-        self._settings['swaync_width_pct']      = width_pct
+    def _apply_low_memory(self, enabled: bool):
+        self._settings['low_memory_mode'] = enabled
         _save_settings(self._settings)
+
+    def _apply_shell_backend(self, backend: str):
+        self._settings['shell_backend'] = backend
+        _save_settings(self._settings)
+        vtl = os.environ.get(
+            'VUTURELAND_DIR',
+            os.path.realpath(os.path.join(os.path.dirname(__file__), '..')))
+        scripts = os.path.join(vtl, 'assets', 'scripts')
+        script = 'launch-quickshell.sh' if backend == 'quickshell' else 'launch-waybar.sh'
+        subprocess.Popen(['bash', os.path.join(scripts, script)],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def _apply_opacity(self, value: float):
         self._root.set_opacity(value)
@@ -612,12 +790,21 @@ class MainWindow(Gtk.ApplicationWindow):
             self._root.remove_css_class(cls)
         self._root.add_css_class(f'place-{side}-{valign}')
 
-        # Mirror the nav sidebar so it stays against the anchored screen edge:
-        # left placement → sidebar first (left), right placement → sidebar last.
+        # Mirror the sidebar to sit against the anchored screen edge.
+        self._panel_side = side
+        autohide = getattr(self, '_sidebar_autohide', False)
+        w = getattr(self, '_sidebar_width', 56)
+        cw = getattr(self, '_content_wrap', None)
         if side == 'left':
-            self._body.reorder_child_after(self._sidebar, None)
+            self._sidebar.set_halign(Gtk.Align.START)
+            if cw is not None and not autohide:
+                cw.set_margin_start(w)
+                cw.set_margin_end(0)
         else:
-            self._body.reorder_child_after(self._sidebar, self._content_wrap)
+            self._sidebar.set_halign(Gtk.Align.END)
+            if cw is not None and not autohide:
+                cw.set_margin_start(0)
+                cw.set_margin_end(w)
 
         if save:
             self._settings['panel_side']   = side
@@ -797,9 +984,11 @@ class MainWindow(Gtk.ApplicationWindow):
             for b in btns:
                 if b is not btn and b.get_active():
                     b.set_active(False)
+            self._sidebar.set_visible(True)
         else:
             if stack.get_visible_child_name() == name:
                 btn.set_active(True)
+
 
 
 class VuturelandSettings(Adw.Application):
@@ -882,11 +1071,26 @@ class VuturelandSettings(Adw.Application):
             return GLib.SOURCE_CONTINUE
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, _toggle)
 
+        # SIGUSR2: toggle window on notify_history (sent by --panel-toggle).
+        def _toggle_notify_history():
+            on_history = (win.get_visible()
+                          and win._stack.get_visible_child_name() == 'notify_history')
+            if on_history:
+                win.hide()
+            else:
+                win.reset_to_page('notify_history')
+                win.set_visible(True)
+            return GLib.SOURCE_CONTINUE
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR2, _toggle_notify_history)
+
         # SIGTERM: actually quit the process
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM,
                              lambda: (self.quit(), GLib.SOURCE_REMOVE)[1])
 
         win.present()
+        open_page = os.environ.get('VUTURELAND_OPEN_PAGE', '')
+        if open_page:
+            win.reset_to_page(open_page)
         if os.environ.get('VUTURELAND_START_HIDDEN') == '1':
             win.hide()
         else:

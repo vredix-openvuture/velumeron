@@ -22,7 +22,8 @@ popup_dialogs = "(" .. popup_dialogs .. ")"
 -- PHASE 1 — Tags  (for keybinds / dispatch, not Phase 2 matching)
 -- ══════════════════════════════════════════════════════
 
-hl.window_rule({ name="browser",     match={class="(librewolf|firefox|chromium|brave|qutebrowser)"}, tag="+browser"     })
+hl.window_rule({ name="browser",       match={class="(librewolf|firefox|chromium|brave|qutebrowser)"}, tag="+browser" })
+hl.window_rule({ name="browser_float", match={class="browser-float"}, float=true, center=true })
 hl.window_rule({ name="editor",      match={class="(codium|vscodium|code|neovide|zed)"},             tag="+editor"      })
 hl.window_rule({ name="terminal",    match={class="(kitty|alacritty|foot|wezterm|ghostty)"},         tag="+terminal"    })
 hl.window_rule({ name="filemanager", match={class="(thunar|nautilus|dolphin|nemo|pcmanfm)"},         tag="+filemanager" })
@@ -99,21 +100,6 @@ hl.window_rule({
     center = true,
     size   = { "(monitor_w*0.5)", "(monitor_h*0.6)" },
 })
-hl.window_rule({
-    name   = "vuture_float",
-    match  = { title = "(.*[Vv]utureland.*)" },
-    float  = true,
-    center = true,
-    size   = { "(monitor_w*0.7)", "(monitor_h*0.8)" },
-})
-hl.window_rule({
-    name      = "float_cap",
-    match     = { float = true, title = ".+", xwayland = false },
-    float     = true,
-    center    = true,
-    size      = { "(monitor_w*0.5)", "(monitor_h*0.6)" },
-})
-
 -- ── Full opacity (no transparency) ────────────────────
 hl.window_rule({
     name    = "media_opaque",
@@ -183,6 +169,23 @@ hl.window_rule({
     match   = { title = "sysmon" },
     opacity = 0.8,
     no_blur = true,
+})
+
+-- All floating windows get the same start size (last Phase-2 rule so nothing overrides it).
+hl.window_rule({
+    name   = "float_cap",
+    match  = { float = true, title = ".+", xwayland = false },
+    center = true,
+    size   = { "(monitor_w*0.5)", "(monitor_h*0.6)" },
+})
+
+-- Vutureland GUI gets a larger size — must come after float_cap to win.
+hl.window_rule({
+    name   = "vuture_float",
+    match  = { title = "(.*[Vv]utureland.*)" },
+    float  = true,
+    center = true,
+    size   = { "(monitor_w*0.7)", "(monitor_h*0.8)" },
 })
 
 
