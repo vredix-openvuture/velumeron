@@ -1,14 +1,13 @@
 <div align="center">
-  <img src="assets/icons/vutureland.png" alt="Vutureland" width="320" />
-</div>
 
-<br/>
+# Velumeron
 
-<div align="center">
+**Velumeron** is a modular Hyprland desktop for Arch Linux.
 
-**Vutureland** is a modular Hyprland desktop configuration for Arch Linux.
-
-It combines a Lua-based Hyprland config, a modular Waybar system, wallpaper-driven color theming via wallust, and a GTK4 settings panel — all wired together into a cohesive, theme-aware desktop environment.
+A Lua-based Hyprland config, a native **Quickshell** desktop shell (bar, menus, OSD, notifications,
+settings & an application launcher), a native per-monitor **wallpaper engine** (static + live video with
+GPU transitions, via a libmpv plugin), and wallpaper-driven colour theming via **wallust** — wired into
+one cohesive, theme-aware environment.
 
 ---
 

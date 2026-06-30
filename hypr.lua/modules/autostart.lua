@@ -30,12 +30,13 @@ hl.on("hyprland.start", function()
     -- hypridle reads ~/.config/hypr/hypridle.conf (symlink seeded by setup);
     -- older versions also accepted -c <path> but some recent builds ignore it.
     hl.exec_cmd("hypridle")
-    hl.exec_cmd("awww-daemon")
+    -- awww-daemon retired: wallpapers are now drawn by the native quickshell engine (WallpaperWindow),
+    -- which reads ~/.config/velumeron/quickshell/wallpapers.json.
     hl.exec_cmd("nm-applet")
     hl.exec_cmd("systemctl --user start hyprpolkitagent")
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
-    hl.exec_cmd(VTL_DIR .. "/bin/vutureland --notify --daemon")
-    hl.exec_cmd(VTL_DIR .. "/assets/scripts/launch-osd.sh")
+    -- Notifications + OSD are now part of quickshell (notify/, osd/); the old Python
+    -- notify daemon and OSD daemon are retired. (swaync stays off too.)
     hl.exec_cmd(VTL_DIR .. "/assets/scripts/brightness.sh warm")
     hl.exec_cmd("wl-paste --watch clipvault store")
     hl.exec_cmd(VTL_DIR .. "/assets/scripts/float-cascade.sh")
@@ -49,9 +50,10 @@ hl.on("hyprland.start", function()
     end
 
     -- ── Cursor and shell ──────────────────────────────
+    -- desktop_shell → launch-shell.sh → QuickShell (bar, OSD, notifications, settings).
+    -- The old Python GUI daemon is retired, so nothing else needs starting here.
     hl.exec_cmd("hyprctl setcursor " .. cur_theme .. " " .. tostring(cur_size))
     hl.exec_cmd(desktop_shell)
-    hl.exec_cmd(VTL_DIR .. "/bin/vutureland --daemon")
 
     -- ── Workspace startup apps (from user_settings) ───
     for _, item in ipairs(start_apps) do

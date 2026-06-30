@@ -1,6 +1,6 @@
 # Hyprland Configuration
 
-Vutureland uses a Lua-based Hyprland config split across several files in `hypr.lua/`.
+Velumeron uses a Lua-based Hyprland config split across several files in `hypr.lua/`.
 
 ## Key files
 
@@ -37,7 +37,7 @@ hyprctl reload
 
 Launch via:
 ```bash
-bash ~/.config/vutureland/assets/scripts/launch-hyprlock.sh
+bash ~/.config/velumeron/assets/scripts/launch-hyprlock.sh
 ```
 
 Switch themes: `hypr.lua/hyprlock-themes/` contains alternative `.conf` files. The active theme is symlinked as `hypr.lua/active-hyprlock.conf`.

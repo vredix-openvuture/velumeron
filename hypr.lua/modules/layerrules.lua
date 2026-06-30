@@ -48,10 +48,10 @@ hl.layer_rule({
     xray         = true,
 })
 
--- Vutureland settings panel
+-- Velumeron settings panel
 hl.layer_rule({
-    name         = "vutureland-settings",
-    match        = { namespace = "(.*vutureland-settings.*|.*vutureland-keybind-help.*)" },
+    name         = "velumeron-settings",
+    match        = { namespace = "(.*velumeron-settings.*|.*velumeron-keybind-help.*)" },
     blur         = true,
     blur_popups  = true,
     ignore_alpha = 0.1,
@@ -75,12 +75,12 @@ hl.layer_rule({
 
 
 
--- Vutureland OSD — one rule per slide direction.
--- The daemon sets the namespace to vutureland-osd-{bottom|top|left|right}
+-- Velumeron OSD — one rule per slide direction.
+-- The daemon sets the namespace to velumeron-osd-{bottom|top|left|right}
 -- based on the position chosen in the OSD settings page.
-hl.layer_rule({ name = "vutureland-osd-bottom", match = { namespace = "vutureland-osd-bottom" }, blur = false, animation = "slidefade bottom 80%", xray = true })
-hl.layer_rule({ name = "vutureland-osd-top",    match = { namespace = "vutureland-osd-top"    }, blur = false, animation = "slidefade top 80%",    xray = true })
-hl.layer_rule({ name = "vutureland-osd-left",   match = { namespace = "vutureland-osd-left"   }, blur = false, animation = "slidefade left 80%",   xray = true })
-hl.layer_rule({ name = "vutureland-osd-right",  match = { namespace = "vutureland-osd-right"  }, blur = false, animation = "slidefade right 80%",  xray = true })
+hl.layer_rule({ name = "velumeron-osd-bottom", match = { namespace = "velumeron-osd-bottom" }, blur = false, animation = "slidefade bottom 80%", xray = true })
+hl.layer_rule({ name = "velumeron-osd-top",    match = { namespace = "velumeron-osd-top"    }, blur = false, animation = "slidefade top 80%",    xray = true })
+hl.layer_rule({ name = "velumeron-osd-left",   match = { namespace = "velumeron-osd-left"   }, blur = false, animation = "slidefade left 80%",   xray = true })
+hl.layer_rule({ name = "velumeron-osd-right",  match = { namespace = "velumeron-osd-right"  }, blur = false, animation = "slidefade right 80%",  xray = true })
 
 

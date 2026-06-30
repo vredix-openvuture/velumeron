@@ -12,18 +12,40 @@ import Quickshell.Hyprland
 PanelWindow {
     id: root
 
+    // This monitor's name → per-monitor bar settings.
+    readonly property string mon: root.monitor?.name ?? ""
+
     // ── Anchor: which edge the menu attaches to + where along it ──────────────
-    readonly property string mEdge:  UiState.menuEdge        // top | left | bottom | right
-    readonly property string mGroup: UiState.menuGroup       // start | center | end → shapes the L
-    readonly property real   mStart: UiState.menuStart       // icon centre along the edge
+    // The vuture-icon module publishes its position into UiState. When no such module is
+    // placed, there's nothing to grow from — fall back to the top-left corner.
+    readonly property bool   hasIcon: VtlConfig.barModulePlacedFor("vuture-icon", root.mon)
+    readonly property string mEdge:  hasIcon ? UiState.menuEdge  : "top"     // top | left | bottom | right
+    readonly property string mGroup: hasIcon ? UiState.menuGroup : "start"   // start | center | end → shapes the L
+    readonly property real   mStart: hasIcon ? UiState.menuStart : 0         // icon centre along the edge
     readonly property bool   vert:   mEdge === "left" || mEdge === "right"
-    readonly property int    barT:   VtlConfig.edgeThickness(mEdge) + (VtlConfig.barFloating ? VtlConfig.barFloatGap : 0)
+    // Offset from the screen edge to sit on the bar's inner face. When the anchored edge has
+    // no bar — or a fullscreen window is hiding it — sit flush at the edge (no empty column).
+    readonly property bool   edgeBar: VtlConfig.edgeActiveFor(mEdge, root.mon) && !root.monFullscreen
+    readonly property int    barT:   edgeBar
+                                     ? VtlConfig.edgeThicknessFor(mEdge, root.mon)
+                                       + (VtlConfig.barFloatingFor(root.mon) ? VtlConfig.barFloatGapFor(root.mon) : 0)
+                                     : 0
     readonly property int    sw:     screen ? screen.width  : 1920
     readonly property int    sh:     screen ? screen.height : 1080
 
-    // Dynamic menu dimensions — 1/5 of screen width, 1/2 of screen height.
-    readonly property int menuW:  screen ? Math.round(screen.width  / 5) : 300
-    readonly property int menuH:  screen ? Math.round(screen.height / 2) : 540
+    // Track the focused window's fullscreen state (Hyprland "fullscreen>>0/1").
+    property bool monFullscreen: false
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) {
+            if (event.name === "fullscreen") root.monFullscreen = (("" + event.data).trim() === "1")
+        }
+    }
+
+    // Menu dimensions — a % of the monitor (set in Settings → Bar; per-monitor capable, so
+    // vertical monitors can use a wider menu). Clamped to a sane minimum.
+    readonly property int menuW:  screen ? Math.max(260, Math.round(screen.width  * VtlConfig.menuWidthPctFor(root.mon)  / 100)) : 300
+    readonly property int menuH:  screen ? Math.max(320, Math.round(screen.height * VtlConfig.menuHeightPctFor(root.mon) / 100)) : 540
 
     // ── How the menu merges into the bar ─────────────────────────────────────────
     // The menu butts against its anchored edge (mEdge) and, on an L-bar, also blends into the
@@ -35,16 +57,28 @@ PanelWindow {
     // face, so the menu stays glued to the bar at *any* thickness, on *any* edge.
     readonly property string startEdge: vert ? "top"    : "left"
     readonly property string endEdge:   vert ? "bottom" : "right"
-    readonly property bool mergeStart: mGroup === "start" && VtlConfig.edgeActive(startEdge)
-    readonly property bool mergeEnd:   mGroup === "end"   && VtlConfig.edgeActive(endEdge)
-    readonly property int  sideStart:  mergeStart ? VtlConfig.edgeThickness(startEdge) : 0
-    readonly property int  sideEnd:    mergeEnd   ? VtlConfig.edgeThickness(endEdge)   : 0
+    // No merging into the perpendicular arm when the bar is hidden (fullscreen) — then the
+    // menu is a free tab growing straight out of the edge.
+    // An icon in the start/end group merges the menu into that end of the bar — the concave
+    // L-transition. The perpendicular target is the side bar if one is there, otherwise the SCREEN
+    // EDGE treated as a zero-thickness bar (sideStart/End = 0), so a top-only bar's corner icon
+    // still grows a menu whose corner curves down into the screen edge (instead of a rounded free
+    // tab). Only requires the anchored edge to have a bar (edgeBar); falls back to a free tab when
+    // that's hidden (fullscreen).
+    // Transition style depends on whether the menu hangs on a bar or a bare screen edge.
+    readonly property string _tctx:    root.edgeBar ? "bar" : "edge"
+    // The perpendicular (corner) merge is suppressed by the "origin edge only" transition style.
+    readonly property bool _mergeAll:  VtlConfig.transitionMergeAllFor("menu", root._tctx)
+    readonly property bool mergeStart: mGroup === "start" && root.edgeBar && _mergeAll
+    readonly property bool mergeEnd:   mGroup === "end"   && root.edgeBar && _mergeAll
+    readonly property int  sideStart:  (mergeStart && VtlConfig.edgeActiveFor(startEdge, root.mon)) ? VtlConfig.edgeThicknessFor(startEdge, root.mon) : 0
+    readonly property int  sideEnd:    (mergeEnd   && VtlConfig.edgeActiveFor(endEdge,   root.mon)) ? VtlConfig.edgeThicknessFor(endEdge,   root.mon)   : 0
 
     // Content-corner radius + concave-fillet radius both track the bar's inner radius.
-    readonly property int edgeR:  VtlConfig.barInnerRadius
-    readonly property int flareR: VtlConfig.barInnerRadius
-    // Bar/menu fill — optionally accent-tinted ("colorful"), matching LBar.
-    readonly property real  _tint: VtlConfig.barColorful ? 0.12 : 0.0
+    readonly property int edgeR:  VtlConfig.barInnerRadiusFor(root.mon)
+    readonly property int flareR: VtlConfig.barInnerRadiusFor(root.mon)
+    // Menu fill — optionally accent-tinted ("colorful").
+    readonly property real  _tint: VtlConfig.menuColorful ? 0.12 : 0.0
     readonly property color cFill: Qt.rgba(Colors.bgPrimary.r * (1 - _tint) + Colors.bgActive.r * _tint,
                                            Colors.bgPrimary.g * (1 - _tint) + Colors.bgActive.g * _tint,
                                            Colors.bgPrimary.b * (1 - _tint) + Colors.bgActive.b * _tint, 1)
@@ -55,9 +89,9 @@ PanelWindow {
     readonly property int pad:    flareR + seam + 2
 
     // Icon rail width — continue the left bar exactly when the menu sits against it.
-    readonly property bool _leftBar: VtlConfig.edgeActive("left")
+    readonly property bool _leftBar: VtlConfig.edgeActiveFor("left", root.mon)
                                      && (mEdge === "left" || (!vert && mGroup === "start"))
-    readonly property int  railW:    _leftBar ? VtlConfig.edgeThickness("left") : 52
+    readonly property int  railW:    _leftBar ? VtlConfig.edgeThicknessFor("left", root.mon) : 52
 
     // ── Outline builder ──────────────────────────────────────────────────────────
     // Returns [borderD, fillD] in Shape-local coords (menu-local + pad). Geometry is built once in
@@ -69,7 +103,8 @@ PanelWindow {
         var A = horizA ? W : H        // extent along the bar
         var D = horizA ? H : W        // depth away from the bar
         var e = Math.max(0, Math.min(edgeR,  A / 3, D / 3))
-        var f = Math.max(0, Math.min(flareR, A / 3, D / 3))
+        // Concave merge fillets collapse to 0 (straight corners) for the non-fillet styles.
+        var f = VtlConfig.transitionFilletFor("menu", root._tctx) ? Math.max(0, Math.min(flareR, A / 3, D / 3)) : 0
         var s = seam
         var ca0 = mergeStart ? sideStart     : 0      // near-end content boundary
         var ca1 = mergeEnd   ? (A - sideEnd) : A      // far-end content boundary
@@ -84,7 +119,8 @@ PanelWindow {
         }
         function M(a, d)     { return "M" + XY(a, d) }
         function L(a, d)     { return " L" + XY(a, d) }
-        function A_(r,a,d,w) { return " A" + r + "," + r + " 0 0 " + (flip ? (1 - w) : w) + " " + XY(a, d) }
+        function A_(r,a,d,w) { return r <= 0 ? (" L" + XY(a, d))
+                                             : " A" + r + "," + r + " 0 0 " + (flip ? (1 - w) : w) + " " + XY(a, d) }
 
         var bd, close
         if (mergeStart && !mergeEnd) {            // sidebar at the near end (classic L)
@@ -116,11 +152,12 @@ PanelWindow {
     // Which section's content is shown.
     property string activeSection: "home"
 
-    // Only show on the monitor whose workspace is currently focused — the menu is opened
-    // globally (one instance per screen), but should appear on the active monitor only.
+    // The menu is opened globally (one instance per screen) but shows on a single monitor. It LATCHES
+    // to the monitor focused at open time (UiState.menuMon) and stays there — it does NOT follow the
+    // focus afterwards. Each instance gates on whether it owns that latched monitor.
     property HyprlandMonitor monitor: Hyprland.monitorFor(root.screen)
-    readonly property bool onActiveMonitor: monitor !== null && monitor === Hyprland.focusedMonitor
     readonly property bool isOpen: UiState.openDropdown === "vuture-icon"
+    readonly property bool onActiveMonitor: root.mon !== "" && root.mon === UiState.menuMon
     readonly property bool active: isOpen && onActiveMonitor
 
     visible: true   // keep alive so the hide animation can play
@@ -132,21 +169,31 @@ PanelWindow {
                                  ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
     // When inactive: empty region → no input (mouse passes through to windows).
-    // When active: null → full-screen input so click-outside dismissal works.
-    // While a native picker is open: drop the grab so the dialog underneath is usable.
+    // When active: grab everything except the bar (lockRect) so windows are locked + click-outside
+    // dismisses, while the bar stays clickable. While a native picker is open: drop the grab so the
+    // dialog underneath is usable.
+    readonly property var _lr: VtlConfig.lockRect(root.mon, root.sw, root.sh)
     Region { id: emptyMask }
-    mask: (root.active && !UiState.pickerOpen) ? null : emptyMask
+    Region { id: lockMask; x: root._lr[0]; y: root._lr[1]; width: root._lr[2]; height: root._lr[3] }
+    // Grab the lock region on EVERY monitor while open (not just the active one) so a click on any
+    // monitor — outside that monitor's bar — dismisses the menu. The panel only renders on the
+    // active monitor; other instances are invisible full-screen click catchers.
+    mask: (root.isOpen && !UiState.pickerOpen) ? lockMask : emptyMask
 
     Shortcut { sequence: "Escape"; onActivated: UiState.openDropdown = "" }
 
-    // Reset to the home section each time the menu opens.
-    onIsOpenChanged: if (isOpen) activeSection = "home"
+    // On open: reset to the home section, and latch the menu to the focused monitor so it stays
+    // there (doesn't follow the focus). Only the focused instance claims the latch.
+    onIsOpenChanged: {
+        if (isOpen) activeSection = "home"
+        if (isOpen && monitor !== null && monitor === Hyprland.focusedMonitor) UiState.menuMon = root.mon
+    }
 
-    // Click-outside dismisses the menu
+    // Click-outside dismisses the menu — on any monitor (every screen grabs while open).
     MouseArea {
         anchors.fill: parent
         z:            0
-        enabled:      root.active
+        enabled:      root.isOpen
         onClicked:    UiState.openDropdown = ""
     }
 
@@ -169,8 +216,9 @@ PanelWindow {
         // Sit on the content side of the icon's edge; centre the morph nub on the icon and
         // clamp the along-edge position so the panel stays on screen.
         readonly property real alongMax: root.vert ? (root.sh - height) : (root.sw - width)
-        // Along the bar: flush to the near end when merged there (so it grows straight out of the
-        // L-bar's inner corner), flush to the far end when merged there, else track the icon.
+        // Along the bar: an icon in the start/end group snaps the menu to that end (the screen
+        // corner — merging into a perpendicular bar there, or into the bare screen edge if none);
+        // a centre-group icon tracks the icon position. This pins corner menus to the corner.
         readonly property real along: root.mergeStart ? 0
                                     : root.mergeEnd   ? alongMax
                                     : Math.max(0, Math.min(root.mStart - collapsed / 2, alongMax))
@@ -227,7 +275,11 @@ PanelWindow {
 
                 RailIcon { icon: "󰋜";  section: "home"     }
                 RailIcon { icon: "󰕮";  section: "bar"      }
-                RailIcon { icon: "󰸉";  section: "theme"    }
+                RailIcon { icon: "󰏘";  section: "style"    }
+                RailIcon { icon: "󰸉";  section: "wallpaper" }
+                RailIcon { icon: "󰍹";  section: "osd"       }
+                RailIcon { icon: "󰂚";  section: "notifications" }
+                RailIcon { icon: "󰌾";  section: "lockscreen" }
                 RailIcon { icon: "󰌌";  section: "keybinds" }
                 RailIcon { icon: "󰋽";  section: "info"     }
             }
@@ -250,22 +302,40 @@ PanelWindow {
             anchors { top: parent.top; bottom: parent.bottom; right: parent.right; left: parent.left
                       leftMargin: root.railW + 1 }
 
-            // Dedicated section pages. Theme = Wallpaper + Colours (AppearanceSection).
+            // Dedicated section pages — incl. the home hub and its Network / Bluetooth sub-pages.
+            readonly property var pagedSections: ["home", "bar", "wallpaper", "style", "osd",
+                                                  "notifications", "lockscreen", "network", "bluetooth"]
             Loader {
                 anchors.fill:         parent
+                anchors.topMargin:    18
                 anchors.leftMargin:   18
                 anchors.rightMargin:  18
                 anchors.bottomMargin: 12
-                active:  root.activeSection === "theme" || root.activeSection === "bar"
+                active:  content.pagedSections.indexOf(root.activeSection) >= 0
                 visible: active
-                sourceComponent: root.activeSection === "bar" ? barComp : appearanceComp
+                sourceComponent: root.activeSection === "home"          ? homeComp
+                               : root.activeSection === "bar"           ? barComp
+                               : root.activeSection === "wallpaper"     ? wallpaperComp
+                               : root.activeSection === "style"         ? styleComp
+                               : root.activeSection === "notifications" ? notifyComp
+                               : root.activeSection === "lockscreen"    ? lockComp
+                               : root.activeSection === "network"       ? networkComp
+                               : root.activeSection === "bluetooth"     ? bluetoothComp
+                               : osdComp
             }
-            Component { id: appearanceComp; AppearanceSection {} }
-            Component { id: barComp;        BarSection      {} }
+            Component { id: homeComp;      HomeHub          { onNavigate: s => root.activeSection = s } }
+            Component { id: networkComp;   NetworkManager   { onBack: root.activeSection = "home" } }
+            Component { id: bluetoothComp; BluetoothManager { onBack: root.activeSection = "home" } }
+            Component { id: barComp;       BarSection       {} }
+            Component { id: wallpaperComp; WallpaperSection {} }
+            Component { id: styleComp;     StyleSection     {} }
+            Component { id: osdComp;       OsdSection       {} }
+            Component { id: notifyComp;    NotifSettings    {} }
+            Component { id: lockComp;      LockscreenSection {} }
 
-            // Placeholder for sections that don't have a page yet.
+            // Placeholder for sections that don't have a page yet (home / keybinds / info).
             Column {
-                visible: root.activeSection !== "theme" && root.activeSection !== "bar"
+                visible: content.pagedSections.indexOf(root.activeSection) < 0
                 anchors { top: parent.top; left: parent.left; right: parent.right
                           topMargin: 18; leftMargin: 20; rightMargin: 20 }
                 spacing: 6
@@ -286,43 +356,20 @@ PanelWindow {
                     wrapMode:       Text.WordWrap
                 }
             }
-
-            // ── Power actions: own block at the bottom of the main (home) page ──────
-            Column {
-                id: powerBlock
-                visible: root.activeSection === "home"
-                anchors { left: parent.left; right: parent.right; bottom: parent.bottom
-                          leftMargin: 18; rightMargin: 18; bottomMargin: 16 }
-                spacing: 12
-
-                Rectangle {   // trennline above the block
-                    width:  parent.width
-                    height: 1
-                    color:  Qt.rgba(Colors.boNormal.r, Colors.boNormal.g, Colors.boNormal.b, 0.25)
-                }
-                Row {
-                    width:   parent.width
-                    spacing: 10
-                    PowerTile { width: (parent.width - parent.spacing * 3) / 4; icon: "󰐥"; label: "Shutdown"; cmd: "systemctl poweroff"      }
-                    PowerTile { width: (parent.width - parent.spacing * 3) / 4; icon: "󰤄"; label: "Suspend";  cmd: "systemctl suspend"       }
-                    PowerTile { width: (parent.width - parent.spacing * 3) / 4; icon: "󰜉"; label: "Reboot";   cmd: "systemctl reboot"        }
-                    PowerTile { width: (parent.width - parent.spacing * 3) / 4; icon: "󰍁"; label: "Lock";     cmd: "loginctl lock-session"   }
-                }
-            }
         }
     }
 
     // ── Section metadata helpers ──────────────────────────────────────────────
     function sectionTitle(s) {
         switch (s) {
-            case "home":      return "Vutureland"
+            case "home":      return "Velumeron"
             case "bar":       return "Bar"
+            case "style":     return "Style"
             case "wallpaper": return "Wallpaper"
-            case "theme":     return "Theme"
+            case "osd":       return "OSD"
+            case "notifications": return "Notifications"
             case "keybinds":  return "Keybindings"
             case "info":      return "Info"
-            case "lock":      return "Lock"
-            case "session":   return "Session"
             default:          return ""
         }
     }
@@ -330,8 +377,9 @@ PanelWindow {
         switch (s) {
             case "home":      return "Welcome. Pick a section from the rail on the left."
             case "bar":       return "Configure bar modules and layout."
+            case "style":     return "Colorful + colour mode."
             case "wallpaper": return "Browse and set wallpapers."
-            case "theme":     return "Colors and theming."
+            case "osd":       return "On-screen display settings."
             case "keybinds":  return "View and edit keybindings."
             case "info":      return "System information."
             default:          return ""
@@ -381,35 +429,25 @@ PanelWindow {
         }
     }
 
-    // ── Power tile (main-page power block) ───────────────────────────────────────
+    // ── Power tile (main-page power block) — square, icon only ───────────────────
     component PowerTile: Rectangle {
         id: pt
         property string icon:  ""
-        property string label: ""
+        property string label: ""   // unused (kept so existing call sites don't break)
         property string cmd:   ""
-        height: 46
-        radius: 10
+        width:  48
+        height: 48
+        radius: 12
         color:  ptHov.containsMouse ? Colors.bgActive
               : Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.12)
         Behavior on color { ColorAnimation { duration: 120 } }
 
-        Column {
+        Text {
             anchors.centerIn: parent
-            spacing: 4
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text:           pt.icon
-                color:          ptHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
-                font.pixelSize: 16
-                font.family:    "FantasqueSansM Nerd Font"
-            }
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text:           pt.label
-                color:          ptHov.containsMouse ? Colors.fgBright : Colors.fgMuted
-                font.pixelSize: 9
-                font.family:    "FantasqueSansM Nerd Font"
-            }
+            text:           pt.icon
+            color:          ptHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
+            font.pixelSize: 18
+            font.family:    "FantasqueSansM Nerd Font"
         }
         MouseArea {
             id: ptHov; anchors.fill: parent; hoverEnabled: true

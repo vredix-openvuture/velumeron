@@ -15,9 +15,9 @@ PanelWindow {
     WlrLayershell.exclusiveZone: -1
     WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
-    readonly property string _vtlDir: Quickshell.env("VUTURELAND_DIR") ?? ""
+    readonly property string _vtlDir: Quickshell.env("VELUMERON_DIR") ?? ""
 
-    // ── File-based IPC: vutureland quickshell --gui-panel writes the trigger ──
+    // ── File-based IPC: velumeron quickshell --gui-panel writes the trigger ──
     Timer {
         interval: 200; repeat: true; running: true
         onTriggered: { ipcProc.running = false; ipcProc.running = true }
@@ -25,7 +25,7 @@ PanelWindow {
     Process {
         id: ipcProc
         command: ["bash", "-c",
-            "f=/tmp/vutureland-qs-gui-panel; [ -f \"$f\" ] && rm \"$f\" && echo 1"]
+            "f=/tmp/velumeron-qs-gui-panel; [ -f \"$f\" ] && rm \"$f\" && echo 1"]
         stdout: SplitParser {
             onRead: line => {
                 if (line.trim() === "1") UiState.guiPanelOpen = !UiState.guiPanelOpen

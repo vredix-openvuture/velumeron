@@ -5,20 +5,20 @@
 -- Scripts live in the read-only package dir (VTL_DIR).
 -- Configs that have to be read alongside wallust-written colour files
 -- (kitty.conf, rofi *.rasi) live in the user dir (VTL_USER_DIR), which
--- welcome_to_vutureland.sh seeds from the package on first run.
+-- welcome_to_velumeron.sh seeds from the package on first run.
 
 desktop_shell  = VTL_DIR      .. "/assets/scripts/launch-shell.sh"
-notify_service = "vutureland-notify"
+notify_service = "velumeron-notify"
 clipboard      = VTL_USER_DIR .. "/rofi/assets/clipvault.sh"
 
-launcher       = "rofi -show drun -config "      .. VTL_USER_DIR .. "/rofi/launcher.rasi"
+-- app launcher + wallpaper switcher are now native (quickshell): see keybinds.lua (Super+Space /
+-- Super+Alt+Space → `qs ipc call launcher/wallpaper toggle`). The rofi drun/wallpaper configs are gone.
 window_switch  = "rofi -show window -config "    .. VTL_USER_DIR .. "/rofi/window-switcher.rasi"
-theme_switch   = "rofi -show wallpaper -config " .. VTL_USER_DIR .. "/rofi/wallpaper-switcher.rasi"
 terminal       = terminal      or ("kitty -c "   .. VTL_USER_DIR .. "/kitty/kitty.conf")
 browser        = browser       or "librewolf"
 browser_float  = browser_float or (browser .. " --class=browser-float")
 filemanager    = filemanager   or "thunar"
-notifications  = VTL_DIR .. "/bin/vutureland --panel-toggle"
+notifications  = VTL_DIR .. "/bin/velumeron --panel-toggle"
 screenshot_cmd = "hyprshot -z --mode region --output-folder ~/Bilder/Screenshots"
 screen_record  = screen_record or ""
 bitwarden      = bitwarden     or "bitwarden"

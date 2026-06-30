@@ -3,10 +3,10 @@
 # Lists .conf files from hyprlock-themes/, shows preview, applies monitor substitution
 source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." && pwd)/assets/scripts/lib/env.sh"
 
-THEMES_DIR="$VUTURELAND_DIR/hypr.lua/hyprlock-themes"
-ACTIVE_CONF="$VUTURELAND_USER_DIR/hypr.lua/hyprlock.conf"
-BLACK_WP="$VUTURELAND_DIR/assets/wallpaper/hyprlock/pure-black.jpg"
-CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/vutureland/hyprlock-thumbs"
+THEMES_DIR="$VELUMERON_DIR/hypr.lua/hyprlock-themes"
+ACTIVE_CONF="$VELUMERON_USER_DIR/hypr.lua/hyprlock.conf"
+BLACK_WP="$VELUMERON_DIR/assets/wallpaper/hyprlock/pure-black.jpg"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/velumeron/hyprlock-thumbs"
 THUMB_W=400
 THUMB_H=240
 
@@ -84,7 +84,7 @@ _ensure_thumb() {
 # the exact same substitution logic and remember the chosen theme.
 _apply_theme() {
     local theme_file="$1"
-    "$VUTURELAND_DIR/assets/scripts/apply-hyprlock-theme.sh" "$(basename "$theme_file" .conf)"
+    "$VELUMERON_DIR/assets/scripts/apply-hyprlock-theme.sh" "$(basename "$theme_file" .conf)"
 }
 
 # ──────────────────────────────────────────────────────────────

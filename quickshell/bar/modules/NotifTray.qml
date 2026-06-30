@@ -1,108 +1,68 @@
-pragma ComponentBehavior: Bound
 import "../.."
 import QtQuick
-import Quickshell
-import Quickshell.Io
-import Quickshell.Widgets
-import Quickshell.Services.SystemTray
+import Quickshell.Hyprland
 
+// The notification bell. Click toggles the notification centre (which grows from here); a small
+// accent dot appears while there are unread notifications (cleared when the centre opens). The
+// system tray now lives in its own Tray module. Publishes this module's anchor so the centre grows
+// from the bell.
 Item {
     id: root
 
-    // Set by LBar's ModSlot so the tray can unfold the right way per edge/position.
+    // Set by Bar's ModSlot.
     property string barEdge:  "top"
     property string barGroup: "start"
+    property string barMon:   ""    // monitor name, for per-monitor icon size
     readonly property bool vert: barEdge === "left" || barEdge === "right"
-    readonly property int  sz:   VtlConfig.barIconSize
+    readonly property int  sz:   VtlConfig.moduleIconSizeFor("notiftray", root.barMon)
 
-    // The bell is the persistent anchor; the system-tray items unfold away from the bar edge.
-    // In a sidebar the bell sits at the start end (top) only for the start group — otherwise at
-    // the end (bottom of a sidebar / right of a horizontal bar), so the tray unfolds upward when
-    // the module is at the bottom and downward when it's at the top. (Group anchoring in LBar
-    // already grows the slot away from its edge, so the bell stays put and the icons appear.)
-    readonly property bool bellFirst: vert && barGroup === "start"
-
-    implicitWidth:  lay.implicitWidth
-    implicitHeight: lay.implicitHeight
+    implicitWidth:  bell.implicitWidth
+    implicitHeight: bell.implicitHeight
     width:  implicitWidth
     height: implicitHeight
 
-    property bool showTray: hoverArea.containsMouse
+    // Only the bell on the focused monitor anchors the centre, so it grows from the right screen.
+    readonly property bool onFocusedMon: Hyprland.focusedMonitor ? (Hyprland.focusedMonitor.name === root.barMon) : true
 
-    function togglePanel() { notifProc.running = false; notifProc.running = true }
+    // Anchor for the notification centre (mirrors VutureIcon.publishAnchor for the corner menu).
+    function publishCenterAnchor() {
+        if (!root.onFocusedMon || !VtlConfig.edgeActiveFor(root.barEdge, root.barMon)) return
+        var c = bell.mapToItem(null, bell.width / 2, bell.height / 2)
+        UiState.notifEdge  = root.barEdge
+        UiState.notifGroup = root.barGroup
+        UiState.notifStart = root.vert ? c.y : c.x
+        UiState.notifMon   = root.barMon   // latch the centre to this monitor (don't follow focus)
+    }
+    function togglePanel() { publishCenterAnchor(); UiState.notifCenterOpen = !UiState.notifCenterOpen }
 
-    Grid {
-        id: lay
-        anchors.centerIn: parent
-        flow:    root.vert ? Grid.TopToBottom : Grid.LeftToRight
-        columns: root.vert ? 1  : 99
-        rows:    root.vert ? 99 : 1
-        spacing: 4
-        // Keep every icon (and the bell) centred on the bar's cross axis.
-        horizontalItemAlignment: Grid.AlignHCenter
-        verticalItemAlignment:   Grid.AlignVCenter
-
-        // Bell on the start side (only a vertical start group); else after the tray items.
-        Loader { active: root.bellFirst;  visible: active; sourceComponent: bell }
-
-        Repeater {
-            model: SystemTray.items
-            delegate: Item {
-                id: tItem
-                required property SystemTrayItem modelData
-                readonly property bool open: root.showTray
-                // Reveal along the bar: width on a horizontal bar, height in a sidebar.
-                implicitWidth:  root.vert ? root.sz : (open ? root.sz : 0)
-                implicitHeight: root.vert ? (open ? root.sz : 0) : root.sz
-                clip: true
-                Behavior on implicitWidth  { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-                Behavior on implicitHeight { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-
-                IconImage {
-                    anchors.centerIn: parent
-                    width:  root.sz
-                    height: root.sz
-                    source: tItem.modelData.icon
-                    implicitSize: root.sz
-                }
-                MouseArea {
-                    anchors.fill:    parent
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                    onClicked: event => {
-                        if (event.button === Qt.LeftButton) tItem.modelData.activate()
-                        else                                tItem.modelData.secondaryActivate()
-                    }
-                }
-            }
-        }
-
-        Loader { active: !root.bellFirst; visible: active; sourceComponent: bell }
+    // Keep the centre anchor current however it's opened (bell click OR the notify IPC / keybind).
+    Connections {
+        target: UiState
+        function onNotifCenterOpenChanged() { if (UiState.notifCenterOpen) root.publishCenterAnchor() }
     }
 
-    Component {
+    Text {
         id: bell
-        Text {
-            text:           "󰂜"
-            color:          bellHover.containsMouse ? Colors.fgBright : Colors.fgPrimary
-            font.family:    "FantasqueSansM Nerd Font"
-            font.pixelSize: root.sz
-            Behavior on color { ColorAnimation { duration: 100 } }
+        text:  "󰂜"
+        color: bellHover.containsMouse ? Colors.fgBright : (Colors[VtlConfig.moduleColorName("notiftray")] ?? Colors.fgPrimary)
+        font.family:    VtlConfig.moduleFontFor("notiftray")
+        font.pixelSize: root.sz
+        Behavior on color { ColorAnimation { duration: 100 } }
 
-            MouseArea {
-                id: bellHover
-                anchors.fill: parent
-                hoverEnabled: true
-                onClicked:    root.togglePanel()
-            }
+        // Unread indicator — an accent dot at the top-right while unread notifications exist.
+        Rectangle {
+            visible: NotifService.unread > 0
+            anchors { right: parent.right; top: parent.top; rightMargin: -1; topMargin: 1 }
+            width: 7; height: 7; radius: 4
+            color: Colors.fgUrgent
+            border.width: 1; border.color: Colors.bgPrimary
+        }
+
+        MouseArea {
+            id: bellHover
+            anchors.fill: parent
+            hoverEnabled: true
+            onClicked: root.togglePanel()
         }
     }
-
-    MouseArea {
-        id: hoverArea
-        anchors.fill:    lay
-        hoverEnabled:    true
-        acceptedButtons: Qt.NoButton
-    }
-
-    Process { id: notifProc; command: ["bash", "-c", "$VUTURELAND_DIR/bin/vutureland --panel-toggle"] }
 }

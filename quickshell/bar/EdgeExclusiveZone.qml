@@ -2,6 +2,7 @@ import ".."
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Hyprland
 
 // Invisible surface that reserves space on one screen edge so tiled windows avoid the
 // bar. One instance per (screen × edge); only active when the bar occupies that edge.
@@ -10,11 +11,12 @@ import Quickshell.Wayland
 PanelWindow {
     id: zone
     required property string edge   // "top" | "bottom" | "left" | "right"
+    readonly property string mon: Hyprland.monitorFor(zone.screen)?.name ?? ""
 
-    readonly property bool isActive:   VtlConfig.edgeActive(edge)
+    readonly property bool isActive:   VtlConfig.edgeActiveFor(edge, zone.mon)
     readonly property bool horizontal: edge === "top" || edge === "bottom"
-    readonly property int  reserve:    VtlConfig.edgeThickness(edge)
-                                       + (VtlConfig.barFloating ? VtlConfig.barFloatGap : 0)
+    readonly property int  reserve:    VtlConfig.edgeThicknessFor(edge, zone.mon)
+                                       + (VtlConfig.barFloatingFor(zone.mon) ? VtlConfig.barFloatGapFor(zone.mon) : 0)
 
     visible:             isActive
     color:               "transparent"

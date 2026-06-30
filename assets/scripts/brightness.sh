@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Vutureland – brightness control with OSD feedback.
+# Velumeron – brightness control with OSD feedback.
 #
 # Prefers brightnessctl when a real /sys/class/backlight device exists (laptop
 # panels — instant). Otherwise falls back to ddcutil for external monitors over
@@ -7,9 +7,11 @@
 # instead of ~2s (ddcutil's per-call display detection is the slow part).
 # Brightness moves in 5% steps, clamped to 0–100.
 #
-#   brightness.sh up      # +5%
-#   brightness.sh down    # -5%
-#   brightness.sh warm    # pre-build the DDC bus cache (run at autostart)
+#   brightness.sh up        # +5%
+#   brightness.sh down      # -5%
+#   brightness.sh get       # print the current brightness % (for the settings slider)
+#   brightness.sh set <pct> # set an absolute brightness % (settings slider)
+#   brightness.sh warm      # pre-build the DDC bus cache (run at autostart)
 
 set -u
 
@@ -19,10 +21,10 @@ STEP=5
 ARG="${1:-up}"
 
 RUNTIME="${XDG_RUNTIME_DIR:-/tmp}"
-BUS_CACHE="$RUNTIME/vutureland-ddc-buses"     # cached DDC-capable I2C buses
-STATE="$RUNTIME/vutureland-brightness"        # last known DDC brightness %
-INC_LOCK="$RUNTIME/vutureland-brightness.inc.lock"     # serialises target bumps
-APPLY_LOCK="$RUNTIME/vutureland-brightness.apply.lock"  # single-flight DDC writer
+BUS_CACHE="$RUNTIME/velumeron-ddc-buses"     # cached DDC-capable I2C buses
+STATE="$RUNTIME/velumeron-brightness"        # last known DDC brightness %
+INC_LOCK="$RUNTIME/velumeron-brightness.inc.lock"     # serialises target bumps
+APPLY_LOCK="$RUNTIME/velumeron-brightness.apply.lock"  # single-flight DDC writer
 
 have_backlight() {
     command -v brightnessctl >/dev/null 2>&1 || return 1
@@ -46,6 +48,53 @@ clamp() { local v=$1; (( v > 100 )) && v=100; (( v < 0 )) && v=0; echo "$v"; }
 # warm: just populate the bus cache so the first real keypress is already fast.
 if [[ "$ARG" == warm ]]; then
     have_backlight || ddc_buses >/dev/null
+    exit 0
+fi
+
+# get: print the current brightness % (no OSD). Used by the settings slider on open.
+if [[ "$ARG" == get ]]; then
+    if have_backlight; then
+        brightnessctl -m 2>/dev/null | awk -F, '{print $4}' | tr -d '%'
+    else
+        mapfile -t BUSES < <(ddc_buses)
+        cur=$(cat "$STATE" 2>/dev/null)
+        if [[ ! "$cur" =~ ^[0-9]+$ ]] && (( ${#BUSES[@]} )); then
+            cur=$(ddcutil --bus "${BUSES[0]}" --noverify getvcp 10 2>/dev/null \
+                  | grep -oP 'current value =\s*\K[0-9]+')
+        fi
+        [[ "$cur" =~ ^[0-9]+$ ]] && echo "$cur" || echo 0
+    fi
+    exit 0
+fi
+
+# set <pct>: jump to an absolute brightness. backlight is instant; DDC reuses the single-flight
+# applier below so a dragged slider coalesces into the latest target instead of queueing I2C writes.
+if [[ "$ARG" == set ]]; then
+    val="${2:-0}"; [[ "$val" =~ ^[0-9]+$ ]] || val=0; val=$(clamp "$val")
+    if have_backlight; then
+        brightnessctl set "${val}%" >/dev/null 2>&1
+        "$OSD" brightness "$val"
+        exit 0
+    fi
+    mapfile -t BUSES < <(ddc_buses)
+    (( ${#BUSES[@]} )) || exit 0
+    echo "$val" > "$STATE"
+    "$OSD" brightness "$val"
+    {
+        exec 9>"$APPLY_LOCK"
+        flock -n 9 || exit 0
+        last=""
+        while :; do
+            target=$(cat "$STATE" 2>/dev/null)
+            [[ "$target" == "$last" ]] && break
+            last="$target"
+            for b in "${BUSES[@]}"; do
+                ddcutil --bus "$b" --noverify setvcp 10 "$target" >/dev/null 2>&1 &
+            done
+            wait
+        done
+    } &
+    disown
     exit 0
 fi
 

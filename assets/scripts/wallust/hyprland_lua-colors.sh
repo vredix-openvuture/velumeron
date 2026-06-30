@@ -3,7 +3,12 @@
 # Called as a wallust hook after the colors.lua template is rendered.
 source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/../lib/env.sh"
 
-file="$VUTURELAND_USER_DIR/hypr.lua/colors.lua"
+file="$VELUMERON_USER_DIR/hypr.lua/colors.lua"
+
+# Unique temp (never a shared "$file.tmp") so two runs can't clobber each other's scratch file and
+# leave colors.lua full of NUL bytes (which breaks the Hyprland config). wallpaper-set.sh also
+# serialises wallust via flock; this is cheap defence-in-depth.
+tmp=$(mktemp "${file}.XXXXXX")
 
 while IFS= read -r line; do
     if [[ "$line" =~ \"#([0-9a-fA-F]{6})\" ]]; then
@@ -15,7 +20,7 @@ while IFS= read -r line; do
     else
         echo "$line"
     fi
-done < "$file" > "$file.tmp"
+done < "$file" > "$tmp"
 
-# cp follows the symlink target; mv would replace the symlink itself
-cp "$file.tmp" "$file" && rm -f "$file.tmp"
+# cp follows the symlink target if colors.lua is one; mv would replace the symlink itself
+cp "$tmp" "$file" && rm -f "$tmp"

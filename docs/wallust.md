@@ -4,7 +4,7 @@ Wallust generates a color palette from the current wallpaper and writes it to al
 
 ## Config location
 
-`~/.config/vutureland/wallust/wallust.toml` — controls backend, palette algorithm, saturation, and template targets.
+`~/.config/velumeron/wallust/wallust.toml` — controls backend, palette algorithm, saturation, and template targets.
 
 ## Templates
 

@@ -4,8 +4,8 @@ source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." && pwd)/assets
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
 export DISPLAY="${DISPLAY:-:0}"
 
-ICONS="$VUTURELAND_DIR/assets/icons"
-THEME="$VUTURELAND_USER_DIR/rofi/session-menu.rasi"
+ICONS="$VELUMERON_DIR/assets/icons"
+THEME="$VELUMERON_USER_DIR/rofi/session-menu.rasi"
 
 entries() {
     printf "Settings\0icon\x1f%s\n" "${ICONS}/vuture.png"
@@ -18,8 +18,8 @@ entries() {
 choice=$(entries | rofi -dmenu -p "" -theme "$THEME")
 
 case "$choice" in
-    Settings) setsid "$VUTURELAND_DIR/bin/vutureland" -t >/dev/null 2>&1 & ;;
-    Suspend)  "$VUTURELAND_DIR/assets/scripts/launch-hyprlock.sh" & sleep 4 && systemctl suspend ;;
+    Settings) setsid "$VELUMERON_DIR/bin/velumeron" -t >/dev/null 2>&1 & ;;
+    Suspend)  "$VELUMERON_DIR/assets/scripts/launch-hyprlock.sh" & sleep 4 && systemctl suspend ;;
     Shutdown) systemctl poweroff ;;
     Logout)   hyprctl dispatch exit ;;
     Reboot)   systemctl reboot ;;

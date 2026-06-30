@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh"
 
-launch_wlogout="wlogout -l $VUTURELAND_DIR/wlogout/layout -C $VUTURELAND_DIR/wlogout/style.css"
-launch_waybar="waybar   -c $VUTURELAND_DIR/waybar/config.json -s $VUTURELAND_DIR/waybar/style.css"
+launch_wlogout="wlogout -l $VELUMERON_DIR/wlogout/layout -C $VELUMERON_DIR/wlogout/style.css"
+launch_waybar="waybar   -c $VELUMERON_DIR/waybar/config.json -s $VELUMERON_DIR/waybar/style.css"
 
 # === Define flags ===
 flag_wlogout=false

@@ -1,6 +1,6 @@
-# Vutureland — Architecture & Engineering Reference
+# Velumeron — Architecture & Engineering Reference
 
-This is the single, all-encompassing technical reference for Vutureland: how the
+This is the single, all-encompassing technical reference for Velumeron: how the
 project is laid out, how every component is wired, how data (especially colours)
 flows, the development workflow, and a running change log.
 
@@ -17,17 +17,17 @@ basis for the public docs.
 
 ## 1. The two-tier model (the single most important concept)
 
-Vutureland always runs against **two** locations:
+Velumeron always runs against **two** locations:
 
 | Role | Variable | On a client (AUR) | On the dev box |
 |------|----------|-------------------|----------------|
-| **Source / package** (read-only templates, scripts, assets) | `VUTURELAND_DIR` | `/usr/share/vutureland` | the git repo, e.g. `~/DEV/vutureland` |
-| **User runtime** (synced templates + generated state + wallust output) | `VUTURELAND_USER_DIR` | `~/.config/vutureland` | `~/.config/vutureland` |
+| **Source / package** (read-only templates, scripts, assets) | `VELUMERON_DIR` | `/usr/share/velumeron` | the git repo, e.g. `~/DEV/velumeron` |
+| **User runtime** (synced templates + generated state + wallust output) | `VELUMERON_USER_DIR` | `~/.config/velumeron` | `~/.config/velumeron` |
 
 **Golden rule:** the source is the *base* you edit; the user dir is what
 everything *operational* reads and writes at runtime. Nothing operational should
-read `VUTURELAND_DIR` directly for files that wallust rewrites or that the user
-customises — those must come from `VUTURELAND_USER_DIR`, otherwise live colours
+read `VELUMERON_DIR` directly for files that wallust rewrites or that the user
+customises — those must come from `VELUMERON_USER_DIR`, otherwise live colours
 and edits won't take effect.
 
 Why it matters: many config files use a **relative** `@import` of the palette
@@ -38,9 +38,9 @@ loaded from the user dir imports the *wallust-updated* palette. Loading config
 from the wrong tier is the root cause of the whole "colours don't update" class
 of bugs (see Change Log).
 
-On the dev box `VUTURELAND_DIR` points at the repo so you get a fast edit loop
+On the dev box `VELUMERON_DIR` points at the repo so you get a fast edit loop
 (edit → `--sync` → test) without rebuilding a package. **Do not install the AUR
-package on the dev box** — it would move `VUTURELAND_DIR` to `/usr/share` and your
+package on the dev box** — it would move `VELUMERON_DIR` to `/usr/share` and your
 repo edits would stop taking effect until a rebuild.
 
 ---
@@ -48,9 +48,9 @@ repo edits would stop taking effect until a rebuild.
 ## 2. Repository / source layout
 
 ```
-vutureland/
-├── welcome_to_vutureland.sh     # setup + --sync (the installer/updater)
-├── bin/vutureland               # settings-panel launcher (symlinked to ~/.local/bin)
+velumeron/
+├── welcome_to_velumeron.sh     # setup + --sync (the installer/updater)
+├── bin/velumeron               # settings-panel launcher (symlinked to ~/.local/bin)
 ├── assets/
 │   ├── scripts/                 # runtime scripts (launch-*, wallpaper-set, lib/env.sh, …)
 │   ├── wallpaper/               # default wallpapers (horizontal/, vertical/, hyprlock/, sets.json)
@@ -83,7 +83,7 @@ default values only (`assets/colors_gtk.css`, `hypr.lua/colors.lua`,
 
 ---
 
-## 3. Setup & sync — `welcome_to_vutureland.sh`
+## 3. Setup & sync — `welcome_to_velumeron.sh`
 
 Two modes:
 
@@ -99,7 +99,7 @@ Two modes:
    `waybar-modular/output/` (generated per machine; a dev tree may carry stale
    output that would pin bars to old paths/colours).
 3. Symlinks `assets/{wallpaper,icons,scripts}` from the source into the user dir
-   (read-only assets referenced by absolute `~/.config/vutureland/assets/...`
+   (read-only assets referenced by absolute `~/.config/velumeron/assets/...`
    paths).
 4. Seeds wallust output fallbacks as **real files** (so wallust can write them).
 5. Wires `~/.config/hypr/{hypridle,hyprlock}.conf` as symlinks to the user dir —
@@ -111,7 +111,7 @@ Two modes:
 7. Wires the GTK theme (adw-gtk3-dark + dark color-scheme; `gtk.css` imports
    `wallust.css`).
 8. Installs the bundled fonts (`assets/fonts/*.ttf` → `~/.local/share/fonts/
-   vutureland/`, then `fc-cache`). Per-user, no root; idempotent (only copies
+   velumeron/`, then `fc-cache`). Per-user, no root; idempotent (only copies
    new/updated files). These are the fonts the configs require — `FantasqueSansM
    Nerd Font` (waybar/swaync/rofi), `Atomic Age` (hyprlock), `Audiowide`.
 
@@ -124,14 +124,14 @@ restarts the settings panel.
 ## 4. The colour pipeline (wallust)
 
 ```
-wallpaper change ──▶ wallust run/cs (config-dir = $VUTURELAND_DIR/wallust)
+wallpaper change ──▶ wallust run/cs (config-dir = $VELUMERON_DIR/wallust)
                          │  uses wallust/templates/*  + wallust.toml mapping
                          ▼
        writes palette to many destinations, e.g.:
-         ~/.config/vutureland/assets/colors_gtk.css   (GTK/waybar/swaync)
-         ~/.config/vutureland/rofi/assets/colors.rasi (rofi)
-         ~/.config/vutureland/kitty/colors.conf       (kitty)
-         ~/.config/vutureland/hypr.lua/colors.lua     (hyprland)
+         ~/.config/velumeron/assets/colors_gtk.css   (GTK/waybar/swaync)
+         ~/.config/velumeron/rofi/assets/colors.rasi (rofi)
+         ~/.config/velumeron/kitty/colors.conf       (kitty)
+         ~/.config/velumeron/hypr.lua/colors.lua     (hyprland)
          ~/.config/gtk-3.0/wallust.css, gtk-4.0/...   (GTK apps)
                          │
                          ▼  [hooks] in wallust.toml + wallpaper-set.sh
@@ -139,7 +139,7 @@ wallpaper change ──▶ wallust run/cs (config-dir = $VUTURELAND_DIR/wallust)
 ```
 
 - **Modes:** `auto` (derive from wallpaper) or `fixed:<scheme>` (from
-  `wallust/fixed_colors/*.json`), stored in `~/.config/vutureland/wallust/color-mode`.
+  `wallust/fixed_colors/*.json`), stored in `~/.config/velumeron/wallust/color-mode`.
 - **Defined colour names** (`wallust/templates/colors_gtk.css`): `color0`–`15`,
   `foreground/background/cursor`, and semantic aliases `bg-primary/element/
   secondary/active/hover`, `bo-normal/active`, `fg-primary/muted/urgent/bright`.
@@ -172,14 +172,14 @@ Fully modular. Source shells in `waybar-modular/config/miboro/base/`, modules in
 `…/modules/horizontal/<module>/{config.json,style.css}`.
 
 - **Default bar:** `apply_default_bar` writes
-  `~/.config/vutureland/waybar-modular/output/miboro/bar/top/<monitor>/{config.json,
+  `~/.config/velumeron/waybar-modular/output/miboro/bar/top/<monitor>/{config.json,
   groups.json,style.css}`. Layout — left: `clock · sep · performance-drawer · sep ·
   interactive-user`; centre: `workspaces · submap`; right: `cava · audio-drawer ·
   sep · tray-drawer · battery` (battery only on devices with one). Drawers pull in
   their child module configs.
 - **Idempotent refresh:** `apply_default_bar` only (re)writes a bar if there is
   none, it points at the read-only package dir, or its module layout matches a
-  layout Vutureland has shipped as a default (`_default_bar_layouts`). A
+  layout Velumeron has shipped as a default (`_default_bar_layouts`). A
   user-customised bar is left alone.
 - **Loading:** `launch-waybar.sh` finds every `output/**/config.json`, merges
   them into `/tmp/waybar-merged-config.json` + `/tmp/waybar-merged-style.css`, and
@@ -188,7 +188,7 @@ Fully modular. Source shells in `waybar-modular/config/miboro/base/`, modules in
 - **Colours:** each bar's `style.css` imports the user-dir `bar.css`, which imports
   `../../../../../assets/colors_gtk.css` (→ user-dir wallust palette). Both the
   shell `apply_default_bar` and the GUI generate these paths from
-  `VUTURELAND_USER_DIR` so the relative palette import always resolves live.
+  `VELUMERON_USER_DIR` so the relative palette import always resolves live.
 
 See [waybar.md](waybar.md).
 
@@ -197,12 +197,12 @@ See [waybar.md](waybar.md).
 ## 7. Hyprlock (lock screen)
 
 - **Themes:** `hypr.lua/hyprlock-themes/*.conf` use `{{mon1}}`/`{{mon2}}`
-  placeholders and `~/.config/vutureland/assets/wallpaper/hyprlock/<img>` paths.
+  placeholders and `~/.config/velumeron/assets/wallpaper/hyprlock/<img>` paths.
 - **`assets/scripts/apply-hyprlock-theme.sh <theme>`** is the single writer of the
   active config: it substitutes **this machine's** monitors into the placeholders,
   rewrites image paths to **absolute** package paths (hyprlock 0.9.x does not
   expand `~`), drops any leftover `{{monN}}` background block (fewer monitors than
-  the theme expects), writes `~/.config/vutureland/hypr.lua/hyprlock.conf`, and
+  the theme expects), writes `~/.config/velumeron/hypr.lua/hyprlock.conf`, and
   records the chosen theme in `…/.hyprlock-theme`.
 - **Consumers:** the rofi picker (`rofi/assets/rofi-hyprlock.sh`) and the GUI
   lockscreen page both delegate to that script.
@@ -221,11 +221,11 @@ monitor names (shipping `DP-2`/`DP-3` once caused clients to show no wallpaper).
 
 GTK4/Adwaita panel, `Adw.Application`, gtk4-layer-shell, run as a daemon.
 
-- **Launcher:** `bin/vutureland` (sets `LD_PRELOAD=libgtk4-layer-shell`). Symlinked
-  to `~/.local/bin/vutureland`. Flags: `--daemon` (start, kept alive hidden),
+- **Launcher:** `bin/velumeron` (sets `LD_PRELOAD=libgtk4-layer-shell`). Symlinked
+  to `~/.local/bin/velumeron`. Flags: `--daemon` (start, kept alive hidden),
   `--toggle` (SIGUSR1 show/hide), `--end` (quit).
-- **Restart it:** `vutureland --end; vutureland --daemon & disown` — or just run
-  `welcome_to_vutureland.sh --sync`, which restarts it too.
+- **Restart it:** `velumeron --end; velumeron --daemon & disown` — or just run
+  `welcome_to_velumeron.sh --sync`, which restarts it too.
 - **Icons:** the panel forces the **Adwaita** icon theme for its own process, so
   it is independent of the user's system icon theme (which may lack freedesktop
   symbolic names and render everything as the broken placeholder). Only Adwaita
@@ -233,7 +233,7 @@ GTK4/Adwaita panel, `Adw.Application`, gtk4-layer-shell, run as a daemon.
 - **Pages** (`gui/pages/`): `home`, `hyprland`, `waybar` (Bar), `wallpaper`
   (Theme, with Sets/Horizontal/Vertical/Colors), `lockscreen` (Power & Lock),
   `notifications`. Models in `gui/models/`. The waybar model resolves all paths
-  from `VUTURELAND_USER_DIR`.
+  from `VELUMERON_USER_DIR`.
 
 See [gui.md](gui.md).
 
@@ -248,28 +248,28 @@ See [gui.md](gui.md).
 - **rofi:** menus are launched with their `.rasi` from the **user dir** so
   `@import "./assets/colors.rasi"` resolves to the wallust output. (Launching from
   the package dir would pick up the static packaged palette.)
-- **kitty:** `~/.config/vutureland/kitty/` (colors.conf is a wallust output).
+- **kitty:** `~/.config/velumeron/kitty/` (colors.conf is a wallust output).
 
 ---
 
 ## 10. Development workflow
 
 ```
-1. Edit the SOURCE in the repo (~/DEV/vutureland/…)   ← the "base"
-2. welcome_to_vutureland.sh --sync                    ← apply to ~/.config/vutureland
+1. Edit the SOURCE in the repo (~/DEV/velumeron/…)   ← the "base"
+2. welcome_to_velumeron.sh --sync                    ← apply to ~/.config/velumeron
 3. Test
-4. git commit && git push                             ← clients get it via: yay -S vutureland-git
+4. git commit && git push                             ← clients get it via: yay -S velumeron-git
 ```
 
-- Never edit files under `~/.config/vutureland/` — they are overwritten by `--sync`
+- Never edit files under `~/.config/velumeron/` — they are overwritten by `--sync`
   or wallust.
 - To change **colours**, edit `wallust/templates/` (not the generated outputs).
 - To change the **default bar**, edit `apply_default_bar` and/or the
   `waybar-modular/config/miboro/base|modules` source; a `--sync` only refreshes
   *un-customised* default bars.
 - Commit messages: end with the project's `Co-Authored-By` trailer.
-- Clients are `vutureland-git` (VCS package); they pick up `main`. `yay -S
-  vutureland-git` forces a rebuild from HEAD (plain `-Syu` may not detect new
+- Clients are `velumeron-git` (VCS package); they pick up `main`. `yay -S
+  velumeron-git` forces a rebuild from HEAD (plain `-Syu` may not detect new
   commits without `--devel`).
 
 ---
@@ -279,7 +279,7 @@ See [gui.md](gui.md).
 Selecting a waybar **design** also themes hyprland, swaync and the GUI. Each app
 keeps a `themes/<design>` file; the current look is shipped as **`miboro`**.
 
-- **Active design record:** `~/.config/vutureland/active-theme` (a file holding
+- **Active design record:** `~/.config/velumeron/active-theme` (a file holding
   the name, e.g. `miboro`). Default when absent = `miboro`.
 - **Per-app theme files:**
   - `swaync/themes/<design>.css` — `launch-swaync.sh` writes the active one to
@@ -301,7 +301,7 @@ keeps a `themes/<design>` file; the current look is shipped as **`miboro`**.
 - **Adding wallpapers on clients (copy target).** The panel-dismiss bug is fixed
   (see Change Log `a38b246`), so the Add dialog now opens correctly. But the copy
   target `WALLPAPER_H/WALLPAPER_V` (GUI constants) still points at
-  `$VUTURELAND_DIR/assets/wallpaper/...`, i.e. the **read-only package** on
+  `$VELUMERON_DIR/assets/wallpaper/...`, i.e. the **read-only package** on
   clients, and the user wallpaper dir is a symlink to it — so the actual copy
   fails on clients (works on the dev box, where the repo is writable). Fix needs a
   user-writable wallpaper location: keep package defaults read-only, add a
@@ -327,7 +327,7 @@ Newest first. Each entry: what changed, why, and the commit.
 
 ### 2026-06-09
 - **Zero-setup monitor + workspaces on a fresh client** — a client that installed
-  `vutureland-git` without running the setup now auto-configures itself:
+  `velumeron-git` without running the setup now auto-configures itself:
   - `modules/variables.lua` provides `or`-fallbacks for every device-specific
     global normally written by the setup (`exec_once_daemons`, `start_apps`,
     `quick_app`, `cur_theme`/`cur_size`, the `fn_*` media keys), so the Hyprland
@@ -422,7 +422,7 @@ Newest first. Each entry: what changed, why, and the commit.
 - **GUI polish** — round toggles/sliders (B2); sidebar = window bg + ~10% accent,
   fewer accent blocks (B1).
 - **hypremoji** added to dependencies (E).
-- Backup before this batch: `~/DEV/vutureland-backup-2026-06-07_2029` (HEAD
+- Backup before this batch: `~/DEV/velumeron-backup-2026-06-07_2029` (HEAD
   `24739a1`).
 
 ### 2026-06-07
@@ -443,7 +443,7 @@ Newest first. Each entry: what changed, why, and the commit.
   log.
 - **Bundled fonts auto-installed on sync** (`<pending>`). `assets/fonts/` now ships
   FantasqueSansM Nerd Font, Atomic Age and Audiowide; `--sync` installs them to
-  `~/.local/share/fonts/vutureland/` (per-user, idempotent) so clients render
+  `~/.local/share/fonts/velumeron/` (per-user, idempotent) so clients render
   correctly without manual font setup. See §3 step 8.
 - **In-panel set editor + library image picker** (`f7b7b49`). The set editor was a
   separate `Adw.Window` that couldn't be used under the layer-shell panel. It is
@@ -469,10 +469,10 @@ Newest first. Each entry: what changed, why, and the commit.
 
 ### 2026-06-06
 - **Waybar bars generated from the user dir, not the package** (`337e337`). The GUI
-  waybar model built `@import` paths from `VUTURELAND_DIR`; on the dev box that is
+  waybar model built `@import` paths from `VELUMERON_DIR`; on the dev box that is
   the repo, whose `colors_gtk.css` is the static fallback, so GUI-touched bars
   never followed the theme (the "border colour doesn't update" bug). The model now
-  resolves all paths from `VUTURELAND_USER_DIR`, and `sync_templates` no longer
+  resolves all paths from `VELUMERON_USER_DIR`, and `sync_templates` no longer
   copies `waybar-modular/output/`. This unified dev and client behaviour.
 - **Revert of the "single waybar restart" change** (`adfae3e`). Removing the second
   restart regressed the palette refresh; restored the wallust `waybar_update` hook

@@ -51,7 +51,7 @@ saturation = 20
 
 vscode       = { src = "vscode.json",            dst = "~/.cache/wallust/colors.json" }
 vscode2      = { src = "vscode",                 dst = "~/.cache/wallust/colors" }
-hyprland_lua = { src = "colors.lua",             dst = "~/.config/vutureland/hypr.lua/colors.lua"}
+hyprland_lua = { src = "colors.lua",             dst = "~/.config/velumeron/hypr.lua/colors.lua"}
 pywalfox     = { src = "pywal-colors",           dst = "~/.cache/wal/colors" }
 pywalfox2    = { src = "pywal-colors.json",      dst = "~/.cache/wal/colors.json" }
 fish         = { src = "colors.fish",            dst = "~/.cache/wallust/colors.fish"}
@@ -64,21 +64,19 @@ gtk4             = { src = "colors_gtk4.css",      dst = "~/.config/gtk-4.0/wall
 qt5ct            = { src = "vutureland.conf",      dst = "~/.config/qt5ct/colors/vutureland.conf"}
 qt6ct            = { src = "vutureland.conf",      dst = "~/.config/qt6ct/colors/vutureland.conf"}
 
-kitty_vuture     = { src = "colors-kitty.conf",    dst = "~/.config/vutureland/kitty/colors.conf"}
-rofi_vuture      = { src = "colors-rofi.conf",     dst = "~/.config/vutureland/rofi/assets/colors.rasi"}
-colors_vuture    = { src = "colors_gtk.css",       dst = "~/.config/vutureland/assets/colors_gtk.css" }
-qs_colors        = { src = "colors.qml",           dst = "~/.config/vutureland/quickshell/Colors.qml" }
+kitty_vuture     = { src = "colors-kitty.conf",    dst = "~/.config/velumeron/kitty/colors.conf"}
+rofi_vuture      = { src = "colors-rofi.conf",     dst = "~/.config/velumeron/rofi/assets/colors.rasi"}
+colors_vuture    = { src = "colors_gtk.css",       dst = "~/.config/velumeron/assets/colors_gtk.css" }
+qs_colors        = { src = "colors.json",          dst = "~/.config/velumeron/quickshell/colors.json" }
 
 [hooks]
-hyprland_lua_colors = "~/.config/vutureland/assets/scripts/wallust/hyprland_lua-colors.sh && hyprctl reload"
+hyprland_lua_colors = "~/.config/velumeron/assets/scripts/wallust/hyprland_lua-colors.sh && hyprctl reload"
 pywalfox_update     = "pywalfox update"
-swaync_update       = "~/.config/vutureland/assets/scripts/launch-swaync.sh"
-# Restart waybar fully — SIGUSR2 only reloads the top-level style.css and
-# misses changes that live in @imported colour files. Skipped when the active
-# bar is quickshell (qs_reload handles that) so waybar isn't launched on top.
-waybar_update       = 'test "$(jq -r ".shell_backend // \"waybar\"" "${XDG_CONFIG_HOME:-$HOME/.config}/vutureland/gui/settings.json" 2>/dev/null)" = quickshell || { sleep 0.8 && ~/.config/vutureland/assets/scripts/launch-waybar.sh; }'
+# swaync_update / waybar_update hooks retired: the shell is quickshell (qs_reload
+# applies the new palette); swaync and waybar are no longer launched.
 # Bump gtk.css mtime so GTK file-monitors see a change and reload the palette.
-# (vutureland's own settings panel watches colors_gtk.css directly — no extra hook needed.)
+# (velumeron's own settings panel watches colors_gtk.css directly — no extra hook needed.)
 gtk_reload          = "touch ~/.config/gtk-3.0/gtk.css ~/.config/gtk-4.0/gtk.css 2>/dev/null || true"
-# Restart Quickshell only if it is already running (copies new Colors.qml via launch script)
-qs_reload           = "pgrep -x quickshell >/dev/null 2>&1 && ~/.config/vutureland/assets/scripts/launch-quickshell.sh || true"
+# Quickshell recolours LIVE: it reads colors.json (above) via a watched FileView in Colors.qml, so a
+# theme change updates every surface in place — NO restart. This removes the old qs_reload hook whose
+# full restart dropped every bar's exclusive zone and made windows on all monitors grow/shrink.

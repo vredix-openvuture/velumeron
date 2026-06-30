@@ -8,6 +8,7 @@ import Quickshell.Io
 Item {
     id: root
     property bool vertical: false   // set by ModSlot: rotate to read along a vertical sidebar
+    property string barMon: ""      // monitor name, for per-monitor font size
     implicitWidth:  label.implicitWidth
     implicitHeight: label.implicitHeight
 
@@ -17,23 +18,29 @@ Item {
     property string _gpuPath: ""
     property bool _ready: false
 
+    // Per-module customization (Settings → Bar → Module → gear).
+    readonly property string _font:    VtlConfig.moduleFontFor("temperature")
+    readonly property string _unit:    VtlConfig.moduleSetting("temperature", "unit", "C")
+    readonly property color  _normCol: Colors[VtlConfig.moduleColorName("temperature")] ?? Colors.fgMuted
+    function _disp(c) { return (root._unit === "F" ? Math.round(c * 9 / 5 + 32) : c) + "°" }
+
     Text {
         id: label
         text: {
             if (!root._ready) return ""
             var parts = []
-            if (root._cpuPath) parts.push(" " + root.cpuTemp + "°")
-            if (root._gpuPath) parts.push("󰢮 " + root.gpuTemp + "°")
+            if (root._cpuPath) parts.push(" " + root._disp(root.cpuTemp))
+            if (root._gpuPath) parts.push("󰢮 " + root._disp(root.gpuTemp))
             return parts.join("  ")
         }
         color: {
-            var t = Math.max(root.cpuTemp, root.gpuTemp)
+            var t = Math.max(root.cpuTemp, root.gpuTemp)   // thresholds always in °C
             if (t >= 90) return Colors.fgUrgent
             if (t >= 75) return Colors.color11
-            return Colors.fgMuted
+            return root._normCol
         }
-        font.family:    "FantasqueSansM Nerd Font"
-        font.pointSize: 10
+        font.family:    root._font
+        font.pixelSize: VtlConfig.moduleFontSizeFor("temperature", root.barMon)
         visible: root._ready && (root._cpuPath !== "" || root._gpuPath !== "")
     }
 

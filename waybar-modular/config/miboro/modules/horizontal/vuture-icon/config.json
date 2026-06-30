@@ -1,8 +1,0 @@
-{
-  "custom/vuture-icon": {
-    "format": " ",
-    "tooltip": false,
-    "on-click": "$VUTURELAND_DIR/bin/vutureland -t",
-    "on-click-right": "rofi -show drun -config $VUTURELAND_USER_DIR/rofi/launcher.rasi"
-  }
-}

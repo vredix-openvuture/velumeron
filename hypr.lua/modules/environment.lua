@@ -3,15 +3,21 @@
 -- See https://wiki.hypr.land/Configuring/Advanced-and-Cool/Environment-variables/
 -- ═══════════════════════════════════════════════════════
 
--- Vutureland install paths (propagates to all child processes: waybar, swaync, rofi, …)
-hl.env("VUTURELAND_DIR",      VTL_DIR)
-hl.env("VUTURELAND_USER_DIR", VTL_USER_DIR)
+-- Velumeron install paths (propagates to all child processes: waybar, swaync, rofi, …)
+hl.env("VELUMERON_DIR",      VTL_DIR)
+hl.env("VELUMERON_USER_DIR", VTL_USER_DIR)
 
 -- QT
 hl.env("QT_QPA_PLATFORM",                    "wayland;xcb")
 hl.env("QT_QPA_PLATFORMTHEME",               "qt5ct")
 --hl.env("QT_STYLE_OVERRIDE",                  "kvantum")
 hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION","1")
+
+-- Make the compiled Velumeron.Mpv live-wallpaper plugin importable from ANY quickshell launch
+-- (session script, a bare `quickshell`, or the `qs` keybinds) — not just launch-quickshell.sh.
+-- Without it on QML_IMPORT_PATH, VideoSurface.qml errors "module Velumeron.Mpv is not installed"
+-- and video wallpapers fall back to a black surface.
+hl.env("QML_IMPORT_PATH", VTL_DIR .. "/quickshell/plugins")
 
 -- Toolkit backends
 hl.env("GDK_BACKEND",    "wayland,x11,*")

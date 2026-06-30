@@ -1,9 +1,0 @@
-window.leftbar #clock {
-    font-size:   1.2rem;
-    font-family: Audiowide;
-    color:       @fg-active;
-    margin:      1px 0px;
-    padding:     4px 1px;
-}
-
-window.leftbar #clock:hover { color: @fg-hover; }

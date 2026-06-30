@@ -1,9 +1,0 @@
-{
-  "custom/performance": {
-    "format": "{}",
-    "exec": "$VUTURELAND_DIR/assets/scripts/powermode.sh --label",
-    "interval": 2,
-    "on-click": "$VUTURELAND_DIR/assets/scripts/powermode.sh",
-    "tooltip": true
-  }
-}

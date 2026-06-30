@@ -8,13 +8,26 @@ Row {
     spacing: 4
     required property HyprlandMonitor monitor
 
-    // Set true by the sidebar Loader (which rotates the whole module -90°).
+    // Set true by the sidebar Loader (which rotates the whole module ±90°).
     // Used to counter-rotate the active-workspace number so it stays upright.
     property bool vertical: false
+    // Which edge we live on — set by the bar. The rotation is -90° on the left edge but
+    // +90° on the right, so the upright counter-rotation and the layout order both flip.
+    property string barEdge: ""
+    readonly property bool onRight: barEdge === "right"
 
-    // The sidebar's -90° rotation sends the row's tail end to the top. Reverse the
-    // layout when vertical so workspaces still read low→high from top to bottom.
-    layoutDirection: vertical ? Qt.RightToLeft : Qt.LeftToRight
+    // The rotation sends one end of the row off-axis; reverse the layout when vertical so
+    // workspaces still read low→high from top to bottom — left edge (-90°) needs RightToLeft,
+    // right edge (+90°) needs LeftToRight.
+    layoutDirection: vertical ? (onRight ? Qt.LeftToRight : Qt.RightToLeft) : Qt.LeftToRight
+
+    // Per-module customization (Settings → Bar → Module → gear). Colour override = the active pill.
+    readonly property int    _is:        VtlConfig.moduleIconSizeFor("workspaces", monitor?.name ?? "")
+    readonly property int    _fs:        VtlConfig.moduleFontSizeFor("workspaces", monitor?.name ?? "")
+    readonly property string _font:      VtlConfig.moduleFontFor("workspaces")
+    readonly property color  _activeCol: Colors[VtlConfig.moduleColorName("workspaces")] ?? Colors.boActive
+    readonly property int    _max:       VtlConfig.moduleSetting("workspaces", "max_workspaces", 10)
+    readonly property bool   _showNum:   VtlConfig.moduleSetting("workspaces", "show_number", true)
 
     Repeater {
         model: Hyprland.workspaces
@@ -30,15 +43,15 @@ Row {
             readonly property string wsMon:   modelData.monitor?.name ?? ipc?.monitor ?? ""
             readonly property bool   isMine:  wsMon === root.monitor?.name
             readonly property bool   isActive: root.monitor?.activeWorkspace?.id === modelData.id
-            readonly property bool   show:    modelData.id > 0 && modelData.id <= 10
+            readonly property bool   show:    modelData.id > 0 && modelData.id <= root._max
             readonly property bool   hovered: dotHover.containsMouse
             // Only the active workspace gets the full icon size; the rest sit a little smaller.
-            readonly property int    dotD:    isActive ? VtlConfig.barIconSize : VtlConfig.barIconSize - 5
+            readonly property int    dotD:    isActive ? root._is : root._is - 5
 
             // Persistent workspaces (this monitor) are always shown; plus the active one.
             visible: show && (isMine || isActive)
-            width:   visible ? (isActive ? VtlConfig.barIconSize + 12 : dotD) : 0
-            height:  VtlConfig.barIconSize + 10
+            width:   visible ? (isActive ? root._is + 14 : dotD) : 0
+            height:  root._is
 
             Behavior on width { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
@@ -48,7 +61,7 @@ Row {
                 height: wsDot.dotD
                 radius: height / 2
                 color: {
-                    if (wsDot.isActive) return Colors.boActive
+                    if (wsDot.isActive) return root._activeCol
                     if (wsDot.hovered)  return Colors.fgPrimary
                     return Colors.bgElement
                 }
@@ -57,14 +70,15 @@ Row {
                 // Workspace number — only on the (widened) active pill
                 Text {
                     anchors.centerIn: parent
-                    // Counter the sidebar's -90° so the digit reads upright when vertical
-                    rotation:       root.vertical ? 90 : 0
-                    visible:        wsDot.isActive
+                    // Counter the sidebar's rotation so the digit reads upright: +90° to undo the
+                    // left edge's -90°, -90° to undo the right edge's +90°.
+                    rotation:       root.vertical ? (root.onRight ? -90 : 90) : 0
+                    visible:        wsDot.isActive && root._showNum
                     text:           wsDot.wsId
                     color:          Colors.bgPrimary
-                    font.pixelSize: 14
+                    font.pixelSize: root._fs
                     font.bold:      true
-                    font.family:    "FantasqueSansM Nerd Font"
+                    font.family:    root._font
                 }
             }
 

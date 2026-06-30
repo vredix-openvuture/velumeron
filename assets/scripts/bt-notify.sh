@@ -8,7 +8,7 @@
 #   After=bluetooth.target
 #
 #   [Service]
-#   ExecStart=%h/.config/vutureland/assets/scripts/bt-notify.sh
+#   ExecStart=%h/.config/velumeron/assets/scripts/bt-notify.sh
 #   Restart=always
 #   RestartSec=3
 #   Environment=DISPLAY=:0
@@ -36,7 +36,7 @@ dbus-monitor --system \
             event="${mac}:connected"
             if [[ "$event" != "$last_event" ]]; then
                 name=$(bluetoothctl info "$mac" 2>/dev/null | awk -F': ' '/^\s+Name:/ {print $2; exit}')
-                notify-send -i "$HOME/.config/vutureland/assets/icons/bluetooth.png" "Bluetooth" "Connected to ${name:-$mac}"
+                notify-send -i "$HOME/.config/velumeron/assets/icons/bluetooth.png" "Bluetooth" "Connected to ${name:-$mac}"
                 last_event="$event"
             fi
             mac=""
@@ -44,7 +44,7 @@ dbus-monitor --system \
             event="${mac}:disconnected"
             if [[ "$event" != "$last_event" ]]; then
                 name=$(bluetoothctl info "$mac" 2>/dev/null | awk -F': ' '/^\s+Name:/ {print $2; exit}')
-                notify-send -i "$HOME/.config/vutureland/assets/icons/bluetooth.png" "Bluetooth" "Disconnected from ${name:-$mac}"
+                notify-send -i "$HOME/.config/velumeron/assets/icons/bluetooth.png" "Bluetooth" "Disconnected from ${name:-$mac}"
                 last_event="$event"
             fi
             mac=""

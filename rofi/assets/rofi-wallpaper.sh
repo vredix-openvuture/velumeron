@@ -2,11 +2,11 @@
 source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." && pwd)/assets/scripts/lib/env.sh"
 
 wallpaper_dir="$WALLPAPER_DIR_H"
-wallpaper_script="$VUTURELAND_DIR/assets/scripts/wallpaper-set.sh"
-themes_file="$VUTURELAND_DIR/assets/wallpaper/theme-names.txt"
-cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/vutureland/wallpaper-thumbs"
-sets_json="$VUTURELAND_USER_DIR/assets/sets.json"
-gui_settings="$VUTURELAND_USER_DIR/gui/settings.json"
+wallpaper_script="$VELUMERON_DIR/assets/scripts/wallpaper-set.sh"
+themes_file="$VELUMERON_DIR/assets/wallpaper/theme-names.txt"
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/velumeron/wallpaper-thumbs"
+sets_json="$VELUMERON_USER_DIR/assets/sets.json"
+gui_settings="$VELUMERON_USER_DIR/gui/settings.json"
 
 # Source toggle (GUI → Settings → "Rofi shows"). Only use sets when the setting
 # asks for it AND at least one set exists; otherwise list the wallpapers.
@@ -20,7 +20,7 @@ if [[ "$rofi_source" == "sets" && -f "$sets_json" ]]; then
 fi
 
 if [[ "$ROFI_RETV" == "0" || -z "$ROFI_RETV" ]]; then
-    bash "$VUTURELAND_DIR/rofi/assets/generate-thumbnail.sh"
+    bash "$VELUMERON_DIR/rofi/assets/generate-thumbnail.sh"
 
     if [[ "$use_sets" == 1 ]]; then
         # List sets (name + a preview of the set's first image)

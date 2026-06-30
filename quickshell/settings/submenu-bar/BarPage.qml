@@ -261,12 +261,12 @@ Item {
         }
     }
 
-    // ── Save to $VUTURELAND_USER_DIR/gui/settings.json ───────────────────────
+    // ── Save to $VELUMERON_USER_DIR/gui/settings.json ───────────────────────
     function _save() {
         var py = "import json,os,sys;" +
-            "pu=os.environ.get('VUTURELAND_USER_DIR') or " +
+            "pu=os.environ.get('VELUMERON_USER_DIR') or " +
               "os.path.join(os.environ.get('XDG_CONFIG_HOME','') or " +
-              "os.path.expanduser('~/.config'),'vutureland');" +
+              "os.path.expanduser('~/.config'),'velumeron');" +
             "p=os.path.join(pu,'gui','settings.json');" +
             "os.makedirs(os.path.dirname(p),exist_ok=True);" +
             "d=json.load(open(p)) if os.path.exists(p) else {};" +

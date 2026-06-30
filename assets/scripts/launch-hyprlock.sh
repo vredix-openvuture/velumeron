@@ -3,7 +3,7 @@
 # Switches to empty lock workspaces first, then restores everything after unlock.
 source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh"
 
-USER_SETTINGS="$VUTURELAND_USER_DIR/hypr.lua/user_settings.lua"
+USER_SETTINGS="$VELUMERON_USER_DIR/hypr.lua/user_settings.lua"
 
 mon1=$(grep -oP '^mon1\s*=\s*"\K[^"]+' "$USER_SETTINGS" 2>/dev/null | head -1 || true)
 mon2=$(grep -oP '^mon2\s*=\s*"\K[^"]+' "$USER_SETTINGS" 2>/dev/null | head -1 || true)
@@ -34,15 +34,15 @@ sleep 0.4
 
 # hyprlock reads ~/.config/hypr/hyprlock.conf (symlink seeded by setup);
 # rofi-hyprlock.sh / the GUI write the active theme to
-# $VUTURELAND_USER_DIR/hypr.lua/hyprlock.conf with this machine's monitors.
+# $VELUMERON_USER_DIR/hypr.lua/hyprlock.conf with this machine's monitors.
 # Self-heal: if that conf references none of the current monitors (e.g. it was
 # shipped/synced with another machine's names), regenerate it now so the
 # wallpaper actually appears on this machine's monitor.
-ACTIVE_CONF="$VUTURELAND_USER_DIR/hypr.lua/hyprlock.conf"
+ACTIVE_CONF="$VELUMERON_USER_DIR/hypr.lua/hyprlock.conf"
 _cur_mons=$(hyprctl monitors -j | jq -r '.[].name' | paste -sd'|')
 if [[ -n "$_cur_mons" ]] && \
    ! grep -qE "monitor[[:space:]]*=[[:space:]]*($_cur_mons)([[:space:]]|\$)" "$ACTIVE_CONF" 2>/dev/null; then
-    "$VUTURELAND_DIR/assets/scripts/apply-hyprlock-theme.sh" || true
+    "$VELUMERON_DIR/assets/scripts/apply-hyprlock-theme.sh" || true
 fi
 
 hyprlock

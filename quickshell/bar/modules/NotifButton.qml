@@ -4,12 +4,13 @@ import Quickshell.Io
 
 Text {
     id: root
+    property string barMon: ""   // monitor name, for per-monitor icon size
     text:  "󰂜"
     color: Colors.fgPrimary
     font.family:    "FantasqueSansM Nerd Font"
-    font.pointSize: 11
+    font.pixelSize: VtlConfig.barIconSizeFor(root.barMon)
 
-    Process { id: proc; command: ["bash", "-c", "$VUTURELAND_DIR/bin/vutureland --panel-toggle"] }
+    Process { id: proc; command: ["bash", "-c", "$VELUMERON_DIR/bin/velumeron --panel-toggle"] }
 
     MouseArea {
         anchors.fill: parent

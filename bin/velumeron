@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Velumeron launcher.
+# The shell (bar, OSD, notifications, settings, keybind help) is now QuickShell;
+# the old Python GUI / waybar / swaync are retired. This stays as the stable entry
+# point and routes the legacy flags to the running QuickShell instance over IPC.
+_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+QS_DIR="${VELUMERON_DIR:-$_DIR/..}/quickshell"
+
+# Fire-and-forget IPC into the running shell (no-op if it isn't up yet).
+ipc() { qs -p "$QS_DIR" ipc call "$@" >/dev/null 2>&1 || true; }
+
+case "${1:-}" in
+    # ── quickshell control ──────────────────────────────────────────────────
+    quickshell)
+        shift
+        case "${1:-}" in
+            --gui-panel)
+                touch /tmp/velumeron-qs-gui-panel
+                pgrep -x quickshell >/dev/null 2>&1 || bash "$_DIR/../assets/scripts/launch-quickshell.sh"
+                ;;
+            *)  exec bash "$_DIR/../assets/scripts/launch-quickshell.sh" ;;
+        esac
+        ;;
+
+    # ── keybind cheatsheet (quickshell overlay) ─────────────────────────────
+    # velumeron --keybind-help [window|apps|system]   (no arg → full reference)
+    --keybind-help)
+        case "${2:-}" in
+            window|apps|system) ipc keybind "$2" ;;
+            *)                  ipc keybind all  ;;
+        esac
+        ;;
+
+    # ── settings / notifications toggles ────────────────────────────────────
+    -t|--toggle|--settings) ipc menu toggle ;;     # settings corner menu
+    --panel-toggle)         ipc notify toggle ;;   # notification centre
+    --dnd)                  ipc notify dnd ;;       # toggle do-not-disturb
+
+    # ── daemon: no-op — the shell starts everything via launch-shell.sh ──────
+    -d|--daemon) : ;;
+
+    # ── stop the shell ──────────────────────────────────────────────────────
+    -e|--end) pkill -x quickshell 2>/dev/null || true ;;
+
+    -h|--help)
+        cat <<'EOF'
+velumeron — Hyprland desktop shell launcher
+
+  velumeron quickshell            Start / restart the QuickShell shell
+  velumeron quickshell --gui-panel Toggle the GUI panel
+  velumeron --keybind-help [ctx]  Keybind cheatsheet (ctx: window|apps|system)
+  velumeron -t, --toggle          Toggle the settings menu
+  velumeron --panel-toggle        Toggle the notification centre
+  velumeron --dnd                 Toggle do-not-disturb
+  velumeron -e, --end             Stop the shell
+EOF
+        ;;
+
+    # ── no args → open the settings menu ────────────────────────────────────
+    "") ipc menu toggle ;;
+
+    *)  echo "velumeron: unknown option '$1' (try --help)" >&2; exit 1 ;;
+esac

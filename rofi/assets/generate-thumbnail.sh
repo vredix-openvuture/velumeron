@@ -3,7 +3,7 @@ source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." && pwd)/assets
 
 WALLPAPER_H="$WALLPAPER_DIR_H"
 WALLPAPER_V="$WALLPAPER_DIR_V"
-cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/vutureland/wallpaper-thumbs"
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/velumeron/wallpaper-thumbs"
 thumb_size=400
 radius=10
 

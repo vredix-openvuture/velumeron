@@ -1,8 +1,0 @@
-{
-  "custom/notification": {
-    "tooltip": false,
-    "format": "󰂜 ",
-    "on-click": "$VUTURELAND_DIR/bin/vutureland --panel-toggle",
-    "escape": true
-  }
-}

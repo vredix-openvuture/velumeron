@@ -1,9 +1,0 @@
-{
-  "custom/actionuser": {
-    "rotate": 90,
-    "exec": "$VUTURELAND_DIR/waybar-modular/assets/interactive-user.sh",
-    "return-type": "json",
-    "interval": "once",
-    "on-click": "$VUTURELAND_DIR/rofi/assets/session-menu.sh"
-  }
-}

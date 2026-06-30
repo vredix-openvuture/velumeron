@@ -1,5 +1,5 @@
 /******************************************************************************
- * Vutureland — Window Switcher
+ * Velumeron — Window Switcher
  * Vertical list: icon  |  ws{n}  ·  class  —  title
  ******************************************************************************/
 @import "./assets/colors.rasi"

@@ -1,7 +1,0 @@
-{
-  "cpu": {
-    "format": "  {usage}%",
-    "tooltip": false,
-    "on-click": "hyprctl dispatch 'hl.dsp.focus({workspace=99})'"
-  }
-}

@@ -1,7 +1,0 @@
-{
-  "memory": {
-    "format": "  {percentage}%",
-    "tooltip": false,
-    "on-click": "hyprctl dispatch 'hl.dsp.focus({workspace=99})'"
-  }
-}

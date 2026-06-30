@@ -6,6 +6,7 @@ import Quickshell.Io
 // Shows the active tunnel name(s); hidden when no VPN is connected.
 Item {
     id: root
+    property string barMon: ""   // monitor name, for per-monitor icon/font size
     implicitWidth:  label.implicitWidth
     implicitHeight: label.implicitHeight
 
@@ -14,12 +15,29 @@ Item {
 
     visible: _connected
 
-    Text {
+    // Per-module customization (Settings → Bar → Module → gear).
+    readonly property string _font: VtlConfig.moduleFontFor("vpn")
+    readonly property color  _col:  Colors[VtlConfig.moduleColorName("vpn")] ?? Colors.boActive
+    readonly property bool   _showName: VtlConfig.moduleSetting("vpn", "show_name", true)
+
+    Row {
         id: label
-        text: " 󰌾 " + root._label
-        color:          Colors.boActive
-        font.family:    "FantasqueSansM Nerd Font"
-        font.pointSize: 10
+        spacing: 6
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text:           "󰌾"
+            color:          root._col
+            font.family:    root._font
+            font.pixelSize: VtlConfig.moduleIconSizeFor("vpn", root.barMon)
+        }
+        Text {
+            visible:        root._showName && root._label !== ""
+            anchors.verticalCenter: parent.verticalCenter
+            text:           root._label
+            color:          root._col
+            font.family:    root._font
+            font.pixelSize: VtlConfig.moduleFontSizeFor("vpn", root.barMon)
+        }
     }
 
     Process {

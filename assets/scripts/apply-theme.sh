@@ -12,9 +12,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 source "$SCRIPT_DIR/lib/env.sh"
 
-MODE_FILE="$VUTURELAND_USER_DIR/wallust/color-mode"
-FIXED_DIR="$VUTURELAND_DIR/wallust/fixed_colors"
-WALLUST_CFG="$VUTURELAND_DIR/wallust"
+MODE_FILE="$VELUMERON_USER_DIR/wallust/color-mode"
+FIXED_DIR="$VELUMERON_DIR/wallust/fixed_colors"
+WALLUST_CFG="$VELUMERON_DIR/wallust"
 
 mode="${1:-auto}"
 mkdir -p "$(dirname "$MODE_FILE")"
@@ -39,12 +39,12 @@ printf 'fixed:%s\n' "$scheme" > "$MODE_FILE"
 # [hooks], so run the post-processing steps ourselves (same as the old GUI).
 wallust --config-dir "$WALLUST_CFG" cs "$scheme_path"
 
-bash "$VUTURELAND_DIR/assets/scripts/wallust/hyprland_lua-colors.sh" 2>/dev/null || true
+bash "$VELUMERON_DIR/assets/scripts/wallust/hyprland_lua-colors.sh" 2>/dev/null || true
 hyprctl reload                  >/dev/null 2>&1 || true
 pywalfox update                 >/dev/null 2>&1 || true
 
 # Reload the active bar backend. Detached into its own session so that, when the
 # quickshell backend restarts itself, killing the old instance can't abort us.
-setsid bash "$VUTURELAND_DIR/assets/scripts/launch-shell.sh" </dev/null >/dev/null 2>&1 &
+setsid bash "$VELUMERON_DIR/assets/scripts/launch-shell.sh" </dev/null >/dev/null 2>&1 &
 
 exit 0

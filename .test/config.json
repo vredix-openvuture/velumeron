@@ -9,7 +9,7 @@
     "margin-right": 10,
     "margin-bottom": 4,
     "include": [
-      "~/.config/vutureland/waybar-modular/groups/groups-dock-top.json"
+      "~/.config/velumeron/waybar-modular/groups/groups-dock-top.json"
     ],
     "modules-left": [
       "group/left_pri_hor"
@@ -31,7 +31,7 @@
     "margin-right": 10,
     "margin-bottom": 4,
     "include": [
-      "~/.config/vutureland/waybar-modular/groups/groups-dock-top.json"
+      "~/.config/velumeron/waybar-modular/groups/groups-dock-top.json"
     ],
     "modules-left": [
       "group/left_sec_hor"

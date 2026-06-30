@@ -1,0 +1,72 @@
+pragma Singleton
+import QtQuick
+import Quickshell
+import Quickshell.Services.Notifications
+
+// The org.freedesktop.Notifications server + shared state. Owns the D-Bus name (so the old
+// Python daemon / swaync must not run). `server.trackedNotifications` is the history; `popups`
+// is the subset currently shown as toasts.
+Singleton {
+    id: root
+
+    property bool dnd:    false
+    property int  unread: 0                         // since the centre was last opened (bell indicator)
+    property var  popups: []                       // [Notification] currently toasting
+    property var  _deadlines: ({})                 // notification.id → epoch-ms expiry (0 = never)
+    readonly property var model: server.trackedNotifications   // ObjectModel — history
+
+    NotificationServer {
+        id: server
+        keepOnReload:        false
+        imageSupported:      true
+        actionsSupported:    true
+        bodySupported:       true
+        bodyMarkupSupported: true
+        persistenceSupported: true
+
+        onNotification: function (n) {
+            n.tracked = true
+            root.unread++
+            if (!root.dnd) {
+                var critical = (n.urgency === NotificationUrgency.Critical)
+                var to = (n.expireTimeout > 0 ? n.expireTimeout : 5000)
+                root._deadlines[n.id] = critical ? 0 : (Date.now() + to)
+                var a = root.popups.filter(function (x) { return x !== n })
+                a.unshift(n)
+                root.popups = a
+            }
+        }
+    }
+
+    // Auto-dismiss is driven here (not in the toast delegate, which gets recreated whenever the
+    // popups array changes — that reset the per-toast timers, so popups could get stuck on a
+    // steady stream of notifications). A single sweep drops popups past their deadline.
+    Timer {
+        interval: 250; repeat: true; running: root.popups.length > 0
+        onTriggered: {
+            var now = Date.now(), keep = [], changed = false
+            for (var i = 0; i < root.popups.length; i++) {
+                var n  = root.popups[i]
+                var dl = root._deadlines[n.id]
+                if (dl && dl > 0 && now >= dl) { changed = true; continue }
+                keep.push(n)
+            }
+            if (changed) root.popups = keep
+        }
+    }
+
+    function dropPopup(n) { root.popups = root.popups.filter(function (x) { return x !== n }) }
+
+    function dismiss(n) {
+        root.dropPopup(n)
+        if (n) n.dismiss()
+    }
+
+    function clearAll() {
+        var vs = server.trackedNotifications.values
+        for (var i = vs.length - 1; i >= 0; i--) vs[i].dismiss()
+        root.popups = []
+    }
+
+    function toggleDnd() { root.dnd = !root.dnd }
+}

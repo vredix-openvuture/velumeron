@@ -17,13 +17,19 @@ PanelWindow {
     id: root
 
     property HyprlandMonitor monitor: Hyprland.monitorFor(root.screen)
+    // This monitor's name — passed to VtlConfig's per-monitor getters. When per-monitor is
+    // off (or this monitor has no override) they resolve to the global value.
+    readonly property string mon: root.monitor?.name ?? ""
 
     // ── Geometry ───────────────────────────────────────────────────────────────
     readonly property int  sw: width
     readonly property int  sh: height
-    readonly property bool floating: VtlConfig.barFloating
-    readonly property int  gap: floating ? VtlConfig.barFloatGap : 0
-    readonly property int  r:   VtlConfig.barInnerRadius
+    readonly property bool floating: VtlConfig.barFloatingFor(root.mon)
+    readonly property bool dockMode: VtlConfig.barModeFor(root.mon) === "dock"
+    readonly property int  gap: floating ? VtlConfig.barFloatGapFor(root.mon) : 0
+    // Dock leaves a little air at the two ends (reuses the gap value) and stays flush to its edge.
+    readonly property int  air: dockMode ? VtlConfig.barFloatGapFor(root.mon) : 0
+    readonly property int  r:   VtlConfig.barInnerRadiusFor(root.mon)
     readonly property real bgAlpha: VtlConfig.barOpacityEnabled ? VtlConfig.barOpacityValue : 1.0
 
     // Bar background: optionally tinted with a little accent ("colorful").
@@ -34,8 +40,8 @@ PanelWindow {
     readonly property color cFill:   Qt.rgba(cBg.r, cBg.g, cBg.b, bgAlpha)
     readonly property color cBorder: Qt.rgba(Colors.boNormal.r,  Colors.boNormal.g,  Colors.boNormal.b,  bgAlpha)
 
-    function edgeOn(e) { return VtlConfig.edgeActive(e) }
-    function thick(e)  { return edgeOn(e) ? VtlConfig.edgeThickness(e) : 0 }
+    function edgeOn(e) { return VtlConfig.edgeActiveFor(e, root.mon) }
+    function thick(e)  { return edgeOn(e) ? VtlConfig.edgeThicknessFor(e, root.mon) : 0 }
     readonly property int tTop:    thick("top")
     readonly property int tBottom: thick("bottom")
     readonly property int tLeft:   thick("left")
@@ -69,10 +75,38 @@ PanelWindow {
             " L" + x0 + "," + (y0 + rr) + " A" + rr + "," + rr + " 0 0 1 " + (x0 + rr) + "," + y0 + " Z"
     }
 
+    // Rounded rect with per-corner radii (clockwise from top-left).
+    function rrPath(x0, y0, x1, y1, rTL, rTR, rBR, rBL) {
+        var d = "M" + (x0 + rTL) + "," + y0
+        d += " L" + (x1 - rTR) + "," + y0
+        if (rTR > 0) d += " A" + rTR + "," + rTR + " 0 0 1 " + x1 + "," + (y0 + rTR)
+        d += " L" + x1 + "," + (y1 - rBR)
+        if (rBR > 0) d += " A" + rBR + "," + rBR + " 0 0 1 " + (x1 - rBR) + "," + y1
+        d += " L" + (x0 + rBL) + "," + y1
+        if (rBL > 0) d += " A" + rBL + "," + rBL + " 0 0 1 " + x0 + "," + (y1 - rBL)
+        d += " L" + x0 + "," + (y0 + rTL)
+        if (rTL > 0) d += " A" + rTL + "," + rTL + " 0 0 1 " + (x0 + rTL) + "," + y0
+        return d + " Z"
+    }
+
+    // Dock: a strip flush to its edge, inset by `air` at the two ends, rounded only on the inner
+    // side; the edge side runs straight into the monitor border ("docked bar" look).
+    function dockPath() {
+        var s = root.stripRect(VtlConfig.barPositionFor(root.mon))
+        var x0 = s[0], y0 = s[1], x1 = s[0] + s[2], y1 = s[1] + s[3]
+        var rad = Math.min(r, s[2] / 2, s[3] / 2)
+        switch (VtlConfig.barPositionFor(root.mon)) {
+        case "bottom": return rrPath(x0, y0, x1, y1, rad, rad, 0, 0)   // inner = top
+        case "left":   return rrPath(x0, y0, x1, y1, 0, rad, rad, 0)   // inner = right
+        case "right":  return rrPath(x0, y0, x1, y1, rad, 0, 0, rad)   // inner = left
+        default:       return rrPath(x0, y0, x1, y1, 0, 0, rad, rad)   // top → inner = bottom
+        }
+    }
+
     // Single floating strip (inset by the gap), fully rounded.
     function floatRect() {
-        var p = VtlConfig.barPosition
-        var t = VtlConfig.barThickness
+        var p = VtlConfig.barPositionFor(root.mon)
+        var t = VtlConfig.barThicknessFor(root.mon)
         if (p === "bottom") return [gap, sh - gap - t, sw - gap, sh - gap]
         if (p === "left")   return [gap, gap, gap + t, sh - gap]
         if (p === "right")  return [sw - gap - t, gap, sw - gap, sh - gap]
@@ -93,8 +127,9 @@ PanelWindow {
         return d + " Z"
     }
 
-    // Fill: floating strip, or screen-rect-minus-hole (even-odd).
+    // Fill: dock strip, floating strip, or screen-rect-minus-hole (even-odd).
     function fillPath() {
+        if (dockMode) return dockPath()
         if (floating) {
             var f = floatRect()
             return roundRectPath(f[0], f[1], f[2], f[3], r)
@@ -105,6 +140,7 @@ PanelWindow {
     // Border: the floating outline, or only the *interior* hole edges (the ones not on
     // the screen border), stitched with rounded corners between adjacent interior edges.
     function borderPath() {
+        if (dockMode) return dockPath()
         if (floating) {
             var f = floatRect()
             return roundRectPath(f[0], f[1], f[2], f[3], r)
@@ -138,7 +174,13 @@ PanelWindow {
     // Strip rectangle [x, y, w, h] for an edge (gap-inset when floating; 0 when inactive).
     function stripRect(e) {
         if (!edgeOn(e)) return [0, 0, 0, 0]
-        var t = floating ? VtlConfig.barThickness : VtlConfig.edgeThickness(e)
+        var t = floating ? VtlConfig.barThicknessFor(root.mon) : VtlConfig.edgeThicknessFor(e, root.mon)
+        if (dockMode) {   // flush to the edge, inset by `air` at the two ends
+            if (e === "bottom") return [air, sh - t, sw - 2 * air, t]
+            if (e === "left")   return [0, air, t, sh - 2 * air]
+            if (e === "right")  return [sw - t, air, t, sh - 2 * air]
+            return [air, 0, sw - 2 * air, t]   // top
+        }
         if (e === "bottom") return [gap, sh - gap - t, sw - 2 * gap, t]
         if (e === "left")   return [gap, gap, t, sh - 2 * gap]
         if (e === "right")  return [sw - gap - t, gap, t, sh - 2 * gap]
@@ -196,7 +238,11 @@ PanelWindow {
         id: em
         required property string edge
         readonly property bool horiz: em.edge === "top" || em.edge === "bottom"
-        readonly property int  m: VtlConfig.barModuleMargin
+        readonly property int  m: VtlConfig.barModuleMarginFor(root.mon)
+        // Only render modules on edges the bar actually occupies. Otherwise an edge that was
+        // removed (but still has modules saved in the config) would render them at (0,0) — the
+        // stray "fragment". Inactive edge → invisible (children don't draw).
+        visible: root.edgeOn(em.edge)
 
         ModGroup {
             edge: em.edge; group: "start"
@@ -228,10 +274,17 @@ PanelWindow {
         required property string edge
         required property string group
         readonly property bool horiz:   mg.edge === "top" || mg.edge === "bottom"
-        readonly property var  keys:    VtlConfig.barModules(mg.edge, mg.group)
-        readonly property bool groupBg: VtlConfig.barModuleBg === "group" && mg.keys.length > 0
-        readonly property int  pad:     mg.groupBg ? 5 : 0
-        readonly property int  sp:      VtlConfig.barModuleSpacing
+        readonly property var  keys:    VtlConfig.barModulesFor(mg.edge, mg.group, root.mon)
+        readonly property bool groupBg: VtlConfig.barModuleBgFor(root.mon) === "group" && mg.keys.length > 0
+        readonly property int  pad:     mg.groupBg ? 6 : 0
+        readonly property int  sp:      VtlConfig.barModuleSpacingFor(root.mon)
+        readonly property int  barT:    VtlConfig.edgeThicknessFor(mg.edge, root.mon)
+        // Length of the visible content (collapsed slots are invisible → the positioner skips
+        // them) — used to hide the group + its background when nothing is showing.
+        // Whether anything in the group actually renders (measured — NOT used to gate the group's
+        // own visibility, which would stop layout and stick it at 0; only used for the background).
+        readonly property real contentLen: mg.horiz ? rowLay.implicitWidth : colLay.implicitHeight
+        readonly property bool hasAny:     mg.contentLen > 1
 
         visible: mg.keys.length > 0
         implicitWidth:  (mg.horiz ? rowLay.implicitWidth  : colLay.implicitWidth)  + 2 * mg.pad
@@ -239,10 +292,15 @@ PanelWindow {
         width: implicitWidth; height: implicitHeight
 
         Rectangle {
-            visible: mg.groupBg
-            anchors.fill: parent
-            radius: VtlConfig.barModuleBgRadius
-            color:  Qt.rgba(Colors.bgElement.r, Colors.bgElement.g, Colors.bgElement.b, 0.22)
+            visible: mg.groupBg && mg.hasAny
+            anchors.centerIn: parent
+            // Length: span the group. Cross-axis: inset from the bar thickness so the pill keeps a
+            // clear margin to the bar edges instead of stretching to the full breadth when the
+            // content (e.g. a tall text row) is high.
+            width:  mg.horiz ? parent.width             : (mg.barT - 2 * mg.pad)
+            height: mg.horiz ? (mg.barT - 2 * mg.pad)   : parent.height
+            radius: VtlConfig.barModuleBgRadiusFor(root.mon)
+            color:  Qt.rgba(Colors.bgElement.r, Colors.bgElement.g, Colors.bgElement.b, VtlConfig.barModuleBgOpacityFor(root.mon))
         }
         Row {
             id: rowLay
@@ -271,29 +329,50 @@ PanelWindow {
         property string grp:  "start"
         property string mkey: ""
         readonly property bool horiz:    ms.edge === "top" || ms.edge === "bottom"
-        readonly property bool moduleBg: VtlConfig.barModuleBg === "module"
-        readonly property int  pad:      ms.moduleBg ? 4 : 0
+        readonly property bool moduleBg: VtlConfig.barModuleBgFor(root.mon) === "module"
+        readonly property int  pad:      ms.moduleBg ? 6 : 0    // equal padding on every side
         // Rotate only on a vertical edge AND only when the module declares `vertical` (its way
         // of saying "I expect to be turned 90° and handle my own upright text").
         readonly property bool rotated: !ms.horiz && ldr.item !== null && ldr.item.hasOwnProperty("vertical")
-        // Robust module size: modules report size via `width` OR `implicitWidth`, so take the
-        // max of the Loader's adopted size and implicit size (whichever is non-zero).
-        readonly property real iw: Math.max(ldr.width,  ldr.implicitWidth,  ldr.item ? ldr.item.width  : 0)
-        readonly property real ih: Math.max(ldr.height, ldr.implicitHeight, ldr.item ? ldr.item.height : 0)
+        // Robust module size: read the *item's* own size, never the Loader's adopted (laid-out)
+        // size — the latter is driven by this slot's size, which would form a binding loop.
+        // Modules report size via `implicitWidth`/`implicitHeight` (or `width`/`height`).
+        readonly property real iw: ldr.item ? Math.max(ldr.item.implicitWidth,  ldr.item.width)  : 0
+        readonly property real ih: ldr.item ? Math.max(ldr.item.implicitHeight, ldr.item.height) : 0
+        // A module with no content (e.g. Mpris with no track, Submap when idle — they report a
+        // 0 implicit size) collapses entirely: no empty slot, no stray background pill.
+        readonly property bool hasContent: ldr.item !== null && ms.iw > 1 && ms.ih > 1
+        // Uniform cross-axis size for the per-module background, so every pill is the same width.
+        readonly property int  bgCross: VtlConfig.barIconSize + 2 * ms.pad
 
-        // Swap width/height only for a rotated module; an upright icon keeps its natural box.
-        implicitWidth:  (ms.rotated ? ms.ih : ms.iw) + 2 * ms.pad
-        implicitHeight: (ms.rotated ? ms.iw : ms.ih) + 2 * ms.pad
+        // NOTE: never gate the slot's own `visible` on a measured size — that stops layout and
+        // sticks the slot at 0. Empty modules report a ~0 implicit size, so the slot collapses on
+        // its own; the background below just hides when there's nothing to frame.
+        // module-bg: uniform cross-axis (= bgCross), content-length along the bar + equal pad.
+        implicitWidth:  !ms.hasContent ? 0
+                      : ms.moduleBg ? (ms.rotated ? ms.bgCross : ms.iw + 2 * ms.pad)
+                      : (ms.rotated ? ms.ih : ms.iw) + 2 * ms.pad
+        implicitHeight: !ms.hasContent ? 0
+                      : ms.moduleBg ? (ms.rotated ? ms.iw + 2 * ms.pad : ms.bgCross)
+                      : (ms.rotated ? ms.iw : ms.ih) + 2 * ms.pad
         width: implicitWidth; height: implicitHeight
         // The Column (vertical edges) left-aligns its children on the cross axis, so narrower
         // modules wouldn't line up under wider ones — centre each slot horizontally instead.
         anchors.horizontalCenter: (!ms.horiz && parent) ? parent.horizontalCenter : undefined
 
+        // Passive hover tracking — runs alongside each module's own MouseArea (doesn't consume
+        // clicks), so the per-module background can react to hover like the icon/text already do.
+        HoverHandler { id: msHover }
         Rectangle {
-            visible: ms.moduleBg
+            visible: ms.moduleBg && ms.hasContent
             anchors.fill: parent
-            radius: VtlConfig.barModuleBgRadius
-            color:  Qt.rgba(Colors.bgElement.r, Colors.bgElement.g, Colors.bgElement.b, 0.22)
+            radius: VtlConfig.barModuleBgRadiusFor(root.mon)
+            readonly property real _o: VtlConfig.barModuleBgOpacityFor(root.mon)
+            // On hover, shift slightly toward the accent and a touch more opaque.
+            color: msHover.hovered
+                 ? Qt.rgba(Colors.bgActive.r,  Colors.bgActive.g,  Colors.bgActive.b,  Math.min(1.0, _o + 0.12))
+                 : Qt.rgba(Colors.bgElement.r, Colors.bgElement.g, Colors.bgElement.b, _o)
+            Behavior on color { ColorAnimation { duration: 130 } }
         }
         Loader {
             id: ldr
@@ -304,6 +383,9 @@ PanelWindow {
                 if (item && item.hasOwnProperty("vertical")) item.vertical = !ms.horiz
                 if (item && item.hasOwnProperty("barEdge"))  item.barEdge  = ms.edge
                 if (item && item.hasOwnProperty("barGroup")) item.barGroup = ms.grp
+                // Monitor name (string) for per-monitor sizing (font/icon). Distinct from
+                // VutureIcon's `barMonitor`, which is the HyprlandMonitor object.
+                if (item && item.hasOwnProperty("barMon"))   item.barMon   = root.mon
             }
         }
     }
@@ -320,6 +402,8 @@ PanelWindow {
             case "mpris":        return mprisComp
             case "volume":       return volumeComp
             case "notiftray":    return notifTrayComp
+            case "tray":         return trayComp
+            case "wallpaper-switcher": return wallpaperSwitcherComp
             case "battery":      return batteryComp
             case "temperature":  return temperatureComp
             case "network":      return networkComp
@@ -329,7 +413,7 @@ PanelWindow {
         }
     }
 
-    Component { id: vutureIconComp;  VutureIcon  {} }
+    Component { id: vutureIconComp;  VutureIcon  { barMonitor: root.monitor } }
     Component { id: clockComp;       Clock       {} }
     Component { id: perfComp;        Performance {} }
     Component { id: userComp;        UserWidget  {} }
@@ -338,6 +422,8 @@ PanelWindow {
     Component { id: mprisComp;       Mpris       {} }
     Component { id: volumeComp;      Volume      {} }
     Component { id: notifTrayComp;   NotifTray   {} }
+    Component { id: trayComp;        Tray        {} }
+    Component { id: wallpaperSwitcherComp; WallpaperSwitcher {} }
     Component { id: batteryComp;     Battery     {} }
     Component { id: temperatureComp; Temperature {} }
     Component { id: networkComp;     Network     {} }

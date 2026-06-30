@@ -179,7 +179,7 @@ hl.window_rule({
     size   = { "(monitor_w*0.5)", "(monitor_h*0.6)" },
 })
 
--- Vutureland GUI gets a larger size — must come after float_cap to win.
+-- Velumeron GUI gets a larger size — must come after float_cap to win.
 hl.window_rule({
     name   = "vuture_float",
     match  = { title = "(.*[Vv]utureland.*)" },

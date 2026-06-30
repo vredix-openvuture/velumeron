@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # Hyprland interactive configurator – writes device-specific settings
-# to $VUTURELAND_USER_DIR/hypr.lua/user_settings.lua
+# to $VELUMERON_USER_DIR/hypr.lua/user_settings.lua
 
 set -euo pipefail
 
 # Package source (read-only on AUR installs) and per-user state dir.
-: "${VUTURELAND_DIR:=$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/.." && pwd)}"
-: "${VUTURELAND_USER_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/vutureland}"
+: "${VELUMERON_DIR:=$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/.." && pwd)}"
+: "${VELUMERON_USER_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/velumeron}"
 
-HYPR_DIR="$VUTURELAND_USER_DIR/hypr"
+HYPR_DIR="$VELUMERON_USER_DIR/hypr"
 MODULES_DIR="$HYPR_DIR/modules"
-USER_SETTINGS="$VUTURELAND_USER_DIR/hypr.lua/user_settings.lua"
+USER_SETTINGS="$VELUMERON_USER_DIR/hypr.lua/user_settings.lua"
 
-mkdir -p "$HYPR_DIR" "$MODULES_DIR" "$VUTURELAND_USER_DIR/hypr.lua"
+mkdir -p "$HYPR_DIR" "$MODULES_DIR" "$VELUMERON_USER_DIR/hypr.lua"
 
 # ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -652,10 +652,10 @@ save_and_reload() {
 # ─── Bootstrap: create skeleton user_settings.lua if missing ────────────────
 
 init_user_settings() {
-    # Symlink ~/.config/wallust → vutureland/wallust so wallust always finds its config
+    # Symlink ~/.config/wallust → velumeron/wallust so wallust always finds its config
     if [[ ! -e "$HOME/.config/wallust" ]]; then
-        ln -sf "$VUTURELAND_DIR/wallust" "$HOME/.config/wallust"
-        ok "Linked ~/.config/wallust → vutureland/wallust"
+        ln -sf "$VELUMERON_DIR/wallust" "$HOME/.config/wallust"
+        ok "Linked ~/.config/wallust → velumeron/wallust"
     fi
 
     if [[ -f "$USER_SETTINGS" ]]; then
@@ -692,7 +692,7 @@ init_user_settings() {
         fi
     fi
 
-    mkdir -p "$VUTURELAND_USER_DIR/hypr.lua"
+    mkdir -p "$VELUMERON_USER_DIR/hypr.lua"
     cat > "$USER_SETTINGS" <<'EOF'
 -- ════════════════════════════════════════════════════════════════════════
 --
@@ -822,7 +822,7 @@ vpn_toggle       = ""
 audio_switch     = ""
 mic_mute         = "pactl set-source-mute @DEFAULT_SOURCE@ toggle"
 night_light      = ""
-dnd_toggle       = "swaync-client --toggle-dnd"
+dnd_toggle       = VTL_DIR .. "/bin/velumeron --dnd"
 screen_record    = ""
 bitwarden        = "bitwarden"
 -- <<<ROLEAPPS-END>>>
@@ -835,7 +835,7 @@ EOF
 autostart_config() {
     echo ""
     echo "  ╔═══════════════════════════════════════════╗"
-    echo "  ║   VUTURELAND – Autostart Configuration    ║"
+    echo "  ║   VELUMERON – Autostart Configuration    ║"
     echo "  ╚═══════════════════════════════════════════╝"
     echo ""
 
@@ -936,7 +936,7 @@ main() {
 
     clear; echo ""
     echo "  ╔═══════════════════════════════════════════╗"
-    echo "  ║      VUTURELAND – Hyprland Setup          ║"
+    echo "  ║      VELUMERON – Hyprland Setup          ║"
     echo "  ╚═══════════════════════════════════════════╝"
 
     init_user_settings

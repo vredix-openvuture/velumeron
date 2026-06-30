@@ -8,10 +8,10 @@
 set -euo pipefail
 source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh"
 
-THEMES_DIR="$VUTURELAND_DIR/hypr.lua/hyprlock-themes"
-ACTIVE_CONF="$VUTURELAND_USER_DIR/hypr.lua/hyprlock.conf"
-MARKER="$VUTURELAND_USER_DIR/hypr.lua/.hyprlock-theme"
-BLACK_WP="$VUTURELAND_DIR/assets/wallpaper/hyprlock/pure-black.jpg"
+THEMES_DIR="$VELUMERON_DIR/hypr.lua/hyprlock-themes"
+ACTIVE_CONF="$VELUMERON_USER_DIR/hypr.lua/hyprlock.conf"
+MARKER="$VELUMERON_USER_DIR/hypr.lua/.hyprlock-theme"
+BLACK_WP="$VELUMERON_DIR/assets/wallpaper/hyprlock/pure-black.jpg"
 DEFAULT_THEME="glitch"
 
 # ── Resolve which theme to apply ─────────────────────────────────────────────
@@ -52,7 +52,7 @@ done
 # drop any leftover background block whose {{monN}} was never substituted
 # (the theme expects more monitors than this machine has).
 content=$(printf '%s\n' "$content" \
-    | sed -e "s#~/.config/vutureland/assets/#${VUTURELAND_DIR}/assets/#g" \
+    | sed -e "s#~/.config/velumeron/assets/#${VELUMERON_DIR}/assets/#g" \
           -e "s#~/#${HOME}/#g" \
     | awk '
         /^background[[:space:]]*\{/ { buf=$0; c=1; ph=0; next }

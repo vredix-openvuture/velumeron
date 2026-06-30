@@ -1,14 +1,14 @@
 -- ═══════════════════════════════════════════════════════
--- VUTURELAND — Hyprland Lua Configuration
+-- VELUMERON — Hyprland Lua Configuration
 -- https://wiki.hypr.land/Configuring/
 -- ═══════════════════════════════════════════════════════
 
 -- Installation paths — set by the entry point (~/.config/hypr/hyprland.lua);
--- fall back to env var or ~/.config/vutureland only if not already provided.
-VTL_DIR      = VTL_DIR      or os.getenv("VUTURELAND_DIR")      or (os.getenv("HOME") .. "/.config/vutureland")
-VTL_USER_DIR = VTL_USER_DIR or os.getenv("VUTURELAND_USER_DIR") or (os.getenv("HOME") .. "/.config/vutureland")
+-- fall back to env var or ~/.config/velumeron only if not already provided.
+VTL_DIR      = VTL_DIR      or os.getenv("VELUMERON_DIR")      or (os.getenv("HOME") .. "/.config/velumeron")
+VTL_USER_DIR = VTL_USER_DIR or os.getenv("VELUMERON_USER_DIR") or (os.getenv("HOME") .. "/.config/velumeron")
 
--- Colors — wallust writes the live palette to ~/.config/vutureland/hypr.lua/colors.lua.
+-- Colors — wallust writes the live palette to ~/.config/velumeron/hypr.lua/colors.lua.
 -- Fall back to the default palette shipped with the package if wallust hasn't
 -- run yet (typical on first start, before the user picked a wallpaper).
 local function _try_dofile(path)

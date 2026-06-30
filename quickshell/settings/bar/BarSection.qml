@@ -2,6 +2,7 @@ import "../.."
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 
 // Bar settings — bar mode (dock / float / frame), position / edges, sizing, module
 // layout, and the modules on each edge. Changes are written live to settings.json; the
@@ -9,20 +10,37 @@ import Quickshell.Io
 Item {
     id: root
 
-    property string mode:       VtlConfig.barMode
-    property string position:   VtlConfig.barPosition
-    property var    edges:      VtlConfig.barEdges.slice()
-    property int    thickness:  VtlConfig.barThickness
-    property int    gap:        VtlConfig.barFloatGap
-    property int    radius:     VtlConfig.barInnerRadius
-    property int    margin:     VtlConfig.barModuleMargin
-    property int    modSpacing: VtlConfig.barModuleSpacing
-    property string bgMode:     VtlConfig.barModuleBg
-    property int    bgRadius:   VtlConfig.barModuleBgRadius
+    // Per-monitor editing: when on, settings are written under bar_monitors.<name>.
+    // targetMon is the monitor currently being edited; editMon ("" = global) drives every
+    // read (VtlConfig.*For) and write (save). Monitor list comes from the live screens, so it
+    // works on any machine (the dev box's monitors aren't representative).
+    property bool   perMonitor: false
+    property string targetMon:  ""
+    readonly property string editMon: perMonitor ? targetMon : ""
+    readonly property var    monitors: Quickshell.screens
+    function monName(s) { return (s && s.name) ? s.name : "" }
+
+    property string mode:       "frame"
+    property string position:   "top"
+    property var    edges:      ["top", "left"]
+    property int    thickness:  36
+    property int    gap:        8
+    property int    radius:     16
+    property int    margin:     12
+    property int    modSpacing: 10
+    property int    iconSize:   18
+    property int    fontSize:   13
+    property string bgMode:     "none"
+    property int    bgRadius:   8
+    property int    menuWPct:   20
+    property int    menuHPct:   50
     property var    modules:    ({})            // {edge:{group:[keys]}}
     property string activeEdge: "top"
     property string addTarget:  ""              // "edge:group" while the add-picker is open
     property string tab:        "form"          // form | style | modules — top-level tab
+    property string customizeKey: ""            // module key whose customization overlay is open
+    property var    fonts:      []              // installed font families (lazy fc-list)
+    property var    _fontBuf:   []
 
     readonly property var allEdges:  ["top", "left", "bottom", "right"]
     readonly property var allGroups: ["start", "center", "end"]
@@ -31,9 +49,19 @@ Item {
         { key: "user",        label: "User",          icon: "󰀄" }, { key: "workspaces",  label: "Workspaces",    icon: "󰕰" },
         { key: "submap",      label: "Submap",        icon: "󰌌" }, { key: "mpris",       label: "Media",         icon: "󰝚" },
         { key: "volume",      label: "Volume",        icon: "󰕾" }, { key: "notiftray",   label: "Notifications", icon: "󰂜" },
+        { key: "tray",        label: "Tray",          icon: "󰀻" },
+        { key: "wallpaper-switcher", label: "Wallpaper", icon: "󰸉" },
         { key: "battery",     label: "Battery",       icon: "󰁹" }, { key: "temperature", label: "Temperature",   icon: "󰔏" },
         { key: "network",     label: "Network",       icon: "󰈀" }, { key: "bluetooth",   label: "Bluetooth",     icon: "󰂯" },
         { key: "vpn",         label: "VPN",           icon: "󰦝" }, { key: "vuture-icon", label: "Vuture Icon",   icon: "󰊠" },
+    ]
+    // Modules grouped by theme/task for the Add-module sub-page.
+    readonly property var categories: [
+        { title: "Time & status",  keys: ["clock", "performance", "battery", "temperature"] },
+        { title: "Connectivity",   keys: ["network", "vpn", "bluetooth", "tray"] },
+        { title: "Media & sound",  keys: ["volume", "mpris"] },
+        { title: "Workspace",      keys: ["workspaces", "submap"] },
+        { title: "System & personal", keys: ["notiftray", "user", "wallpaper-switcher", "vuture-icon"] }
     ]
     function labelFor(k) {
         for (var i = 0; i < registry.length; i++) if (registry[i].key === k) return registry[i].label
@@ -48,59 +76,157 @@ Item {
     Component.onCompleted: reload()
     onVisibleChanged:      if (visible) reload()
 
+    // When the menu opens (on whichever monitor it grew from), preselect that monitor for editing.
+    Connections {
+        target: UiState
+        function onOpenDropdownChanged() {
+            if (UiState.openDropdown !== "vuture-icon" || !root.perMonitor) return
+            var f = Hyprland.focusedMonitor?.name ?? ""
+            if (f !== "" && root.monitors.map(root.monName).indexOf(f) >= 0 && f !== root.targetMon)
+                root.setTargetMon(f)
+        }
+    }
+
     function currentEdges() { return mode === "frame" ? edges : [position] }
     function modList(edge, group) {
         return (modules[edge] && modules[edge][group]) ? modules[edge][group] : []
     }
 
     function reload() {
-        mode       = VtlConfig.barMode
-        position   = VtlConfig.barPosition
-        edges      = VtlConfig.barEdges.slice()
-        thickness  = VtlConfig.barThickness
-        gap        = VtlConfig.barFloatGap
-        radius     = VtlConfig.barInnerRadius
-        margin     = VtlConfig.barModuleMargin
-        modSpacing = VtlConfig.barModuleSpacing
-        bgMode     = VtlConfig.barModuleBg
-        bgRadius   = VtlConfig.barModuleBgRadius
-        var m = {}
-        for (var i = 0; i < allEdges.length; i++) {
-            m[allEdges[i]] = {}
-            for (var j = 0; j < allGroups.length; j++)
-                m[allEdges[i]][allGroups[j]] = VtlConfig.barModules(allEdges[i], allGroups[j]).slice()
+        perMonitor = VtlConfig.barPerMonitor
+        if (perMonitor) {
+            var names = monitors.map(monName).filter(function (n) { return n !== "" })
+            if (names.indexOf(targetMon) < 0) targetMon = names[0] || ""
         }
-        modules   = m
+        var mn     = editMon
+        mode       = VtlConfig.barModeFor(mn)
+        position   = VtlConfig.barPositionFor(mn)
+        edges      = VtlConfig.barEdgesFor(mn).slice()
+        thickness  = VtlConfig.barThicknessFor(mn)
+        gap        = VtlConfig.barFloatGapFor(mn)
+        radius     = VtlConfig.barInnerRadiusFor(mn)
+        margin     = VtlConfig.barModuleMarginFor(mn)
+        modSpacing = VtlConfig.barModuleSpacingFor(mn)
+        iconSize   = VtlConfig.barIconSizeFor(mn)
+        fontSize   = VtlConfig.barFontSizeFor(mn)
+        bgMode     = VtlConfig.barModuleBgFor(mn)
+        bgRadius   = VtlConfig.barModuleBgRadiusFor(mn)
+        menuWPct   = VtlConfig.menuWidthPctFor(mn)
+        menuHPct   = VtlConfig.menuHeightPctFor(mn)
+        reloadModules()
         addTarget = ""
         if (currentEdges().indexOf(activeEdge) < 0) activeEdge = currentEdges()[0] || "top"
     }
 
-    // ── Persist one key into settings.json ──────────────────────────────────────
-    function save(key, value) {
+    // Load the module map for the monitor + the CURRENTLY edited mode (root.mode), so switching
+    // mode shows that mode's own arrangement without waiting on the settings.json poll.
+    function reloadModules() {
+        var mn = editMon, m = {}
+        for (var i = 0; i < allEdges.length; i++) {
+            m[allEdges[i]] = {}
+            for (var j = 0; j < allGroups.length; j++)
+                m[allEdges[i]][allGroups[j]] = VtlConfig.barModulesForMode(allEdges[i], allGroups[j], mn, mode).slice()
+        }
+        modules = m
+    }
+
+    // ── Persist one key into settings.json (global, or under bar_monitors.<mon>) ──
+    function saveKey(key, value, mon) {
         var py = "import json,os,sys;" +
-            "pu=os.environ.get('VUTURELAND_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
-              "or os.path.expanduser('~/.config'),'vutureland');" +
+            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
+              "or os.path.expanduser('~/.config'),'velumeron');" +
             "p=os.path.join(pu,'gui','settings.json');" +
             "os.makedirs(os.path.dirname(p),exist_ok=True);" +
             "d=json.load(open(p)) if os.path.exists(p) else {};" +
-            "d[sys.argv[1]]=json.loads(sys.argv[2]);" +
+            "k=sys.argv[1];v=json.loads(sys.argv[2]);m=sys.argv[3];" +
+            "t=(d.setdefault('bar_monitors',{}).setdefault(m,{}) if m else d);" +
+            "t[k]=v;" +
             "open(p,'w').write(json.dumps(d,indent=2))"
-        saveProc.command = ["python3", "-c", py, key, JSON.stringify(value)]
+        saveProc.command = ["python3", "-c", py, key, JSON.stringify(value), mon]
+        saveProc.running = false
+        saveProc.running = true
+    }
+    function save(key, value) { saveKey(key, value, editMon) }
+
+    // Persist the module map under bar_modules_m.<currentMode> (per-monitor when editing one),
+    // merging so the other modes/monitors are left untouched.
+    function saveModules(map) {
+        var py = "import json,os,sys;" +
+            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
+              "or os.path.expanduser('~/.config'),'velumeron');" +
+            "p=os.path.join(pu,'gui','settings.json');" +
+            "os.makedirs(os.path.dirname(p),exist_ok=True);" +
+            "d=json.load(open(p)) if os.path.exists(p) else {};" +
+            "v=json.loads(sys.argv[1]);mode=sys.argv[2];m=sys.argv[3];" +
+            "t=(d.setdefault('bar_monitors',{}).setdefault(m,{}) if m else d);" +
+            "t.setdefault('bar_modules_m',{})[mode]=v;" +
+            "open(p,'w').write(json.dumps(d,indent=2))"
+        saveProc.command = ["python3", "-c", py, JSON.stringify(map), root.mode, editMon]
         saveProc.running = false
         saveProc.running = true
     }
     Process { id: saveProc }
 
+    // ── Per-module customization persistence (module_settings.<key>.<name>, global) ──
+    function saveModuleSetting(key, name, value) {
+        var py = "import json,os,sys;" +
+            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
+              "or os.path.expanduser('~/.config'),'velumeron');" +
+            "p=os.path.join(pu,'gui','settings.json');" +
+            "os.makedirs(os.path.dirname(p),exist_ok=True);" +
+            "d=json.load(open(p)) if os.path.exists(p) else {};" +
+            "k=sys.argv[1];n=sys.argv[2];v=json.loads(sys.argv[3]);" +
+            "d.setdefault('module_settings',{}).setdefault(k,{})[n]=v;" +
+            "open(p,'w').write(json.dumps(d,indent=2))"
+        modProc.command = ["python3", "-c", py, key, name, JSON.stringify(value)]
+        modProc.running = false; modProc.running = true
+    }
+    function resetModuleSettings(key) {
+        var py = "import json,os,sys;" +
+            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
+              "or os.path.expanduser('~/.config'),'velumeron');" +
+            "p=os.path.join(pu,'gui','settings.json');" +
+            "d=json.load(open(p)) if os.path.exists(p) else {};" +
+            "ms=d.get('module_settings');" +
+            "(ms.pop(sys.argv[1],None) if ms else None);" +
+            "open(p,'w').write(json.dumps(d,indent=2))"
+        modProc.command = ["python3", "-c", py, key]
+        modProc.running = false; modProc.running = true
+    }
+    Process { id: modProc }
+
+    // Installed font families (lazy — loaded the first time the customization overlay opens).
+    function loadFonts() {
+        if (root.fonts.length > 0 || fontsProc.running) return
+        root._fontBuf = []
+        fontsProc.running = false; fontsProc.running = true
+    }
+    Process {
+        id: fontsProc
+        command: ["bash", "-c", "fc-list : family | sed 's/,.*//' | sort -u"]
+        stdout: SplitParser { onRead: line => { var t = line.trim(); if (t !== "") root._fontBuf.push(t) } }
+        onRunningChanged: { if (!running) { root.fonts = root._fontBuf.slice(); root._fontBuf = [] } }
+    }
+
+    function setPerMonitor(on) { perMonitor = on; saveKey("bar_per_monitor", on, ""); reload() }
+    function setTargetMon(n)   { targetMon = n; reload() }
+
     function reloadActiveEdge() { if (currentEdges().indexOf(activeEdge) < 0) activeEdge = currentEdges()[0] || "top" }
-    function setMode(m)      { mode = m; save("bar_mode", m); reloadActiveEdge() }
+    // Switching mode shows that mode's saved module arrangement (and the dock/frame/float layout).
+    function setMode(m)      { mode = m; save("bar_mode", m); reloadActiveEdge(); reloadModules() }
     function setPosition(p)  { position = p; save("bar_position", p); reloadActiveEdge() }
     function setThickness(v) { thickness = Math.max(16, Math.min(80, v)); save("bar_thickness", thickness) }
     function setGap(v)       { gap = Math.max(0, Math.min(40, v)); save("bar_float_gap", gap) }
     function setRadius(v)    { radius = Math.max(0, Math.min(40, v)); save("bar_inner_radius", radius) }
     function setMargin(v)    { margin = Math.max(0, Math.min(40, v)); save("bar_module_margin", margin) }
     function setSpacing(v)   { modSpacing = Math.max(0, Math.min(40, v)); save("bar_module_spacing", modSpacing) }
+    function setIconSize(v)  { iconSize = Math.max(8, Math.min(48, v)); save("bar_icon_size", iconSize) }
+    function setFontSize(v)  { fontSize = Math.max(6, Math.min(40, v)); save("bar_font_size", fontSize) }
     function setBgMode(m)    { bgMode = m; save("bar_module_bg", m) }
     function setBgRadius(v)  { bgRadius = Math.max(0, Math.min(30, v)); save("bar_module_bg_radius", bgRadius) }
+    function setBgOpacity(v) { save("bar_module_bg_opacity", Math.max(0, Math.min(100, v)) / 100) }
+    function setMenuWPct(v)  { menuWPct = Math.max(8,  Math.min(80, v)); save("menu_width_pct",  menuWPct) }
+    function setMenuHPct(v)  { menuHPct = Math.max(20, Math.min(95, v)); save("menu_height_pct", menuHPct) }
 
     function toggleEdge(e) {
         var set = {}
@@ -117,14 +243,14 @@ Item {
         if (!m[edge][group]) m[edge][group] = []
         m[edge][group].push(key)
         modules = m; addTarget = ""
-        save("bar_modules", m)
+        saveModules(m)
     }
     function removeModule(edge, group, key) {
         var m = JSON.parse(JSON.stringify(modules))
         if (m[edge] && m[edge][group])
             m[edge][group] = m[edge][group].filter(function(x) { return x !== key })
         modules = m
-        save("bar_modules", m)
+        saveModules(m)
     }
     // Reorder within a group: pull the item at fromIdx and re-insert it at toIdx.
     function moveModule(edge, group, fromIdx, toIdx) {
@@ -136,13 +262,62 @@ Item {
         if (!m[edge]) m[edge] = {}
         m[edge][group] = arr
         modules = m
-        save("bar_modules", m)
+        saveModules(m)
+    }
+
+    // ── Header: per-monitor toggle + monitor picker (fixed) ─────────────────────────
+    Column {
+        id: header
+        visible: root.customizeKey === "" && root.addTarget === ""
+        anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 2 }
+        spacing: 8
+
+        Rectangle {
+            width: parent.width; height: 40; radius: 10; color: Colors.bgElement
+            Column {
+                anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                spacing: 1
+                Text { text: "Per monitor"; color: Colors.fgPrimary; font.pixelSize: 13
+                       font.family: "FantasqueSansM Nerd Font" }
+                Text { text: "Set each setting separately per monitor"; color: Colors.fgMuted
+                       font.pixelSize: 10; font.family: "FantasqueSansM Nerd Font" }
+            }
+            Rectangle {
+                anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                width: 42; height: 22; radius: 11
+                color: root.perMonitor ? Colors.bgActive : Colors.bgPrimary
+                Behavior on color { ColorAnimation { duration: 120 } }
+                Rectangle {
+                    width: 16; height: 16; radius: 8; color: Colors.fgBright
+                    anchors.verticalCenter: parent.verticalCenter
+                    x: root.perMonitor ? parent.width - width - 3 : 3
+                    Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                }
+                MouseArea { anchors.fill: parent; onClicked: root.setPerMonitor(!root.perMonitor) }
+            }
+        }
+
+        // Which monitor is being edited (live screen list).
+        Flow {
+            visible: root.perMonitor
+            width: parent.width; spacing: 6
+            Repeater {
+                model: root.monitors
+                delegate: Seg {
+                    required property var modelData
+                    label: root.monName(modelData)
+                    sel:   root.targetMon === root.monName(modelData)
+                    onPicked: root.setTargetMon(root.monName(modelData))
+                }
+            }
+        }
     }
 
     // ── Tab bar (fixed) ───────────────────────────────────────────────────────────
     Row {
         id: tabBar
-        anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 16 }
+        visible: root.customizeKey === "" && root.addTarget === ""
+        anchors { top: header.bottom; left: parent.left; right: parent.right; topMargin: 12 }
         height:  34
         spacing: 6
         TabBtn { icon: "󰠱"; label: "Form";   key: "form"    }
@@ -152,6 +327,7 @@ Item {
 
     // ── Page content (one tab visible at a time) ────────────────────────────────────
     Flickable {
+        visible: root.customizeKey === "" && root.addTarget === ""
         anchors { top: tabBar.bottom; topMargin: 22; left: parent.left; right: parent.right; bottom: parent.bottom }
         contentHeight: pages.implicitHeight
         clip: true
@@ -219,14 +395,18 @@ Item {
                 id: stylePage
                 visible: root.tab === "style"
                 width: parent.width
-                spacing: 10
+                spacing: 16
 
                 Group {
                     Text { text: "SIZE"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
                            font.family: "FantasqueSansM Nerd Font" }
                     Stepper { label: "Thickness"; value: root.thickness; onChanged: root.setThickness(v) }
-                    Stepper { label: "Gap";    value: root.gap;    visible: root.mode === "float"; onChanged: root.setGap(v) }
-                    Stepper { label: "Radius"; value: root.radius; visible: root.mode === "frame"; onChanged: root.setRadius(v) }
+                    Stepper { label: root.mode === "dock" ? "End air" : "Gap"; value: root.gap
+                              visible: root.mode === "float" || root.mode === "dock"; onChanged: root.setGap(v) }
+                    Stepper { label: "Radius"; value: root.radius
+                              visible: root.mode === "frame" || root.mode === "dock"; onChanged: root.setRadius(v) }
+                    Stepper { label: "Icon size"; value: root.iconSize; onChanged: root.setIconSize(v) }
+                    Stepper { label: "Font size"; value: root.fontSize; onChanged: root.setFontSize(v) }
                 }
                 Group {
                     Text { text: "LAYOUT"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
@@ -242,37 +422,17 @@ Item {
                         Seg { label: "Group";  sel: root.bgMode === "group";  onPicked: root.setBgMode("group")  }
                         Seg { label: "Module"; sel: root.bgMode === "module"; onPicked: root.setBgMode("module") }
                     }
-                    Stepper { label: "BG radius"; value: root.bgRadius; visible: root.bgMode !== "none"; onChanged: root.setBgRadius(v) }
+                    Stepper { label: "BG radius";  value: root.bgRadius; visible: root.bgMode !== "none"; onChanged: root.setBgRadius(v) }
+                    Stepper { label: "BG opacity"; value: Math.round(VtlConfig.barModuleBgOpacityFor(root.editMon) * 100)
+                              visible: root.bgMode !== "none"; onChanged: root.setBgOpacity(v) }
                 }
                 Group {
-                    Text { text: "APPEARANCE"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
+                    Text { text: "MENU"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
                            font.family: "FantasqueSansM Nerd Font" }
-
-                    // Colorful — blend a hint of the accent into the bar background.
-                    Rectangle {
-                        width: parent.width; height: 46; radius: 10; color: Colors.bgElement
-                        Column {
-                            anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                            spacing: 1
-                            Text { text: "Colorful"; color: Colors.fgPrimary
-                                   font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
-                            Text { text: "Tint the bar with the accent colour"; color: Colors.fgMuted
-                                   font.pixelSize: 10; font.family: "FantasqueSansM Nerd Font" }
-                        }
-                        Rectangle {
-                            anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                            width: 42; height: 22; radius: 11
-                            color: VtlConfig.barColorful ? Colors.bgActive : Colors.bgPrimary
-                            Behavior on color { ColorAnimation { duration: 120 } }
-                            Rectangle {
-                                width: 16; height: 16; radius: 8; color: Colors.fgBright
-                                anchors.verticalCenter: parent.verticalCenter
-                                x: VtlConfig.barColorful ? parent.width - width - 3 : 3
-                                Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-                            }
-                            MouseArea { anchors.fill: parent; onClicked: root.save("bar_colorful", !VtlConfig.barColorful) }
-                        }
-                    }
+                    Text { text: "Corner-menu size (% of the monitor)"; color: Colors.fgMuted
+                           font.pixelSize: 10; font.family: "FantasqueSansM Nerd Font" }
+                    Stepper { label: "Width %";  value: root.menuWPct; step: 5; onChanged: root.setMenuWPct(v) }
+                    Stepper { label: "Height %"; value: root.menuHPct; step: 5; onChanged: root.setMenuHPct(v) }
                 }
             }
 
@@ -315,69 +475,102 @@ Item {
         }
     }
 
-    // ── Add-module overlay ──────────────────────────────────────────────────────────
-    // Opened by a zone's "+", dims the whole section and shows every available module.
-    Rectangle {
+    // ── Add-module sub-page ─────────────────────────────────────────────────────────
+    // Opened by a zone's "+"; takes over the section and lists modules grouped by theme/task.
+    Item {
         anchors.fill: parent
         visible: root.addTarget !== ""
-        z: 100
-        color: Qt.rgba(0, 0, 0, 0.55)
-        MouseArea { anchors.fill: parent; onClicked: root.addTarget = "" }   // click-outside closes
 
-        Rectangle {
-            anchors.centerIn: parent
-            width:  parent.width - 32
-            height: Math.min(parent.height - 50, ovCol.implicitHeight + 28)
-            radius: 14
-            color:  Colors.bgElement
-            border.width: 1
-            border.color: Colors.bgActive
-            MouseArea { anchors.fill: parent }   // swallow clicks so the backdrop doesn't close
-
+        Row {
+            id: addBack
+            anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 2 }
+            height: 34; spacing: 8
+            Rectangle {
+                width: 34; height: 34; radius: 8; color: abHov.containsMouse ? Colors.bgActive : Colors.bgElement
+                Behavior on color { ColorAnimation { duration: 100 } }
+                Text { anchors.centerIn: parent; text: "󰁍"; color: Colors.fgBright; font.pixelSize: 16; font.family: "FantasqueSansM Nerd Font" }
+                MouseArea { id: abHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.addTarget = "" }
+            }
+            Text { anchors.verticalCenter: parent.verticalCenter; text: "Add module"; color: Colors.fgBright
+                   font.pixelSize: 16; font.bold: true; font.family: "FantasqueSansM Nerd Font" }
+        }
+        Flickable {
+            anchors { top: addBack.bottom; topMargin: 14; left: parent.left; right: parent.right; bottom: parent.bottom }
+            contentHeight: addCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
             Column {
-                id: ovCol
-                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 14 }
-                spacing: 12
-
-                Text {
-                    text:  "Add module"
-                    color: Colors.fgBright; font.pixelSize: 14; font.bold: true
-                    font.family: "FantasqueSansM Nerd Font"
-                }
-                Flow {
-                    width: parent.width; spacing: 8
-                    Repeater {
-                        model: root.registry
-                        delegate: Rectangle {
-                            required property var modelData
-                            width:  ovRow.implicitWidth + 22
-                            height: 34
-                            radius: 9
-                            color:  ovHov.containsMouse ? Colors.bgActive
-                                  : Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.20)
-                            Behavior on color { ColorAnimation { duration: 90 } }
-                            Row {
-                                id: ovRow
-                                anchors.centerIn: parent
-                                spacing: 8
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.icon
-                                       color: ovHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
-                                       font.pixelSize: 14; font.family: "FantasqueSansM Nerd Font" }
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.label
-                                       color: ovHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
-                                       font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
-                            }
-                            MouseArea {
-                                id: ovHov; anchors.fill: parent; hoverEnabled: true
-                                onClicked: {
-                                    var p = root.addTarget.split(":")
-                                    root.addModule(p[0], p[1], modelData.key)   // also clears addTarget → closes
+                id: addCol
+                width: parent.width; spacing: 16
+                Repeater {
+                    model: root.categories
+                    delegate: Column {
+                        id: catCol
+                        required property var modelData
+                        width: addCol.width; spacing: 8
+                        FieldLabel { text: catCol.modelData.title }
+                        Flow {
+                            width: parent.width; spacing: 8
+                            Repeater {
+                                model: catCol.modelData.keys
+                                delegate: Rectangle {
+                                    id: chip
+                                    required property string modelData
+                                    width: chipRow.implicitWidth + 22; height: 34; radius: 9
+                                    color: chHov.containsMouse ? Colors.bgActive
+                                         : Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.20)
+                                    Behavior on color { ColorAnimation { duration: 90 } }
+                                    Row {
+                                        id: chipRow
+                                        anchors.centerIn: parent; spacing: 8
+                                        Text { anchors.verticalCenter: parent.verticalCenter; text: root.iconFor(chip.modelData)
+                                               color: chHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
+                                               font.pixelSize: 14; font.family: "FantasqueSansM Nerd Font" }
+                                        Text { anchors.verticalCenter: parent.verticalCenter; text: root.labelFor(chip.modelData)
+                                               color: chHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
+                                               font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+                                    }
+                                    MouseArea { id: chHov; anchors.fill: parent; hoverEnabled: true
+                                        onClicked: { var p = root.addTarget.split(":"); root.addModule(p[0], p[1], chip.modelData) } }
                                 }
                             }
                         }
                     }
                 }
             }
+        }
+    }
+
+    // ── Module sub-page ───────────────────────────────────────────────────────────
+    // Opened by a chip's gear; takes over the whole section (the header / tabs / page above are
+    // hidden) and shows the per-module ModuleCustomize page with a Back button.
+    Item {
+        anchors.fill: parent
+        visible: root.customizeKey !== ""
+
+        Row {
+            id: backRow
+            anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 2 }
+            height:  34
+            spacing: 8
+            Rectangle {
+                width: 34; height: 34; radius: 8
+                color: bkHov.containsMouse ? Colors.bgActive : Colors.bgElement
+                Behavior on color { ColorAnimation { duration: 100 } }
+                Text { anchors.centerIn: parent; text: "󰁍"; color: Colors.fgBright
+                       font.pixelSize: 16; font.family: "FantasqueSansM Nerd Font" }
+                MouseArea { id: bkHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.customizeKey = "" }
+            }
+            Text { anchors.verticalCenter: parent.verticalCenter; text: "Back to modules"
+                   color: Colors.fgMuted; font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+        }
+
+        ModuleCustomize {
+            anchors { top: backRow.bottom; topMargin: 14; left: parent.left; right: parent.right; bottom: parent.bottom }
+            moduleKey: root.customizeKey
+            title:     root.labelFor(root.customizeKey)
+            icon:      root.iconFor(root.customizeKey)
+            fonts:     root.fonts
+            onChanged:  (name, value) => root.saveModuleSetting(root.customizeKey, name, value)
+            onResetAll: root.resetModuleSettings(root.customizeKey)
         }
     }
 
@@ -594,6 +787,16 @@ Item {
                                 Text { anchors.verticalCenter: parent.verticalCenter
                                        text: root.labelFor(slot.modelData); color: Colors.fgPrimary
                                        font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+                                // Customize (font / colour / size / module-specific settings)
+                                Rectangle {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 16; height: 16; radius: 8
+                                    color: grHov.containsMouse ? Colors.bgActive : "transparent"
+                                    Text { anchors.centerIn: parent; text: "󰒓"; color: Colors.fgMuted; font.pixelSize: 11
+                                           font.family: "FantasqueSansM Nerd Font" }
+                                    MouseArea { id: grHov; anchors.fill: parent; hoverEnabled: true
+                                                onClicked: { root.customizeKey = slot.modelData; root.loadFonts() } }
+                                }
                                 Rectangle {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: 16; height: 16; radius: 8
@@ -685,7 +888,7 @@ Item {
         id: st
         property string label: ""
         property int    value: 0
-        property int    step:  2
+        property int    step:  5
         signal changed(int v)
         spacing: 8
         Text { anchors.verticalCenter: parent.verticalCenter; width: 78; text: st.label

@@ -1,5 +1,5 @@
-To use Fastfetch with vutureland themes, the active `~/.config/fastfetch/config.jsonc`
-must be replaced with the one from the vutureland folder when the theme changes.
+To use Fastfetch with velumeron themes, the active `~/.config/fastfetch/config.jsonc`
+must be replaced with the one from the velumeron folder when the theme changes.
 
 Unfortunately this is only possible via a symlink.
 

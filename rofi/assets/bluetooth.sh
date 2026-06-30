@@ -4,8 +4,8 @@ source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." && pwd)/assets
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
 export DISPLAY="${DISPLAY:-:0}"
 
-THEME="$VUTURELAND_USER_DIR/rofi/bluetooth.rasi"
-ICONS="$VUTURELAND_DIR/assets/icons"
+THEME="$VELUMERON_USER_DIR/rofi/bluetooth.rasi"
+ICONS="$VELUMERON_DIR/assets/icons"
 
 # Sort priority: lower = higher up in list
 type_priority() {

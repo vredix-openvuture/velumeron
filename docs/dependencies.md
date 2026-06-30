@@ -1,4 +1,4 @@
-# Vutureland — Dependencies
+# Velumeron — Dependencies
 
 Complete list of everything required for this config to work.
 

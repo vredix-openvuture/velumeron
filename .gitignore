@@ -5,16 +5,13 @@ hypr.lua/user_settings.lua
 # Auto-generated colors (written by wallust on wallpaper change).
 # These files are committed with default values as fallback templates so
 # Hyprland/Waybar can start before the first wallpaper has been applied.
-# The actual runtime versions live in ~/.config/vutureland/ — created by
-# welcome_to_vutureland.sh on first run.
+# The actual runtime versions live in ~/.config/velumeron/ — created by
+# welcome_to_velumeron.sh on first run.
 # (kept tracked: assets/colors_gtk.css, kitty/colors.conf,
 #  rofi/assets/colors.rasi, assets/colors_hyprland.conf)
 # colors.lua is NOT tracked — it kept showing machine-specific churn; hyprland.lua
-# loads it via a guarded _try_dofile and welcome_to_vutureland.sh regenerates it.
+# loads it via a guarded _try_dofile and welcome_to_velumeron.sh regenerates it.
 hypr.lua/colors.lua
-
-# Per-user GUI preferences
-gui/settings.json
 
 # Editor / IDE
 .vscode/
@@ -22,9 +19,6 @@ gui/settings.json
 
 # Image editor backups
 assets/icons/.*.png
-
-# Auto-generated Waybar output (rebuilt by waybar.sh --rebuild)
-waybar-modular/output/
 
 # Node modules (panel)
 panel/node_modules/
@@ -35,12 +29,15 @@ assets/wallpaper/
 # Logs and cache
 **/*.log
 **/.cache/
-gui/__pycache__/
-gui/models/__pycache__/
-gui/pages/__pycache__/
 
-# Wallpaper sets are per-client now (stored in ~/.config/vutureland/assets/sets.json)
+# Wallpaper sets are per-client now (stored in ~/.config/velumeron/assets/sets.json)
 assets/wallpaper/sets.json
+
+# Compiled QML plugins — CMake build tree + generated module output.
+# Source lives in quickshell/plugins/<name>/; the .so module is rebuilt on demand
+# by assets/scripts/build-mpv-plugin.sh (invoked from launch-quickshell.sh).
+quickshell/plugins/*/build/
+quickshell/plugins/Velumeron/
 
 # Archive
 .archive/

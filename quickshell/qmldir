@@ -3,9 +3,35 @@ singleton Colors    1.0 Colors.qml
 singleton VtlConfig 1.0 VtlConfig.qml
 singleton UiState   1.0 UiState.qml
 
+# Native wallpaper engine (per-monitor background surface)
+WallpaperWindow   1.0 WallpaperWindow.qml
+Launcher          1.0 launcher/Launcher.qml
+
 # Bar (dynamic, multi-edge)
 Bar               1.0 bar/Bar.qml
 EdgeExclusiveZone 1.0 bar/EdgeExclusiveZone.qml
+Flyout            1.0 bar/Flyout.qml
+
+# OSD (volume / brightness)
+Osd               1.0 osd/Osd.qml
+VolumeGlide       1.0 osd/VolumeGlide.qml
+BarGlide          1.0 osd/BarGlide.qml
+PerformanceGlide  1.0 osd/PerformanceGlide.qml
+UserGlide         1.0 osd/UserGlide.qml
+TrayGlide         1.0 osd/TrayGlide.qml
+NetworkGlide      1.0 osd/NetworkGlide.qml
+BtGlide           1.0 osd/BtGlide.qml
+WallpaperQuick    1.0 osd/WallpaperQuick.qml
+
+# Keybind cheatsheet overlay
+KeybindHelp       1.0 keybind/KeybindHelp.qml
+
+# Notifications (server + popups + centre + shared list)
+singleton NotifService 1.0 notify/NotifService.qml
+NotifPopups            1.0 notify/NotifPopups.qml
+NotifCenter            1.0 notify/NotifCenter.qml
+NotifList              1.0 notify/NotifList.qml
+NotifSettings          1.0 settings/notify/NotifSettings.qml
 
 # Bar modules
 BarSeparator    1.0 bar/modules/BarSeparator.qml
@@ -13,12 +39,17 @@ Clock           1.0 bar/modules/Clock.qml
 Workspaces      1.0 bar/modules/Workspaces.qml
 Submap          1.0 bar/modules/Submap.qml
 Volume          1.0 bar/modules/Volume.qml
+VolumeMenu      1.0 bar/modules/VolumeMenu.qml
+MprisMenu       1.0 bar/modules/MprisMenu.qml
+BluetoothMenu   1.0 bar/modules/BluetoothMenu.qml
+NetworkMenu            1.0 bar/modules/NetworkMenu.qml
 Battery         1.0 bar/modules/Battery.qml
 Mpris           1.0 bar/modules/Mpris.qml
 Performance     1.0 bar/modules/Performance.qml
 SessionMenu     1.0 bar/modules/SessionMenu.qml
 UserWidget      1.0 bar/modules/UserWidget.qml
 NotifTray       1.0 bar/modules/NotifTray.qml
+WallpaperSwitcher 1.0 bar/modules/WallpaperSwitcher.qml
 VutureIcon      1.0 bar/modules/VutureIcon.qml
 Temperature     1.0 bar/modules/Temperature.qml
 Network         1.0 bar/modules/Network.qml
@@ -30,9 +61,16 @@ NotifButton     1.0 bar/modules/NotifButton.qml
 # Settings menu (the corner dropdown) + its pages
 Settings             1.0 settings/Settings.qml
 GuiPanel             1.0 settings/GuiPanel.qml
+HomeHub              1.0 settings/home/HomeHub.qml
+NetworkManager       1.0 settings/home/NetworkManager.qml
+BluetoothManager     1.0 settings/home/BluetoothManager.qml
 BarSection           1.0 settings/bar/BarSection.qml
-AppearanceSection    1.0 settings/theme/AppearanceSection.qml
+ModuleCustomize      1.0 settings/bar/ModuleCustomize.qml
+StyleSection         1.0 settings/style/StyleSection.qml
+OsdSection           1.0 settings/osd/OsdSection.qml
 WallpaperSection     1.0 settings/theme/WallpaperSection.qml
-ThemeSettingsSection 1.0 settings/theme/ThemeSettingsSection.qml
+LockscreenSection    1.0 settings/lockscreen/LockscreenSection.qml
+WallpaperFolders     1.0 settings/theme/WallpaperFolders.qml
+WallpaperSets        1.0 settings/theme/WallpaperSets.qml
 BarPage              1.0 settings/submenu-bar/BarPage.qml
 BarZone              1.0 settings/submenu-bar/BarZone.qml

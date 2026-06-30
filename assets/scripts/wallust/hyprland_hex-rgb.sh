@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/../lib/env.sh"
 
-file="$VUTURELAND_USER_DIR/assets/colors_hyprland.conf"
+file="$VELUMERON_USER_DIR/assets/colors_hyprland.conf"
 
 while IFS= read -r line; do
     if [[ "$line" == *"#"* ]]; then

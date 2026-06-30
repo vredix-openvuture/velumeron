@@ -5,6 +5,8 @@ import Quickshell.Io
 Item {
     id: root
     property bool vertical: false   // set by ModSlot: rotate to read along a vertical sidebar
+    property string barMon:  ""     // monitor name, for per-monitor icon/font size
+    property string barEdge: "top"  // set by Bar; drives the hover-glide direction
 
     // Report the inner Row as our implicit size so wrappers / Loaders size to us.
     implicitWidth:  innerRow.width
@@ -17,49 +19,89 @@ Item {
     property real memPct:  0
     property real gpuPct:  -1   // -1 = not available
     property int  cpuTemp: 0
+    property int  gpuTemp: 0    // 0 = not available
     property var  _cpuPrev: null
     property string powerProfile: "balanced"
 
-    readonly property string _icon: {
+    // Per-module customization (Settings → Bar → Module → gear).
+    readonly property string _font: VtlConfig.moduleFontFor("performance")
+    readonly property int    _fs:   VtlConfig.moduleFontSizeFor("performance", root.barMon)
+    readonly property int    _is:   VtlConfig.moduleIconSizeFor("performance", root.barMon)
+    readonly property color  _col:  Colors[VtlConfig.moduleColorName("performance")] ?? Colors.fgPrimary
+    readonly property bool   _showWord: VtlConfig.moduleSetting("performance", "show_word", true)
+
+    // ── Per-value glide icons — SET YOUR OWN GLYPH HERE (leave "" for no icon). ───────────────────
+    // One icon per metric shown in the hover glide; rendered as "<icon> <value>" in glide order:
+    //   CPU usage · CPU temp · Memory · GPU usage · GPU temp
+    readonly property string iconCpuUsage: ""
+    readonly property string iconCpuTemp:  ""
+    readonly property string iconMemory:   ""
+    readonly property string iconGpuUsage: "󰢮"
+    readonly property string iconGpuTemp:  ""
+
+    // Stats string shown by the PerformanceGlide pill that glides out of the bar on hover, in the
+    // fixed order CPU usage → CPU temp → Memory → GPU usage → GPU temp. Each value can be toggled
+    // off in the module's customization, and prefixes its icon above (when set).
+    readonly property string _statsStr: {
+        var parts = []
+        function add(icon, txt) { parts.push(icon !== "" ? (icon + " " + txt) : txt) }
+        if (VtlConfig.moduleSetting("performance", "glide_cpu_usage", true))                       add(root.iconCpuUsage, root.cpuPct.toFixed(0) + "%")
+        if (VtlConfig.moduleSetting("performance", "glide_cpu_temp",  true))                       add(root.iconCpuTemp,  root.cpuTemp + "°")
+        if (VtlConfig.moduleSetting("performance", "glide_memory",    true))                       add(root.iconMemory,   root.memPct.toFixed(0) + "%")
+        if (VtlConfig.moduleSetting("performance", "glide_gpu_usage", true) && root.gpuPct >= 0)   add(root.iconGpuUsage, root.gpuPct.toFixed(0) + "%")
+        if (VtlConfig.moduleSetting("performance", "glide_gpu_temp",  true) && root.gpuTemp > 0)   add(root.iconGpuTemp,  root.gpuTemp + "°")
+        return parts.join("   ")
+    }
+    function _publishGlide() {
+        var c = root.mapToItem(null, root.width / 2, root.height / 2)
+        UiState.perfAnchorX = c.x; UiState.perfAnchorY = c.y
+        UiState.perfEdge = root.barEdge; UiState.perfMon = root.barMon
+        UiState.perfStats = root._statsStr
+    }
+    onHoveredChanged: {
+        if (root.hovered) { _publishGlide(); UiState.perfHover = true }
+        else if (UiState.perfMon === root.barMon) UiState.perfHover = false
+    }
+    on_StatsStrChanged: if (root.hovered) UiState.perfStats = root._statsStr
+
+    readonly property string _glyph: {
         switch (root.powerProfile) {
-            case "performance": return "󰡴 Performance"
-            case "power-saver": return "󰞀 Powersaver"
-            default:            return "󰌪 Balanced"
+            case "performance": return "󰡴"
+            case "power-saver": return "󰞀"
+            default:            return "󰌪"
+        }
+    }
+    readonly property string _word: {
+        switch (root.powerProfile) {
+            case "performance": return "Performance"
+            case "power-saver": return "Powersaver"
+            default:            return "Balanced"
         }
     }
 
     Row {
         id: innerRow
-        spacing: 3
+        spacing: 6
 
-        // Mode icon – always visible (prevents width-collapse hover bug)
+        // Mode glyph (icon size) – always visible (prevents width-collapse hover bug)
         Text {
             id: modeIcon
             anchors.verticalCenter: parent.verticalCenter
-            text:  root._icon
-            color: root.hovered ? Colors.fgBright : Colors.fgPrimary
-            font.family:    "FantasqueSansM Nerd Font"
-            font.pointSize: 11
+            text:  root._glyph
+            color: root.hovered ? Colors.fgBright : root._col
+            font.family:    root._font
+            font.pixelSize: root._is
             Behavior on color { ColorAnimation { duration: 100 } }
         }
-
-        // Stats – slide in on hover
+        // Mode word (font size). The detailed stats glide out of the bar on hover (PerformanceGlide).
         Text {
-            id: statsText
+            visible: root._showWord
             anchors.verticalCenter: parent.verticalCenter
-            text: {
-                var s = " " + root.cpuPct.toFixed(0) + "%  " + root.cpuTemp + "°  " + root.memPct.toFixed(0) + "%"
-                if (root.gpuPct >= 0) s += "  󰒃 " + root.gpuPct.toFixed(0) + "%"
-                return s
-            }
-            color:   Colors.fgMuted
-            font.family:    "FantasqueSansM Nerd Font"
-            font.pointSize: 10
-            width:   root.hovered ? implicitWidth : 0
-            opacity: root.hovered ? 1.0 : 0.0
-            clip: true
-            Behavior on width   { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-            Behavior on opacity { NumberAnimation { duration: 100 } }
+            text:  root._word
+            color: root.hovered ? Colors.fgBright : root._col
+            font.family:    root._font
+            font.pixelSize: root._fs
+            Behavior on color { ColorAnimation { duration: 100 } }
         }
     }
 
@@ -77,7 +119,7 @@ Item {
 
     Process {
         id: cycleProc
-        command: ["bash", "-c", "$VUTURELAND_DIR/assets/scripts/powermode.sh"]
+        command: ["bash", "-c", "$VELUMERON_DIR/assets/scripts/powermode.sh"]
         onRunningChanged: {
             if (!running) { profileProc.running = false; profileProc.running = true }
         }
@@ -85,7 +127,7 @@ Item {
 
     Process {
         id: profileProc
-        command: ["bash", "-c", "$VUTURELAND_DIR/assets/scripts/powermode.sh --active"]
+        command: ["bash", "-c", "$VELUMERON_DIR/assets/scripts/powermode.sh --active"]
         stdout: SplitParser { onRead: line => { root.powerProfile = line.trim() } }
     }
 
@@ -143,6 +185,20 @@ Item {
         }}
     }
 
+    // GPU temperature from the GPU hwmon (amdgpu / nvidia / nouveau), in °C.
+    Process {
+        id: gpuTempProc
+        command: ["bash", "-c",
+            "for d in /sys/class/hwmon/hwmon*; do " +
+            "  n=$(cat \"$d/name\" 2>/dev/null); " +
+            "  case \"$n\" in amdgpu|nvidia|nouveau) " +
+            "    awk '{printf \"%d\", $1/1000}' \"$d/temp1_input\" 2>/dev/null; break ;; esac; done"]
+        stdout: SplitParser { onRead: line => {
+            var v = parseInt(line.trim())
+            if (!isNaN(v) && v > 0) root.gpuTemp = v
+        }}
+    }
+
     Timer {
         interval: 2000; repeat: true; running: true; triggeredOnStart: true
         onTriggered: {
@@ -153,7 +209,10 @@ Item {
     }
     Timer {
         interval: 4000; repeat: true; running: true; triggeredOnStart: true
-        onTriggered: { tempProc.running = false; tempProc.running = true }
+        onTriggered: {
+            tempProc.running = false; tempProc.running = true
+            gpuTempProc.running = false; gpuTempProc.running = true
+        }
     }
     Timer {
         interval: 10000; repeat: true; running: true; triggeredOnStart: true

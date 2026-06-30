@@ -5,6 +5,7 @@ import Quickshell.Hyprland
 Item {
     id: root
     property bool vertical: false   // set by ModSlot: rotate to read along a vertical sidebar
+    property string barMon: ""      // monitor name, for per-monitor font size
     property string activeSubmap: ""
     visible: activeSubmap !== "" && activeSubmap !== "normal"
     implicitWidth:  visible ? label.implicitWidth + 12 : 0
@@ -22,9 +23,9 @@ Item {
         id: label
         anchors.centerIn: parent
         text:  root.activeSubmap
-        color: Colors.fgBright
-        font.family:    "FantasqueSansM Nerd Font"
-        font.pointSize: 9
+        color: Colors[VtlConfig.moduleColorName("submap")] ?? Colors.fgBright
+        font.family:    VtlConfig.moduleFontFor("submap")
+        font.pixelSize: VtlConfig.moduleFontSizeFor("submap", root.barMon)
     }
 
     Connections {

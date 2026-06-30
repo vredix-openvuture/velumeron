@@ -1,7 +1,7 @@
 @import "./assets/colors.rasi"
 
 configuration {
-    modi: "hyprlock:~/.config/vutureland/rofi/assets/rofi-hyprlock.sh";
+    modi: "hyprlock:~/.config/velumeron/rofi/assets/rofi-hyprlock.sh";
     show-icons: true;
     font-family: "FantasqueSansM Nerd Font";
     font-weight: 800;
