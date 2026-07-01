@@ -91,7 +91,7 @@ Item {
         height: 34; spacing: 8
         BackBtn { onTrig: root.back() }
         Text { anchors.verticalCenter: parent.verticalCenter; text: "Bluetooth"; color: Colors.fgBright
-               font.pixelSize: 16; font.bold: true; font.family: "FantasqueSansM Nerd Font" }
+               font.pixelSize: 16; font.bold: true; font.family: Style.font }
     }
     Row {
         anchors { verticalCenter: hdr.verticalCenter; right: parent.right }
@@ -104,7 +104,7 @@ Item {
         id: status
         anchors { top: hdr.bottom; left: parent.left; right: parent.right; topMargin: 8 }
         text: root.busy !== "" ? root.busy : root.scanning ? "Scanning…" : (!root.powered ? "Bluetooth off" : "")
-        color: Colors.fgMuted; font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font"; visible: text !== ""
+        color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font; visible: text !== ""
     }
 
     Flickable {
@@ -132,60 +132,60 @@ Item {
                 Repeater { model: root._available; delegate: DevRow { required property var modelData; dev: modelData } }
             }
             Text { visible: root.devices.length === 0; text: "No devices — tap scan"; color: Colors.fgMuted
-                   font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+                   font.pixelSize: 12; font.family: Style.font }
         }
     }
 
     // ── Reusable bits ──────────────────────────────────────────────────────────────
     component CapLabel: Text {
         color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-        font.letterSpacing: 0.5; font.family: "FantasqueSansM Nerd Font"
+        font.letterSpacing: 0.5; font.family: Style.font
     }
     component DevRow: Rectangle {
         property var dev
         width: parent ? parent.width : 0
         height: 44; radius: 10
-        color: dev && dev.connected ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.28)
-             : (dHov.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.16) : Colors.bgElement)
+        color: dev && dev.connected ? Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.28)
+             : (dHov.containsMouse ? Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.16) : Style.controlFill)
         Behavior on color { ColorAnimation { duration: 100 } }
         Text { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
                text: dev ? root.devIcon(dev.icon) : ""; color: Colors.fgMuted
-               font.pixelSize: 16; font.family: "FantasqueSansM Nerd Font" }
+               font.pixelSize: 16; font.family: Style.font }
         Text { anchors { left: parent.left; leftMargin: 44; right: dRow.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
                text: dev ? dev.name : ""; elide: Text.ElideRight
                color: dev && dev.connected ? Colors.fgBright : Colors.fgPrimary
-               font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
+               font.pixelSize: 13; font.family: Style.font }
         Row {
             id: dRow
             anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
             spacing: 6
             Text { visible: dev && dev.connected; anchors.verticalCenter: parent.verticalCenter
-                   text: "connected"; color: Colors.fgMuted; font.pixelSize: 10; font.family: "FantasqueSansM Nerd Font" }
+                   text: "connected"; color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font }
             IconBtn { visible: dev && dev.paired; icon: "󰩹"; onTrig: root.forget(dev.mac) }
         }
         MouseArea { id: dHov; anchors.fill: parent; hoverEnabled: true; onClicked: if (dev) root.tap(dev) }
     }
     component BackBtn: Rectangle {
         signal trig()
-        width: 34; height: 34; radius: 8; color: bHov.containsMouse ? Colors.bgActive : Colors.bgElement
+        width: 34; height: 34; radius: 8; color: bHov.containsMouse ? Style.accent : Style.controlFill
         Behavior on color { ColorAnimation { duration: 100 } }
-        Text { anchors.centerIn: parent; text: "󰁍"; color: Colors.fgBright; font.pixelSize: 16; font.family: "FantasqueSansM Nerd Font" }
+        Text { anchors.centerIn: parent; text: "󰁍"; color: Colors.fgBright; font.pixelSize: 16; font.family: Style.font }
         MouseArea { id: bHov; anchors.fill: parent; hoverEnabled: true; onClicked: parent.trig() }
     }
     component IconBtn: Rectangle {
         property string icon: ""
         signal trig()
-        width: 28; height: 28; radius: 7; color: iHov.containsMouse ? Colors.bgActive : Colors.bgElement
+        width: 28; height: 28; radius: 7; color: iHov.containsMouse ? Style.accent : Style.controlFill
         anchors.verticalCenter: parent ? parent.verticalCenter : undefined
         Behavior on color { ColorAnimation { duration: 100 } }
-        Text { anchors.centerIn: parent; text: parent.icon; color: Colors.fgPrimary; font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
+        Text { anchors.centerIn: parent; text: parent.icon; color: Colors.fgPrimary; font.pixelSize: 13; font.family: Style.font }
         MouseArea { id: iHov; anchors.fill: parent; hoverEnabled: true; onClicked: parent.trig() }
     }
     component Toggle: Rectangle {
         property bool on: false
         signal toggled()
         anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-        width: 42; height: 22; radius: 11; color: on ? Colors.bgActive : Colors.bgPrimary
+        width: 42; height: 22; radius: 11; color: on ? Style.accent : Colors.bgPrimary
         Behavior on color { ColorAnimation { duration: 120 } }
         Rectangle { width: 16; height: 16; radius: 8; color: Colors.fgBright; anchors.verticalCenter: parent.verticalCenter
                     x: parent.on ? parent.width - width - 3 : 3; Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } } }

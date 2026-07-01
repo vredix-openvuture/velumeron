@@ -1,6 +1,12 @@
 <div align="center">
 
-# Velumeron
+<picture>
+  <source media="(prefers-color-scheme: dark)"  srcset="assets/icons/velumeron_banner-white.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/icons/velumeron_banner-black.png">
+  <img alt="Velumeron" src="assets/icons/velumeron_banner-black.png" width="520">
+</picture>
+
+<br><br>
 
 **Velumeron** is a modular Hyprland desktop for Arch Linux.
 

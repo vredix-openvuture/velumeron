@@ -85,7 +85,7 @@ Item {
         height: 34; spacing: 8
         BackBtn { onTrig: root.back() }
         Text { anchors.verticalCenter: parent.verticalCenter; text: "Network"; color: Colors.fgBright
-               font.pixelSize: 16; font.bold: true; font.family: "FantasqueSansM Nerd Font" }
+               font.pixelSize: 16; font.bold: true; font.family: Style.font }
         Item { width: 1; height: 1 }   // spacer pushes the toggle right via the next anchors
     }
     Row {
@@ -101,7 +101,7 @@ Item {
         text: root.busy !== "" ? root.busy
             : root.ethStatus !== "" ? ("Ethernet connected (" + root.ethStatus + ")")
             : (!root.wifiOn ? "Wi-Fi off" : "")
-        color: Colors.fgMuted; font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font"
+        color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
         visible: text !== ""
     }
 
@@ -121,22 +121,22 @@ Item {
                     width: list.width; spacing: 4
                     Rectangle {
                         width: parent.width; height: 44; radius: 10
-                        color: modelData.active ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.28)
-                             : (rHov.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.16) : Colors.bgElement)
+                        color: modelData.active ? Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.28)
+                             : (rHov.containsMouse ? Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.16) : Style.controlFill)
                         Behavior on color { ColorAnimation { duration: 100 } }
                         Text { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
                                text: root.sigIcon(modelData.signal) + (modelData.sec ? "  󰌾" : "   ")
-                               color: Colors.fgMuted; font.pixelSize: 14; font.family: "FantasqueSansM Nerd Font" }
+                               color: Colors.fgMuted; font.pixelSize: 14; font.family: Style.font }
                         Text { anchors { left: parent.left; leftMargin: 58; right: actRow.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
                                text: modelData.ssid; elide: Text.ElideRight
                                color: modelData.active ? Colors.fgBright : Colors.fgPrimary
-                               font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
+                               font.pixelSize: 13; font.family: Style.font }
                         Row {
                             id: actRow
                             anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
                             spacing: 6
                             Text { visible: modelData.active; anchors.verticalCenter: parent.verticalCenter
-                                   text: "connected"; color: Colors.fgMuted; font.pixelSize: 10; font.family: "FantasqueSansM Nerd Font" }
+                                   text: "connected"; color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font }
                             IconBtn { visible: root.saved[modelData.ssid] === true; icon: "󰩹"; onTrig: root.forget(modelData.ssid) }
                         }
                         MouseArea { id: rHov; anchors.fill: parent; hoverEnabled: true
@@ -146,11 +146,11 @@ Item {
                     Rectangle {
                         visible: root.pwFor === modelData.ssid
                         width: parent.width; height: 38; radius: 10; color: Colors.bgPrimary
-                        border.width: 1; border.color: Colors.bgActive
+                        border.width: 1; border.color: Style.accent
                         TextInput {
                             id: pw
                             anchors { left: parent.left; leftMargin: 12; right: goBtn.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                            color: Colors.fgBright; font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font"
+                            color: Colors.fgBright; font.pixelSize: 13; font.family: Style.font
                             echoMode: TextInput.Password; clip: true
                             focus: root.pwFor === modelData.ssid
                             onAccepted: root.connectPw(modelData.ssid, text)
@@ -160,40 +160,40 @@ Item {
                         Rectangle {
                             id: goBtn
                             anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
-                            width: 56; height: 28; radius: 7; color: gHov.containsMouse ? Colors.boActive : Colors.bgActive
-                            Text { anchors.centerIn: parent; text: "Connect"; color: Colors.fgBright; font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font" }
+                            width: 56; height: 28; radius: 7; color: gHov.containsMouse ? Colors.boActive : Style.accent
+                            Text { anchors.centerIn: parent; text: "Connect"; color: Colors.fgBright; font.pixelSize: 11; font.family: Style.font }
                             MouseArea { id: gHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.connectPw(modelData.ssid, pw.text) }
                         }
                     }
                 }
             }
             Text { visible: root.nets.length === 0; text: "No networks found"; color: Colors.fgMuted
-                   font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+                   font.pixelSize: 12; font.family: Style.font }
         }
     }
 
     // ── Reusable bits ──────────────────────────────────────────────────────────────
     component BackBtn: Rectangle {
         signal trig()
-        width: 34; height: 34; radius: 8; color: bHov.containsMouse ? Colors.bgActive : Colors.bgElement
+        width: 34; height: 34; radius: 8; color: bHov.containsMouse ? Style.accent : Style.controlFill
         Behavior on color { ColorAnimation { duration: 100 } }
-        Text { anchors.centerIn: parent; text: "󰁍"; color: Colors.fgBright; font.pixelSize: 16; font.family: "FantasqueSansM Nerd Font" }
+        Text { anchors.centerIn: parent; text: "󰁍"; color: Colors.fgBright; font.pixelSize: 16; font.family: Style.font }
         MouseArea { id: bHov; anchors.fill: parent; hoverEnabled: true; onClicked: parent.trig() }
     }
     component IconBtn: Rectangle {
         property string icon: ""
         signal trig()
-        width: 28; height: 28; radius: 7; color: iHov.containsMouse ? Colors.bgActive : Colors.bgElement
+        width: 28; height: 28; radius: 7; color: iHov.containsMouse ? Style.accent : Style.controlFill
         anchors.verticalCenter: parent ? parent.verticalCenter : undefined
         Behavior on color { ColorAnimation { duration: 100 } }
-        Text { anchors.centerIn: parent; text: parent.icon; color: Colors.fgPrimary; font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
+        Text { anchors.centerIn: parent; text: parent.icon; color: Colors.fgPrimary; font.pixelSize: 13; font.family: Style.font }
         MouseArea { id: iHov; anchors.fill: parent; hoverEnabled: true; onClicked: parent.trig() }
     }
     component Toggle: Rectangle {
         property bool on: false
         signal toggled()
         anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-        width: 42; height: 22; radius: 11; color: on ? Colors.bgActive : Colors.bgPrimary
+        width: 42; height: 22; radius: 11; color: on ? Style.accent : Colors.bgPrimary
         Behavior on color { ColorAnimation { duration: 120 } }
         Rectangle { width: 16; height: 16; radius: 8; color: Colors.fgBright; anchors.verticalCenter: parent.verticalCenter
                     x: parent.on ? parent.width - width - 3 : 3; Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } } }

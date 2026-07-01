@@ -204,11 +204,15 @@ Flyout {
             }
         }
 
-        GridView {
-            id: grid
+        Item {
+            id: gridWrap
             visible: root.view === "grid"
             width:  parent.width
             height: root._rows * root._cellH
+
+            GridView {
+            id: grid
+            anchors.fill: parent
             clip:   true
             model:  root.filteredItems
             cellWidth:  Math.floor(width / root._cols)
@@ -259,6 +263,26 @@ Flyout {
                 }
                 Component.onCompleted: if (cell.isVid) thumbProc.running = true
             }
+            }
+
+            // Faster wheel scrolling: jump ~one row per wheel notch, smoothly. NoButton + no hover so
+            // clicks and hover still reach the cells — we only capture the wheel here (the default
+            // Flickable wheel step felt very slow with these tall thumbnail rows).
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.NoButton
+                readonly property real step: grid.cellHeight * 0.6   // per wheel notch (tune here)
+                onWheel: wheel => {
+                    var maxY = Math.max(0, grid.contentHeight - grid.height)
+                    var from = scrollAnim.running ? scrollAnim.to : grid.contentY
+                    grid.cancelFlick()
+                    scrollAnim.to = Math.max(0, Math.min(maxY, from - (wheel.angleDelta.y / 120) * step))
+                    scrollAnim.restart()
+                    wheel.accepted = true
+                }
+            }
+            NumberAnimation { id: scrollAnim; target: grid; property: "contentY"
+                              duration: 140; easing.type: Easing.OutCubic }
         }
 
         // Sets view — apply a defined set (all its monitors at once) with a preview thumbnail.

@@ -3,8 +3,9 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Style settings: the Colorful master + per-surface sub-toggles, and the wallust colour mode
-// (automatic vs. fixed scheme) moved here from the old wallpaper settings.
+// Style settings: the global UI-style variant, the Colorful master + per-surface sub-toggles, the
+// grow-from-bar transition style, and the wallust colour mode (automatic vs. fixed scheme).
+// All controls come from quickshell/common (token-driven shared components).
 Item {
     id: root
 
@@ -25,7 +26,8 @@ Item {
         { key: "osd",           label: "OSD" },
         { key: "notify_popup",  label: "Notification popups" },
         { key: "notify_center", label: "Notification center" },
-        { key: "flyout",        label: "Bar flyouts" }
+        { key: "flyout",        label: "Bar flyouts" },
+        { key: "taskbar",       label: "Taskbar" }
     ]
     function styleLabel(k) {
         return ({ fillet: "Tapered (fillet)", straight: "Straight — all edges",
@@ -105,6 +107,18 @@ Item {
     Timer { id: colorClear; interval: 4000
             onTriggered: if (!root.colorStatus.endsWith("…")) root.colorStatus = "" }
 
+    // ── Template (preset) editor state ──
+    property string _tplEdit: ""   // "" | "new" | "rename"
+    function _tplBeginNew()    { _tplEdit = "new";    tplNameInput.text = "";                    tplNameInput.forceActiveFocus() }
+    function _tplBeginRename() { _tplEdit = "rename"; tplNameInput.text = Templates.activeName;  tplNameInput.forceActiveFocus() }
+    function _tplCommit() {
+        var n = ("" + tplNameInput.text).trim()
+        if (n === "") { _tplEdit = ""; return }
+        if      (_tplEdit === "new")    Templates.create(n)
+        else if (_tplEdit === "rename") Templates.rename(Templates.activeId, n)
+        _tplEdit = ""
+    }
+
     // ── Content ──────────────────────────────────────────────────────────────────
     Flickable {
         anchors.fill: parent
@@ -116,17 +130,97 @@ Item {
             id: col
             width: parent.width
             topPadding: 4
-            spacing: 18
+            spacing: Style.cardGap
+
+            // ── Template (preset) ─────────────────────────────────────────────
+            Card {
+                CardLabel { text: "TEMPLATE" }
+                SubLabel { width: parent.width
+                           text: "Switch the whole look. Editing anything forks a private copy — the built-in presets stay untouched." }
+
+                Text {
+                    width:   parent.width
+                    visible: Templates.activeName !== ""
+                    text:    "Active: " + Templates.activeName + (Templates.activeIsBuiltin ? "  · built-in" : "  · your copy")
+                    color:   Colors.fgMuted; font.pixelSize: Style.fsSub; font.family: Style.font
+                    elide:   Text.ElideRight
+                }
+
+                // Available templates — built-ins first, then user copies.
+                Column {
+                    width: parent.width; spacing: 4
+                    Repeater {
+                        model: Templates.templates
+                        delegate: SelectRow {
+                            required property var modelData
+                            label:    modelData.name + (modelData.builtin ? "  · built-in" : "")
+                            selected: modelData.active
+                            onClicked: Templates.activate(modelData.source, modelData.id)
+                        }
+                    }
+                }
+
+                // Inline name editor (New / Rename).
+                Rectangle {
+                    width: parent.width; height: 40; radius: Style.rControl
+                    visible: root._tplEdit !== ""
+                    color: Style.controlFill
+                    border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+                    Row {
+                        anchors { fill: parent; leftMargin: 12; rightMargin: 8 }
+                        spacing: 8
+                        TextInput {
+                            id: tplNameInput
+                            width: parent.width - 128
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: Colors.fgBright; font.pixelSize: Style.fsLabel; font.family: Style.font
+                            clip: true; selectByMouse: true
+                            onAccepted: root._tplCommit()
+                            Keys.onEscapePressed: root._tplEdit = ""
+                            Text { anchors.fill: parent; verticalAlignment: Text.AlignVCenter
+                                   visible: tplNameInput.text === ""; text: "Template name…"
+                                   color: Colors.fgMuted; font: tplNameInput.font }
+                        }
+                        TextButton { primary: true; label: "OK"; anchors.verticalCenter: parent.verticalCenter
+                                     onClicked: root._tplCommit() }
+                        TextButton { label: "Cancel"; anchors.verticalCenter: parent.verticalCenter
+                                     onClicked: root._tplEdit = "" }
+                    }
+                }
+
+                // Actions.
+                Flow {
+                    width: parent.width; spacing: 8
+                    TextButton { label: "New";       onClicked: root._tplBeginNew() }
+                    TextButton { label: "Duplicate"; onClicked: Templates.duplicate(Templates.activeSource, Templates.activeId, "") }
+                    TextButton { label: "Rename"; visible: !Templates.activeIsBuiltin && Templates.activeId !== ""
+                                 onClicked: root._tplBeginRename() }
+                    TextButton { label: "Delete"; visible: !Templates.activeIsBuiltin && Templates.activeId !== ""
+                                 onClicked: Templates.remove(Templates.activeId) }
+                }
+            }
+
+            // ── UI style variant ──────────────────────────────────────────────
+            Card {
+                CardLabel { text: "UI STYLE" }
+                SubLabel { width: parent.width
+                           text: "Look of every menu and the quick-panel. Switches live." }
+                Segmented {
+                    equal: true
+                    current: VtlConfig.uiStyle
+                    segments: [{ label: "Flat", key: "flat" }, { label: "Cards", key: "cards" },
+                               { label: "Outlined", key: "outlined" }]
+                    onPicked: { VtlConfig.applyLocal("ui_style", key); root.save("ui_style", key) }
+                }
+            }
 
             // ── Colorful ──────────────────────────────────────────────────────
-            Group {
-                Text { text: "COLORFUL"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-                       font.family: "FantasqueSansM Nerd Font" }
-
+            Card {
+                CardLabel { text: "COLORFUL" }
                 Toggle {
-                    title:    "Colorful"
-                    subtitle: "Blend a hint of the accent into surfaces"
-                    on:       VtlConfig.colorfulEnabled
+                    label: "Colorful"
+                    sub:   "Blend a hint of the accent into surfaces"
+                    on:    VtlConfig.colorfulEnabled
                     onToggled: root.save("colorful_enabled", !VtlConfig.colorfulEnabled)
                 }
                 // Per-surface sub-toggles — only while the master is on.
@@ -134,32 +228,30 @@ Item {
                     width:   parent.width
                     spacing: 6
                     visible: VtlConfig.colorfulEnabled
-                    Toggle { indent: true; title: "Bar";   on: VtlConfig.colorfulBarSub
+                    Toggle { indent: true; label: "Bar";   on: VtlConfig.colorfulBarSub
                              onToggled: root.save("colorful_bar",   !VtlConfig.colorfulBarSub) }
-                    Toggle { indent: true; title: "Menus"; on: VtlConfig.colorfulMenusSub
+                    Toggle { indent: true; label: "Menus"; on: VtlConfig.colorfulMenusSub
                              onToggled: root.save("colorful_menus", !VtlConfig.colorfulMenusSub) }
-                    Toggle { indent: true; title: "OSD";   on: VtlConfig.colorfulOsdSub
+                    Toggle { indent: true; label: "OSD";   on: VtlConfig.colorfulOsdSub
                              onToggled: root.save("colorful_osd",   !VtlConfig.colorfulOsdSub) }
                 }
             }
 
             // ── Transition ────────────────────────────────────────────────────
-            Group {
-                Text { text: "TRANSITION"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-                       font.family: "FantasqueSansM Nerd Font" }
-                Text {
-                    width: parent.width; wrapMode: Text.WordWrap
+            Card {
+                CardLabel { text: "TRANSITION" }
+                SubLabel {
+                    width: parent.width
                     text: "How OSD, menus and notifications meet the bar (or bare monitor edge) they grow from — set per context."
-                    color: Colors.fgMuted; font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font"
                 }
 
-                SubLabel { text: "Global — when on a bar" }
+                FieldLabel { text: "Global — when on a bar" }
                 Dropdown {
                     summary: root.styleLabel(VtlConfig.transitionGlobalRaw("bar"))
                     options: root.styleOpts(VtlConfig.transitionGlobalRaw("bar"), false)
                     onPicked: root.save("transition_style_bar", key)
                 }
-                SubLabel { text: "Global — when on a monitor edge" }
+                FieldLabel { text: "Global — when on a monitor edge" }
                 Dropdown {
                     summary: root.styleLabel(VtlConfig.transitionGlobalRaw("edge"))
                     options: root.styleOpts(VtlConfig.transitionGlobalRaw("edge"), false)
@@ -170,19 +262,19 @@ Item {
                 Rectangle {
                     id: perMenuHead
                     property bool open: false
-                    width: parent.width; height: 34; radius: 8
-                    color: phHov.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.20)
-                                               : Colors.bgElement
+                    width: parent.width; height: 34; radius: Style.rControl
+                    color: phHov.containsMouse ? Style.controlHover : Style.controlFill
+                    border.width: Style.controlBorderW; border.color: Style.controlBorderColor
                     Behavior on color { ColorAnimation { duration: 100 } }
                     Text {
                         anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
                         text: "Per-menu overrides"; color: Colors.fgPrimary
-                        font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font"
+                        font.pixelSize: Style.fsLabel; font.family: Style.font
                     }
                     Text {
                         anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
                         text: perMenuHead.open ? "▴" : "▾"; color: Colors.fgMuted
-                        font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font"
+                        font.pixelSize: 12; font.family: Style.font
                     }
                     MouseArea { id: phHov; anchors.fill: parent; hoverEnabled: true
                                 onClicked: perMenuHead.open = !perMenuHead.open }
@@ -215,45 +307,29 @@ Item {
             }
 
             // ── Colours (wallust mode) ────────────────────────────────────────
-            Group {
-                Text { text: "COLOURS"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-                       font.family: "FantasqueSansM Nerd Font" }
-
+            Card {
+                CardLabel { text: "COLOURS" }
                 Toggle {
-                    title:    "Automatic colours"
-                    subtitle: "Derive from the wallpaper on each change"
-                    on:       root.autoMode
+                    label: "Automatic colours"
+                    sub:   "Derive from the wallpaper on each change"
+                    on:    root.autoMode
                     onToggled: root.autoMode = !root.autoMode
                 }
 
-                Text {
+                CardLabel {
                     visible: !root.autoMode
                     text: root.schemes.length ? "FIXED SCHEME" : "No schemes in fixed_colors/"
-                    color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-                    font.family: "FantasqueSansM Nerd Font"
                 }
                 Column {
                     width: parent.width; spacing: 4
                     visible: !root.autoMode
                     Repeater {
                         model: root.schemes
-                        delegate: Rectangle {
+                        delegate: SelectRow {
                             required property string modelData
-                            readonly property bool sel: root.selected === modelData
-                            width: parent.width; height: 34; radius: 8
-                            color: sel ? Colors.bgActive
-                                 : (rHov.containsMouse
-                                    ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.18)
-                                    : Colors.bgElement)
-                            Behavior on color { ColorAnimation { duration: 90 } }
-                            Text {
-                                anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                                text: root.displayName(parent.modelData)
-                                color: parent.sel ? Colors.fgBright : Colors.fgPrimary
-                                font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font"
-                            }
-                            MouseArea { id: rHov; anchors.fill: parent; hoverEnabled: true
-                                        onClicked: root.selected = parent.modelData }
+                            label:    root.displayName(modelData)
+                            selected: root.selected === modelData
+                            onClicked: root.selected = modelData
                         }
                     }
                 }
@@ -263,129 +339,11 @@ Item {
                     Text {
                         width: parent.width - 72; anchors.verticalCenter: parent.verticalCenter
                         text: root.colorStatus; color: Colors.fgMuted; font.pixelSize: 11
-                        elide: Text.ElideRight; font.family: "FantasqueSansM Nerd Font"
+                        elide: Text.ElideRight; font.family: Style.font
                     }
-                    Rectangle {
-                        width: 64; height: 28; radius: 6
-                        color: acHov.containsMouse ? Colors.boActive : Colors.bgActive
-                        Text { anchors.centerIn: parent; text: "Apply"; color: Colors.fgBright; font.bold: true
-                               font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font" }
-                        MouseArea { id: acHov; anchors.fill: parent; hoverEnabled: true
-                                    onClicked: root.applyColours() }
-                    }
+                    TextButton { primary: true; label: "Apply"; onClicked: root.applyColours() }
                 }
             }
-        }
-    }
-
-    // ── Reusable bits ──────────────────────────────────────────────────────────────
-    component Group: Rectangle {
-        default property alias content: inner.data
-        width:  parent ? parent.width : 0
-        radius: 12
-        color:  Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.08)
-        height: inner.implicitHeight + 24
-        Column {
-            id: inner
-            anchors { top: parent.top; left: parent.left; right: parent.right
-                      topMargin: 12; leftMargin: 12; rightMargin: 12 }
-            spacing: 8
-        }
-    }
-
-    component FieldLabel: Text {
-        color: Colors.fgBright; font.pixelSize: 12; font.bold: true
-        font.letterSpacing: 0.5; font.family: "FantasqueSansM Nerd Font"
-    }
-    component SubLabel: Text {
-        color: Colors.fgMuted; font.pixelSize: 10
-        font.family: "FantasqueSansM Nerd Font"
-    }
-
-    // Compact inline-expanding dropdown (mirrors the OSD / Notifications settings pages).
-    component Dropdown: Column {
-        id: dd
-        property var    options: []
-        property string summary: ""
-        property bool   open:    false
-        signal picked(string key)
-        width:   parent ? parent.width : 0
-        spacing: 4
-
-        Rectangle {
-            width: parent.width; height: 34; radius: 8
-            color: ddHov.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.34)
-                                       : Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.20)
-            border.width: dd.open ? 2 : 1
-            border.color: Colors.bgActive
-            Behavior on color { ColorAnimation { duration: 100 } }
-            Text {
-                anchors { left: parent.left; leftMargin: 12; right: chev.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                text: dd.summary; color: Colors.fgPrimary; elide: Text.ElideRight
-                font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font"
-            }
-            Text { id: chev; anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                   text: dd.open ? "▴" : "▾"; color: Colors.fgMuted; font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
-            MouseArea { id: ddHov; anchors.fill: parent; hoverEnabled: true; onClicked: dd.open = !dd.open }
-        }
-        Column {
-            visible: dd.open
-            width: parent.width; spacing: 3
-            Repeater {
-                model: dd.options
-                delegate: Rectangle {
-                    required property var modelData
-                    width: dd.width; height: 30; radius: 7
-                    color: modelData.on ? Colors.bgActive
-                         : (oHov.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.34)
-                                               : Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.20))
-                    Behavior on color { ColorAnimation { duration: 90 } }
-                    Text {
-                        anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                        text: modelData.label; color: modelData.on ? Colors.fgBright : Colors.fgPrimary
-                        font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font"
-                    }
-                    Text { visible: modelData.on; anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                           text: "✓"; color: Colors.fgBright; font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
-                    MouseArea { anchors.fill: parent; hoverEnabled: true; id: oHov
-                                onClicked: { dd.picked(modelData.key); dd.open = false } }
-                }
-            }
-        }
-    }
-
-    component Toggle: Rectangle {
-        id: tg
-        property string title:    ""
-        property string subtitle: ""
-        property bool   on:       false
-        property bool   indent:   false
-        signal toggled()
-        width:  parent ? parent.width - (indent ? 12 : 0) : 0
-        x:      indent ? 12 : 0
-        height: tg.subtitle !== "" ? 46 : 38
-        radius: 10
-        color:  indent ? Qt.rgba(Colors.bgElement.r, Colors.bgElement.g, Colors.bgElement.b, 0.5) : Colors.bgElement
-        Column {
-            anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-            spacing: 1
-            Text { text: tg.title; color: Colors.fgPrimary
-                   font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
-            Text { visible: tg.subtitle !== ""; text: tg.subtitle; color: Colors.fgMuted
-                   font.pixelSize: 10; font.family: "FantasqueSansM Nerd Font" }
-        }
-        Rectangle {
-            anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-            width: 42; height: 22; radius: 11
-            color: tg.on ? Colors.bgActive : Colors.bgPrimary
-            Behavior on color { ColorAnimation { duration: 120 } }
-            Rectangle {
-                width: 16; height: 16; radius: 8; color: Colors.fgBright
-                anchors.verticalCenter: parent.verticalCenter
-                x: tg.on ? parent.width - width - 3 : 3
-                Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-            }
-            MouseArea { anchors.fill: parent; onClicked: tg.toggled() }
         }
     }
 }

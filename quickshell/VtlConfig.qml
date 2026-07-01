@@ -70,6 +70,7 @@ Item {
     readonly property real   opacityValue:    _data.opacity_value     ?? 0.88
     readonly property string menuTheme:       _data.menu_theme        ?? "follow"
     readonly property string logoVariant:     _data.logo_variant      ?? "full"
+    readonly property string uiStyle:         _data.ui_style          ?? "flat"   // flat | cards | outlined
 
     readonly property bool   sidebarLabels:   _data.sidebar_labels    ?? false
     readonly property bool   sidebarAutohide: _data.sidebar_autohide  ?? false
@@ -333,6 +334,56 @@ Item {
     readonly property int    launcherRows:       _data.launcher_rows       ?? 7     // visible rows
     readonly property int    launcherWidth:      _data.launcher_width      ?? 560   // panel width px (docked / standalone)
     readonly property int    launcherFsCols:     _data.launcher_fs_cols    ?? 6     // columns in fullscreen grid
+    readonly property bool   launcherBlur:       _data.launcher_blur       ?? true  // blur the backdrop (Hyprland)
+    readonly property bool   launcherDock:       _data.launcher_dock       ?? false // snap flush against the bar/edge
+
+    // ── Hot corners / screen edges (Settings → Corners) ───────────────────────
+    // Push the mouse into a corner or edge-centre and hold for the dwell time → fire an action.
+    // Zones (ids): top-left | top | top-right | right | bottom-right | bottom | bottom-left | left.
+    readonly property bool cornerActionsEnabled: _data.corner_actions_enabled ?? false
+    readonly property bool cornerPerMonitor:     _data.corner_per_monitor     ?? false  // zones per monitor
+    readonly property int  cornerDefaultDwell:   _data.corner_default_dwell   ?? 300   // ms held in zone
+    readonly property int  cornerSize:           _data.corner_size            ?? 6     // corner zone px
+    readonly property int  cornerEdgeLength:     _data.corner_edge_length     ?? 160   // edge zone length px
+    // Zone map for a monitor: the per-monitor override (corner_monitors.<mon>.corner_zones) when
+    // per-monitor is on and that monitor has one, else the global corner_zones. mon "" = global.
+    function _cornerZones(mon) {
+        if (cornerPerMonitor && mon) {
+            var cm = _data.corner_monitors
+            if (cm && cm[mon] && cm[mon].corner_zones) return cm[mon].corner_zones
+        }
+        return _data.corner_zones || {}
+    }
+    function cornerZoneFor(id, mon)   { var z = _cornerZones(mon); return (z && z[id]) ? z[id] : null }
+    function cornerActionFor(id, mon) { var z = cornerZoneFor(id, mon); return (z && z.action) ? z.action : { type: "none", value: "" } }
+    function cornerDwellFor(id, mon)  { var z = cornerZoneFor(id, mon); return (z && z.dwell !== undefined && z.dwell !== null) ? z.dwell : cornerDefaultDwell }
+    // Global convenience wrappers (mon = "").
+    function cornerZone(id)   { return cornerZoneFor(id, "") }
+    function cornerAction(id) { return cornerActionFor(id, "") }
+    function cornerDwell(id)  { return cornerDwellFor(id, "") }
+
+    // ── Taskbar OSD (Settings → Taskbar) ──────────────────────────────────────
+    // A Windows-style taskbar of open windows; click focuses. Placement mirrors the OSD.
+    readonly property bool   taskbarEnabled:    _data.taskbar_enabled    ?? false
+    readonly property string taskbarPosition:   _data.taskbar_position   ?? "bottom-center"  // 9-grid
+    readonly property string taskbarStyle:      _data.taskbar_style      ?? "dock"    // dock | float
+    readonly property string taskbarVisibility: _data.taskbar_visibility ?? "always"  // always | hover
+    readonly property string taskbarScope:      _data.taskbar_scope      ?? "monitor" // monitor | workspace | all
+    readonly property bool   taskbarLabels:     _data.taskbar_labels     ?? true
+    readonly property int    taskbarIconSize:   _data.taskbar_icon_size  ?? 24
+    readonly property int    taskbarMargin:     _data.taskbar_margin     ?? 12
+    readonly property string taskbarLayer:      _data.taskbar_layer      ?? "over"    // over | reserve (like bar)
+    // Per-monitor on/off: taskbar_monitors maps a monitor name → true/false, overriding the master
+    // switch on that screen. Missing entry = follow the master (taskbarEnabled).
+    readonly property var    taskbarMonitors:   _data.taskbar_monitors    ?? ({})
+    function taskbarEnabledFor(mon) {
+        var m = _data.taskbar_monitors
+        if (mon && m && m[mon] !== undefined && m[mon] !== null) return m[mon]
+        return taskbarEnabled
+    }
+    // "Like bar" (reserve space so windows are pushed away) only applies to always-visible; a hover
+    // auto-hide taskbar is always drawn over the windows.
+    readonly property bool   taskbarReserve:    taskbarLayer === "reserve" && taskbarVisibility === "always"
 
     // Custom Bluetooth device names (rename in the BT menu) — bt_aliases.<mac> → display name.
     function btAlias(mac) { var a = _data.bt_aliases; return (a && a[mac]) ? a[mac] : "" }

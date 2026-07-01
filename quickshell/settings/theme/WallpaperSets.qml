@@ -4,8 +4,8 @@ import Quickshell
 import Quickshell.Io
 
 // Wallpaper Sets — fixed wallpaper combinations across monitors. Build a set by picking one
-// wallpaper per monitor (each from that monitor's own folder), name it, save. Applying a set sets
-// every monitor at once. Stored in settings.json as wallpaper_sets.<name> = { "<mon>": "<path>" }.
+// wallpaper per monitor, name it, save. Applying a set sets every monitor at once. Stored in
+// settings.json as wallpaper_sets.<name> = { "<mon>": "<path>" }. Uses shared common components.
 Item {
     id: root
 
@@ -81,7 +81,6 @@ Item {
         reloadSets()
     }
     function applySet(images) {
-        // One wallpaper-set.sh call per monitor; the focused monitor's call also drives wallust.
         var cmd = ""
         for (var mon in images)
             cmd += "bash \"$VELUMERON_DIR/assets/scripts/wallpaper-set.sh\" --no-waybar --no-showcase "
@@ -141,109 +140,97 @@ Item {
         Column {
             id: col
             width: parent.width
-            spacing: 12
+            spacing: Style.cardGap
 
             // New set: a slot per monitor + name + save
-            Text { text: "NEW SET"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-                   font.family: "FantasqueSansM Nerd Font" }
-            Row {
-                width: parent.width; spacing: 8
-                Repeater {
-                    model: root.monitors
-                    delegate: Column {
-                        required property var modelData
-                        readonly property string mn: root.monName(modelData)
-                        width: (col.width - (root.monitors.length - 1) * 8) / Math.max(1, root.monitors.length)
-                        spacing: 4
-                        Rectangle {
-                            width: parent.width; height: parent.width * 9 / 16
-                            radius: 8; clip: true; color: Colors.bgElement
-                            border.width: 1; border.color: Colors.boNormal
-                            Image {
-                                anchors.fill: parent; anchors.margins: 2
-                                visible: (root.picks[parent.parent.mn] ?? "") !== "" && !root.isVideo(root.picks[parent.parent.mn] ?? "")
-                                source:  (root.picks[parent.parent.mn] ?? "") !== "" ? ("file://" + root.picks[parent.parent.mn]) : ""
-                                fillMode: Image.PreserveAspectCrop; asynchronous: true
-                                sourceSize.width: 200; sourceSize.height: 120
+            Card {
+                CardLabel { text: "NEW SET" }
+                Row {
+                    width: parent.width; spacing: 8
+                    Repeater {
+                        model: root.monitors
+                        delegate: Column {
+                            required property var modelData
+                            readonly property string mn: root.monName(modelData)
+                            width: (col.width - 2 * Style.cardPad - (root.monitors.length - 1) * 8) / Math.max(1, root.monitors.length)
+                            spacing: 4
+                            Rectangle {
+                                width: parent.width; height: parent.width * 9 / 16
+                                radius: Style.rTile; clip: true; color: Style.controlFill
+                                border.width: 1; border.color: Style.controlBorderColor
+                                Image {
+                                    anchors.fill: parent; anchors.margins: 2
+                                    visible: (root.picks[parent.parent.mn] ?? "") !== "" && !root.isVideo(root.picks[parent.parent.mn] ?? "")
+                                    source:  (root.picks[parent.parent.mn] ?? "") !== "" ? ("file://" + root.picks[parent.parent.mn]) : ""
+                                    fillMode: Image.PreserveAspectCrop; asynchronous: true
+                                    sourceSize.width: 200; sourceSize.height: 120
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    visible: (root.picks[parent.parent.mn] ?? "") === ""
+                                    text: "+"; color: Colors.fgMuted; font.pixelSize: 22; font.family: Style.font
+                                }
+                                MouseArea { anchors.fill: parent; onClicked: root.openPicker(parent.parent.mn) }
                             }
-                            Text {
-                                anchors.centerIn: parent
-                                visible: (root.picks[parent.parent.mn] ?? "") === ""
-                                text: "+"; color: Colors.fgMuted; font.pixelSize: 22
-                                font.family: "FantasqueSansM Nerd Font"
-                            }
-                            MouseArea { anchors.fill: parent; onClicked: root.openPicker(parent.parent.mn) }
+                            Text { text: parent.mn; color: Colors.fgMuted; font.pixelSize: 10
+                                   width: parent.width; elide: Text.ElideRight; horizontalAlignment: Text.AlignHCenter
+                                   font.family: Style.font }
                         }
-                        Text { text: parent.mn; color: Colors.fgMuted; font.pixelSize: 10
-                               width: parent.width; elide: Text.ElideRight; horizontalAlignment: Text.AlignHCenter
-                               font.family: "FantasqueSansM Nerd Font" }
                     }
                 }
-            }
-            Row {
-                width: parent.width; spacing: 8
-                Rectangle {
-                    width: parent.width - 80; height: 30; radius: 6; color: Colors.bgPrimary
-                    TextInput {
-                        id: nameInput
-                        anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
-                        verticalAlignment: TextInput.AlignVCenter
-                        color: Colors.fgPrimary; font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font"
-                        clip: true
-                        text: root.newName
-                        onTextChanged: root.newName = text
-                        Text { anchors.verticalCenter: parent.verticalCenter
-                               visible: nameInput.text === ""; text: "Set name…"; color: Colors.fgMuted
-                               font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+                Row {
+                    width: parent.width; spacing: 8
+                    Rectangle {
+                        width: parent.width - 80; height: 30; radius: Style.rControl; color: Colors.bgPrimary
+                        border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+                        TextInput {
+                            id: nameInput
+                            anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: Colors.fgPrimary; font.pixelSize: 12; font.family: Style.font
+                            clip: true
+                            text: root.newName
+                            onTextChanged: root.newName = text
+                            Text { anchors.verticalCenter: parent.verticalCenter
+                                   visible: nameInput.text === ""; text: "Set name…"; color: Colors.fgMuted
+                                   font.pixelSize: 12; font.family: Style.font }
+                        }
                     }
+                    TextButton { primary: true; label: "Save"; onClicked: root.saveSet() }
                 }
-                Rectangle {
-                    width: 72; height: 30; radius: 6
-                    color: svHov.containsMouse ? Colors.boActive : Colors.bgActive
-                    Text { anchors.centerIn: parent; text: "Save"; color: Colors.fgBright; font.bold: true
-                           font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font" }
-                    MouseArea { id: svHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.saveSet() }
-                }
+                SubLabel { visible: root.status !== ""; text: root.status }
             }
-            Text { visible: root.status !== ""; text: root.status; color: Colors.fgMuted
-                   font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font" }
 
             // Saved sets
-            Text { text: "SAVED SETS"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-                   font.family: "FantasqueSansM Nerd Font"; topPadding: 6 }
-            Repeater {
-                model: root.sets
-                delegate: Rectangle {
-                    required property var modelData
-                    width: col.width; height: 40; radius: 8; color: Colors.bgElement
-                    Text {
-                        anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                        text: modelData.name; color: Colors.fgPrimary; font.pixelSize: 12
-                        font.family: "FantasqueSansM Nerd Font"
-                    }
-                    Row {
-                        anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                        spacing: 6
-                        Rectangle {
-                            width: 56; height: 26; radius: 6
-                            color: apHov.containsMouse ? Colors.boActive : Colors.bgActive
-                            Text { anchors.centerIn: parent; text: "Apply"; color: Colors.fgBright
-                                   font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font" }
-                            MouseArea { id: apHov; anchors.fill: parent; hoverEnabled: true
-                                        onClicked: root.applySet(modelData.images) }
+            Card {
+                CardLabel { text: "SAVED SETS" }
+                Repeater {
+                    model: root.sets
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: parent.width; height: 40; radius: Style.rControl; color: Style.controlFill
+                        border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+                        Text {
+                            anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                            text: modelData.name; color: Colors.fgPrimary; font.pixelSize: 12; font.family: Style.font
                         }
-                        Rectangle {
-                            width: 26; height: 26; radius: 6
-                            color: dlHov.containsMouse ? Qt.rgba(Colors.fgUrgent.r, Colors.fgUrgent.g, Colors.fgUrgent.b, 0.25) : "transparent"
-                            Text { anchors.centerIn: parent; text: "✕"; color: Colors.fgMuted; font.pixelSize: 11 }
-                            MouseArea { id: dlHov; anchors.fill: parent; hoverEnabled: true
-                                        onClicked: root.deleteSet(modelData.name) }
+                        Row {
+                            anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                            spacing: 6
+                            TextButton { primary: true; label: "Apply"; onClicked: root.applySet(modelData.images) }
+                            Rectangle {
+                                width: 26; height: 26; radius: Style.rTile
+                                color: dlHov.containsMouse ? Style.tint(Colors.fgUrgent, 0.25) : "transparent"
+                                Text { anchors.centerIn: parent; text: "✕"; color: Colors.fgMuted
+                                       font.pixelSize: 11; font.family: Style.font }
+                                MouseArea { id: dlHov; anchors.fill: parent; hoverEnabled: true
+                                            onClicked: root.deleteSet(modelData.name) }
+                            }
                         }
                     }
                 }
+                SubLabel { visible: root.sets.length === 0; text: "No sets yet." }
             }
-            Text { visible: root.sets.length === 0; text: "No sets yet."; color: Colors.fgMuted
-                   font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font" }
         }
     }
 
@@ -256,13 +243,13 @@ Item {
         MouseArea { anchors.fill: parent; onClicked: root.pickMon = "" }
         Rectangle {
             anchors.fill: parent; anchors.margins: 6
-            radius: 12; color: Colors.bgPrimary; border.width: 1; border.color: Colors.bgActive
+            radius: Style.rCard; color: Colors.bgPrimary; border.width: 1; border.color: Style.accent
             MouseArea { anchors.fill: parent }
             Text {
                 id: pickHead
                 anchors { top: parent.top; left: parent.left; right: parent.right; margins: 10 }
                 text: "Pick wallpaper — " + root.pickMon; color: Colors.fgBright
-                font.pixelSize: 13; font.bold: true; font.family: "FantasqueSansM Nerd Font"
+                font.pixelSize: 13; font.bold: true; font.family: Style.font
             }
             GridView {
                 anchors { top: pickHead.bottom; left: parent.left; right: parent.right
@@ -274,8 +261,8 @@ Item {
                     required property var modelData
                     width: GridView.view.cellWidth; height: GridView.view.cellHeight
                     Rectangle {
-                        anchors.fill: parent; anchors.margins: 3; radius: 6; clip: true; color: Colors.bgElement
-                        border.color: Colors.boActive; border.width: phov.containsMouse ? 1 : 0
+                        anchors.fill: parent; anchors.margins: 3; radius: Style.rTile; clip: true; color: Style.controlFill
+                        border.color: Style.accent; border.width: phov.containsMouse ? 1 : 0
                         Image {
                             anchors.fill: parent; anchors.margins: 2
                             visible: !root.isVideo(root.base(modelData))
@@ -284,8 +271,7 @@ Item {
                             sourceSize.width: 180; sourceSize.height: 110
                         }
                         Text { visible: root.isVideo(root.base(modelData)); anchors.centerIn: parent
-                               text: "󰕧"; color: Colors.fgMuted; font.pixelSize: 22
-                               font.family: "FantasqueSansM Nerd Font" }
+                               text: "󰕧"; color: Colors.fgMuted; font.pixelSize: 22; font.family: Style.font }
                         MouseArea { id: phov; anchors.fill: parent; hoverEnabled: true
                                     onClicked: root.choose(modelData) }
                     }

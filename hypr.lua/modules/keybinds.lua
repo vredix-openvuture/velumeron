@@ -7,6 +7,10 @@ local MOD = "SUPER"
 
 local osd = VTL_DIR .. "/assets/scripts/osd-show.sh"
 
+-- Window switcher: Super+Tab opens it; the overlay itself grabs the keyboard and handles Tab /
+-- Super-release / Enter / Esc, then sends the focus command. No Hyprland submap.
+local win_open = "qs -p " .. VTL_DIR .. "/quickshell ipc call window open"
+
 
 
 -- ── Helpers ──────────────────────────────────────────
@@ -55,7 +59,7 @@ hl.bind(MOD .. " + H",      hl.dsp.focus({ workspace = "m-1" }))
 hl.bind(MOD .. " + L",      hl.dsp.focus({ workspace = "m+1" }))
 hl.bind(MOD .. " + J",      hl.dsp.window.cycle_next())
 hl.bind(MOD .. " + K",      hl.dsp.window.cycle_next({ next = false }))
-hl.bind(MOD .. " + TAB",    hl.dsp.exec_cmd(window_switch))
+hl.bind(MOD .. " + TAB",    hl.dsp.exec_cmd(win_open))
 hl.bind(MOD .. " + SPACE",  hl.dsp.exec_cmd("qs -p " .. VTL_DIR .. "/quickshell ipc call launcher toggle"))
 hl.bind(MOD .. " + RETURN", hl.dsp.workspace.toggle_special("magic"))
 hl.bind(MOD .. " + PERIOD", hl.dsp.exec_cmd("hypremoji"))
@@ -215,7 +219,7 @@ hl.define_submap("window", function()
     hl.bind(MOD .. " + O", hl.dsp.layout("togglesplit"))
 
     -- Utilities
-    hl.bind(MOD .. " + TAB",   hl.dsp.exec_cmd(window_switch))
+    hl.bind(MOD .. " + TAB",   hl.dsp.exec_cmd(win_open))
     hl.bind(MOD .. " + SPACE", hl.dsp.exec_cmd("hyprctl dispatch centerwindow"))
 
     -- Fullscreen / maximize / pin

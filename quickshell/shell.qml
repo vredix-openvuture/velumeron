@@ -5,6 +5,10 @@ import Quickshell.Io
 import Quickshell.Hyprland
 
 ShellRoot {
+    // Touch the Templates singleton on startup so its copy-on-write watcher + one-time migration run
+    // even before any settings UI is opened (a singleton only instantiates once referenced).
+    Component.onCompleted: { Templates.boot(); void Hyprwindows.windows }
+
     // IPC: toggle / open / close the corner menu from outside (e.g. a Hyprland keybind):
     //   qs -p <this-dir> ipc call menu toggle
     IpcHandler {
@@ -60,11 +64,41 @@ ShellRoot {
     }
 
     // IPC: application launcher (replaces the rofi drun launcher; bound to Super+Space).
+    // Latch the launcher to the monitor focused at open time so it stays there even if focus moves.
     IpcHandler {
         target: "launcher"
-        function toggle(): void { UiState.launcherOpen = !UiState.launcherOpen }
-        function open():   void { UiState.launcherOpen = true }
+        function toggle(): void {
+            if (!UiState.launcherOpen) UiState.launcherMon = Hyprland.focusedMonitor?.name ?? ""
+            UiState.launcherOpen = !UiState.launcherOpen
+        }
+        function open():   void { UiState.launcherMon = Hyprland.focusedMonitor?.name ?? ""; UiState.launcherOpen = true }
         function close():  void { UiState.launcherOpen = false }
+    }
+
+    // IPC: rofi successors — clipboard history (Super+V), window switcher (Super+Tab), session menu
+    // (Super+Ctrl+Q). Each latches to the monitor focused at open time (like the launcher).
+    IpcHandler {
+        target: "clipboard"
+        function toggle(): void { if (!UiState.clipboardOpen) UiState.clipboardMon = Hyprland.focusedMonitor?.name ?? ""; UiState.clipboardOpen = !UiState.clipboardOpen }
+        function open():   void { UiState.clipboardMon = Hyprland.focusedMonitor?.name ?? ""; UiState.clipboardOpen = true }
+        function close():  void { UiState.clipboardOpen = false }
+    }
+    // Window switcher: Super+Tab opens it, then the overlay grabs the keyboard and handles the rest.
+    // `open` while already open advances the selection (fallback if the grab didn't suppress the bind).
+    IpcHandler {
+        target: "window"
+        function open(): void {
+            if (!UiState.windowSwitcherOpen) { UiState.windowSwitcherMon = Hyprland.focusedMonitor?.name ?? ""; UiState.windowSwitcherOpen = true }
+            else UiState.windowSwitcherNext++
+        }
+        function toggle(): void { if (UiState.windowSwitcherOpen) UiState.windowSwitcherOpen = false; else open() }
+        function close():  void { UiState.windowSwitcherOpen = false }
+    }
+    IpcHandler {
+        target: "session"
+        function toggle(): void { if (!UiState.sessionOpen) UiState.sessionMon = Hyprland.focusedMonitor?.name ?? ""; UiState.sessionOpen = !UiState.sessionOpen }
+        function open():   void { UiState.sessionMon = Hyprland.focusedMonitor?.name ?? ""; UiState.sessionOpen = true }
+        function close():  void { UiState.sessionOpen = false }
     }
 
     // IPC: toggle / open / close the notification centre.
@@ -155,6 +189,22 @@ ShellRoot {
         model: Quickshell.screens
         delegate: Launcher { required property var modelData; screen: modelData }
     }
+
+    // Hot corners / screen edges: one transparent trigger overlay per screen (Settings → Corners).
+    Variants {
+        model: Quickshell.screens
+        delegate: HotCorners { required property var modelData; screen: modelData }
+    }
+
+    // rofi successors: window switcher, clipboard history, session menu — one per screen.
+    Variants { model: Quickshell.screens; delegate: WindowSwitcher { required property var modelData; screen: modelData } }
+    Variants { model: Quickshell.screens; delegate: ClipboardMenu  { required property var modelData; screen: modelData } }
+    Variants { model: Quickshell.screens; delegate: SessionOverlay { required property var modelData; screen: modelData } }
+
+    // Taskbar OSD: a strip of open windows (Settings → Taskbar), one per screen. TaskbarReserve is the
+    // invisible space-reserving surface for the "like bar" layer.
+    Variants { model: Quickshell.screens; delegate: Taskbar        { required property var modelData; screen: modelData } }
+    Variants { model: Quickshell.screens; delegate: TaskbarReserve { required property var modelData; screen: modelData } }
 
     // OSD: one per screen, shows on the focused monitor (volume / brightness)
     Variants {

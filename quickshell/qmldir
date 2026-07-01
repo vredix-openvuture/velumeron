@@ -2,10 +2,32 @@
 singleton Colors    1.0 Colors.qml
 singleton VtlConfig 1.0 VtlConfig.qml
 singleton UiState   1.0 UiState.qml
+singleton Style     1.0 Style.qml
+singleton Templates 1.0 Templates.qml
+singleton Hyprwindows 1.0 Hyprwindows.qml
+
+# Shared UI component library (token-driven; used by every settings page)
+Card        1.0 common/Card.qml
+CardLabel   1.0 common/CardLabel.qml
+FieldLabel  1.0 common/FieldLabel.qml
+SubLabel    1.0 common/SubLabel.qml
+Toggle      1.0 common/Toggle.qml
+Dropdown    1.0 common/Dropdown.qml
+Stepper     1.0 common/Stepper.qml
+Segmented   1.0 common/Segmented.qml
+Chip        1.0 common/Chip.qml
+SelectRow   1.0 common/SelectRow.qml
+SelectTile  1.0 common/SelectTile.qml
+PosGrid     1.0 common/PosGrid.qml
+TextButton  1.0 common/TextButton.qml
 
 # Native wallpaper engine (per-monitor background surface)
 WallpaperWindow   1.0 WallpaperWindow.qml
 Launcher          1.0 launcher/Launcher.qml
+HotCorners        1.0 corners/HotCorners.qml
+WindowSwitcher    1.0 windowswitcher/WindowSwitcher.qml
+ClipboardMenu     1.0 clipboard/ClipboardMenu.qml
+SessionOverlay    1.0 session/SessionOverlay.qml
 
 # Bar (dynamic, multi-edge)
 Bar               1.0 bar/Bar.qml
@@ -22,6 +44,8 @@ TrayGlide         1.0 osd/TrayGlide.qml
 NetworkGlide      1.0 osd/NetworkGlide.qml
 BtGlide           1.0 osd/BtGlide.qml
 WallpaperQuick    1.0 osd/WallpaperQuick.qml
+Taskbar           1.0 osd/Taskbar.qml
+TaskbarReserve    1.0 osd/TaskbarReserve.qml
 
 # Keybind cheatsheet overlay
 KeybindHelp       1.0 keybind/KeybindHelp.qml
@@ -37,6 +61,7 @@ NotifSettings          1.0 settings/notify/NotifSettings.qml
 BarSeparator    1.0 bar/modules/BarSeparator.qml
 Clock           1.0 bar/modules/Clock.qml
 Workspaces      1.0 bar/modules/Workspaces.qml
+Tasks           1.0 bar/modules/Tasks.qml
 Submap          1.0 bar/modules/Submap.qml
 Volume          1.0 bar/modules/Volume.qml
 VolumeMenu      1.0 bar/modules/VolumeMenu.qml
@@ -68,6 +93,9 @@ BarSection           1.0 settings/bar/BarSection.qml
 ModuleCustomize      1.0 settings/bar/ModuleCustomize.qml
 StyleSection         1.0 settings/style/StyleSection.qml
 OsdSection           1.0 settings/osd/OsdSection.qml
+LauncherSection      1.0 settings/launcher/LauncherSection.qml
+CornerActionsSection 1.0 settings/corners/CornerActionsSection.qml
+TaskbarSection       1.0 settings/taskbar/TaskbarSection.qml
 WallpaperSection     1.0 settings/theme/WallpaperSection.qml
 LockscreenSection    1.0 settings/lockscreen/LockscreenSection.qml
 WallpaperFolders     1.0 settings/theme/WallpaperFolders.qml

@@ -18,7 +18,10 @@ PanelWindow {
 
     WlrLayershell.layer:     WlrLayer.Background
     WlrLayershell.namespace: "velumeron-wallpaper"
-    exclusiveZone: 0
+    // -1 = ignore every exclusive zone so the wallpaper spans the FULL monitor, including under the
+    // bar and its rounded inner corners. With 0 it respected the bar's reservations and got inset by
+    // the bar thickness, leaving the strip under the bar black. The bar sits above us at Bottom layer.
+    exclusiveZone: -1
     anchors { top: true; left: true; right: true; bottom: true }
     color: "black"
 

@@ -4,8 +4,7 @@ import Quickshell.Io
 
 // Lockscreen & suspend. Pick a hyprlock theme (hypr.lua/hyprlock-themes/*.conf, applied via
 // apply-hyprlock-theme.sh, active one remembered in the .hyprlock-theme marker) and set the
-// idle→lock and idle→suspend timeouts (hypr.lua/hypridle.conf, two `timeout =` listeners in seconds;
-// hypridle-set.sh rewrites them and restarts hypridle).
+// idle→lock and idle→suspend timeouts (hypr.lua/hypridle.conf). Uses the shared common components.
 Item {
     id: root
 
@@ -70,79 +69,39 @@ Item {
             id: col
             width: parent.width
             topPadding: 4
-            spacing: 18
+            spacing: Style.cardGap
 
             // ── Theme ─────────────────────────────────────────────────────────
-            Text { text: "LOCKSCREEN THEME"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-                   font.family: "FantasqueSansM Nerd Font" }
-            Flow {
-                width: parent.width; spacing: 8
-                Repeater {
-                    model: root.themes
-                    delegate: Rectangle {
-                        required property var modelData
-                        width: 110; height: 64; radius: 12
-                        color: modelData.active ? Colors.bgActive
-                             : (tHov.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.20) : Colors.bgElement)
-                        border.width: modelData.active ? 1 : 0
-                        border.color: Colors.boActive
-                        Behavior on color { ColorAnimation { duration: 110 } }
-                        Column {
-                            anchors.centerIn: parent; spacing: 4
-                            Text { anchors.horizontalCenter: parent.horizontalCenter; text: "󰌾"
-                                   color: modelData.active ? Colors.fgBright : Colors.fgMuted
-                                   font.pixelSize: 20; font.family: "FantasqueSansM Nerd Font" }
-                            Text { anchors.horizontalCenter: parent.horizontalCenter; text: root.cap(modelData.name)
-                                   color: modelData.active ? Colors.fgBright : Colors.fgPrimary
-                                   font.pixelSize: 12; font.bold: modelData.active; font.family: "FantasqueSansM Nerd Font" }
+            Card {
+                CardLabel { text: "LOCKSCREEN THEME" }
+                Flow {
+                    width: parent.width; spacing: 8
+                    Repeater {
+                        model: root.themes
+                        delegate: SelectTile {
+                            required property var modelData
+                            width: 110; height: 64
+                            icon:     "󰌾"
+                            label:    root.cap(modelData.name)
+                            selected: modelData.active
+                            onClicked: root.applyTheme(modelData.name)
                         }
-                        MouseArea { id: tHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.applyTheme(modelData.name) }
                     }
+                    SubLabel { visible: root.themes.length === 0; text: "No hyprlock themes found" }
                 }
-                Text { visible: root.themes.length === 0; text: "No hyprlock themes found"
-                       color: Colors.fgMuted; font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
             }
 
             // ── Timers ────────────────────────────────────────────────────────
-            Text { text: "TIMERS"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-                   font.family: "FantasqueSansM Nerd Font" }
-            Stepper { label: "Lock after"; unit: "min"; min: 1; max: 120
-                      value: root.lockMin; onChanged: { root.lockMin = v; root.commitTimes() } }
-            Stepper { label: "Suspend after"; unit: root.suspendMin > 0 ? "min" : "off"; min: 0; max: 240
-                      value: root.suspendMin; onChanged: { root.suspendMin = v; root.commitTimes() } }
-            Text { text: "Idle time before the lockscreen appears, then before the system suspends."
-                   color: Colors.fgMuted; font.pixelSize: 10; font.family: "FantasqueSansM Nerd Font"
-                   width: parent.width; wrapMode: Text.WordWrap }
-        }
-    }
-
-    component Stepper: Row {
-        id: st
-        property string label: ""
-        property string unit:  ""
-        property int    value: 0
-        property int    step:  5
-        property int    min:   0
-        property int    max:   9999
-        signal changed(int v)
-        width:   parent ? parent.width : 0
-        spacing: 8
-        Text { anchors.verticalCenter: parent.verticalCenter; width: 110; text: st.label
-               color: Colors.fgPrimary; font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
-        Rectangle {
-            width: 26; height: 26; radius: 6; color: mh.containsMouse ? Colors.bgActive : Colors.bgElement
-            Text { anchors.centerIn: parent; text: "−"; color: Colors.fgPrimary; font.pixelSize: 14 }
-            MouseArea { id: mh; anchors.fill: parent; hoverEnabled: true
-                        onClicked: st.changed(Math.max(st.min, st.value - st.step)) }
-        }
-        Text { anchors.verticalCenter: parent.verticalCenter; width: 64; horizontalAlignment: Text.AlignHCenter
-               text: st.value + (st.unit !== "" ? " " + st.unit : ""); color: Colors.fgBright
-               font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
-        Rectangle {
-            width: 26; height: 26; radius: 6; color: ph.containsMouse ? Colors.bgActive : Colors.bgElement
-            Text { anchors.centerIn: parent; text: "+"; color: Colors.fgPrimary; font.pixelSize: 14 }
-            MouseArea { id: ph; anchors.fill: parent; hoverEnabled: true
-                        onClicked: st.changed(Math.min(st.max, st.value + st.step)) }
+            Card {
+                CardLabel { text: "TIMERS" }
+                Stepper { label: "Lock after"; unit: "min"; min: 1; max: 120; labelWidth: 110
+                          value: root.lockMin; onChanged: { root.lockMin = v; root.commitTimes() } }
+                Stepper { label: "Suspend after"; unit: root.suspendMin > 0 ? "min" : "off"; min: 0; max: 240
+                          labelWidth: 110
+                          value: root.suspendMin; onChanged: { root.suspendMin = v; root.commitTimes() } }
+                SubLabel { width: parent.width
+                           text: "Idle time before the lockscreen appears, then before the system suspends." }
+            }
         }
     }
 }

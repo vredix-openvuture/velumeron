@@ -62,6 +62,7 @@ Item {
         { key: "performance", label: "Performance"    },
         { key: "user",        label: "User"           },
         { key: "workspaces",  label: "Workspaces"     },
+        { key: "tasks",       label: "Tasks"          },
         { key: "submap",      label: "Submap"         },
         { key: "mpris",       label: "Media"          },
         { key: "volume",      label: "Volume"         },

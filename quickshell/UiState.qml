@@ -9,6 +9,18 @@ QtObject {
     property string openDropdown:   ""      // key of the currently open module dropdown
     property bool   notifCenterOpen: false  // notification centre panel (the bar's bell)
     property bool   launcherOpen:    false  // application launcher (Super+Space / `launcher` IPC)
+    property string launcherMon:     ""     // monitor the launcher latched to when opened
+
+    // rofi successors — each latches to the monitor focused at open time (like the launcher).
+    property bool   clipboardOpen:      false  // clipboard history (Super+V / `clipboard` IPC)
+    property string clipboardMon:       ""
+    property bool   windowSwitcherOpen: false  // Alt-Tab window switcher (Super+Tab / `window` IPC)
+    property string windowSwitcherMon:  ""
+    // The overlay grabs the keyboard and handles input itself; this counter is only a fallback for the
+    // case where the grab doesn't suppress the Super+Tab bind (it re-fires `window open` → advance).
+    property int    windowSwitcherNext:    0
+    property bool   sessionOpen:        false  // power / session menu (Super+Ctrl+Q / `session` IPC)
+    property string sessionMon:         ""
 
     // Keybind cheatsheet overlay context: "" = closed, "all" = full reference,
     // "window" | "apps" | "system" = that submap's binds. Driven by the `keybind` IPC.

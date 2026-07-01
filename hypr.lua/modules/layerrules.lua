@@ -75,6 +75,18 @@ hl.layer_rule({
 
 
 
+-- Velumeron launcher — the "-noblur" namespace opts OUT of the global blur (placed after the global
+-- rule so blur=false wins), letting the Launcher settings page toggle blur by swapping the namespace.
+hl.layer_rule({ name = "velumeron-launcher-noblur", match = { namespace = "velumeron-launcher-noblur" }, blur = false, xray = true })
+
+-- Velumeron hot corners — the glow overlay must NOT be blurred (the global rule would blur behind its
+-- translucent accent glow, turning it into a frosted block). Opt out here.
+hl.layer_rule({ name = "velumeron-hotcorners", match = { namespace = "velumeron-hotcorners" }, blur = false, no_anim = true, xray = true })
+
+-- Velumeron window switcher — must NOT blur: you want to see the windows clearly, and its dim
+-- backdrop would otherwise frost the whole screen. Opt out of the global blur.
+hl.layer_rule({ name = "velumeron-window-switcher", match = { namespace = "velumeron-window-switcher" }, blur = false, no_anim = true, xray = true })
+
 -- Velumeron OSD — one rule per slide direction.
 -- The daemon sets the namespace to velumeron-osd-{bottom|top|left|right}
 -- based on the position chosen in the OSD settings page.

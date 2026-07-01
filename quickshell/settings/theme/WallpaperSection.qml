@@ -4,18 +4,15 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 
-// Wallpaper picker (corner menu). NEW per-monitor model: pick the monitor, list its folder (resolved
-// from wallpaper_dirs.<mon>, with optional subfolder search/grouping), click a thumbnail to apply it
-// to THAT monitor via wallpaper-set.sh --mon NAME --file FILE. The gear opens WallpaperFolders.
-// Thumbnails are the images themselves (downscaled), so any folder works without pre-generation.
+// Wallpaper picker (corner menu). Per-monitor model: pick the monitor, list its folder, click a
+// thumbnail to apply it to THAT monitor via wallpaper-set.sh. The gear opens WallpaperFolders.
+// Controls (tabs, monitor selector, position grid, steppers, buttons) come from quickshell/common.
 Item {
     id: root
 
     readonly property var    monitors: Quickshell.screens
     function monName(s) { return (s && s.name) ? s.name : "" }
     property string targetMon: ""
-    // Selected monitor portrait? → render thumbnails in vertical cells (vertical wallpapers were
-    // being cropped into landscape tiles).
     readonly property bool vertMon: {
         for (var i = 0; i < monitors.length; i++)
             if (monitors[i] && monitors[i].name === targetMon) return monitors[i].height > monitors[i].width
@@ -26,13 +23,12 @@ Item {
     property string status:    ""
     property string applying:  ""
     property bool   showFolders: false
-    property string tab:        "browse"   // browse | sets
+    property string tab:        "browse"   // browse | sets | quickselect | auto
 
     function isVideo(n) { return /\.(mp4|webm|mkv|avi|mov)$/i.test(n) }
     function stem(n)    { return ("" + n).replace(/\.[^.]+$/, "") }
 
     readonly property string _thumbDir: (Quickshell.env("HOME") ?? "") + "/.cache/velumeron/wp-thumbs"
-    // Persist one key into settings.json (used by the Quickselect tab; bar follows on VtlConfig poll).
     function save(key, value) {
         VtlConfig.applyLocal(key, value)   // instant UI feedback; the write below persists it
         var py = "import json,os,sys;" +
@@ -67,15 +63,11 @@ Item {
     }
 
     function apply(path) {
-        // Resolve the monitor robustly: the selected one, else the focused monitor. An empty --mon
-        // makes wallpaper-set.sh bail with a usage error (looks like "nothing happens"), so guard it.
         var mon = root.targetMon !== "" ? root.targetMon
                 : (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "")
         if (mon === "") { status = "No monitor"; return }
         applying = path
         status   = "Applying " + stem(path.split("/").pop()) + " → " + mon
-        // setsid -f fully detaches (survives the wallust qs_reload that restarts quickshell); log to
-        // a file so failures are diagnosable instead of vanishing into /dev/null.
         applyProc.command = ["bash", "-c",
             "echo \"--- $(date +%T) apply --mon " + mon + " ---\" >>/tmp/vtl-wp.log; "
             + "setsid -f bash \"$VELUMERON_DIR/assets/scripts/wallpaper-set.sh\" --no-waybar "
@@ -87,8 +79,6 @@ Item {
     Timer { id: statusClear; interval: 5000
             onTriggered: { root.applying = ""; root.status = root.items.length + " wallpaper(s)" } }
 
-    // Resolve the monitor's folder (wallpaper_dirs.<mon> → legacy hor → bundled) and list image /
-    // video files (recursing when search_subfolders is on); emit "subfolder\tfullpath" per file.
     readonly property string _listPy:
         "import json,os,sys;" +
         "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
@@ -134,48 +124,40 @@ Item {
     Process { id: applyProc }
     Process { id: folderProc }
 
-    // ── Header: title + monitor selector + gear ───────────────────────────────
+    // ── Header: tabs + monitor selector + gear ─────────────────────────────────
     Item {
         id: head
         anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 2 }
-        height: 22
-        // Subtabs (Browse / Sets) when in the picker; plain title in the folder settings.
-        Row {
+        height: 26
+        Segmented {
             anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-            spacing: 6
             visible: !root.showFolders
-            TabBtn { label: "Browse"; k: "browse" }
-            TabBtn { label: "Sets";   k: "sets"   }
-            TabBtn { label: "Quick";  k: "quickselect" }
-            TabBtn { label: "Auto";   k: "auto" }
+            current: root.tab
+            segments: [{ label: "Browse", key: "browse" }, { label: "Sets", key: "sets" },
+                       { label: "Quick", key: "quickselect" }, { label: "Auto", key: "auto" }]
+            onPicked: root.tab = key
         }
         Text {
             anchors { left: parent.left; verticalCenter: parent.verticalCenter }
             visible: root.showFolders
             text: "Wallpaper folder"; color: Colors.fgBright
-            font.pixelSize: 14; font.bold: true; font.family: "FantasqueSansM Nerd Font"
+            font.pixelSize: 14; font.bold: true; font.family: Style.font
         }
         Row {
             anchors { right: parent.right; verticalCenter: parent.verticalCenter }
             spacing: 6
-            Row {
+            Segmented {
                 visible: !root.showFolders && root.tab === "browse" && root.monitors.length > 1
-                spacing: 4
-                Repeater {
-                    model: root.monitors
-                    delegate: MonBtn {
-                        required property var modelData
-                        label: root.monName(modelData)
-                        active: root.targetMon === root.monName(modelData)
-                        onPicked: root.setTargetMon(root.monName(modelData))
-                    }
-                }
+                current: root.targetMon
+                segments: root.monitors.map(function (m) { return { label: root.monName(m), key: root.monName(m) } })
+                onPicked: root.setTargetMon(key)
             }
             Rectangle {
-                width: 24; height: 20; radius: 5
-                color: gHov.containsMouse ? Colors.bgActive : Colors.bgElement
+                width: 26; height: 24; radius: Style.rTile
+                color: gHov.containsMouse ? Style.controlHover : Style.controlFill
+                border.width: Style.controlBorderW; border.color: Style.controlBorderColor
                 Text { anchors.centerIn: parent; text: root.showFolders ? "󰁍" : "󰒓"; color: Colors.fgPrimary
-                       font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+                       font.pixelSize: 12; font.family: Style.font }
                 MouseArea { id: gHov; anchors.fill: parent; hoverEnabled: true
                             onClicked: root.showFolders = !root.showFolders }
             }
@@ -204,9 +186,9 @@ Item {
 
             Rectangle {
                 anchors.fill: parent; anchors.margins: 4
-                radius: 8; clip: true
-                color: Colors.bgElement
-                border.color: Colors.boActive
+                radius: Style.rTile; clip: true
+                color: Style.controlFill
+                border.color: Style.accent
                 border.width: root.applying === cell.modelData.path ? 2 : (cHov.containsMouse ? 1 : 0)
                 Behavior on border.width { NumberAnimation { duration: 80 } }
 
@@ -223,16 +205,15 @@ Item {
                 Text {
                     visible: cell.isVid && img.status !== Image.Ready
                     anchors.centerIn: parent; text: "󰕧"; color: Colors.fgMuted
-                    font.family: "FantasqueSansM Nerd Font"; font.pixelSize: 28
+                    font.family: Style.font; font.pixelSize: 28
                 }
-                // Subfolder label when grouping is on.
                 Rectangle {
                     visible: root.grouped && cell.modelData.sub !== ""
                     anchors { left: parent.left; top: parent.top; leftMargin: 5; topMargin: 5 }
                     width: subLbl.implicitWidth + 10; height: subLbl.implicitHeight + 4
                     radius: 5; color: Qt.rgba(0, 0, 0, 0.55)
                     Text { id: subLbl; anchors.centerIn: parent; text: cell.modelData.sub
-                           color: Colors.fgBright; font.pixelSize: 9; font.family: "FantasqueSansM Nerd Font" }
+                           color: Colors.fgBright; font.pixelSize: 9; font.family: Style.font }
                 }
                 Rectangle {
                     visible: root.isVideo(cell.modelData.name)
@@ -243,7 +224,6 @@ Item {
                 MouseArea { id: cHov; anchors.fill: parent; hoverEnabled: true
                             onClicked: root.apply(cell.modelData.path) }
             }
-            // First-frame thumbnail for live wallpapers (cached); reload the Image when ready.
             Process {
                 id: thumbProc
                 command: ["bash", "-c",
@@ -268,113 +248,71 @@ Item {
         anchors { top: head.bottom; topMargin: 10; left: parent.left; right: parent.right; bottom: parent.bottom }
     }
 
-    // ── Quickselect subtab — the grow-from-bar quick-menu's position + grid + preview size ─────────
+    // ── Quickselect subtab ─────────────────────────────────────────────────────────
     Flickable {
         visible: !root.showFolders && root.tab === "quickselect"
         anchors { top: head.bottom; topMargin: 12; left: parent.left; right: parent.right; bottom: parent.bottom }
         contentHeight: qsCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
         Column {
             id: qsCol
-            width: parent.width; spacing: 14
+            width: parent.width; spacing: Style.cardGap
 
-            Text { text: "POSITION"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-                   font.family: "FantasqueSansM Nerd Font" }
-            Grid {
-                anchors.horizontalCenter: parent.horizontalCenter
-                columns: 3; rowSpacing: 4; columnSpacing: 4
-                Repeater {
-                    model: [{ k: "top-left", s: "↖" }, { k: "top-center", s: "↑" }, { k: "top-right", s: "↗" },
-                            { k: "center-left", s: "←" }, { k: "", s: "" }, { k: "center-right", s: "→" },
-                            { k: "bottom-left", s: "↙" }, { k: "bottom-center", s: "↓" }, { k: "bottom-right", s: "↘" }]
-                    delegate: Rectangle {
-                        required property var modelData
-                        readonly property bool sel: VtlConfig.wallpaperQuickPos === modelData.k && modelData.k !== ""
-                        width: 58; height: 30; radius: 7
-                        color: modelData.k === "" ? "transparent"
-                             : sel ? Colors.bgActive
-                             : (gh.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.20) : Colors.bgElement)
-                        Behavior on color { ColorAnimation { duration: 100 } }
-                        Text { anchors.centerIn: parent; text: modelData.s
-                               color: parent.sel ? Colors.fgBright : Colors.fgPrimary
-                               font.pixelSize: 14; font.family: "FantasqueSansM Nerd Font" }
-                        MouseArea { id: gh; anchors.fill: parent; hoverEnabled: modelData.k !== ""
-                                    enabled: modelData.k !== ""; onClicked: root.save("wallpaper_quick_position", modelData.k) }
-                    }
-                }
+            Card {
+                CardLabel { text: "POSITION" }
+                PosGrid { current: VtlConfig.wallpaperQuickPos
+                          onPicked: root.save("wallpaper_quick_position", key) }
             }
-            QSStepper { label: "Columns"; step: 1; value: VtlConfig.wallpaperQuickCols; min: 1; max: 8
-                        onChanged: root.save("wallpaper_quick_cols", v) }
-            QSStepper { label: "Rows";    step: 1; value: VtlConfig.wallpaperQuickRows; min: 1; max: 8
-                        onChanged: root.save("wallpaper_quick_rows", v) }
-            QSStepper { label: "Preview"; unit: "px"; step: 5; min: 70; max: 300
-                        value: VtlConfig.wallpaperQuickPreview; onChanged: root.save("wallpaper_quick_preview", v) }
+            Card {
+                CardLabel { text: "GRID" }
+                Stepper { label: "Columns"; step: 1; value: VtlConfig.wallpaperQuickCols; min: 1; max: 8
+                          labelWidth: 78; onChanged: root.save("wallpaper_quick_cols", v) }
+                Stepper { label: "Rows"; step: 1; value: VtlConfig.wallpaperQuickRows; min: 1; max: 8
+                          labelWidth: 78; onChanged: root.save("wallpaper_quick_rows", v) }
+                Stepper { label: "Preview"; unit: "px"; step: 5; min: 70; max: 300; labelWidth: 78
+                          value: VtlConfig.wallpaperQuickPreview; onChanged: root.save("wallpaper_quick_preview", v) }
+            }
         }
     }
 
-    // ── Auto subtab — periodic wallpaper change (off / silent / show + interval + order) ──────────
+    // ── Auto subtab ────────────────────────────────────────────────────────────────
     Flickable {
         visible: !root.showFolders && root.tab === "auto"
         anchors { top: head.bottom; topMargin: 12; left: parent.left; right: parent.right; bottom: parent.bottom }
         contentHeight: autoCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
         Column {
             id: autoCol
-            width: parent.width; spacing: 14
+            width: parent.width; spacing: Style.cardGap
 
-            Text { text: "AUTO-CHANGE"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-                   font.family: "FantasqueSansM Nerd Font" }
-            Row {
-                width: parent.width; spacing: 6
-                Repeater {
-                    model: [{ k: "off", l: "Off" }, { k: "silent", l: "Silent" }, { k: "show", l: "Show" }]
-                    delegate: Rectangle {
-                        required property var modelData
-                        readonly property bool sel: VtlConfig.wallpaperAutoMode === modelData.k
-                        width: (autoCol.width - 12) / 3; height: 32; radius: 8
-                        color: sel ? Colors.bgActive
-                             : (mHov.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.20) : Colors.bgElement)
-                        Behavior on color { ColorAnimation { duration: 100 } }
-                        Text { anchors.centerIn: parent; text: modelData.l
-                               color: parent.sel ? Colors.fgBright : Colors.fgPrimary
-                               font.pixelSize: 12; font.bold: true; font.family: "FantasqueSansM Nerd Font" }
-                        MouseArea { id: mHov; anchors.fill: parent; hoverEnabled: true
-                                    onClicked: root.save("wallpaper_auto_mode", modelData.k) }
-                    }
+            Card {
+                CardLabel { text: "AUTO-CHANGE" }
+                Segmented {
+                    equal: true
+                    current: VtlConfig.wallpaperAutoMode
+                    segments: [{ label: "Off", key: "off" }, { label: "Silent", key: "silent" },
+                               { label: "Show", key: "show" }]
+                    onPicked: root.save("wallpaper_auto_mode", key)
                 }
+                SubLabel { width: parent.width
+                           text: "Silent = swap in place · Show = switch to a free workspace for the transition." }
+                Stepper { label: "Every"; unit: "min"; step: 1; min: 1; max: 600; labelWidth: 78
+                          value: VtlConfig.wallpaperAutoMinutes; onChanged: root.save("wallpaper_auto_minutes", v) }
             }
-            Text { text: "Silent = swap in place · Show = switch to a free workspace for the transition."
-                   color: Colors.fgMuted; font.pixelSize: 10; font.family: "FantasqueSansM Nerd Font"
-                   width: parent.width; wrapMode: Text.WordWrap }
 
-            QSStepper { label: "Every"; unit: "min"; step: 1; min: 1; max: 600
-                        value: VtlConfig.wallpaperAutoMinutes; onChanged: root.save("wallpaper_auto_minutes", v) }
-
-            Text { text: "ORDER"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-                   font.family: "FantasqueSansM Nerd Font" }
-            Column {
-                width: parent.width; spacing: 6
+            Card {
+                CardLabel { text: "ORDER" }
                 Repeater {
                     model: [{ k: "alpha_all",  l: "Alphabetical — all subfolders" },
                             { k: "alpha_per",  l: "Alphabetical — per subfolder" },
                             { k: "random_all", l: "Random — all subfolders" },
                             { k: "random_per", l: "Random — per subfolder" }]
-                    delegate: Rectangle {
+                    delegate: SelectRow {
                         required property var modelData
-                        readonly property bool sel: VtlConfig.wallpaperAutoOrder === modelData.k
-                        width: parent.width; height: 34; radius: 8
-                        color: sel ? Colors.bgActive
-                             : (oHov.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.20) : Colors.bgElement)
-                        Behavior on color { ColorAnimation { duration: 100 } }
-                        Text { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                               text: modelData.l; color: parent.sel ? Colors.fgBright : Colors.fgPrimary
-                               font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
-                        Text { visible: parent.sel; anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                               text: "✓"; color: Colors.fgBright; font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
-                        MouseArea { id: oHov; anchors.fill: parent; hoverEnabled: true
-                                    onClicked: root.save("wallpaper_auto_order", modelData.k) }
+                        label:    modelData.l
+                        selected: VtlConfig.wallpaperAutoOrder === modelData.k
+                        onClicked: root.save("wallpaper_auto_order", modelData.k)
                     }
                 }
             }
-
         }
     }
 
@@ -388,96 +326,24 @@ Item {
             anchors { left: parent.left; verticalCenter: parent.verticalCenter }
             width: parent.width - 152
             text: root.status; color: Colors.fgMuted; font.pixelSize: 11; elide: Text.ElideRight
-            font.family: "FantasqueSansM Nerd Font"
+            font.family: Style.font
         }
         Row {
             anchors { right: parent.right; verticalCenter: parent.verticalCenter }
             spacing: 8
-            Rectangle {
-                width: 64; height: 28; radius: 6
-                color: fHov.containsMouse ? Colors.bgActive : Colors.bgElement
-                Text { anchors.centerIn: parent; text: "Folder"; color: Colors.fgPrimary
-                       font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font" }
-                MouseArea {
-                    id: fHov; anchors.fill: parent; hoverEnabled: true
-                    onClicked: {
-                        folderProc.command = ["bash", "-c",
-                            "python3 -c \"import json,os;" +
-                            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.expanduser('~/.config/velumeron');" +
-                            "d=json.load(open(os.path.join(pu,'gui','settings.json')));" +
-                            "print((d.get('wallpaper_dirs',{}) or {}).get('" + root.targetMon + "','') " +
-                            "or d.get('wallpaper_dir_hor','') or '')\" | xargs -r -d '\\n' xdg-open >/dev/null 2>&1 &"]
-                        folderProc.running = false; folderProc.running = true
-                    }
+            TextButton {
+                label: "Folder"
+                onClicked: {
+                    folderProc.command = ["bash", "-c",
+                        "python3 -c \"import json,os;" +
+                        "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.expanduser('~/.config/velumeron');" +
+                        "d=json.load(open(os.path.join(pu,'gui','settings.json')));" +
+                        "print((d.get('wallpaper_dirs',{}) or {}).get('" + root.targetMon + "','') " +
+                        "or d.get('wallpaper_dir_hor','') or '')\" | xargs -r -d '\\n' xdg-open >/dev/null 2>&1 &"]
+                    folderProc.running = false; folderProc.running = true
                 }
             }
-            Rectangle {
-                width: 64; height: 28; radius: 6
-                color: rHov.containsMouse ? Colors.bgActive : Colors.bgElement
-                Text { anchors.centerIn: parent; text: "Refresh"; color: Colors.fgPrimary
-                       font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font" }
-                MouseArea { id: rHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.reload() }
-            }
-        }
-    }
-
-    component MonBtn: Rectangle {
-        id: mb
-        property string label:  ""
-        property bool   active: false
-        signal picked()
-        width: ml.implicitWidth + 14; height: 20; radius: 5
-        color: active ? Colors.bgActive
-             : (mbHov.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.18)
-                                    : Colors.bgElement)
-        Text { id: ml; anchors.centerIn: parent; text: mb.label
-               color: mb.active ? Colors.fgBright : Colors.fgMuted
-               font.pixelSize: 10; font.bold: true; font.family: "FantasqueSansM Nerd Font" }
-        MouseArea { id: mbHov; anchors.fill: parent; hoverEnabled: true; onClicked: mb.picked() }
-    }
-
-    component TabBtn: Rectangle {
-        id: tbn
-        property string label: ""
-        property string k:     ""
-        readonly property bool on: root.tab === tbn.k
-        width: tl.implicitWidth + 18; height: 22; radius: 6
-        color: on ? Colors.bgActive
-             : (tbHov.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.18)
-                                    : Colors.bgElement)
-        Behavior on color { ColorAnimation { duration: 100 } }
-        Text { id: tl; anchors.centerIn: parent; text: tbn.label
-               color: tbn.on ? Colors.fgBright : Colors.fgPrimary
-               font.pixelSize: 12; font.bold: true; font.family: "FantasqueSansM Nerd Font" }
-        MouseArea { anchors.fill: parent; hoverEnabled: true; onClicked: root.tab = tbn.k; id: tbHov }
-    }
-
-    component QSStepper: Row {
-        id: st
-        property string label: ""
-        property string unit:  ""
-        property int    value: 0
-        property int    step:  5
-        property int    min:   0
-        property int    max:   99
-        signal changed(int v)
-        spacing: 8
-        Text { anchors.verticalCenter: parent.verticalCenter; width: 78; text: st.label
-               color: Colors.fgPrimary; font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
-        Rectangle {
-            width: 26; height: 26; radius: 6; color: mh.containsMouse ? Colors.bgActive : Colors.bgElement
-            Text { anchors.centerIn: parent; text: "−"; color: Colors.fgPrimary; font.pixelSize: 14 }
-            MouseArea { id: mh; anchors.fill: parent; hoverEnabled: true
-                        onClicked: st.changed(Math.max(st.min, st.value - st.step)) }
-        }
-        Text { anchors.verticalCenter: parent.verticalCenter; width: 54; horizontalAlignment: Text.AlignHCenter
-               text: st.value + (st.unit !== "" ? " " + st.unit : ""); color: Colors.fgBright
-               font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
-        Rectangle {
-            width: 26; height: 26; radius: 6; color: ph.containsMouse ? Colors.bgActive : Colors.bgElement
-            Text { anchors.centerIn: parent; text: "+"; color: Colors.fgPrimary; font.pixelSize: 14 }
-            MouseArea { id: ph; anchors.fill: parent; hoverEnabled: true
-                        onClicked: st.changed(Math.min(st.max, st.value + st.step)) }
+            TextButton { label: "Refresh"; onClicked: root.reload() }
         }
     }
 }

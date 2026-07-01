@@ -87,9 +87,9 @@ Item {
             Row {
                 spacing: 10
                 Text { text: root.icon; color: Colors.fgBright; font.pixelSize: 20
-                       font.family: "FantasqueSansM Nerd Font"; anchors.verticalCenter: parent.verticalCenter }
+                       font.family: Style.font; anchors.verticalCenter: parent.verticalCenter }
                 Text { text: root.title; color: Colors.fgBright; font.pixelSize: 16; font.bold: true
-                       font.family: "FantasqueSansM Nerd Font"; anchors.verticalCenter: parent.verticalCenter }
+                       font.family: Style.font; anchors.verticalCenter: parent.verticalCenter }
             }
 
             // ── Appearance (framework) ─────────────────────────────────────────
@@ -146,10 +146,10 @@ Item {
             Rectangle {
                 width: parent.width; height: 34; radius: 8
                 color: rstHov.containsMouse ? Qt.rgba(Colors.fgUrgent.r, Colors.fgUrgent.g, Colors.fgUrgent.b, 0.22)
-                                            : Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.14)
+                                            : Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.14)
                 Behavior on color { ColorAnimation { duration: 100 } }
                 Text { anchors.centerIn: parent; text: "Reset all to default"; color: Colors.fgPrimary
-                       font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+                       font.pixelSize: 12; font.family: Style.font }
                 MouseArea { id: rstHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.resetAll() }
             }
         }
@@ -200,12 +200,12 @@ Item {
             FieldLabel { text: txtRoot.spec ? txtRoot.spec.label : "" }
             Rectangle {
                 width: parent.width; height: 34; radius: 8; color: Colors.bgPrimary
-                border.width: 1; border.color: Colors.bgActive
+                border.width: 1; border.color: Style.accent
                 TextInput {
                     id: ti
                     anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12
                     verticalAlignment: TextInput.AlignVCenter
-                    color: Colors.fgBright; font.pixelSize: 15; font.family: "FantasqueSansM Nerd Font"
+                    color: Colors.fgBright; font.pixelSize: 15; font.family: Style.font
                     clip: true
                     text: txtRoot.spec ? root.ms(txtRoot.spec.name, txtRoot.spec.def) : ""
                     onEditingFinished: if (txtRoot.spec) root.changed(txtRoot.spec.name, ti.text)
@@ -217,11 +217,11 @@ Item {
     // ── Reusable bits ──────────────────────────────────────────────────────────────
     component CapLabel: Text {
         color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-        font.letterSpacing: 0.5; font.family: "FantasqueSansM Nerd Font"
+        font.letterSpacing: 0.5; font.family: Style.font
     }
     component FieldLabel: Text {
         color: Colors.fgBright; font.pixelSize: 12; font.bold: true
-        font.family: "FantasqueSansM Nerd Font"
+        font.family: Style.font
     }
 
     // Font/icon-size stepper with inherit (reset → "").
@@ -234,11 +234,11 @@ Item {
         readonly property int  value:      root.ms(fs.name, fs.fallback)
         spacing: 8
         Text { anchors.verticalCenter: parent.verticalCenter; width: 70; text: fs.label
-               color: Colors.fgPrimary; font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+               color: Colors.fgPrimary; font.pixelSize: 12; font.family: Style.font }
         StepBtn { sym: "−"; onTrig: root.changed(fs.name, Math.max(4,  fs.value - 1)) }
         Text { anchors.verticalCenter: parent.verticalCenter; width: 48; horizontalAlignment: Text.AlignHCenter
                text: fs.value + (fs.overridden ? "" : " ·"); color: fs.overridden ? Colors.fgBright : Colors.fgMuted
-               font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
+               font.pixelSize: 13; font.family: Style.font }
         StepBtn { sym: "+"; onTrig: root.changed(fs.name, Math.min(64, fs.value + 1)) }
         StepBtn { sym: "↺"; visible: fs.overridden; onTrig: root.changed(fs.name, "") }
     }
@@ -248,10 +248,10 @@ Item {
         readonly property int value: ss.specRef ? root.ms(ss.specRef.name, ss.specRef.def) : 0
         spacing: 8
         Text { anchors.verticalCenter: parent.verticalCenter; width: 96; text: ss.specRef ? ss.specRef.label : ""
-               color: Colors.fgPrimary; font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+               color: Colors.fgPrimary; font.pixelSize: 12; font.family: Style.font }
         StepBtn { sym: "−"; onTrig: if (ss.specRef) root.changed(ss.specRef.name, Math.max(ss.specRef.min, ss.value - ss.specRef.step)) }
         Text { anchors.verticalCenter: parent.verticalCenter; width: 48; horizontalAlignment: Text.AlignHCenter
-               text: ss.value; color: Colors.fgBright; font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
+               text: ss.value; color: Colors.fgBright; font.pixelSize: 13; font.family: Style.font }
         StepBtn { sym: "+"; onTrig: if (ss.specRef) root.changed(ss.specRef.name, Math.min(ss.specRef.max, ss.value + ss.specRef.step)) }
     }
     component StepBtn: Rectangle {
@@ -259,10 +259,10 @@ Item {
         property string sym: ""
         signal trig()
         width: 26; height: 26; radius: 6
-        color: sbHov.containsMouse ? Colors.bgActive : Colors.bgElement
+        color: sbHov.containsMouse ? Style.accent : Style.controlFill
         Behavior on color { ColorAnimation { duration: 90 } }
         Text { anchors.centerIn: parent; text: sb.sym; color: Colors.fgPrimary; font.pixelSize: 13
-               font.family: "FantasqueSansM Nerd Font" }
+               font.family: Style.font }
         MouseArea { id: sbHov; anchors.fill: parent; hoverEnabled: true; onClicked: sb.trig() }
     }
 
@@ -272,13 +272,13 @@ Item {
         property bool   on:    false
         signal toggled()
         width:  parent ? parent.width : 0
-        height: 38; radius: 10; color: Colors.bgElement
+        height: 38; radius: 10; color: Style.controlFill
         Text { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-               text: tg.label; color: Colors.fgPrimary; font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
+               text: tg.label; color: Colors.fgPrimary; font.pixelSize: 13; font.family: Style.font }
         Rectangle {
             anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
             width: 42; height: 22; radius: 11
-            color: tg.on ? Colors.bgActive : Colors.bgPrimary
+            color: tg.on ? Style.accent : Colors.bgPrimary
             Behavior on color { ColorAnimation { duration: 120 } }
             Rectangle { width: 16; height: 16; radius: 8; color: Colors.fgBright
                         anchors.verticalCenter: parent.verticalCenter
@@ -300,15 +300,15 @@ Item {
         spacing: 4
         Rectangle {
             width: parent.width; height: 34; radius: 8
-            color: ddHov.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.34)
-                                       : Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.20)
-            border.width: dd.open ? 2 : 1; border.color: Colors.bgActive
+            color: ddHov.containsMouse ? Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.34)
+                                       : Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.20)
+            border.width: dd.open ? 2 : 1; border.color: Style.accent
             Behavior on color { ColorAnimation { duration: 100 } }
             Text { anchors { left: parent.left; leftMargin: 12; right: chev.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
                    text: dd.summary; color: Colors.fgPrimary; elide: Text.ElideRight
-                   font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
+                   font.pixelSize: 13; font.family: Style.font }
             Text { id: chev; anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                   text: dd.open ? "▴" : "▾"; color: Colors.fgMuted; font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+                   text: dd.open ? "▴" : "▾"; color: Colors.fgMuted; font.pixelSize: 12; font.family: Style.font }
             MouseArea { id: ddHov; anchors.fill: parent; hoverEnabled: true; onClicked: dd.open = !dd.open }
         }
         Column {
@@ -321,9 +321,9 @@ Item {
                     required property var modelData
                     readonly property bool on: dd.current === modelData.key
                     width: dd.width; height: 30; radius: 7
-                    color: on ? Colors.bgActive
-                         : (oHov.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.34)
-                                               : Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.20))
+                    color: on ? Style.accent
+                         : (oHov.containsMouse ? Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.34)
+                                               : Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.20))
                     Behavior on color { ColorAnimation { duration: 90 } }
                     Row {
                         anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
@@ -338,10 +338,10 @@ Item {
                         }
                         Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.label
                                color: optRow.on ? Colors.fgBright : Colors.fgPrimary
-                               font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+                               font.pixelSize: 12; font.family: Style.font }
                     }
                     Text { visible: optRow.on; anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                           text: "✓"; color: Colors.fgBright; font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+                           text: "✓"; color: Colors.fgBright; font.pixelSize: 12; font.family: Style.font }
                     MouseArea { anchors.fill: parent; hoverEnabled: true; id: oHov
                                 onClicked: { dd.picked(modelData.key); dd.open = false } }
                 }

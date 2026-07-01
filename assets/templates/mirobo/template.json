@@ -1,0 +1,241 @@
+{
+  "id": "mirobo",
+  "name": "Mirobo",
+  "author": "velumeron",
+  "builtin": true,
+  "version": 1,
+  "settings": {
+    "opacity_enabled": true,
+    "panel_width_pct": 20,
+    "panel_height_pct": 80,
+    "menu_theme": "follow",
+    "opacity_value": 0.88,
+    "sidebar_labels": true,
+    "swaync_margin_top_pct": 20,
+    "swaync_width_pct": 20,
+    "logo_variant": "full",
+    "wallpaper_dir_hor": "/home/vredix/Bilder/Wallpapers/horizontal",
+    "wallpaper_dir_ver": "/home/vredix/Bilder/Wallpapers/vertical",
+    "rofi_source": "sets",
+    "panel_side": "left",
+    "panel_valign": "bottom",
+    "sidebar_autohide": true,
+    "shell_backend": "quickshell",
+    "bar_modules_left": [],
+    "bar_modules_center": [
+      "clock"
+    ],
+    "bar_modules_right": [],
+    "bar_opacity_enabled": false,
+    "bar_opacity_value": 0.88,
+    "bar_mode": "frame",
+    "bar_edges": [
+      "top",
+      "left",
+      "bottom",
+      "right"
+    ],
+    "bar_thickness": 40,
+    "bar_inner_radius": 10,
+    "bar_modules": {
+      "top": {
+        "start": [
+          "submap"
+        ],
+        "center": [
+          "clock"
+        ],
+        "end": []
+      },
+      "left": {
+        "start": [],
+        "center": [
+          "mpris",
+          "volume"
+        ],
+        "end": [
+          "workspaces",
+          "bluetooth",
+          "vuture-icon"
+        ]
+      },
+      "bottom": {
+        "start": [],
+        "center": [],
+        "end": []
+      },
+      "right": {
+        "start": [],
+        "center": [],
+        "end": []
+      }
+    },
+    "bar_module_bg": "none",
+    "bar_module_bg_radius": 6,
+    "bar_position": "top",
+    "bar_module_margin": 24,
+    "bar_module_spacing": 22,
+    "bar_colorful": true,
+    "colorful_enabled": true,
+    "colorful_menus": true,
+    "colorful_osd": true,
+    "bar_module_bg_opacity": 0.37,
+    "notify_dock": true,
+    "notify_position": "bottom-center",
+    "osd_style": "dock",
+    "osd_position": "bottom-right",
+    "bar_per_monitor": true,
+    "bar_monitors": {
+      "DP-3": {
+        "bar_edges": [
+          "top",
+          "right"
+        ],
+        "menu_width_pct": 50,
+        "menu_height_pct": 40,
+        "bar_modules_m": {
+          "frame": {
+            "top": {
+              "start": [
+                "submap"
+              ],
+              "center": [
+                "clock"
+              ],
+              "end": []
+            },
+            "left": {
+              "start": [],
+              "center": [
+                "mpris",
+                "volume"
+              ],
+              "end": [
+                "workspaces",
+                "bluetooth",
+                "vuture-icon"
+              ]
+            },
+            "bottom": {
+              "start": [],
+              "center": [],
+              "end": []
+            },
+            "right": {
+              "start": [],
+              "center": [
+                "workspaces"
+              ],
+              "end": [
+                "vuture-icon"
+              ]
+            }
+          }
+        },
+        "bar_module_bg": "group",
+        "bar_module_bg_opacity": 0.3,
+        "bar_module_bg_radius": 4
+      },
+      "DP-2": {
+        "bar_mode": "frame",
+        "bar_modules_m": {
+          "frame": {
+            "top": {
+              "start": [
+                "vuture-icon",
+                "user",
+                "mpris",
+                "performance"
+              ],
+              "center": [
+                "clock",
+                "workspaces",
+                "submap"
+              ],
+              "end": [
+                "volume",
+                "bluetooth",
+                "network",
+                "notiftray",
+                "wallpaper-switcher"
+              ]
+            },
+            "left": {
+              "start": [],
+              "center": [
+                "submap",
+                "workspaces"
+              ],
+              "end": [
+                "bluetooth",
+                "volume",
+                "network",
+                "vuture-icon"
+              ]
+            },
+            "bottom": {
+              "start": [],
+              "center": [],
+              "end": []
+            },
+            "right": {
+              "start": [],
+              "center": [],
+              "end": []
+            }
+          }
+        },
+        "bar_edges": [
+          "top"
+        ],
+        "bar_module_margin": 4,
+        "bar_module_spacing": 4,
+        "bar_module_bg": "module",
+        "bar_module_bg_opacity": 0.2,
+        "bar_icon_size": 14,
+        "bar_font_size": 14,
+        "bar_thickness": 40,
+        "bar_module_bg_radius": 8,
+        "menu_height_pct": 52,
+        "menu_width_pct": 22
+      }
+    },
+    "notify_main_monitor_only": true,
+    "wallpaper_dirs": {
+      "DP-2": "/home/vredix/Bilder/Wallpapers/horizontal",
+      "DP-3": "/home/vredix/Bilder/Wallpapers/vertical"
+    },
+    "wallpaper_search_subfolders": true,
+    "wallpaper_subfolder_sorting": true,
+    "wallpaper_sets": {
+      "Sunset Vibe": {
+        "DP-2": "/home/vredix/Bilder/Wallpapers/horizontal/purple-women-smoking.jpg",
+        "DP-3": "/home/vredix/Bilder/Wallpapers/vertical/purple-women-smoking.jpg"
+      }
+    },
+    "osd_width_px": 300,
+    "osd_height_px": 52,
+    "notify_center_height": 320,
+    "notify_center_width": 360,
+    "wallpaper_quick_position": "bottom-center",
+    "wallpaper_quick_rows": 4,
+    "wallpaper_quick_preview": 260,
+    "wallpaper_quick_cols": 2,
+    "wallpaper_auto_minutes": 14,
+    "wallpaper_transition": "random",
+    "wallpaper_transition_ms": 1400,
+    "wallpaper_slide_dir": "left",
+    "transition_style_bar": "fillet",
+    "transition_style_edge": "straight",
+    "wallpaper_auto_mode": "silent",
+    "wallpaper_auto_order": "random_all",
+    "ui_style": "flat",
+    "launcher_cols": 6,
+    "launcher_position": "bottom-center",
+    "launcher_blur": false,
+    "launcher_dock": true,
+    "launcher_fullscreen": false,
+    "launcher_width": 800,
+    "launcher_rows": 4
+  }
+}

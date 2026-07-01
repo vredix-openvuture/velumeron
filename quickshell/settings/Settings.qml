@@ -274,6 +274,7 @@ PanelWindow {
                 spacing: 4
 
                 RailIcon { icon: "󰋜";  section: "home"     }
+                RailIcon { icon: "󰀻";  section: "launcher" }
                 RailIcon { icon: "󰕮";  section: "bar"      }
                 RailIcon { icon: "󰏘";  section: "style"    }
                 RailIcon { icon: "󰸉";  section: "wallpaper" }
@@ -281,6 +282,8 @@ PanelWindow {
                 RailIcon { icon: "󰂚";  section: "notifications" }
                 RailIcon { icon: "󰌾";  section: "lockscreen" }
                 RailIcon { icon: "󰌌";  section: "keybinds" }
+                RailIcon { icon: "󰊓";  section: "corners"  }
+                RailIcon { icon: "󱂩";  section: "taskbar"  }
                 RailIcon { icon: "󰋽";  section: "info"     }
             }
         }
@@ -303,8 +306,8 @@ PanelWindow {
                       leftMargin: root.railW + 1 }
 
             // Dedicated section pages — incl. the home hub and its Network / Bluetooth sub-pages.
-            readonly property var pagedSections: ["home", "bar", "wallpaper", "style", "osd",
-                                                  "notifications", "lockscreen", "network", "bluetooth"]
+            readonly property var pagedSections: ["home", "bar", "launcher", "wallpaper", "style", "osd",
+                                                  "notifications", "lockscreen", "corners", "taskbar", "network", "bluetooth"]
             Loader {
                 anchors.fill:         parent
                 anchors.topMargin:    18
@@ -314,6 +317,7 @@ PanelWindow {
                 active:  content.pagedSections.indexOf(root.activeSection) >= 0
                 visible: active
                 sourceComponent: root.activeSection === "home"          ? homeComp
+                               : root.activeSection === "launcher"      ? launcherComp
                                : root.activeSection === "bar"           ? barComp
                                : root.activeSection === "wallpaper"     ? wallpaperComp
                                : root.activeSection === "style"         ? styleComp
@@ -321,17 +325,22 @@ PanelWindow {
                                : root.activeSection === "lockscreen"    ? lockComp
                                : root.activeSection === "network"       ? networkComp
                                : root.activeSection === "bluetooth"     ? bluetoothComp
+                               : root.activeSection === "corners"       ? cornersComp
+                               : root.activeSection === "taskbar"       ? taskbarComp
                                : osdComp
             }
             Component { id: homeComp;      HomeHub          { onNavigate: s => root.activeSection = s } }
             Component { id: networkComp;   NetworkManager   { onBack: root.activeSection = "home" } }
             Component { id: bluetoothComp; BluetoothManager { onBack: root.activeSection = "home" } }
             Component { id: barComp;       BarSection       {} }
+            Component { id: launcherComp;  LauncherSection  {} }
             Component { id: wallpaperComp; WallpaperSection {} }
             Component { id: styleComp;     StyleSection     {} }
             Component { id: osdComp;       OsdSection       {} }
             Component { id: notifyComp;    NotifSettings    {} }
             Component { id: lockComp;      LockscreenSection {} }
+            Component { id: cornersComp;   CornerActionsSection {} }
+            Component { id: taskbarComp;   TaskbarSection {} }
 
             // Placeholder for sections that don't have a page yet (home / keybinds / info).
             Column {
@@ -345,13 +354,13 @@ PanelWindow {
                     color:          Colors.fgBright
                     font.pixelSize: 17
                     font.bold:      true
-                    font.family:    "FantasqueSansM Nerd Font"
+                    font.family:    Style.font
                 }
                 Text {
                     text:           root.sectionHint(root.activeSection)
                     color:          Colors.fgMuted
                     font.pixelSize: 12
-                    font.family:    "FantasqueSansM Nerd Font"
+                    font.family:    Style.font
                     width:          parent.width
                     wrapMode:       Text.WordWrap
                 }
@@ -363,6 +372,7 @@ PanelWindow {
     function sectionTitle(s) {
         switch (s) {
             case "home":      return "Velumeron"
+            case "launcher":  return "Launcher"
             case "bar":       return "Bar"
             case "style":     return "Style"
             case "wallpaper": return "Wallpaper"
@@ -376,6 +386,7 @@ PanelWindow {
     function sectionHint(s) {
         switch (s) {
             case "home":      return "Welcome. Pick a section from the rail on the left."
+            case "launcher":  return "App launcher placement and layout."
             case "bar":       return "Configure bar modules and layout."
             case "style":     return "Colorful + colour mode."
             case "wallpaper": return "Browse and set wallpapers."
@@ -402,10 +413,8 @@ PanelWindow {
         height: ri.sz
         radius: Math.round(ri.sz * 0.3)
         color:  ri.active
-                ? Colors.bgActive
-                : (riHov.containsMouse
-                   ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.18)
-                   : "transparent")
+                ? Style.accent
+                : (riHov.containsMouse ? Style.tint(Style.accent, 0.18) : "transparent")
         Behavior on color { ColorAnimation { duration: 100 } }
 
         Text {
@@ -414,7 +423,7 @@ PanelWindow {
             color:          ri.active ? Colors.fgBright
                             : (riHov.containsMouse ? Colors.fgBright : Colors.fgMuted)
             font.pixelSize: 18
-            font.family:    "FantasqueSansM Nerd Font"
+            font.family:    Style.font
         }
 
         MouseArea {
@@ -437,9 +446,8 @@ PanelWindow {
         property string cmd:   ""
         width:  48
         height: 48
-        radius: 12
-        color:  ptHov.containsMouse ? Colors.bgActive
-              : Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.12)
+        radius: Style.rTile
+        color:  ptHov.containsMouse ? Style.accent : Style.controlFill
         Behavior on color { ColorAnimation { duration: 120 } }
 
         Text {
@@ -447,7 +455,7 @@ PanelWindow {
             text:           pt.icon
             color:          ptHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
             font.pixelSize: 18
-            font.family:    "FantasqueSansM Nerd Font"
+            font.family:    Style.font
         }
         MouseArea {
             id: ptHov; anchors.fill: parent; hoverEnabled: true

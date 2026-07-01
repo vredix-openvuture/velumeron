@@ -9,11 +9,11 @@
 
 desktop_shell  = VTL_DIR      .. "/assets/scripts/launch-shell.sh"
 notify_service = "velumeron-notify"
-clipboard      = VTL_USER_DIR .. "/rofi/assets/clipvault.sh"
+clipboard      = "qs -p " .. VTL_DIR .. "/quickshell ipc call clipboard toggle"
 
--- app launcher + wallpaper switcher are now native (quickshell): see keybinds.lua (Super+Space /
--- Super+Alt+Space → `qs ipc call launcher/wallpaper toggle`). The rofi drun/wallpaper configs are gone.
-window_switch  = "rofi -show window -config "    .. VTL_USER_DIR .. "/rofi/window-switcher.rasi"
+-- Launcher, wallpaper switcher, window switcher, clipboard and session menu are now native
+-- (quickshell) — the `qs ipc call <target>` overlays replace the old rofi/drun menus.
+window_switch  = "qs -p " .. VTL_DIR .. "/quickshell ipc call window open"
 terminal       = terminal      or ("kitty -c "   .. VTL_USER_DIR .. "/kitty/kitty.conf")
 browser        = browser       or "librewolf"
 browser_float  = browser_float or (browser .. " --class=browser-float")
@@ -25,7 +25,7 @@ bitwarden      = bitwarden     or "bitwarden"
 
 on_sleep       = "systemctl suspend"
 on_lock        = VTL_DIR      .. "/assets/scripts/launch-hyprlock.sh"
-session_menu   = VTL_USER_DIR .. "/rofi/assets/session-menu.sh"
+session_menu   = "qs -p " .. VTL_DIR .. "/quickshell ipc call session toggle"
 
 
 -- ── Role-based app variables — set per device in user_settings.lua ─────────

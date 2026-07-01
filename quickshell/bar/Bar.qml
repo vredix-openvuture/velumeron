@@ -398,6 +398,7 @@ PanelWindow {
             case "performance":  return perfComp
             case "user":         return userComp
             case "workspaces":   return workspacesComp
+            case "tasks":        return tasksComp
             case "submap":       return submapComp
             case "mpris":        return mprisComp
             case "volume":       return volumeComp
@@ -418,6 +419,7 @@ PanelWindow {
     Component { id: perfComp;        Performance {} }
     Component { id: userComp;        UserWidget  {} }
     Component { id: workspacesComp;  Workspaces  { monitor: root.monitor } }
+    Component { id: tasksComp;       Tasks       { monitor: root.monitor } }
     Component { id: submapComp;      Submap      {} }
     Component { id: mprisComp;       Mpris       {} }
     Component { id: volumeComp;      Volume      {} }
