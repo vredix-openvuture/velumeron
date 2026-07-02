@@ -9,9 +9,9 @@ here (see [Change Log](#change-log) at the bottom). Keep it accurate; it is the
 basis for the public docs.
 
 > Topic-specific docs live alongside this file: [dependencies](dependencies.md),
-> [gui](gui.md), [hyprland](hyprland.md), [wallpaper](wallpaper.md),
-> [wallust](wallust.md), [waybar](waybar.md). This file is the overview that ties
-> them together.
+> [hyprland](hyprland.md), [wallpaper](wallpaper.md), [wallust](wallust.md).
+> User-facing documentation lives in the [wiki](wiki/Home.md). This file is the
+> engineering overview that ties everything together.
 
 ---
 
@@ -168,29 +168,10 @@ gitignored. See [hyprland.md](hyprland.md).
 
 ## 6. Waybar
 
-Fully modular. Source shells in `waybar-modular/config/miboro/base/`, modules in
-`…/modules/horizontal/<module>/{config.json,style.css}`.
-
-- **Default bar:** `apply_default_bar` writes
-  `~/.config/velumeron/waybar-modular/output/miboro/bar/top/<monitor>/{config.json,
-  groups.json,style.css}`. Layout — left: `clock · sep · performance-drawer · sep ·
-  interactive-user`; centre: `workspaces · submap`; right: `cava · audio-drawer ·
-  sep · tray-drawer · battery` (battery only on devices with one). Drawers pull in
-  their child module configs.
-- **Idempotent refresh:** `apply_default_bar` only (re)writes a bar if there is
-  none, it points at the read-only package dir, or its module layout matches a
-  layout Velumeron has shipped as a default (`_default_bar_layouts`). A
-  user-customised bar is left alone.
-- **Loading:** `launch-waybar.sh` finds every `output/**/config.json`, merges
-  them into `/tmp/waybar-merged-config.json` + `/tmp/waybar-merged-style.css`, and
-  runs `waybar -c … -s …`. Only *applied* bars (those with a `config.json`) load;
-  auto-init scaffolding leaves only `groups.json`.
-- **Colours:** each bar's `style.css` imports the user-dir `bar.css`, which imports
-  `../../../../../assets/colors_gtk.css` (→ user-dir wallust palette). Both the
-  shell `apply_default_bar` and the GUI generate these paths from
-  `VELUMERON_USER_DIR` so the relative palette import always resolves live.
-
-See [waybar.md](waybar.md).
+**Retired.** The waybar-modular bar was replaced by the native Quickshell bar
+(`quickshell/bar/`, configured in Settings → Bar). The `waybar-modular/` tree and
+`launch-waybar.sh` no longer exist; user docs live in
+[wiki/Bar.md](wiki/Bar.md).
 
 ---
 
@@ -219,23 +200,10 @@ monitor names (shipping `DP-2`/`DP-3` once caused clients to show no wallpaper).
 
 ## 8. Settings GUI (`gui/`)
 
-GTK4/Adwaita panel, `Adw.Application`, gtk4-layer-shell, run as a daemon.
-
-- **Launcher:** `bin/velumeron` (sets `LD_PRELOAD=libgtk4-layer-shell`). Symlinked
-  to `~/.local/bin/velumeron`. Flags: `--daemon` (start, kept alive hidden),
-  `--toggle` (SIGUSR1 show/hide), `--end` (quit).
-- **Restart it:** `velumeron --end; velumeron --daemon & disown` — or just run
-  `welcome_to_velumeron.sh --sync`, which restarts it too.
-- **Icons:** the panel forces the **Adwaita** icon theme for its own process, so
-  it is independent of the user's system icon theme (which may lack freedesktop
-  symbolic names and render everything as the broken placeholder). Only Adwaita
-  symbolic names may be used in GUI code.
-- **Pages** (`gui/pages/`): `home`, `hyprland`, `waybar` (Bar), `wallpaper`
-  (Theme, with Sets/Horizontal/Vertical/Colors), `lockscreen` (Power & Lock),
-  `notifications`. Models in `gui/models/`. The waybar model resolves all paths
-  from `VELUMERON_USER_DIR`.
-
-See [gui.md](gui.md).
+**Retired.** The GTK4/Adwaita settings daemon (`gui/`) was replaced by the
+in-shell settings menu (`quickshell/settings/`, opened via the bar's Velumeron
+icon). Settings are stored in `gui/settings.json` as before — the schema is
+documented in [wiki/Settings-Reference.md](wiki/Settings-Reference.md).
 
 ---
 
