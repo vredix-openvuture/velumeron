@@ -28,21 +28,7 @@ Item {
     function isVideo(n) { return /\.(mp4|webm|mkv|avi|mov)$/i.test(n) }
     function stem(n)    { return ("" + n).replace(/\.[^.]+$/, "") }
 
-    readonly property string _thumbDir: (Quickshell.env("HOME") ?? "") + "/.cache/velumeron/wp-thumbs"
-    function save(key, value) {
-        VtlConfig.applyLocal(key, value)   // instant UI feedback; the write below persists it
-        var py = "import json,os,sys;" +
-            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
-              "or os.path.expanduser('~/.config'),'velumeron');" +
-            "p=os.path.join(pu,'gui','settings.json');" +
-            "os.makedirs(os.path.dirname(p),exist_ok=True);" +
-            "d=json.load(open(p)) if os.path.exists(p) else {};" +
-            "d[sys.argv[1]]=json.loads(sys.argv[2]);" +
-            "open(p,'w').write(json.dumps(d,indent=2))"
-        saveProc.command = ["python3", "-c", py, key, JSON.stringify(value)]
-        saveProc.running = false; saveProc.running = true
-    }
-    Process { id: saveProc }
+    function save(key, value) { SettingsStore.set(key, value) }
 
     Component.onCompleted: { _initMon(); reload() }
     onVisibleChanged:      if (visible) { _initMon(); reload() }
@@ -58,7 +44,8 @@ Item {
 
     function reload() {
         status = "Loading…"; items = []
-        listProc.command = ["python3", "-c", root._listPy, root.targetMon]
+        listProc.command = ["bash", "-c",
+            "python3 \"$VELUMERON_DIR/assets/scripts/wallpaper-list.py\" \"$1\"", "vtl", root.targetMon]
         listProc.running = false; listProc.running = true
     }
 
@@ -78,29 +65,6 @@ Item {
     }
     Timer { id: statusClear; interval: 5000
             onTriggered: { root.applying = ""; root.status = root.items.length + " wallpaper(s)" } }
-
-    readonly property string _listPy:
-        "import json,os,sys;" +
-        "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
-          "or os.path.expanduser('~/.config'),'velumeron');" +
-        "p=os.path.join(pu,'gui','settings.json');" +
-        "d=json.load(open(p)) if os.path.exists(p) else {};" +
-        "mon=sys.argv[1];" +
-        "vd=os.environ.get('VELUMERON_DIR','');" +
-        "dirp=(d.get('wallpaper_dirs',{}) or {}).get(mon) or d.get('wallpaper_dir_hor') or os.path.join(vd,'assets/wallpaper/horizontal');" +
-        "sub=bool(d.get('wallpaper_search_subfolders'));" +
-        "print('GROUP:'+('1' if (sub and d.get('wallpaper_subfolder_sorting')) else '0'));" +
-        "exts={'.png','.jpg','.jpeg','.webp','.mp4','.webm','.mkv','.avi','.mov'};" +
-        "dirp=os.path.expanduser(dirp);" +
-        "rows=[];" +
-        "\nif os.path.isdir(dirp):\n" +
-        " for r,ds,fs in os.walk(dirp):\n" +
-        "  if not sub and os.path.abspath(r)!=os.path.abspath(dirp): continue\n" +
-        "  rel=os.path.relpath(r,dirp); rel='' if rel=='.' else rel\n" +
-        "  for f in sorted(fs):\n" +
-        "   if os.path.splitext(f)[1].lower() in exts: rows.append((rel,os.path.join(r,f)))\n" +
-        "rows.sort(key=lambda t:(t[0].lower(),os.path.basename(t[1]).lower()))\n" +
-        "for rel,full in rows: print(rel+'\\t'+full)"
 
     Process {
         id: listProc
@@ -164,75 +128,65 @@ Item {
         }
     }
 
-    // ── Thumbnail grid ─────────────────────────────────────────────────────────
-    GridView {
+    // Items bucketed by subfolder for the browse view — one section per subfolder when
+    // subfolder-sorting is on (root-level files first as "Main"), one anonymous group otherwise.
+    readonly property var groups: {
+        if (!root.grouped) return [{ name: "", items: root.items }]
+        var map = {}, order = []
+        for (var i = 0; i < root.items.length; i++) {
+            var s = root.items[i].sub || ""
+            if (!(s in map)) { map[s] = []; order.push(s) }
+            map[s].push(root.items[i])
+        }
+        // Subfolders first (alphabetical), the root-level "Main" bucket last.
+        order.sort(function (a, b) {
+            return a === "" ? 1 : b === "" ? -1 : a.toLowerCase() < b.toLowerCase() ? -1 : 1
+        })
+        return order.map(function (s) { return { name: s === "" ? "Main" : s, items: map[s] } })
+    }
+
+    // ── Thumbnail grid: one captioned section per subfolder ───────────────────
+    ListView {
         id: grid
         anchors { top: head.bottom; topMargin: 8; left: parent.left; right: parent.right
                   bottom: bottomBar.top; bottomMargin: 8 }
         clip: true
         visible: !root.showFolders && root.tab === "browse"
-        model: root.items
+        model: root.groups
+        spacing: 4
+        boundsBehavior: Flickable.StopAtBounds
 
-        readonly property int cols: root.vertMon ? 4 : 3
-        cellWidth:  Math.floor(width / cols)
-        cellHeight: (root.vertMon ? cellWidth * 16 / 9 : cellWidth * 9 / 16) + 6
+        readonly property int  cols:  root.vertMon ? 4 : 3
+        readonly property real cellW: Math.floor(width / cols)
+        readonly property real cellH: (root.vertMon ? cellW * 16 / 9 : cellW * 9 / 16) + 6
 
-        delegate: Item {
-            id: cell
+        delegate: Column {
+            id: group
             required property var modelData
-            readonly property bool   isVid: root.isVideo(modelData.name)
-            readonly property string thumb: root._thumbDir + "/" + Qt.md5(modelData.path) + ".jpg"
-            width: grid.cellWidth; height: grid.cellHeight
+            width: grid.width
 
-            Rectangle {
-                anchors.fill: parent; anchors.margins: 4
-                radius: Style.rTile; clip: true
-                color: Style.controlFill
-                border.color: Style.accent
-                border.width: root.applying === cell.modelData.path ? 2 : (cHov.containsMouse ? 1 : 0)
-                Behavior on border.width { NumberAnimation { duration: 80 } }
-
-                Image {
-                    id: img
-                    anchors.fill: parent; anchors.margins: 2
-                    source:  cell.isVid ? ("file://" + cell.thumb) : ("file://" + cell.modelData.path)
-                    visible: status === Image.Ready
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
-                    sourceSize.width:  220
-                    sourceSize.height: 130
-                }
-                Text {
-                    visible: cell.isVid && img.status !== Image.Ready
-                    anchors.centerIn: parent; text: "󰕧"; color: Colors.fgMuted
-                    font.family: Style.font; font.pixelSize: 28
-                }
-                Rectangle {
-                    visible: root.grouped && cell.modelData.sub !== ""
-                    anchors { left: parent.left; top: parent.top; leftMargin: 5; topMargin: 5 }
-                    width: subLbl.implicitWidth + 10; height: subLbl.implicitHeight + 4
-                    radius: 5; color: Qt.rgba(0, 0, 0, 0.55)
-                    Text { id: subLbl; anchors.centerIn: parent; text: cell.modelData.sub
-                           color: Colors.fgBright; font.pixelSize: 9; font.family: Style.font }
-                }
-                Rectangle {
-                    visible: root.isVideo(cell.modelData.name)
-                    anchors { right: parent.right; bottom: parent.bottom; rightMargin: 5; bottomMargin: 5 }
-                    width: 16; height: 16; radius: 8; color: Qt.rgba(0, 0, 0, 0.5)
-                    Text { anchors.centerIn: parent; text: "▶"; color: Colors.fgBright; font.pixelSize: 8 }
-                }
-                MouseArea { id: cHov; anchors.fill: parent; hoverEnabled: true
-                            onClicked: root.apply(cell.modelData.path) }
+            // Section caption — only meaningful with subfolder-sorting and > 1 bucket.
+            Text {
+                visible: root.grouped && root.groups.length > 1
+                text:    group.modelData.name + "  ·  " + group.modelData.items.length
+                color:   Colors.fgMuted
+                font.pixelSize: 11; font.bold: true; font.letterSpacing: 0.5; font.family: Style.font
+                topPadding: 6; bottomPadding: 4; leftPadding: 4
             }
-            Process {
-                id: thumbProc
-                command: ["bash", "-c",
-                    "t=\"$1\"; v=\"$2\"; mkdir -p \"$(dirname \"$t\")\"; " +
-                    "[ -f \"$t\" ] || ffmpeg -y -i \"$v\" -vframes 1 -vf scale=320:-1 \"$t\" >/dev/null 2>&1; echo ok",
-                    "vtl", cell.thumb, cell.modelData.path]
-                onRunningChanged: if (!running) { img.source = ""; img.source = "file://" + cell.thumb }
+            Grid {
+                columns: grid.cols
+                Repeater {
+                    model: group.modelData.items
+                    delegate: WallThumb {
+                        required property var modelData
+                        width: grid.cellW; height: grid.cellH
+                        path:   modelData.path
+                        name:   modelData.name
+                        active: root.applying === modelData.path
+                        onPicked: root.apply(modelData.path)
+                    }
+                }
             }
-            Component.onCompleted: if (cell.isVid) thumbProc.running = true
         }
     }
 

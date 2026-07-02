@@ -152,6 +152,37 @@ PanelWindow {
     // Which section's content is shown.
     property string activeSection: "home"
 
+    // ── Section registry — ONE list drives the rail, the page loader and the titles ──
+    // (rail: false → reachable only via navigation, e.g. the home hub's sub-pages; comp: null →
+    // the placeholder page with `hint`.) Component ids resolve file-wide, so forward refs are fine.
+    readonly property var sections: [
+        { key: "home",          icon: "󰋜", title: "Velumeron",     comp: homeComp },
+        { key: "launcher",      icon: "󰀻", title: "Launcher",      comp: launcherComp },
+        { key: "bar",           icon: "󰕮", title: "Bar",           comp: barComp },
+        { key: "style",         icon: "󰏘", title: "Style",         comp: styleComp },
+        { key: "wallpaper",     icon: "󰸉", title: "Wallpaper",     comp: wallpaperComp },
+        { key: "osd",           icon: "󰍹", title: "OSD",           comp: osdComp },
+        { key: "notifications", icon: "󰂚", title: "Notifications", comp: notifyComp },
+        { key: "calendar",      icon: "󰃭", title: "Calendar",      comp: calendarComp },
+        { key: "lockscreen",    icon: "󰌾", title: "Lockscreen",    comp: lockComp },
+        { key: "keybinds",      icon: "󰌌", title: "Keybindings",   comp: keybindsComp },
+        { key: "corners",       icon: "󰊓", title: "Hot corners",   comp: cornersComp },
+        { key: "taskbar",       icon: "󱂩", title: "Taskbar",       comp: taskbarComp },
+        { key: "zones",         icon: "󰝘", title: "Zones",         comp: zonesComp },
+        { key: "layouts",       icon: "󰕴", title: "Layouts",       comp: layoutsComp },
+        { key: "windowtags",    icon: "󰓹", title: "Window tags",   comp: windowTagsComp },
+        { key: "info",          icon: "󰋽", title: "Info",          comp: null,
+          hint: "System information." },
+        { key: "network",       rail: false, title: "Network",     comp: networkComp },
+        { key: "bluetooth",     rail: false, title: "Bluetooth",   comp: bluetoothComp }
+    ]
+    function sectionMeta(s) {
+        for (var i = 0; i < sections.length; i++) if (sections[i].key === s) return sections[i]
+        return null
+    }
+    function sectionTitle(s) { return root.sectionMeta(s)?.title ?? s }
+    function sectionHint(s)  { return root.sectionMeta(s)?.hint  ?? "" }
+
     // The menu is opened globally (one instance per screen) but shows on a single monitor. It LATCHES
     // to the monitor focused at open time (UiState.menuMon) and stays there — it does NOT follow the
     // focus afterwards. Each instance gates on whether it owns that latched monitor.
@@ -182,10 +213,16 @@ PanelWindow {
 
     Shortcut { sequence: "Escape"; onActivated: UiState.openDropdown = "" }
 
-    // On open: reset to the home section, and latch the menu to the focused monitor so it stays
-    // there (doesn't follow the focus). Only the focused instance claims the latch.
+    // On open: reset to the home section — unless another surface requested a specific page
+    // (e.g. the calendar flyout's gear → "calendar") — and latch the menu to the focused monitor
+    // so it stays there (doesn't follow the focus). Only the focused instance claims the latch.
     onIsOpenChanged: {
-        if (isOpen) activeSection = "home"
+        if (isOpen) {
+            activeSection = UiState.settingsRequestSection !== "" ? UiState.settingsRequestSection : "home"
+            // One instance per screen and all of them read the request — clear it only after
+            // every handler has run.
+            Qt.callLater(function () { UiState.settingsRequestSection = "" })
+        }
         if (isOpen && monitor !== null && monitor === Hyprland.focusedMonitor) UiState.menuMon = root.mon
     }
 
@@ -267,24 +304,21 @@ PanelWindow {
             id: rail
             width:   root.railW
             opacity: menu.contentReveal
+            z:       5    // above the content pane, so the hover tooltips aren't painted under it
             anchors { top: parent.top; bottom: parent.bottom; left: parent.left }
 
             Column {
                 anchors { top: parent.top; topMargin: 26; horizontalCenter: parent.horizontalCenter }
                 spacing: 4
 
-                RailIcon { icon: "󰋜";  section: "home"     }
-                RailIcon { icon: "󰀻";  section: "launcher" }
-                RailIcon { icon: "󰕮";  section: "bar"      }
-                RailIcon { icon: "󰏘";  section: "style"    }
-                RailIcon { icon: "󰸉";  section: "wallpaper" }
-                RailIcon { icon: "󰍹";  section: "osd"       }
-                RailIcon { icon: "󰂚";  section: "notifications" }
-                RailIcon { icon: "󰌾";  section: "lockscreen" }
-                RailIcon { icon: "󰌌";  section: "keybinds" }
-                RailIcon { icon: "󰊓";  section: "corners"  }
-                RailIcon { icon: "󱂩";  section: "taskbar"  }
-                RailIcon { icon: "󰋽";  section: "info"     }
+                Repeater {
+                    model: root.sections.filter(function (s) { return s.rail !== false })
+                    delegate: RailIcon {
+                        required property var modelData
+                        icon:    modelData.icon
+                        section: modelData.key
+                    }
+                }
             }
         }
 
@@ -295,7 +329,7 @@ PanelWindow {
             opacity: menu.contentReveal
             anchors { top: parent.top; bottom: parent.bottom
                       topMargin: 12; bottomMargin: 12 }
-            color:  Qt.rgba(Colors.boNormal.r, Colors.boNormal.g, Colors.boNormal.b, 0.25)
+            color:  Style.tint(Colors.boNormal, 0.25)
         }
 
         // ── Content area (right) ─────────────────────────────────────────────
@@ -305,29 +339,17 @@ PanelWindow {
             anchors { top: parent.top; bottom: parent.bottom; right: parent.right; left: parent.left
                       leftMargin: root.railW + 1 }
 
-            // Dedicated section pages — incl. the home hub and its Network / Bluetooth sub-pages.
-            readonly property var pagedSections: ["home", "bar", "launcher", "wallpaper", "style", "osd",
-                                                  "notifications", "lockscreen", "corners", "taskbar", "network", "bluetooth"]
+            // The active section's page, straight from the registry.
+            readonly property var activeMeta: root.sectionMeta(root.activeSection)
             Loader {
                 anchors.fill:         parent
                 anchors.topMargin:    18
                 anchors.leftMargin:   18
                 anchors.rightMargin:  18
                 anchors.bottomMargin: 12
-                active:  content.pagedSections.indexOf(root.activeSection) >= 0
+                active:  (content.activeMeta?.comp ?? null) !== null
                 visible: active
-                sourceComponent: root.activeSection === "home"          ? homeComp
-                               : root.activeSection === "launcher"      ? launcherComp
-                               : root.activeSection === "bar"           ? barComp
-                               : root.activeSection === "wallpaper"     ? wallpaperComp
-                               : root.activeSection === "style"         ? styleComp
-                               : root.activeSection === "notifications" ? notifyComp
-                               : root.activeSection === "lockscreen"    ? lockComp
-                               : root.activeSection === "network"       ? networkComp
-                               : root.activeSection === "bluetooth"     ? bluetoothComp
-                               : root.activeSection === "corners"       ? cornersComp
-                               : root.activeSection === "taskbar"       ? taskbarComp
-                               : osdComp
+                sourceComponent: content.activeMeta?.comp ?? null
             }
             Component { id: homeComp;      HomeHub          { onNavigate: s => root.activeSection = s } }
             Component { id: networkComp;   NetworkManager   { onBack: root.activeSection = "home" } }
@@ -341,10 +363,15 @@ PanelWindow {
             Component { id: lockComp;      LockscreenSection {} }
             Component { id: cornersComp;   CornerActionsSection {} }
             Component { id: taskbarComp;   TaskbarSection {} }
+            Component { id: windowTagsComp; WindowTagsSection {} }
+            Component { id: calendarComp;  CalendarSection {} }
+            Component { id: zonesComp;     ZonesSection {} }
+            Component { id: layoutsComp;   LayoutsSection {} }
+            Component { id: keybindsComp;  KeybindsSection {} }
 
-            // Placeholder for sections that don't have a page yet (home / keybinds / info).
+            // Placeholder for registry entries without a page yet (comp: null).
             Column {
-                visible: content.pagedSections.indexOf(root.activeSection) < 0
+                visible: (content.activeMeta?.comp ?? null) === null
                 anchors { top: parent.top; left: parent.left; right: parent.right
                           topMargin: 18; leftMargin: 20; rightMargin: 20 }
                 spacing: 6
@@ -368,34 +395,6 @@ PanelWindow {
         }
     }
 
-    // ── Section metadata helpers ──────────────────────────────────────────────
-    function sectionTitle(s) {
-        switch (s) {
-            case "home":      return "Velumeron"
-            case "launcher":  return "Launcher"
-            case "bar":       return "Bar"
-            case "style":     return "Style"
-            case "wallpaper": return "Wallpaper"
-            case "osd":       return "OSD"
-            case "notifications": return "Notifications"
-            case "keybinds":  return "Keybindings"
-            case "info":      return "Info"
-            default:          return ""
-        }
-    }
-    function sectionHint(s) {
-        switch (s) {
-            case "home":      return "Welcome. Pick a section from the rail on the left."
-            case "launcher":  return "App launcher placement and layout."
-            case "bar":       return "Configure bar modules and layout."
-            case "style":     return "Colorful + colour mode."
-            case "wallpaper": return "Browse and set wallpapers."
-            case "osd":       return "On-screen display settings."
-            case "keybinds":  return "View and edit keybindings."
-            case "info":      return "System information."
-            default:          return ""
-        }
-    }
 
     // ── Rail icon button ──────────────────────────────────────────────────────
     component RailIcon: Rectangle {
@@ -434,6 +433,28 @@ PanelWindow {
             onClicked: {
                 if (ri.accent) ri.triggered()
                 else           root.activeSection = ri.section
+            }
+        }
+
+        // Hover tooltip: the section name, floating right of the rail (the rail is raised above the
+        // content pane so the label isn't painted under it).
+        readonly property string tipText: root.sectionTitle(ri.section)
+        Rectangle {
+            visible: opacity > 0.01 && ri.tipText !== ""
+            opacity: riHov.containsMouse ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 120 } }
+            anchors { left: parent.right; leftMargin: 10; verticalCenter: parent.verticalCenter }
+            width:  tipTxt.implicitWidth + 16
+            height: tipTxt.implicitHeight + 10
+            radius: Style.rControl
+            color:  Colors.bgPrimary
+            border.width: 1; border.color: Colors.boNormal
+            Text {
+                id: tipTxt
+                anchors.centerIn: parent
+                text: ri.tipText
+                color: Colors.fgPrimary
+                font.pixelSize: 12; font.family: Style.font
             }
         }
     }

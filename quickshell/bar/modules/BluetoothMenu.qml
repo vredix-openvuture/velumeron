@@ -124,14 +124,14 @@ Flyout {
         Item {
             width: parent.width; height: 26
             Text { anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                   text: "Bluetooth"; color: Colors.fgBright; font.pixelSize: 14; font.bold: true; font.family: "FantasqueSansM Nerd Font" }
+                   text: "Bluetooth"; color: Colors.fgBright; font.pixelSize: 14; font.bold: true; font.family: Style.font }
             BtToggle { anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                        on: root.powered; onToggled: root.run("bluetoothctl power " + (root.powered ? "off" : "on"), "") }
         }
 
         Text { visible: root.busy !== "" || root.scanning
                text: root.busy !== "" ? root.busy : "Scanning…"; color: Colors.fgMuted
-               font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font" }
+               font.pixelSize: 11; font.family: Style.font }
 
         // ── Known devices (bucketed by group, each bucket fronted by a named divider) ──────────
         Column {
@@ -152,7 +152,7 @@ Flyout {
                         Text { id: gName
                                anchors { left: parent.left; leftMargin: 20; verticalCenter: parent.verticalCenter }
                                text: gsec.modelData.group !== "" ? gsec.modelData.group : "Ungrouped"
-                               color: Colors.fgMuted; font.pixelSize: 10; font.bold: true; font.family: "FantasqueSansM Nerd Font" }
+                               color: Colors.fgMuted; font.pixelSize: 10; font.bold: true; font.family: Style.font }
                         Rectangle { anchors { left: gName.right; leftMargin: 8; right: parent.right; verticalCenter: parent.verticalCenter }
                                     height: 1; color: Colors.bgActive }
                     }
@@ -168,16 +168,16 @@ Flyout {
                 }
             }
             Text { visible: root._paired.length === 0; text: "No paired devices"; color: Colors.fgMuted
-                   font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+                   font.pixelSize: 12; font.family: Style.font }
 
             // Add-new button — accent-outlined action, distinct from the solid device rows.
             Rectangle {
                 width: parent.width; height: 38; radius: 10
-                color: addH.containsMouse ? Qt.rgba(Colors.boActive.r, Colors.boActive.g, Colors.boActive.b, 0.22) : "transparent"
+                color: addH.containsMouse ? Style.tint(Colors.boActive, 0.22) : "transparent"
                 border.width: 1; border.color: Colors.boActive
                 Behavior on color { ColorAnimation { duration: 100 } }
                 Text { anchors.centerIn: parent; text: "  Add new device"; color: Colors.boActive
-                       font.pixelSize: 12; font.bold: true; font.family: "FantasqueSansM Nerd Font" }
+                       font.pixelSize: 12; font.bold: true; font.family: Style.font }
                 MouseArea { id: addH; anchors.fill: parent; hoverEnabled: true
                             onClicked: { root.mode = "add"; root.scan() } }
             }
@@ -189,13 +189,13 @@ Flyout {
             width: parent.width; spacing: 6
             Rectangle {
                 width: parent.width; height: 32; radius: 8
-                color: bkH.containsMouse ? Qt.rgba(Colors.boActive.r, Colors.boActive.g, Colors.boActive.b, 0.22) : "transparent"
+                color: bkH.containsMouse ? Style.tint(Colors.boActive, 0.22) : "transparent"
                 border.width: 1; border.color: Colors.boActive
                 Text { anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                       text: "󰁍  Paired devices"; color: Colors.boActive; font.bold: true; font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+                       text: "󰁍  Paired devices"; color: Colors.boActive; font.bold: true; font.pixelSize: 12; font.family: Style.font }
                 Rectangle { anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
                     width: 28; height: 22; radius: 6; color: scH.containsMouse ? Colors.boActive : Colors.bgPrimary
-                    Text { anchors.centerIn: parent; text: "󰍉"; color: Colors.fgBright; font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+                    Text { anchors.centerIn: parent; text: "󰍉"; color: Colors.fgBright; font.pixelSize: 12; font.family: Style.font }
                     MouseArea { id: scH; anchors.fill: parent; hoverEnabled: true; onClicked: root.scan() } }
                 MouseArea { id: bkH; anchors.fill: parent; anchors.rightMargin: 40; hoverEnabled: true; onClicked: root.mode = "known" }
             }
@@ -204,7 +204,7 @@ Flyout {
                 delegate: BtRow { required property var modelData; dev: modelData; gearVisible: false; onTrig: root.tap(modelData) }
             }
             Text { visible: root._available.length === 0; text: root.scanning ? "Scanning…" : "No devices found — tap scan"
-                   color: Colors.fgMuted; font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+                   color: Colors.fgMuted; font.pixelSize: 12; font.family: Style.font }
         }
 
         // ── Device settings page (rename + group assignment + forget) ──────────────
@@ -215,10 +215,10 @@ Flyout {
             // Back to the device list.
             Rectangle {
                 width: parent.width; height: 32; radius: 8
-                color: dbH.containsMouse ? Qt.rgba(Colors.boActive.r, Colors.boActive.g, Colors.boActive.b, 0.22) : "transparent"
+                color: dbH.containsMouse ? Style.tint(Colors.boActive, 0.22) : "transparent"
                 border.width: 1; border.color: Colors.boActive
                 Text { anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                       text: "󰁍  Devices"; color: Colors.boActive; font.bold: true; font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+                       text: "󰁍  Devices"; color: Colors.boActive; font.bold: true; font.pixelSize: 12; font.family: Style.font }
                 MouseArea { id: dbH; anchors.fill: parent; hoverEnabled: true; onClicked: root.mode = "known" }
             }
 
@@ -226,13 +226,13 @@ Flyout {
             Row {
                 width: parent.width; spacing: 10
                 Text { anchors.verticalCenter: parent.verticalCenter; text: root._sel ? root.devIcon(root._sel.icon) : ""
-                       color: Colors.fgBright; font.pixelSize: 24; font.family: "FantasqueSansM Nerd Font" }
+                       color: Colors.fgBright; font.pixelSize: 24; font.family: Style.font }
                 Column {
                     anchors.verticalCenter: parent.verticalCenter; spacing: 1
                     Text { text: root._sel ? root.dispName(root._sel) : ""; color: Colors.fgBright
-                           font.pixelSize: 14; font.bold: true; font.family: "FantasqueSansM Nerd Font" }
+                           font.pixelSize: 14; font.bold: true; font.family: Style.font }
                     Text { text: root._sel && root._sel.connected ? "Connected" : "Paired"
-                           color: Colors.fgMuted; font.pixelSize: 10; font.family: "FantasqueSansM Nerd Font" }
+                           color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font }
                 }
             }
 
@@ -243,13 +243,13 @@ Flyout {
                 border.width: 1; border.color: Colors.bgActive
                 TextInput { id: dNameIn
                     anchors { left: parent.left; leftMargin: 12; right: rnBtn.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                    color: Colors.fgBright; font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font"; clip: true
+                    color: Colors.fgBright; font.pixelSize: 13; font.family: Style.font; clip: true
                     onAccepted: root.setAlias(root.openMac, text)
                 }
                 Rectangle { id: rnBtn
                     anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
                     width: 62; height: 26; radius: 6; color: rnH.containsMouse ? Colors.boActive : Colors.bgActive
-                    Text { anchors.centerIn: parent; text: "Rename"; color: Colors.fgBright; font.pixelSize: 10; font.family: "FantasqueSansM Nerd Font" }
+                    Text { anchors.centerIn: parent; text: "Rename"; color: Colors.fgBright; font.pixelSize: 10; font.family: Style.font }
                     MouseArea { id: rnH; anchors.fill: parent; hoverEnabled: true; onClicked: root.setAlias(root.openMac, dNameIn.text) }
                 }
             }
@@ -274,15 +274,15 @@ Flyout {
                 border.width: 1; border.color: Colors.bgActive
                 TextInput { id: newGrpIn
                     anchors { left: parent.left; leftMargin: 12; right: ngBtn.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                    color: Colors.fgBright; font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font"; clip: true
+                    color: Colors.fgBright; font.pixelSize: 13; font.family: Style.font; clip: true
                     onAccepted: { if (text.trim() !== "") { root.setGroup(root.openMac, text.trim()); text = "" } }
                 }
                 Text { visible: newGrpIn.text === ""; anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                       text: "New group…"; color: Colors.fgMuted; font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
+                       text: "New group…"; color: Colors.fgMuted; font.pixelSize: 13; font.family: Style.font }
                 Rectangle { id: ngBtn
                     anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
                     width: 30; height: 26; radius: 6; color: ngH.containsMouse ? Colors.boActive : Colors.bgActive
-                    Text { anchors.centerIn: parent; text: "✓"; color: Colors.fgBright; font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+                    Text { anchors.centerIn: parent; text: "✓"; color: Colors.fgBright; font.pixelSize: 12; font.family: Style.font }
                     MouseArea { id: ngH; anchors.fill: parent; hoverEnabled: true
                                 onClicked: { if (newGrpIn.text.trim() !== "") { root.setGroup(root.openMac, newGrpIn.text.trim()); newGrpIn.text = "" } } }
                 }
@@ -293,12 +293,12 @@ Flyout {
             // Forget (destructive).
             Rectangle {
                 width: parent.width; height: 36; radius: 10
-                color: fgPH.containsMouse ? Qt.rgba(Colors.fgUrgent.r, Colors.fgUrgent.g, Colors.fgUrgent.b, 0.30)
-                                          : Qt.rgba(Colors.fgUrgent.r, Colors.fgUrgent.g, Colors.fgUrgent.b, 0.12)
+                color: fgPH.containsMouse ? Style.tint(Colors.fgUrgent, 0.30)
+                                          : Style.tint(Colors.fgUrgent, 0.12)
                 border.width: 1; border.color: Colors.fgUrgent
                 Behavior on color { ColorAnimation { duration: 100 } }
                 Text { anchors.centerIn: parent; text: "󰩹  Forget device"; color: Colors.fgUrgent
-                       font.pixelSize: 12; font.bold: true; font.family: "FantasqueSansM Nerd Font" }
+                       font.pixelSize: 12; font.bold: true; font.family: Style.font }
                 MouseArea { id: fgPH; anchors.fill: parent; hoverEnabled: true
                             onClicked: { root.forget(root.openMac); root.mode = "known" } }
             }
@@ -316,8 +316,8 @@ Flyout {
         width:  parent ? parent.width : 0
         height: 44; radius: 10
         clip: true
-        color: dev && dev.connected ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.28)
-             : (brH.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.16) : Colors.bgElement)
+        color: dev && dev.connected ? Style.tint(Colors.bgActive, 0.28)
+             : (brH.containsMouse ? Style.tint(Colors.bgActive, 0.16) : Colors.bgElement)
         Behavior on color { ColorAnimation { duration: 100 } }
         // Connecting wave — an accent glow sweeps left→right across the card while an action runs.
         Rectangle {
@@ -327,28 +327,28 @@ Flyout {
             gradient: Gradient {
                 orientation: Gradient.Horizontal
                 GradientStop { position: 0.0; color: "transparent" }
-                GradientStop { position: 0.5; color: Qt.rgba(Colors.boActive.r, Colors.boActive.g, Colors.boActive.b, 0.40) }
+                GradientStop { position: 0.5; color: Style.tint(Colors.boActive, 0.40) }
                 GradientStop { position: 1.0; color: "transparent" }
             }
             NumberAnimation on x { running: br.busy; from: -70; to: br.width; duration: 1100; loops: Animation.Infinite }
         }
         Text { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-               text: dev ? root.devIcon(dev.icon) : ""; color: Colors.fgMuted; font.pixelSize: 16; font.family: "FantasqueSansM Nerd Font" }
+               text: dev ? root.devIcon(dev.icon) : ""; color: Colors.fgMuted; font.pixelSize: 16; font.family: Style.font }
         Text { anchors { left: parent.left; leftMargin: 44; right: gB.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
                text: dev ? root.dispName(dev) : ""; elide: Text.ElideRight
-               color: dev && dev.connected ? Colors.fgBright : Colors.fgPrimary; font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
+               color: dev && dev.connected ? Colors.fgBright : Colors.fgPrimary; font.pixelSize: 13; font.family: Style.font }
         Rectangle { id: gB
             visible: br.gearVisible
             anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
             width: 26; height: 26; radius: 6; color: gH.containsMouse ? Colors.bgActive : "transparent"
-            Text { anchors.centerIn: parent; text: "󰒓"; color: Colors.fgMuted; font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
+            Text { anchors.centerIn: parent; text: "󰒓"; color: Colors.fgMuted; font.pixelSize: 13; font.family: Style.font }
             MouseArea { id: gH; anchors.fill: parent; hoverEnabled: true; onClicked: br.gear() }
         }
         MouseArea { id: brH; anchors.fill: parent; anchors.rightMargin: br.gearVisible ? 38 : 0; hoverEnabled: true; onClicked: br.trig() }
     }
     component FieldLabel: Text {
         color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-        font.letterSpacing: 0.5; font.family: "FantasqueSansM Nerd Font"
+        font.letterSpacing: 0.5; font.family: Style.font
     }
     component GroupChip: Rectangle {
         property string label: ""
@@ -356,12 +356,12 @@ Flyout {
         signal pick()
         width:  gcT.implicitWidth + 22; height: 28; radius: 8
         color:  sel ? Colors.bgActive
-              : (gcH.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.22) : Colors.bgElement)
+              : (gcH.containsMouse ? Style.tint(Colors.bgActive, 0.22) : Colors.bgElement)
         border.width: 1; border.color: sel ? Colors.boActive : "transparent"
         Behavior on color { ColorAnimation { duration: 90 } }
         Text { id: gcT; anchors.centerIn: parent; text: parent.label
                color: parent.sel ? Colors.fgBright : Colors.fgPrimary
-               font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font" }
+               font.pixelSize: 11; font.family: Style.font }
         MouseArea { id: gcH; anchors.fill: parent; hoverEnabled: true; onClicked: parent.pick() }
     }
     component BtToggle: Rectangle {

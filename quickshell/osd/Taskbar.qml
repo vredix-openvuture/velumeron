@@ -67,7 +67,14 @@ PanelWindow {
     readonly property int    seam:     root.barThk  + 24
     readonly property int    perpSeam: root.perpThk + 24
     readonly property int    pad:      root.flareR + Math.max(root.seam, root.perpSeam)
-    readonly property color  cardColor: Colors.bgPrimary
+    // Same accent-tinted background the bar / OSD use, so the taskbar matches (Settings → Style →
+    // Colorful). Blend bgPrimary → bgActive by a small amount when the OSD colorful flag is on.
+    readonly property color  cardColor: {
+        var t = VtlConfig.osdColorful ? 0.12 : 0.0
+        return Qt.rgba(Colors.bgPrimary.r * (1 - t) + Colors.bgActive.r * t,
+                       Colors.bgPrimary.g * (1 - t) + Colors.bgActive.g * t,
+                       Colors.bgPrimary.b * (1 - t) + Colors.bgActive.b * t, 1)
+    }
 
     readonly property int cardW: Math.min(root.sw - 16, content.implicitWidth)
     readonly property int cardH: Math.min(root.sh - 16, content.implicitHeight)
@@ -149,8 +156,42 @@ PanelWindow {
         if (de === "right")  return [openX, openY, root.sw - openX, cardH]
         return [openX, openY, cardW, cardH]
     }
+    // Active hot-corner zones (same rects HotCorners.qml uses). They are punched OUT of this
+    // surface's input mask below: both surfaces sit on the Overlay layer, and wherever the taskbar's
+    // (hover) region covers a zone it would swallow the input and make that corner dead — a taskbar
+    // docked into a hot corner killed the corner. Subtracted pixels fall through to HotCorners.
+    readonly property var _hcRects: {
+        var s = VtlConfig.cornerSize, e = VtlConfig.cornerEdgeLength, W = root.sw, H = root.sh
+        return [
+            { id: "top-left",     x: 0,           y: 0,           w: s, h: s },
+            { id: "top",          x: (W - e) / 2, y: 0,           w: e, h: s },
+            { id: "top-right",    x: W - s,       y: 0,           w: s, h: s },
+            { id: "right",        x: W - s,       y: (H - e) / 2, w: s, h: e },
+            { id: "bottom-right", x: W - s,       y: H - s,       w: s, h: s },
+            { id: "bottom",       x: (W - e) / 2, y: H - s,       w: e, h: s },
+            { id: "bottom-left",  x: 0,           y: H - s,       w: s, h: s },
+            { id: "left",         x: 0,           y: (H - e) / 2, w: s, h: e }
+        ]
+    }
+    function _hcOn(i) {
+        return VtlConfig.cornerActionsEnabled
+            && VtlConfig.cornerActionFor(root._hcRects[i].id, root.mon).type !== "none"
+    }
+    function hcx(i) { return root._hcRects[i].x }
+    function hcy(i) { return root._hcRects[i].y }
+    function hcw(i) { return root._hcOn(i) ? root._hcRects[i].w : 0 }   // 0 = no-op subtract
+    function hch(i) { return root._hcOn(i) ? root._hcRects[i].h : 0 }
+
     mask: Region {
         Region { x: root.haRect[0]; y: root.haRect[1]; width: root.haRect[2]; height: root.haRect[3] }
+        Region { intersection: Intersection.Subtract; x: root.hcx(0); y: root.hcy(0); width: root.hcw(0); height: root.hch(0) }
+        Region { intersection: Intersection.Subtract; x: root.hcx(1); y: root.hcy(1); width: root.hcw(1); height: root.hch(1) }
+        Region { intersection: Intersection.Subtract; x: root.hcx(2); y: root.hcy(2); width: root.hcw(2); height: root.hch(2) }
+        Region { intersection: Intersection.Subtract; x: root.hcx(3); y: root.hcy(3); width: root.hcw(3); height: root.hch(3) }
+        Region { intersection: Intersection.Subtract; x: root.hcx(4); y: root.hcy(4); width: root.hcw(4); height: root.hch(4) }
+        Region { intersection: Intersection.Subtract; x: root.hcx(5); y: root.hcy(5); width: root.hcw(5); height: root.hch(5) }
+        Region { intersection: Intersection.Subtract; x: root.hcx(6); y: root.hcy(6); width: root.hcw(6); height: root.hch(6) }
+        Region { intersection: Intersection.Subtract; x: root.hcx(7); y: root.hcy(7); width: root.hcw(7); height: root.hch(7) }
     }
 
     // Hover zone (plain Item, so item clicks pass straight through). A HoverHandler — not a MouseArea

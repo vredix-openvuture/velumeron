@@ -208,12 +208,12 @@ PanelWindow {
                 text:  root.titles[root.ctx] ?? "Keybinds"
                 color: Colors.fgBright
                 font.pixelSize: 20; font.bold: true
-                font.family: "FantasqueSansM Nerd Font"
+                font.family: Style.font
             }
             Text {
                 text:  "c or click outside to close  ·  / to search"
                 color: Colors.fgMuted
-                font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font"
+                font.pixelSize: 11; font.family: Style.font
                 visible: !root.searching
             }
 
@@ -231,7 +231,7 @@ PanelWindow {
                     color: Colors.fgBright
                     placeholderText: "Search keybinds…"
                     placeholderTextColor: Colors.fgMuted
-                    font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font"
+                    font.pixelSize: 13; font.family: Style.font
                     verticalAlignment: TextInput.AlignVCenter
                     onTextChanged: root.query = text
                     Keys.onEscapePressed: { root.searching = false; root.query = ""; text = "" }
@@ -270,7 +270,7 @@ PanelWindow {
                                     text:  modelData.title
                                     color: Colors.fgBright
                                     font.pixelSize: 13; font.bold: true
-                                    font.family: "FantasqueSansM Nerd Font"
+                                    font.family: Style.font
                                     bottomPadding: 2
                                 }
                                 Repeater {
@@ -283,12 +283,12 @@ PanelWindow {
 
                                         Rectangle {
                                             width: 118; height: 24; radius: 6
-                                            color: Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.28)
+                                            color: Style.tint(Colors.bgActive, 0.28)
                                             Text {
                                                 anchors { left: parent.left; leftMargin: 9; verticalCenter: parent.verticalCenter }
                                                 text:  modelData.k
                                                 color: Colors.fgBright
-                                                font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font"
+                                                font.pixelSize: 11; font.family: Style.font
                                                 elide: Text.ElideRight
                                                 width: parent.width - 16
                                             }
@@ -297,7 +297,7 @@ PanelWindow {
                                             anchors.verticalCenter: parent.verticalCenter
                                             text:  modelData.d
                                             color: Colors.fgPrimary
-                                            font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font"
+                                            font.pixelSize: 12; font.family: Style.font
                                         }
                                     }
                                 }

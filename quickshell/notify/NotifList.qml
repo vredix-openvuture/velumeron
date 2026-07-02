@@ -31,7 +31,7 @@ Item {
         anchors.centerIn: parent
         visible: root.rows.length === 0
         text:   "No notifications"
-        color:  Colors.fgMuted; font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font"
+        color:  Colors.fgMuted; font.pixelSize: 13; font.family: Style.font
     }
 
     ListView {
@@ -55,20 +55,20 @@ Item {
                 anchors { left: parent.left; right: badge.left; top: parent.top
                           leftMargin: 16; rightMargin: 8; topMargin: 14 }
                 text: item.n ? item.n.appName : ""; color: Colors.fgMuted
-                font.pixelSize: 10; font.family: "FantasqueSansM Nerd Font"; elide: Text.ElideRight
+                font.pixelSize: 10; font.family: Style.font; elide: Text.ElideRight
             }
             Text {
                 id: isum
                 anchors { left: iapp.left; right: idel.left; rightMargin: 8; top: iapp.bottom; topMargin: 1 }
                 text: item.n ? item.n.summary : ""; color: Colors.fgBright
-                font.pixelSize: 13; font.bold: true; font.family: "FantasqueSansM Nerd Font"; elide: Text.ElideRight
+                font.pixelSize: 13; font.bold: true; font.family: Style.font; elide: Text.ElideRight
             }
             Text {
                 id: ibody
                 anchors { left: iapp.left; right: parent.right; rightMargin: 16; top: isum.bottom; topMargin: 3 }
                 visible: text !== ""
                 text: item.n ? item.n.body : ""; color: Colors.fgPrimary
-                font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font"
+                font.pixelSize: 12; font.family: Style.font
                 wrapMode: Text.WordWrap; textFormat: Text.PlainText
                 maximumLineCount: 5; elide: Text.ElideRight
             }
@@ -80,13 +80,13 @@ Item {
                 width: cnt.implicitWidth + 12; height: 16; radius: 8
                 color: Colors.bgActive
                 Text { id: cnt; anchors.centerIn: parent; text: item.modelData.count
-                       color: Colors.fgBright; font.pixelSize: 9; font.bold: true; font.family: "FantasqueSansM Nerd Font" }
+                       color: Colors.fgBright; font.pixelSize: 9; font.bold: true; font.family: Style.font }
             }
             Rectangle {
                 id: idel
                 anchors { right: parent.right; top: parent.top; rightMargin: 8; topMargin: 8 }
                 width: 20; height: 20; radius: 10
-                color: dHov.containsMouse ? Qt.rgba(Colors.fgUrgent.r, Colors.fgUrgent.g, Colors.fgUrgent.b, 0.25) : "transparent"
+                color: dHov.containsMouse ? Style.tint(Colors.fgUrgent, 0.25) : "transparent"
                 Text { anchors.centerIn: parent; text: "✕"; color: Colors.fgMuted; font.pixelSize: 10 }
                 MouseArea { id: dHov; anchors.fill: parent; hoverEnabled: true
                             onClicked: root.dismissRow(item.modelData) }

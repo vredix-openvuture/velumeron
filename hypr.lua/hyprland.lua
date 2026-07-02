@@ -56,6 +56,11 @@ require("modules.windowrules")
 require("modules.workspaces")
 require("modules.layerrules")
 require("modules.keybinds")
+require("modules.fancyzones")   -- after keybinds: replaces the MOD+LMB drag bind
+
+-- User-defined tiling layouts (Settings → Layouts) + the persisted layout choice.
+-- Generated file — a missing one is a no-op.
+_try_dofile(VTL_USER_DIR .. "/hypr.lua/user_layouts.lua")
 
 
 

@@ -23,7 +23,19 @@ WALLUST_LOCK="${XDG_RUNTIME_DIR:-/tmp}/vtl-wallust.lock"
 # queuing. Prevents the colors.lua race (only one wallust writes at a time) without ever piling up a
 # queue of stuck applies — the wallpaper itself was already applied above; only the recolour is
 # skipped for a rapid second click.
-_wallust() { flock -n "$WALLUST_LOCK" wallust --config-dir "$VELUMERON_DIR/wallust" "$@"; }
+#
+# Split run: wallust broadcasts colour sequences to EVERY /dev/pts/* before templating, and a
+# pty that is never read (gvfsd-sftp's ssh ptys, dead terminals) blocks that write forever —
+# which froze the whole colour pipeline while holding the lock. So the main run skips
+# sequences (-s: templates + hooks always land), and a follow-up sequences-only pass (-T)
+# recolours live terminals best-effort, hard-reaped if it hits a blocked pty. The timeout on
+# the main run is belt-and-braces against any other way wallust finds to never exit.
+_wallust() {
+    local sub="$1"; shift
+    timeout -k 5 30 flock -n "$WALLUST_LOCK" \
+        wallust --config-dir "$VELUMERON_DIR/wallust" "$sub" -s "$@" || return
+    ( timeout -k 2 5 wallust --config-dir "$VELUMERON_DIR/wallust" "$sub" -T -q "$@" >/dev/null 2>&1 & )
+}
 
 # Native wallpaper engine: upsert this monitor's entry in wallpapers.json. Quickshell watches the file
 # and crossfades in place (static image or live video by extension) — no awww/mpvpaper, no spawn. The

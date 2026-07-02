@@ -16,13 +16,7 @@ PanelWindow {
     readonly property bool isOpen: UiState.sessionOpen
     readonly property bool active: isOpen && root.mon !== "" && root.mon === UiState.sessionMon
 
-    readonly property var actions: [
-        { icon: "󰌾", label: "Lock",     cmd: "loginctl lock-session" },
-        { icon: "󰤄", label: "Suspend",  cmd: "\"$VELUMERON_DIR/assets/scripts/launch-hyprlock.sh\" & sleep 1 && systemctl suspend" },
-        { icon: "󰗽", label: "Logout",   cmd: "hyprctl dispatch exit" },
-        { icon: "󰜉", label: "Reboot",   cmd: "systemctl reboot" },
-        { icon: "󰐥", label: "Shutdown", cmd: "systemctl poweroff" }
-    ]
+    readonly property var actions: UiState.sessionActions   // canonical shared list
     property int sel: 0
 
     property real reveal: 0

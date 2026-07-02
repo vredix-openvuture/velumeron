@@ -20,24 +20,19 @@ BarGlide {
     Row {
         spacing: 8
         Repeater {
-            model: [
-                { icon: "󰍁", cmd: "loginctl lock-session" },
-                { icon: "󰗽", cmd: "hyprctl dispatch exit"  },
-                { icon: "󰜉", cmd: "systemctl reboot"       },
-                { icon: "󰐥", cmd: "systemctl poweroff"     }
-            ]
+            model: UiState.sessionActions   // canonical shared list (same icons as the session menu)
             delegate: Rectangle {
                 id: tile
                 required property var modelData
                 width: 36; height: 36; radius: 9
                 color: tHov.containsMouse ? Colors.bgActive
-                     : Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.14)
+                     : Style.tint(Colors.bgActive, 0.14)
                 Behavior on color { ColorAnimation { duration: 100 } }
                 Text {
                     anchors.centerIn: parent
                     text:  tile.modelData.icon
                     color: tHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
-                    font.family: "FantasqueSansM Nerd Font"; font.pixelSize: 16
+                    font.family: Style.font; font.pixelSize: 16
                 }
                 MouseArea {
                     id: tHov

@@ -87,6 +87,19 @@ hl.layer_rule({ name = "velumeron-hotcorners", match = { namespace = "velumeron-
 -- backdrop would otherwise frost the whole screen. Opt out of the global blur.
 hl.layer_rule({ name = "velumeron-window-switcher", match = { namespace = "velumeron-window-switcher" }, blur = false, no_anim = true, xray = true })
 
+-- Velumeron window tags — mostly-transparent full-screen overlay with tiny name chips; the global
+-- blur rule would frost the whole surface. Opt out.
+hl.layer_rule({ name = "velumeron-windowtags", match = { namespace = "velumeron-windowtags" }, blur = false, no_anim = true, xray = true })
+
+-- Velumeron FancyZones — translucent zone fields shown while a float is Super-dragged; blurring
+-- would frost them into solid blocks, and the overlay fades itself (no_anim).
+hl.layer_rule({ name = "velumeron-zones", match = { namespace = "velumeron-zones" }, blur = false, no_anim = true, xray = true })
+
+-- Velumeron clipboard history — no blur by default (the global rule frosted the whole screen
+-- behind the dim shade); the -blur namespace is the Settings → OSD opt-in variant.
+hl.layer_rule({ name = "velumeron-clipboard",      match = { namespace = "velumeron-clipboard" },      blur = false, no_anim = true, xray = true })
+hl.layer_rule({ name = "velumeron-clipboard-blur", match = { namespace = "velumeron-clipboard-blur" }, blur = true, blur_popups = true, ignore_alpha = 0.1, no_anim = true, xray = true })
+
 -- Velumeron OSD — one rule per slide direction.
 -- The daemon sets the namespace to velumeron-osd-{bottom|top|left|right}
 -- based on the position chosen in the OSD settings page.

@@ -1,6 +1,7 @@
 # Shared singletons
 singleton Colors    1.0 Colors.qml
 singleton VtlConfig 1.0 VtlConfig.qml
+singleton SettingsStore 1.0 SettingsStore.qml
 singleton UiState   1.0 UiState.qml
 singleton Style     1.0 Style.qml
 singleton Templates 1.0 Templates.qml
@@ -20,6 +21,7 @@ SelectRow   1.0 common/SelectRow.qml
 SelectTile  1.0 common/SelectTile.qml
 PosGrid     1.0 common/PosGrid.qml
 TextButton  1.0 common/TextButton.qml
+WallThumb   1.0 common/WallThumb.qml
 
 # Native wallpaper engine (per-monitor background surface)
 WallpaperWindow   1.0 WallpaperWindow.qml
@@ -46,9 +48,22 @@ BtGlide           1.0 osd/BtGlide.qml
 WallpaperQuick    1.0 osd/WallpaperQuick.qml
 Taskbar           1.0 osd/Taskbar.qml
 TaskbarReserve    1.0 osd/TaskbarReserve.qml
+WindowTags        1.0 windowtags/WindowTags.qml
 
 # Keybind cheatsheet overlay
 KeybindHelp       1.0 keybind/KeybindHelp.qml
+
+# Calendar + tasks (CalDAV: Nextcloud Calendar / Tasks, Vikunja)
+singleton CalDavService 1.0 calendar/CalDavService.qml
+CalendarMenu            1.0 calendar/CalendarMenu.qml
+CalendarSection         1.0 settings/calendar/CalendarSection.qml
+LayoutsSection          1.0 settings/layouts/LayoutsSection.qml
+KeybindsSection         1.0 settings/keybinds/KeybindsSection.qml
+
+# FancyZones (floating-window snap zones; compositor side in hypr.lua/modules/fancyzones.lua)
+singleton ZonesState 1.0 zones/ZonesState.qml
+ZoneOverlay          1.0 zones/ZoneOverlay.qml
+ZonesSection         1.0 settings/zones/ZonesSection.qml
 
 # Notifications (server + popups + centre + shared list)
 singleton NotifService 1.0 notify/NotifService.qml
@@ -82,10 +97,12 @@ Bluetooth       1.0 bar/modules/Bluetooth.qml
 VPN             1.0 bar/modules/VPN.qml
 Tray            1.0 bar/modules/Tray.qml
 NotifButton     1.0 bar/modules/NotifButton.qml
+Updates         1.0 bar/modules/Updates.qml
+LayoutSwitcher  1.0 bar/modules/LayoutSwitcher.qml
+LayoutMenu      1.0 bar/modules/LayoutMenu.qml
 
 # Settings menu (the corner dropdown) + its pages
 Settings             1.0 settings/Settings.qml
-GuiPanel             1.0 settings/GuiPanel.qml
 HomeHub              1.0 settings/home/HomeHub.qml
 NetworkManager       1.0 settings/home/NetworkManager.qml
 BluetoothManager     1.0 settings/home/BluetoothManager.qml
@@ -96,9 +113,8 @@ OsdSection           1.0 settings/osd/OsdSection.qml
 LauncherSection      1.0 settings/launcher/LauncherSection.qml
 CornerActionsSection 1.0 settings/corners/CornerActionsSection.qml
 TaskbarSection       1.0 settings/taskbar/TaskbarSection.qml
+WindowTagsSection    1.0 settings/windowtags/WindowTagsSection.qml
 WallpaperSection     1.0 settings/theme/WallpaperSection.qml
 LockscreenSection    1.0 settings/lockscreen/LockscreenSection.qml
 WallpaperFolders     1.0 settings/theme/WallpaperFolders.qml
 WallpaperSets        1.0 settings/theme/WallpaperSets.qml
-BarPage              1.0 settings/submenu-bar/BarPage.qml
-BarZone              1.0 settings/submenu-bar/BarZone.qml

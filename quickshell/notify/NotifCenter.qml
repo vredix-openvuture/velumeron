@@ -228,7 +228,7 @@ PanelWindow {
                 Text {
                     anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                     text: "Notifications"; color: Colors.fgBright
-                    font.pixelSize: 15; font.bold: true; font.family: "FantasqueSansM Nerd Font"
+                    font.pixelSize: 15; font.bold: true; font.family: Style.font
                 }
                 Row {
                     anchors { right: parent.right; verticalCenter: parent.verticalCenter }
@@ -237,10 +237,10 @@ PanelWindow {
                     Rectangle {
                         width: 30; height: 24; radius: 7
                         color: NotifService.dnd ? Colors.bgActive
-                             : (dndHov.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.18) : Colors.bgElement)
+                             : (dndHov.containsMouse ? Style.tint(Colors.bgActive, 0.18) : Colors.bgElement)
                         Text { anchors.centerIn: parent; text: NotifService.dnd ? "󰂛" : "󰂚"
                                color: NotifService.dnd ? Colors.fgBright : Colors.fgPrimary
-                               font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
+                               font.pixelSize: 13; font.family: Style.font }
                         MouseArea { id: dndHov; anchors.fill: parent; hoverEnabled: true; onClicked: NotifService.toggleDnd() }
                     }
                     // Clear all
@@ -248,7 +248,7 @@ PanelWindow {
                         width: 30; height: 24; radius: 7
                         color: clrHov.containsMouse ? Colors.bgActive : Colors.bgElement
                         Text { anchors.centerIn: parent; text: "󰎟"; color: Colors.fgPrimary
-                               font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
+                               font.pixelSize: 13; font.family: Style.font }
                         MouseArea { id: clrHov; anchors.fill: parent; hoverEnabled: true; onClicked: NotifService.clearAll() }
                     }
                 }

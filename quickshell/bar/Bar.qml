@@ -38,7 +38,7 @@ PanelWindow {
                                              Colors.bgPrimary.g * (1 - tintAmt) + Colors.bgActive.g * tintAmt,
                                              Colors.bgPrimary.b * (1 - tintAmt) + Colors.bgActive.b * tintAmt, 1)
     readonly property color cFill:   Qt.rgba(cBg.r, cBg.g, cBg.b, bgAlpha)
-    readonly property color cBorder: Qt.rgba(Colors.boNormal.r,  Colors.boNormal.g,  Colors.boNormal.b,  bgAlpha)
+    readonly property color cBorder: Style.tint(Colors.boNormal, bgAlpha)
 
     function edgeOn(e) { return VtlConfig.edgeActiveFor(e, root.mon) }
     function thick(e)  { return edgeOn(e) ? VtlConfig.edgeThicknessFor(e, root.mon) : 0 }
@@ -300,7 +300,7 @@ PanelWindow {
             width:  mg.horiz ? parent.width             : (mg.barT - 2 * mg.pad)
             height: mg.horiz ? (mg.barT - 2 * mg.pad)   : parent.height
             radius: VtlConfig.barModuleBgRadiusFor(root.mon)
-            color:  Qt.rgba(Colors.bgElement.r, Colors.bgElement.g, Colors.bgElement.b, VtlConfig.barModuleBgOpacityFor(root.mon))
+            color:  Style.tint(Colors.bgElement, VtlConfig.barModuleBgOpacityFor(root.mon))
         }
         Row {
             id: rowLay
@@ -370,8 +370,8 @@ PanelWindow {
             readonly property real _o: VtlConfig.barModuleBgOpacityFor(root.mon)
             // On hover, shift slightly toward the accent and a touch more opaque.
             color: msHover.hovered
-                 ? Qt.rgba(Colors.bgActive.r,  Colors.bgActive.g,  Colors.bgActive.b,  Math.min(1.0, _o + 0.12))
-                 : Qt.rgba(Colors.bgElement.r, Colors.bgElement.g, Colors.bgElement.b, _o)
+                 ? Style.tint(Colors.bgActive, Math.min(1.0, _o + 0.12))
+                 : Style.tint(Colors.bgElement, _o)
             Behavior on color { ColorAnimation { duration: 130 } }
         }
         Loader {
@@ -410,6 +410,8 @@ PanelWindow {
             case "network":      return networkComp
             case "bluetooth":    return bluetoothComp
             case "vpn":          return vpnComp
+            case "updates":      return updatesComp
+            case "layout":       return layoutComp
             default:             return null
         }
     }
@@ -431,4 +433,6 @@ PanelWindow {
     Component { id: networkComp;     Network     {} }
     Component { id: bluetoothComp;   Bluetooth   {} }
     Component { id: vpnComp;         VPN         {} }
+    Component { id: updatesComp;     Updates     {} }
+    Component { id: layoutComp;      LayoutSwitcher {} }
 }

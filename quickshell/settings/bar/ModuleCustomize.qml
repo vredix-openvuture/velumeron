@@ -47,7 +47,9 @@ Item {
             { type: "toggle", name: "glide_cpu_temp",  label: "Glide: CPU temp",  def: true },
             { type: "toggle", name: "glide_memory",    label: "Glide: Memory",    def: true },
             { type: "toggle", name: "glide_gpu_usage", label: "Glide: GPU usage", def: true },
-            { type: "toggle", name: "glide_gpu_temp",  label: "Glide: GPU temp",  def: true } ]
+            { type: "toggle", name: "glide_gpu_temp",  label: "Glide: GPU temp",  def: true },
+            { type: "stepper", name: "btop_width_pct",  label: "btop width %",  def: 44, min: 20, max: 90, step: 2 },
+            { type: "stepper", name: "btop_height_pct", label: "btop height %", def: 55, min: 20, max: 90, step: 5 } ]
         case "battery": return [
             { type: "toggle",  name: "show_percent",  label: "Show percentage", def: true },
             { type: "stepper", name: "low_threshold", label: "Low at %", def: 10, min: 5, max: 50, step: 5 } ]
@@ -62,6 +64,14 @@ Item {
             { type: "dropdown", name: "unit", label: "Unit", def: "C",
               options: [{ label: "Celsius", key: "C" }, { label: "Fahrenheit", key: "F" }] } ]
         case "bluetooth":   return [ { type: "toggle", name: "show_name", label: "Show connected count", def: true } ]
+        case "layout": return [
+            { type: "toggle", name: "show_name", label: "Show layout name", def: true } ]
+        case "updates": return [
+            { type: "stepper", name: "check_minutes",   label: "Check every (min)", def: 30, min: 5, max: 240, step: 5 },
+            { type: "toggle",  name: "show_zero",       label: "Show when up to date", def: false },
+            { type: "toggle",  name: "include_aur",     label: "Count AUR updates", def: true },
+            { type: "toggle",  name: "include_flatpak", label: "Count flatpak updates", def: false },
+            { type: "text",    name: "update_command",  label: "Update command", def: "yay -Syu" } ]
         case "vpn":         return [ { type: "toggle", name: "show_name", label: "Show VPN name",     def: true } ]
         case "volume":      return [ { type: "toggle",  name: "show_percent", label: "Show percentage", def: false },
                                      { type: "stepper", name: "scroll_step",  label: "Scroll step %", def: 5, min: 5, max: 25, step: 5 } ]
@@ -145,7 +155,7 @@ Item {
             // Reset all
             Rectangle {
                 width: parent.width; height: 34; radius: 8
-                color: rstHov.containsMouse ? Qt.rgba(Colors.fgUrgent.r, Colors.fgUrgent.g, Colors.fgUrgent.b, 0.22)
+                color: rstHov.containsMouse ? Style.tint(Colors.fgUrgent, 0.22)
                                             : Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.14)
                 Behavior on color { ColorAnimation { duration: 100 } }
                 Text { anchors.centerIn: parent; text: "Reset all to default"; color: Colors.fgPrimary

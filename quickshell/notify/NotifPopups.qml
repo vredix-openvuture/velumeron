@@ -246,7 +246,7 @@ PanelWindow {
                       right: closeBtn.left; rightMargin: 10; top: parent.top; topMargin: 16 + card.topExtra }
             text:  card.notif ? card.notif.appName : ""
             color: Colors.fgMuted
-            font.pixelSize: 10; font.family: "FantasqueSansM Nerd Font"
+            font.pixelSize: 10; font.family: Style.font
             elide: Text.ElideRight
         }
         Text {
@@ -254,7 +254,7 @@ PanelWindow {
             anchors { left: appName.left; right: closeBtn.left; rightMargin: 8; top: appName.bottom; topMargin: 1 }
             text:  card.notif ? card.notif.summary : ""
             color: Colors.fgBright
-            font.pixelSize: 13; font.bold: true; font.family: "FantasqueSansM Nerd Font"
+            font.pixelSize: 13; font.bold: true; font.family: Style.font
             wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight
         }
         Text {
@@ -263,7 +263,7 @@ PanelWindow {
             visible: text !== ""
             text:  card.notif ? card.notif.body : ""
             color: Colors.fgPrimary
-            font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font"
+            font.pixelSize: 12; font.family: Style.font
             // Wrap on word boundaries (fall back to anywhere for very long unbroken strings) and
             // show the full message — only extremely long bodies elide, and then at the line end.
             wrapMode: Text.Wrap
@@ -276,7 +276,7 @@ PanelWindow {
             id: closeBtn
             anchors { right: parent.right; top: parent.top; rightMargin: 8; topMargin: 8 + card.topExtra }
             width: 22; height: 22; radius: 11
-            color: clHov.containsMouse ? Qt.rgba(Colors.fgUrgent.r, Colors.fgUrgent.g, Colors.fgUrgent.b, 0.25) : "transparent"
+            color: clHov.containsMouse ? Style.tint(Colors.fgUrgent, 0.25) : "transparent"
             Text { anchors.centerIn: parent; text: "✕"; color: Colors.fgMuted; font.pixelSize: 11 }
             MouseArea { id: clHov; anchors.fill: parent; hoverEnabled: true
                         onClicked: NotifService.dismiss(card.notif) }

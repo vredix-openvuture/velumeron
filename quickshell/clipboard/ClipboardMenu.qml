@@ -36,7 +36,9 @@ PanelWindow {
     color: "transparent"
     anchors { top: true; left: true; right: true; bottom: true }
     WlrLayershell.layer:         WlrLayer.Overlay
-    WlrLayershell.namespace:     "velumeron-clipboard"
+    // Blur is opt-in (Settings → OSD): the -blur namespace gets a blur layer rule, the plain
+    // one opts out of the global blur (layerrules.lua) so only the dim shade tints the screen.
+    WlrLayershell.namespace:     VtlConfig.clipboardBlur ? "velumeron-clipboard-blur" : "velumeron-clipboard"
     WlrLayershell.keyboardFocus: active ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusiveZone: 0
 
@@ -64,14 +66,14 @@ PanelWindow {
 
     Rectangle {
         anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.4 * root.reveal)
+        color: Qt.rgba(0, 0, 0, (VtlConfig.clipboardDim ? 0.4 : 0.0) * root.reveal)
         MouseArea { anchors.fill: parent; onClicked: UiState.clipboardOpen = false }
     }
 
     Rectangle {
         id: card
-        width:  Math.min(640, root.width - 80)
-        height: Math.min(root.height - 120, 28 + 46 + 10 + 8 * 52)
+        width:  Math.min(VtlConfig.clipboardWidth, root.width - 80)
+        height: Math.min(root.height - 120, 28 + 46 + 10 + VtlConfig.clipboardRows * 52)
         anchors.horizontalCenter: parent.horizontalCenter
         y: (root.height - height) / 2
         radius: Style.rCard; color: Colors.bgPrimary

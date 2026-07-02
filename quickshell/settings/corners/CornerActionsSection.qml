@@ -54,20 +54,7 @@ Item {
     readonly property var selZone:   VtlConfig.cornerZoneFor(root.sel, root.effMon)     // { action, dwell } | null
 
     // ── Persistence ────────────────────────────────────────────────────────────────────────────
-    function save(key, value) {
-        VtlConfig.applyLocal(key, value)
-        var py = "import json,os,sys;" +
-            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
-              "or os.path.expanduser('~/.config'),'velumeron');" +
-            "p=os.path.join(pu,'gui','settings.json');" +
-            "os.makedirs(os.path.dirname(p),exist_ok=True);" +
-            "d=json.load(open(p)) if os.path.exists(p) else {};" +
-            "d[sys.argv[1]]=json.loads(sys.argv[2]);" +
-            "open(p,'w').write(json.dumps(d,indent=2))"
-        saveProc.command = ["python3", "-c", py, key, JSON.stringify(value)]
-        saveProc.running = false; saveProc.running = true
-    }
-    Process { id: saveProc }
+    function save(key, value) { SettingsStore.set(key, value) }
 
     function _targetZones() {
         if (root.perMon && root.editMon) {

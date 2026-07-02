@@ -84,12 +84,12 @@ Flyout {
                     readonly property bool cur: modelData === root.player
                     width: 38; height: 38; radius: 10
                     color: cur ? Colors.bgActive
-                         : (pHov.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.20) : Colors.bgElement)
+                         : (pHov.containsMouse ? Style.tint(Colors.bgActive, 0.20) : Colors.bgElement)
                     Behavior on color { ColorAnimation { duration: 100 } }
                     Text {
                         anchors.centerIn: parent; text: root.iconFor(modelData)
                         color: cur ? Colors.fgBright : (modelData.isPlaying ? Colors.fgPrimary : Colors.fgMuted)
-                        font.family: "FantasqueSansM Nerd Font"; font.pixelSize: 18
+                        font.family: Style.font; font.pixelSize: 18
                     }
                     // Small dot marks players that are currently playing.
                     Rectangle {
@@ -123,7 +123,7 @@ Flyout {
                 visible: !root.player || (root.player.trackArtUrl ?? "") === ""
                 text:  "󰝚"
                 color: Colors.fgMuted
-                font.family: "FantasqueSansM Nerd Font"; font.pixelSize: 64
+                font.family: Style.font; font.pixelSize: 64
             }
         }
 
@@ -134,14 +134,14 @@ Flyout {
                 width: parent.width; elide: Text.ElideRight
                 text:  root.player?.trackTitle ?? "Nothing playing"
                 color: Colors.fgBright
-                font.family: "FantasqueSansM Nerd Font"; font.pixelSize: 14; font.bold: true
+                font.family: Style.font; font.pixelSize: 14; font.bold: true
             }
             Text {
                 width: parent.width; elide: Text.ElideRight
                 visible: (root.player?.trackArtist ?? "") !== ""
                 text:  root.player?.trackArtist ?? ""
                 color: Colors.fgMuted
-                font.family: "FantasqueSansM Nerd Font"; font.pixelSize: 12
+                font.family: Style.font; font.pixelSize: 12
             }
         }
 
@@ -167,11 +167,11 @@ Flyout {
             Row {
                 width: parent.width
                 Text { text: root._fmt(root.player?.position ?? 0); color: Colors.fgMuted
-                       font.family: "FantasqueSansM Nerd Font"; font.pixelSize: 10 }
+                       font.family: Style.font; font.pixelSize: 10 }
                 Item { width: parent.width - 2 * 36; height: 1 }
                 Text { width: 36; horizontalAlignment: Text.AlignRight
                        text: root._fmt(root.player?.length ?? 0); color: Colors.fgMuted
-                       font.family: "FantasqueSansM Nerd Font"; font.pixelSize: 10 }
+                       font.family: Style.font; font.pixelSize: 10 }
             }
         }
 
@@ -193,13 +193,13 @@ Flyout {
         height: big ? 48 : 40
         radius: width / 2
         color:  ch.containsMouse ? Colors.bgActive
-              : Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.18)
+              : Style.tint(Colors.bgActive, 0.18)
         Behavior on color { ColorAnimation { duration: 100 } }
         Text {
             anchors.centerIn: parent
             text:  parent.icon
             color: ch.containsMouse ? Colors.fgBright : Colors.fgPrimary
-            font.family: "FantasqueSansM Nerd Font"; font.pixelSize: parent.big ? 22 : 18
+            font.family: Style.font; font.pixelSize: parent.big ? 22 : 18
         }
         MouseArea { id: ch; anchors.fill: parent; hoverEnabled: true; onClicked: parent.trig() }
     }

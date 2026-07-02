@@ -191,10 +191,12 @@ hl.define_submap("window", function()
     hl.bind(MOD .. " + L", hl.dsp.focus({ direction = "right" }))
 
     -- Move window position in tiling layout
-    hl.bind(MOD .. " + SHIFT + H", hl.dsp.exec_cmd("hyprctl dispatch movewindow l"))
-    hl.bind(MOD .. " + SHIFT + J", hl.dsp.exec_cmd("hyprctl dispatch movewindow d"))
-    hl.bind(MOD .. " + SHIFT + K", hl.dsp.exec_cmd("hyprctl dispatch movewindow u"))
-    hl.bind(MOD .. " + SHIFT + L", hl.dsp.exec_cmd("hyprctl dispatch movewindow r"))
+    -- NOTE: `hyprctl dispatch <classic syntax>` doesn't exist on the hypr.lua runtime (the
+    -- argument is evaluated as Lua) — these binds silently did nothing. Native hl.dsp now.
+    hl.bind(MOD .. " + SHIFT + H", hl.dsp.window.move({ direction = "left" }))
+    hl.bind(MOD .. " + SHIFT + J", hl.dsp.window.move({ direction = "down" }))
+    hl.bind(MOD .. " + SHIFT + K", hl.dsp.window.move({ direction = "up" }))
+    hl.bind(MOD .. " + SHIFT + L", hl.dsp.window.move({ direction = "right" }))
 
     -- Resize
     hl.bind(MOD .. " + ALT + H", hl.dsp.window.resize({ x = -50, y =   0, relative = true }), { repeating = true })
@@ -209,23 +211,24 @@ hl.define_submap("window", function()
     hl.bind(MOD .. " + P",     hl.dsp.window.pseudo())
 
     -- Group management
-    hl.bind(MOD .. " + G",         hl.dsp.exec_cmd("hyprctl dispatch togglegroup"))
-    hl.bind(MOD .. " + N",         hl.dsp.exec_cmd("hyprctl dispatch changegroupactive f"))
-    hl.bind(MOD .. " + SHIFT + N", hl.dsp.exec_cmd("hyprctl dispatch changegroupactive b"))
+    hl.bind(MOD .. " + G",         hl.dsp.group.toggle())
+    hl.bind(MOD .. " + N",         hl.dsp.group.next())
+    hl.bind(MOD .. " + SHIFT + N", hl.dsp.group.prev())
 
-    -- Layout switching
-    hl.bind(MOD .. " + D", hl.dsp.exec_cmd("hyprctl dispatch setlayout dwindle"))
-    hl.bind(MOD .. " + M", hl.dsp.exec_cmd("hyprctl dispatch setlayout master"))
+    -- Layout switching — the tiling layout is a config option (general.layout), set live
+    -- via hl.config (there is no setlayout dispatcher; classic `hyprctl keyword` is gone).
+    hl.bind(MOD .. " + D", function() hl.config({ general = { layout = "dwindle" } }) end)
+    hl.bind(MOD .. " + M", function() hl.config({ general = { layout = "master" } }) end)
     hl.bind(MOD .. " + O", hl.dsp.layout("togglesplit"))
 
     -- Utilities
     hl.bind(MOD .. " + TAB",   hl.dsp.exec_cmd(win_open))
-    hl.bind(MOD .. " + SPACE", hl.dsp.exec_cmd("hyprctl dispatch centerwindow"))
+    hl.bind(MOD .. " + SPACE", hl.dsp.window.center())
 
     -- Fullscreen / maximize / pin
     hl.bind(MOD .. " + ALT + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
     hl.bind(MOD .. " + ALT + M", hl.dsp.window.fullscreen({ mode = "maximized" }))
-    hl.bind(MOD .. " + ALT + P", hl.dsp.exec_cmd("hyprctl dispatch pin"))
+    hl.bind(MOD .. " + ALT + P", hl.dsp.window.pin())
 
     -- Move to workspace (stay in submap)
     for i = 1, 9 do

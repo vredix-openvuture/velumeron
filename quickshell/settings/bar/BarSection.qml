@@ -53,15 +53,17 @@ Item {
         { key: "wallpaper-switcher", label: "Wallpaper", icon: "󰸉" },
         { key: "battery",     label: "Battery",       icon: "󰁹" }, { key: "temperature", label: "Temperature",   icon: "󰔏" },
         { key: "network",     label: "Network",       icon: "󰈀" }, { key: "bluetooth",   label: "Bluetooth",     icon: "󰂯" },
-        { key: "vpn",         label: "VPN",           icon: "󰦝" }, { key: "vuture-icon", label: "Vuture Icon",   icon: "󰊠" },
+        { key: "vpn",         label: "VPN",           icon: "󰦝" }, { key: "vuture-icon", label: "Velumeron icon", icon: "󰊠" },
         { key: "tasks",       label: "Tasks",         icon: "󱂩" },
+        { key: "updates",     label: "Updates",       icon: "󰚰" },
+        { key: "layout",      label: "Layout",        icon: "󰕴" },
     ]
     // Modules grouped by theme/task for the Add-module sub-page.
     readonly property var categories: [
-        { title: "Time & status",  keys: ["clock", "performance", "battery", "temperature"] },
+        { title: "Time & status",  keys: ["clock", "performance", "battery", "temperature", "updates"] },
         { title: "Connectivity",   keys: ["network", "vpn", "bluetooth", "tray"] },
         { title: "Media & sound",  keys: ["volume", "mpris"] },
-        { title: "Workspace",      keys: ["workspaces", "submap", "tasks"] },
+        { title: "Workspace",      keys: ["workspaces", "submap", "tasks", "layout"] },
         { title: "System & personal", keys: ["notiftray", "user", "wallpaper-switcher", "vuture-icon"] }
     ]
     function labelFor(k) {
@@ -801,7 +803,7 @@ Item {
                                 Rectangle {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: 16; height: 16; radius: 8
-                                    color: rmHov.containsMouse ? Qt.rgba(Colors.fgUrgent.r, Colors.fgUrgent.g, Colors.fgUrgent.b, 0.25) : "transparent"
+                                    color: rmHov.containsMouse ? Style.tint(Colors.fgUrgent, 0.25) : "transparent"
                                     Text { anchors.centerIn: parent; text: "✕"; color: Colors.fgMuted; font.pixelSize: 9 }
                                     MouseArea { id: rmHov; anchors.fill: parent; hoverEnabled: true
                                                 onClicked: root.removeModule(root.activeEdge, zone.grp, slot.modelData) }

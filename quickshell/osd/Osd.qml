@@ -105,7 +105,7 @@ PanelWindow {
         }
     }
 
-    readonly property var    _pp:   VtlConfig.osdPosition.split("-")
+    readonly property var    _pp:   VtlConfig.osdPositionFor(root.mon).split("-")
     readonly property string vside: root._pp[0]                   // top | center | bottom
     readonly property string hside: root._pp[1] ?? "center"       // left | center | right
     readonly property bool   dock:  VtlConfig.osdStyle === "dock"
@@ -319,7 +319,7 @@ PanelWindow {
                     id: sysIcon
                     anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                     text: root.icon; color: Colors.fgBright
-                    font.pixelSize: 22; font.family: "FantasqueSansM Nerd Font"
+                    font.pixelSize: 22; font.family: Style.font
                 }
                 Text {
                     id: sysVal
@@ -330,7 +330,7 @@ PanelWindow {
                     text: Math.round(root.level * 100) + "%"
                     color: Colors.fgPrimary
                     font.pixelSize: root.displayMode === "value_only" ? 20 : 14
-                    font.family: "FantasqueSansM Nerd Font"
+                    font.family: Style.font
                 }
                 Rectangle {
                     visible: root.displayMode !== "value_only"
@@ -356,7 +356,7 @@ PanelWindow {
                 width: parent.width - 32
                 horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
                 text: root.deviceName; color: Colors.fgMuted
-                font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font"
+                font.pixelSize: 11; font.family: Style.font
             }
 
             // ── Workspace content (dots + name/id, card shrinks to fit) ─────────────
@@ -390,7 +390,7 @@ PanelWindow {
                     anchors.verticalCenter: parent.verticalCenter
                     text:  root.wsName !== "" ? root.wsName : ("" + root.wsId)
                     color: Colors.fgBright
-                    font.pixelSize: 18; font.bold: true; font.family: "FantasqueSansM Nerd Font"
+                    font.pixelSize: 18; font.bold: true; font.family: Style.font
                 }
             }
         }

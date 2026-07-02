@@ -107,19 +107,27 @@ PanelWindow {
             // opacity ramps with `prog` for the brighten-on-hold feel.
             Canvas {
                 id: glow
-                readonly property int d: 220
-                property color acc: Style.accent
+                readonly property int d: 260
+                // Border accent (color5), not Style.accent (color3): the glow should match the
+                // bar/card border colour the user actually sees as "the accent".
+                property color acc: Colors.boNormal
                 visible: zone.on && zone.prog > 0.001
                 width: d; height: d
                 x: zone.cx - width / 2; y: zone.cy - height / 2
-                opacity: 0.06 + 0.5 * zone.prog
+                opacity: 0.12 + 0.88 * zone.prog
                 onPaint: {
                     var ctx = getContext("2d")
                     ctx.reset()
                     var c = width / 2, r = width / 2
+                    // Saturation-boosted accent for the core, so the origin reads as a vivid accent
+                    // dot instead of a washed-out haze; the falloff blends back to the plain accent.
+                    var hot = Qt.hsla(glow.acc.hslHue, Math.min(1, glow.acc.hslSaturation * 1.35),
+                                      glow.acc.hslLightness, 1)
                     var g = ctx.createRadialGradient(c, c, 0, c, c, r)
-                    g.addColorStop(0.0, Qt.rgba(glow.acc.r, glow.acc.g, glow.acc.b, 0.6))
-                    g.addColorStop(1.0, Qt.rgba(glow.acc.r, glow.acc.g, glow.acc.b, 0.0))
+                    g.addColorStop(0.0,  Qt.rgba(hot.r, hot.g, hot.b, 1.0))
+                    g.addColorStop(0.18, Qt.rgba(hot.r, hot.g, hot.b, 0.85))
+                    g.addColorStop(0.45, Qt.rgba(glow.acc.r, glow.acc.g, glow.acc.b, 0.45))
+                    g.addColorStop(1.0,  Qt.rgba(glow.acc.r, glow.acc.g, glow.acc.b, 0.0))
                     ctx.fillStyle = g
                     ctx.beginPath(); ctx.arc(c, c, r, 0, 2 * Math.PI); ctx.fill()
                 }

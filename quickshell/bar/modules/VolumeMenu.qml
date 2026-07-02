@@ -46,7 +46,7 @@ Flyout {
 
         Text {
             text: sec.title; color: Colors.fgMuted; font.bold: true
-            font.pixelSize: 11; font.letterSpacing: 0.5; font.family: "FantasqueSansM Nerd Font"
+            font.pixelSize: 11; font.letterSpacing: 0.5; font.family: Style.font
         }
         Repeater {
             model: sec.nodes
@@ -58,7 +58,7 @@ Flyout {
                 height: 50
                 radius: 10
                 color:  rowHov.containsMouse || isDef
-                        ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, isDef ? 0.30 : 0.16)
+                        ? Style.tint(Colors.bgActive, isDef ? 0.30 : 0.16)
                         : Colors.bgElement
                 Behavior on color { ColorAnimation { duration: 100 } }
 
@@ -74,7 +74,7 @@ Flyout {
                             anchors.verticalCenter: parent.verticalCenter
                             text:  row.isDef ? "󰄬" : "󰝥"
                             color: row.isDef ? Colors.boActive : Colors.fgMuted
-                            font.family: "FantasqueSansM Nerd Font"; font.pixelSize: 13
+                            font.family: Style.font; font.pixelSize: 13
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
@@ -82,7 +82,7 @@ Flyout {
                             elide:  Text.ElideRight
                             text:   root._label(row.modelData)
                             color:  row.isDef ? Colors.fgBright : Colors.fgPrimary
-                            font.family: "FantasqueSansM Nerd Font"; font.pixelSize: 12
+                            font.family: Style.font; font.pixelSize: 12
                         }
                     }
 
@@ -123,7 +123,7 @@ Flyout {
         Text {
             visible: sec.nodes.length === 0
             text:  "no devices"
-            color: Colors.fgMuted; font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font"
+            color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
         }
     }
 }

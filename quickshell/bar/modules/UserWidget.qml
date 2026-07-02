@@ -55,7 +55,7 @@ Item {
                 anchors.centerIn: parent
                 text:  ""
                 color: Colors.fgMuted
-                font.family:    "FantasqueSansM Nerd Font"
+                font.family:    Style.font
                 font.pointSize: 10
                 visible: faceImage.status !== Image.Ready
             }

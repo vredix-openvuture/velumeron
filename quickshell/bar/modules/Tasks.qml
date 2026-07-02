@@ -41,8 +41,8 @@ Item {
                 readonly property int sz: root.isz + 8
                 width: sz; height: sz; radius: 6
                 color: it.modelData.focused
-                     ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.9)
-                     : (h.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.22) : "transparent")
+                     ? Style.tint(Colors.bgActive, 0.9)
+                     : (h.containsMouse ? Style.tint(Colors.bgActive, 0.22) : "transparent")
                 Behavior on color { ColorAnimation { duration: 100 } }
                 Image {
                     anchors.centerIn: parent

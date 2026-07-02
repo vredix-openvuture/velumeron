@@ -101,7 +101,7 @@ Flyout {
         Item {
             width: parent.width; height: 26
             Text { anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                   text: "Network"; color: Colors.fgBright; font.pixelSize: 14; font.bold: true; font.family: "FantasqueSansM Nerd Font" }
+                   text: "Network"; color: Colors.fgBright; font.pixelSize: 14; font.bold: true; font.family: Style.font }
             Row {
                 anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                 spacing: 8
@@ -114,7 +114,7 @@ Flyout {
                text: root.busy !== "" ? root.busy
                    : root.ethStatus !== "" ? ("Ethernet connected (" + root.ethStatus + ")")
                    : "Wi-Fi off"
-               color: Colors.fgMuted; font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font" }
+               color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font }
 
         // ── Wi-Fi networks ──────────────────────────────────────────────────────
         Column {
@@ -128,22 +128,22 @@ Flyout {
                     width: body.width; spacing: 4
                     Rectangle {
                         width: parent.width; height: 44; radius: 10
-                        color: nd.modelData.active ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.28)
-                             : (rHov.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.16) : Colors.bgElement)
+                        color: nd.modelData.active ? Style.tint(Colors.bgActive, 0.28)
+                             : (rHov.containsMouse ? Style.tint(Colors.bgActive, 0.16) : Colors.bgElement)
                         Behavior on color { ColorAnimation { duration: 100 } }
                         Text { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
                                text: root.sigIcon(nd.modelData.signal) + (nd.modelData.sec ? "  󰌾" : "   ")
-                               color: Colors.fgMuted; font.pixelSize: 14; font.family: "FantasqueSansM Nerd Font" }
+                               color: Colors.fgMuted; font.pixelSize: 14; font.family: Style.font }
                         Text { anchors { left: parent.left; leftMargin: 58; right: actRow.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
                                text: nd.modelData.ssid; elide: Text.ElideRight
                                color: nd.modelData.active ? Colors.fgBright : Colors.fgPrimary
-                               font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
+                               font.pixelSize: 13; font.family: Style.font }
                         Row {
                             id: actRow
                             anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
                             spacing: 6
                             Text { visible: nd.modelData.active; anchors.verticalCenter: parent.verticalCenter
-                                   text: "connected"; color: Colors.fgMuted; font.pixelSize: 10; font.family: "FantasqueSansM Nerd Font" }
+                                   text: "connected"; color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font }
                             IconBtn { visible: root.saved[nd.modelData.ssid] === true; icon: "󰩹"; onTrig: root.forget(nd.modelData.ssid) }
                         }
                         MouseArea { id: rHov; anchors.fill: parent; hoverEnabled: true
@@ -157,7 +157,7 @@ Flyout {
                         TextInput {
                             id: pw
                             anchors { left: parent.left; leftMargin: 12; right: goBtn.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                            color: Colors.fgBright; font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font"
+                            color: Colors.fgBright; font.pixelSize: 13; font.family: Style.font
                             echoMode: TextInput.Password; clip: true
                             focus: root.pwFor === nd.modelData.ssid
                             onAccepted: root.connectPw(nd.modelData.ssid, text)
@@ -168,14 +168,14 @@ Flyout {
                             id: goBtn
                             anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
                             width: 56; height: 28; radius: 7; color: gHov.containsMouse ? Colors.boActive : Colors.bgActive
-                            Text { anchors.centerIn: parent; text: "Connect"; color: Colors.fgBright; font.pixelSize: 11; font.family: "FantasqueSansM Nerd Font" }
+                            Text { anchors.centerIn: parent; text: "Connect"; color: Colors.fgBright; font.pixelSize: 11; font.family: Style.font }
                             MouseArea { id: gHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.connectPw(nd.modelData.ssid, pw.text) }
                         }
                     }
                 }
             }
             Text { visible: root.nets.length === 0; text: "No networks found"; color: Colors.fgMuted
-                   font.pixelSize: 12; font.family: "FantasqueSansM Nerd Font" }
+                   font.pixelSize: 12; font.family: Style.font }
         }
 
         // ── VPN ─────────────────────────────────────────────────────────────────
@@ -187,7 +187,7 @@ Flyout {
                 Rectangle { anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                             width: 12; height: 1; color: Colors.bgActive }
                 Text { id: vpnLbl; anchors { left: parent.left; leftMargin: 20; verticalCenter: parent.verticalCenter }
-                       text: "VPN"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true; font.family: "FantasqueSansM Nerd Font" }
+                       text: "VPN"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true; font.family: Style.font }
                 Rectangle { anchors { left: vpnLbl.right; leftMargin: 8; right: parent.right; verticalCenter: parent.verticalCenter }
                             height: 1; color: Colors.bgActive }
             }
@@ -196,20 +196,20 @@ Flyout {
                 delegate: Rectangle {
                     required property var modelData
                     width: parent.width; height: 40; radius: 10
-                    color: modelData.active ? Qt.rgba(Colors.boActive.r, Colors.boActive.g, Colors.boActive.b, 0.22)
-                         : (vHov.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.16) : Colors.bgElement)
+                    color: modelData.active ? Style.tint(Colors.boActive, 0.22)
+                         : (vHov.containsMouse ? Style.tint(Colors.bgActive, 0.16) : Colors.bgElement)
                     Behavior on color { ColorAnimation { duration: 100 } }
                     Text { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
                            text: "󰌾"; color: modelData.active ? Colors.boActive : Colors.fgMuted
-                           font.pixelSize: 15; font.family: "FantasqueSansM Nerd Font" }
+                           font.pixelSize: 15; font.family: Style.font }
                     Text { anchors { left: parent.left; leftMargin: 40; right: vState.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
                            text: modelData.name; elide: Text.ElideRight
                            color: modelData.active ? Colors.fgBright : Colors.fgPrimary
-                           font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
+                           font.pixelSize: 13; font.family: Style.font }
                     Text { id: vState; anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
                            text: modelData.active ? "on" : "off"
                            color: modelData.active ? Colors.boActive : Colors.fgMuted
-                           font.pixelSize: 10; font.bold: true; font.family: "FantasqueSansM Nerd Font" }
+                           font.pixelSize: 10; font.bold: true; font.family: Style.font }
                     MouseArea { id: vHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.vpnToggle(modelData) }
                 }
             }
@@ -222,7 +222,7 @@ Flyout {
         signal trig()
         width: 28; height: 28; radius: 7; color: iHov.containsMouse ? Colors.bgActive : Colors.bgElement
         Behavior on color { ColorAnimation { duration: 100 } }
-        Text { anchors.centerIn: parent; text: parent.icon; color: Colors.fgPrimary; font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font" }
+        Text { anchors.centerIn: parent; text: parent.icon; color: Colors.fgPrimary; font.pixelSize: 13; font.family: Style.font }
         MouseArea { id: iHov; anchors.fill: parent; hoverEnabled: true; onClicked: parent.trig() }
     }
     component NetToggle: Rectangle {

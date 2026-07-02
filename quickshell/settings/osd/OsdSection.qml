@@ -16,19 +16,28 @@ Item {
                   dots_only: "Dots", number_only: "Number", dots_and_number: "Dots + number" })[k] ?? k
     }
 
-    function save(key, value) {
-        var py = "import json,os,sys;" +
-            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
-              "or os.path.expanduser('~/.config'),'velumeron');" +
-            "p=os.path.join(pu,'gui','settings.json');" +
-            "os.makedirs(os.path.dirname(p),exist_ok=True);" +
-            "d=json.load(open(p)) if os.path.exists(p) else {};" +
-            "d[sys.argv[1]]=json.loads(sys.argv[2]);" +
-            "open(p,'w').write(json.dumps(d,indent=2))"
-        saveProc.command = ["python3", "-c", py, key, JSON.stringify(value)]
-        saveProc.running = false; saveProc.running = true
+    function save(key, value) { SettingsStore.set(key, value) }
+
+    // OSD position scope: "" = global, else a monitor-name override (osd_monitors.<name>.position).
+    property string editMon: ""
+    readonly property bool hasOverride: {
+        var m = VtlConfig._data.osd_monitors
+        return root.editMon !== "" && !!(m && m[root.editMon] && m[root.editMon].position)
     }
-    Process { id: saveProc }
+    function savePosition(key) {
+        if (root.editMon === "") { root.save("osd_position", key); return }
+        var m = {}
+        var cur = VtlConfig._data.osd_monitors || {}
+        for (var k in cur) m[k] = cur[k]
+        m[root.editMon] = { position: key }
+        root.save("osd_monitors", m)
+    }
+    function clearOverride() {
+        var m = {}
+        var cur = VtlConfig._data.osd_monitors || {}
+        for (var k in cur) if (k !== root.editMon) m[k] = cur[k]
+        root.save("osd_monitors", m)
+    }
 
     readonly property var notifyPositions: ["top-left", "top-center", "top-right",
                                             "bottom-left", "bottom-center", "bottom-right"]
@@ -61,7 +70,28 @@ Item {
             Card {
                 CardLabel { text: "SYSTEM OSD" }
                 FieldLabel { text: "Position" }
-                PosGrid { current: VtlConfig.osdPosition; onPicked: root.save("osd_position", key) }
+                Segmented {
+                    visible: Quickshell.screens.length > 1
+                    current: root.editMon
+                    segments: [{ label: "Global", key: "" }].concat(
+                        Quickshell.screens.map(function (s) { return { label: s.name, key: s.name } }))
+                    onPicked: key => root.editMon = key
+                }
+                Row {
+                    visible: root.editMon !== ""
+                    spacing: 8
+                    TextButton {
+                        visible: root.hasOverride
+                        label: "Use global position"
+                        onClicked: root.clearOverride()
+                    }
+                    SubLabel {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.hasOverride ? "This monitor has its own position."
+                                               : "Inherits the global position — pick a slot to override."
+                    }
+                }
+                PosGrid { current: VtlConfig.osdPositionFor(root.editMon); onPicked: root.savePosition(key) }
                 FieldLabel { text: "Style" }
                 Dropdown {
                     summary: root.cap(VtlConfig.osdStyle)
@@ -112,6 +142,19 @@ Item {
                     options: root.wsDisplay.map(function (k) { return { label: root.dispLabel(k), key: k, on: VtlConfig.osdWorkspaceDisplay === k } })
                     onPicked: root.save("osd_workspace_display", key)
                 }
+            }
+
+            // ── Clipboard history (Super+V overlay) ───────────────────────────
+            Card {
+                CardLabel { text: "CLIPBOARD HISTORY" }
+                Stepper { label: "Width"; unit: "px"; step: 20; min: 400; max: 1200
+                          value: VtlConfig.clipboardWidth; onChanged: root.save("clipboard_width", v) }
+                Stepper { label: "Rows"; step: 1; min: 4; max: 16
+                          value: VtlConfig.clipboardRows; onChanged: root.save("clipboard_rows", v) }
+                Toggle { label: "Dim backdrop"; sub: "Shade the screen behind the list"
+                         on: VtlConfig.clipboardDim; onToggled: root.save("clipboard_dim", !VtlConfig.clipboardDim) }
+                Toggle { label: "Blur backdrop"; sub: "Frost the screen behind the list (Hyprland blur)"
+                         on: VtlConfig.clipboardBlur; onToggled: root.save("clipboard_blur", !VtlConfig.clipboardBlur) }
             }
 
             // ── Appearance ────────────────────────────────────────────────────

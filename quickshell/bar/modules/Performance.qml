@@ -105,17 +105,32 @@ Item {
         }
     }
 
-    // MouseArea anchored to the Row, not parent (avoids size-change feedback loop)
+    // MouseArea anchored to the Row, not parent (avoids size-change feedback loop).
+    // Left click cycles the power profile; right click drops the themed btop terminal
+    // out of the bar at this module (btop-drop.sh — size via the module's gear settings).
     MouseArea {
         anchors.fill:    innerRow
         hoverEnabled:    true
-        acceptedButtons: Qt.LeftButton
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         onEntered: root.hovered = true
         onExited:  root.hovered = false
-        onClicked: { cycleProc.running = false; cycleProc.running = true }
+        onClicked: mouse => {
+            if (mouse.button === Qt.RightButton) {
+                var c = root.mapToItem(null, root.width / 2, root.height / 2)
+                var along = (root.barEdge === "left" || root.barEdge === "right") ? c.y : c.x
+                btopProc.command = ["bash", "-c",
+                    "\"$VELUMERON_DIR/assets/scripts/btop-drop.sh\" " +
+                    "'" + root.barMon + "' " + Math.round(along) + " " + root.barEdge]
+                btopProc.running = false; btopProc.running = true
+            } else {
+                cycleProc.running = false; cycleProc.running = true
+            }
+        }
     }
 
     // ── Processes ─────────────────────────────────────────────────────────────
+
+    Process { id: btopProc }
 
     Process {
         id: cycleProc

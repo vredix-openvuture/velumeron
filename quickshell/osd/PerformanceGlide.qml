@@ -15,7 +15,7 @@ BarGlide {
     Text {
         text:  UiState.perfStats
         color: Colors.fgPrimary
-        font.family:    "FantasqueSansM Nerd Font"
+        font.family:    Style.font
         font.pixelSize: 14
     }
 }

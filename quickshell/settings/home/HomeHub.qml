@@ -150,14 +150,17 @@ Item {
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
         spacing: 12
         Rectangle { width: parent.width; height: 1
-                    color: Qt.rgba(Colors.boNormal.r, Colors.boNormal.g, Colors.boNormal.b, 0.25) }
+                    color: Style.tint(Colors.boNormal, 0.25) }
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 12
-            PowerTile { icon: "󰐥"; cmd: "systemctl poweroff" }
-            PowerTile { icon: "󰤄"; cmd: "systemctl suspend" }
-            PowerTile { icon: "󰜉"; cmd: "systemctl reboot" }
-            PowerTile { icon: "󰍁"; cmd: "loginctl lock-session" }
+            Repeater {
+                model: UiState.sessionActions   // canonical shared list (same icons as the session menu)
+                delegate: PowerTile {
+                    required property var modelData
+                    icon: modelData.icon; cmd: modelData.cmd
+                }
+            }
         }
     }
 

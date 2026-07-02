@@ -1,6 +1,6 @@
 // Live view of $VELUMERON_USER_DIR/gui/settings.json.
-// Polls the file every 1.5 s via cat so it reacts to changes from the Python GUI.
-// Read-only — writing is handled by the Python GUI or launch scripts.
+// A watched FileView re-parses on every change (writes come from SettingsStore and a few
+// bespoke writers), so the whole shell reacts instantly — no polling.
 pragma Singleton
 pragma ComponentBehavior: Bound
 import QtQuick
@@ -34,50 +34,27 @@ Item {
         root._data = d
     }
 
-    // cat + tr collapses multi-line JSON to a single line for SplitParser
-    Process {
-        id: readProc
-        command: ["bash", "-c",
-            "cat '" + root.settingsPath + "' 2>/dev/null | tr -d '\\n\\r' || echo '{}'"]
-        stdout: SplitParser {
-            onRead: line => {
-                var t = line.trim()
-                // Keep the last good config if a read lands mid-write (partial / garbled JSON) —
-                // resetting to {} would flash every surface back to defaults. Empty file → {}.
-                if (t === "") { root._data = {}; return }
-                try { root._data = JSON.parse(t) } catch (e) { /* keep previous _data */ }
-            }
-        }
+    // Watched file — re-parse on every change. Keep the last good config if a read lands
+    // mid-write (partial / garbled JSON): resetting to {} would flash every surface back to
+    // defaults. SettingsStore writes atomically (tmp + rename), so torn reads are rare anyway.
+    function _parse(t) {
+        var s = ("" + t).trim()
+        if (s === "") return
+        try { root._data = JSON.parse(s) } catch (e) { /* keep previous _data */ }
     }
-
-    // Fast poll so settings changes (steppers / toggles / dropdowns) feel immediate; the keep-last-
-    // good parse above makes the faster cadence safe against partial reads.
-    Timer {
-        interval: 400
-        repeat:   true
-        running:  true
-        triggeredOnStart: true
-        onTriggered: {
-            readProc.running = false
-            readProc.running = true
-        }
+    FileView {
+        path: root.settingsPath
+        watchChanges: true
+        onLoaded:      root._parse(text())
+        onFileChanged: reload()
     }
 
     // ── Public properties (with sane defaults) ────────────────────────────────
-    readonly property string shellBackend:    _data.shell_backend     ?? "waybar"
-
     readonly property bool   opacityEnabled:  _data.opacity_enabled   ?? false
     readonly property real   opacityValue:    _data.opacity_value     ?? 0.88
     readonly property string menuTheme:       _data.menu_theme        ?? "follow"
     readonly property string logoVariant:     _data.logo_variant      ?? "full"
     readonly property string uiStyle:         _data.ui_style          ?? "flat"   // flat | cards | outlined
-
-    readonly property bool   sidebarLabels:   _data.sidebar_labels    ?? false
-    readonly property bool   sidebarAutohide: _data.sidebar_autohide  ?? false
-    readonly property string panelSide:       _data.panel_side        ?? "left"
-    readonly property string panelValign:     _data.panel_valign      ?? "bottom"
-    readonly property int    panelWidthPct:   _data.panel_width_pct   ?? 50
-    readonly property int    panelHeightPct:  _data.panel_height_pct  ?? 100
 
     readonly property bool   lowMemoryMode:   _data.low_memory_mode   ?? false
 
@@ -277,6 +254,12 @@ Item {
     // style: float = inset by margin · dock = flush to the screen edge.
     readonly property string osdPosition:          _data.osd_position             ?? "bottom-center"
     readonly property string osdStyle:             _data.osd_style                ?? "float"   // float | dock
+    // Per-monitor position override (osd_monitors.<name>.position); missing = the global slot.
+    function osdPositionFor(mon) {
+        var m = _data.osd_monitors
+        if (mon && m && m[mon] && m[mon].position) return m[mon].position
+        return osdPosition
+    }
     readonly property int    osdDuration:          _data.osd_duration_ms          ?? 1600
     readonly property int    osdMargin:            _data.osd_margin_px             ?? 80
     readonly property int    osdWidth:             _data.osd_width_px              ?? 320
@@ -302,6 +285,12 @@ Item {
     readonly property string notifyCenterPos:    _data.notify_center_position ?? "auto"
     readonly property int    notifyCenterWidth:  _data.notify_center_width  ?? 370   // px
     readonly property int    notifyCenterHeight: _data.notify_center_height ?? 0     // px, 0 = auto-fill
+
+    // ── Clipboard history (Super+V; Settings → OSD) ───────────────────────────
+    readonly property int  clipboardWidth: _data.clipboard_width ?? 640
+    readonly property int  clipboardRows:  _data.clipboard_rows  ?? 8
+    readonly property bool clipboardDim:   _data.clipboard_dim   ?? true
+    readonly property bool clipboardBlur:  _data.clipboard_blur  ?? false
 
     // Wallpaper quick-menu (the grow-from-bar picker, opened by IPC / keybind / hub).
     readonly property string wallpaperQuickPos:     _data.wallpaper_quick_position ?? "top-center"
@@ -373,6 +362,29 @@ Item {
     readonly property int    taskbarIconSize:   _data.taskbar_icon_size  ?? 24
     readonly property int    taskbarMargin:     _data.taskbar_margin     ?? 12
     readonly property string taskbarLayer:      _data.taskbar_layer      ?? "over"    // over | reserve (like bar)
+    // ── Window tags (Settings → Window tags) ─────────────────────────────────────
+    // A small name chip on the edge/corner of every window that fades out when the cursor comes near.
+    readonly property bool   windowTagsEnabled:  _data.window_tags_enabled   ?? false
+    // Per-monitor on/off override (window_tags_monitors.<name> → bool); missing = follow master.
+    readonly property var    windowTagsMonitors: _data.window_tags_monitors  ?? ({})
+    function windowTagsEnabledFor(mon) {
+        var m = _data.window_tags_monitors
+        if (mon && m && m[mon] !== undefined && m[mon] !== null) return m[mon]
+        return windowTagsEnabled
+    }
+    // True when tags are on anywhere — drives the shared geometry/cursor poll (Hyprwindows).
+    readonly property bool windowTagsAnyEnabled: {
+        if (windowTagsEnabled) return true
+        var m = _data.window_tags_monitors
+        for (var k in m) if (m[k]) return true
+        return false
+    }
+    readonly property string windowTagsPosition: _data.window_tags_position  ?? "top-center"  // 8 window edges/corners
+    readonly property string windowTagsContent:  _data.window_tags_content   ?? "title"       // title | app
+    readonly property bool   windowTagsIcon:     _data.window_tags_icon      ?? true
+    readonly property int    windowTagsMaxWidth: _data.window_tags_max_width ?? 200
+    readonly property int    windowTagsFontSize: _data.window_tags_font_size ?? 11
+
     // Per-monitor on/off: taskbar_monitors maps a monitor name → true/false, overriding the master
     // switch on that screen. Missing entry = follow the master (taskbarEnabled).
     readonly property var    taskbarMonitors:   _data.taskbar_monitors    ?? ({})
@@ -384,6 +396,55 @@ Item {
     // "Like bar" (reserve space so windows are pushed away) only applies to always-visible; a hover
     // auto-hide taskbar is always drawn over the windows.
     readonly property bool   taskbarReserve:    taskbarLayer === "reserve" && taskbarVisibility === "always"
+
+    // ── Calendar / CalDAV (Settings → Calendar) ───────────────────────────────
+    // Accounts live in gui/caldav-accounts.json (managed by caldav-client.py); these are the
+    // non-secret preferences. caldav_hidden maps a calendar id → true to hide it from the menu.
+    readonly property int    caldavSyncMinutes:     _data.caldav_sync_minutes      ?? 15
+    readonly property var    caldavHidden:          _data.caldav_hidden            ?? ({})
+    readonly property string calendarFirstDay:      _data.calendar_first_day       ?? "monday"  // monday | sunday
+    readonly property string caldavDefaultEventCal: _data.caldav_default_event_cal ?? ""
+    readonly property string caldavDefaultTodoCal:  _data.caldav_default_todo_cal  ?? ""
+    function caldavCalHidden(id) { var h = _data.caldav_hidden; return !!(h && h[id]) }
+    // Flyout size: width is fixed, height auto-fits the content up to the max.
+    readonly property int    calendarMenuWidth:     _data.calendar_menu_width      ?? 380
+    readonly property int    calendarMenuMaxH:      _data.calendar_menu_max_height ?? 700
+
+    // ── Tiling layouts (Settings → Layouts + the bar's Layout module) ─────────
+    // custom_layouts: [{name, kind: columns|rows|grid|main_stack, gap, ratio, side}] — the
+    // parametric specs the settings page turns into user_layouts.lua (hl.layout.register).
+    // tiling_layout persists the active choice so reloads restore it.
+    readonly property var    customLayouts: _data.custom_layouts ?? []
+    readonly property string tilingLayout:  _data.tiling_layout  ?? "dwindle"
+    function customLayoutFor(l) {
+        var s = "" + l
+        if (s.indexOf("lua:") !== 0) return null
+        var n = s.slice(4)
+        var cs = _data.custom_layouts || []
+        for (var i = 0; i < cs.length; i++) if (cs[i].name === n) return cs[i]
+        return null
+    }
+
+    // ── FancyZones (Settings → Zones) ─────────────────────────────────────────
+    // Zone layout for Super-dragged floating windows. fancy_zones_resolved holds the
+    // active layout as "x,y,w,h;…" fractions of the usable area — shared verbatim with
+    // modules/fancyzones.lua (the compositor-side snap), so overlay and snap never diverge.
+    readonly property bool   fancyZonesEnabled:  _data.fancy_zones_enabled  ?? false
+    readonly property string fancyZonesLayout:   _data.fancy_zones_layout   ?? "halves"
+    readonly property string fancyZonesResolved: _data.fancy_zones_resolved ?? "0,0,0.5,1;0.5,0,0.5,1"
+    readonly property int    fancyZonesGap:      _data.fancy_zones_gap      ?? 12
+    readonly property var fancyZonesMonitors: _data.fancy_zones_monitors ?? ({})
+    // Per-monitor layout override: fancy_zones_monitors.<name> = { layout, resolved }.
+    function fancyZonesLayoutFor(mon) {
+        var m = _data.fancy_zones_monitors
+        if (mon && m && m[mon] && m[mon].layout) return m[mon].layout
+        return fancyZonesLayout
+    }
+    function fancyZonesResolvedFor(mon) {
+        var m = _data.fancy_zones_monitors
+        if (mon && m && m[mon] && m[mon].resolved) return m[mon].resolved
+        return fancyZonesResolved
+    }
 
     // Custom Bluetooth device names (rename in the BT menu) — bt_aliases.<mac> → display name.
     function btAlias(mac) { var a = _data.bt_aliases; return (a && a[mac]) ? a[mac] : "" }
@@ -403,17 +464,6 @@ Item {
     // (Half-thickness only applies in frame mode; dock/float edges are always full.)
     function edgeThickness(edge) { return edgeThicknessFor(edge, "") }
 
-    // Back-compat aliases (still read by the GuiPanel BarPage editor).
-    readonly property var barModulesLeft:    barModules("top",  "start")
-    readonly property var barModulesCenter:  barModules("top",  "center")
-    readonly property var barModulesRight:   barModules("top",  "end")
-    readonly property var barModulesSidebar: barModules("left", "end")
-
     readonly property bool barOpacityEnabled: _data.bar_opacity_enabled ?? false
     readonly property real barOpacityValue:   _data.bar_opacity_value   ?? 0.88
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-    function hasLeft(id)   { return barModulesLeft.includes(id)   }
-    function hasCenter(id) { return barModulesCenter.includes(id) }
-    function hasRight(id)  { return barModulesRight.includes(id)  }
 }

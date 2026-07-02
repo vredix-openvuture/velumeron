@@ -42,3 +42,4 @@ quickshell/plugins/Velumeron/
 # Archive
 .archive/
 
+__pycache__/

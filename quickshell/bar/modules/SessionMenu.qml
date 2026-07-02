@@ -20,7 +20,7 @@ Item {
             id: userBtn
             text:  " "
             color: root.expanded ? Colors.fgBright : Colors.fgPrimary
-            font.family:    "FantasqueSansM Nerd Font"
+            font.family:    Style.font
             font.pointSize: 11
 
             MouseArea {
@@ -45,7 +45,7 @@ Item {
                 color:   Colors.fgMuted
                 visible: root.expanded
                 width:   root.expanded ? implicitWidth : 0
-                font.family:    "FantasqueSansM Nerd Font"
+                font.family:    Style.font
                 font.pointSize: 11
 
                 Behavior on width { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }

@@ -4,9 +4,23 @@ import QtQuick
 QtObject {
     id: ui
 
-    property bool   guiPanelOpen:   false
-    property bool   barSettingsOpen: false  // kept for compat; gui panel supersedes it
+    // Canonical session actions — ONE list shared by the session overlay (Super+Ctrl+Q), the bar's
+    // User-module glide and the settings home hub, so their icons/commands/order never diverge.
+    readonly property var sessionActions: [
+        { icon: "󰌾", label: "Lock",     cmd: "loginctl lock-session" },
+        { icon: "󰤄", label: "Suspend",  cmd: "\"$VELUMERON_DIR/assets/scripts/launch-hyprlock.sh\" & sleep 1 && systemctl suspend" },
+        { icon: "󰗽", label: "Logout",   cmd: "hyprctl dispatch exit" },
+        { icon: "󰜉", label: "Reboot",   cmd: "systemctl reboot" },
+        { icon: "󰐥", label: "Shutdown", cmd: "systemctl poweroff" }
+    ]
+
     property string openDropdown:   ""      // key of the currently open module dropdown
+    // A surface can request the settings menu to open on a specific section (e.g. the calendar
+    // flyout's gear → "calendar"): set this, then openDropdown = "vuture-icon". Settings clears it.
+    property string settingsRequestSection: ""
+    // Bumped after the tiling layout changed (LayoutMenu / LayoutsSection) — every LayoutSwitcher
+    // module re-polls general:layout on change.
+    property int layoutPollSerial: 0
     property bool   notifCenterOpen: false  // notification centre panel (the bar's bell)
     property bool   launcherOpen:    false  // application launcher (Super+Space / `launcher` IPC)
     property string launcherMon:     ""     // monitor the launcher latched to when opened

@@ -36,9 +36,10 @@ ShellRoot {
             UiState.toggleFlyout(id, UiState.flyoutAnchorX, UiState.flyoutAnchorY,
                                  UiState.flyoutEdge, UiState.flyoutGroup, m ? m.name : UiState.flyoutMon)
         }
-        function volume(): void { _open("volume") }
-        function mpris():  void { _open("mpris") }
-        function close():  void { UiState.flyout = "" }
+        function volume():   void { _open("volume") }
+        function mpris():    void { _open("mpris") }
+        function calendar(): void { _open("calendar") }
+        function close():    void { UiState.flyout = "" }
     }
 
     // IPC: wallpaper quick-menu — grows out of the bar on the focused monitor (successor to the
@@ -99,6 +100,32 @@ ShellRoot {
         function toggle(): void { if (!UiState.sessionOpen) UiState.sessionMon = Hyprland.focusedMonitor?.name ?? ""; UiState.sessionOpen = !UiState.sessionOpen }
         function open():   void { UiState.sessionMon = Hyprland.focusedMonitor?.name ?? ""; UiState.sessionOpen = true }
         function close():  void { UiState.sessionOpen = false }
+    }
+
+    // IPC: FancyZones overlay — poked by hypr.lua/modules/fancyzones.lua while a floating
+    // window is Super-dragged (show) and on release (hide).
+    IpcHandler {
+        target: "zones"
+        // NOTE: `show` is unusable as an IPC function name (qs treats `ipc call <t> show`
+        // as target introspection) — hence open/close.
+        function open():  void { ZonesState.show() }
+        function close(): void { ZonesState.hide() }
+    }
+
+    // IPC: btop dropdown — a themed kitty+btop window dropping out of the bar (btop-drop.sh).
+    // No anchor here, so it opens top-centre on the focused monitor; the Performance module's
+    // right-click passes its exact module anchor instead.
+    Process { id: btopDropProc }
+    IpcHandler {
+        target: "btop"
+        function _run(arg: string): void {
+            btopDropProc.command = ["bash", "-c",
+                "\"$VELUMERON_DIR/assets/scripts/btop-drop.sh\" " + arg]
+            btopDropProc.running = false
+            btopDropProc.running = true
+        }
+        function toggle(): void { _run("") }
+        function close():  void { _run("close") }
     }
 
     // IPC: toggle / open / close the notification centre.
@@ -206,6 +233,9 @@ ShellRoot {
     Variants { model: Quickshell.screens; delegate: Taskbar        { required property var modelData; screen: modelData } }
     Variants { model: Quickshell.screens; delegate: TaskbarReserve { required property var modelData; screen: modelData } }
 
+    // Window tags: a name chip on the edge of every window, fading out on cursor approach.
+    Variants { model: Quickshell.screens; delegate: WindowTags     { required property var modelData; screen: modelData } }
+
     // OSD: one per screen, shows on the focused monitor (volume / brightness)
     Variants {
         model: Quickshell.screens
@@ -263,6 +293,21 @@ ShellRoot {
         model: Quickshell.screens
         delegate: WallpaperQuick { required property var modelData; screen: modelData }
     }
+    Variants {
+        model: Quickshell.screens
+        delegate: CalendarMenu { required property var modelData; screen: modelData }
+    }
+
+    Variants {
+        model: Quickshell.screens
+        delegate: LayoutMenu { required property var modelData; screen: modelData }
+    }
+
+    // FancyZones: input-transparent zone fields per screen, shown while a float is dragged.
+    Variants {
+        model: Quickshell.screens
+        delegate: ZoneOverlay { required property var modelData; screen: modelData }
+    }
 
     // Keybind cheatsheet: one per screen, shown via UiState.keybindContext
     Variants {
@@ -280,6 +325,4 @@ ShellRoot {
         delegate: NotifCenter { required property var modelData; screen: modelData }
     }
 
-    // GUI panel: single shared instance, shown via UiState.guiPanelOpen
-    GuiPanel {}
 }

@@ -19,7 +19,6 @@ Flyout {
     // Fixed landscape cell aspect regardless of monitor/wallpaper orientation, so the panel is the SAME
     // size on every monitor (a vertical monitor used to make the cells tall → a huge panel).
     readonly property int _cellH:   Math.round(_preview * 9 / 16) + 6
-    readonly property string _thumbDir: (Quickshell.env("HOME") ?? "") + "/.cache/velumeron/wp-thumbs"
     panelW:   _cols * _preview + 28
     maxH:     _rows * _cellH + 128
 
@@ -50,6 +49,24 @@ Flyout {
         var live = root.typeFilter === "live"
         return root.items.filter(function (it) { return root.isVideo(it.name) === live })
     }
+    // Subfolder-as-sorting (Settings → Wallpaper): bucket the grid into one captioned section
+    // per subfolder, root-level files first as "Main". Off → one anonymous group, no captions.
+    property bool grouped: false
+    readonly property var groups: {
+        if (!root.grouped) return [{ name: "", items: root.filteredItems }]
+        var map = {}, order = []
+        var its = root.filteredItems
+        for (var i = 0; i < its.length; i++) {
+            var s = its[i].sub || ""
+            if (!(s in map)) { map[s] = []; order.push(s) }
+            map[s].push(its[i])
+        }
+        // Subfolders first (alphabetical), the root-level "Main" bucket last.
+        order.sort(function (a, b) {
+            return a === "" ? 1 : b === "" ? -1 : a.toLowerCase() < b.toLowerCase() ? -1 : 1
+        })
+        return order.map(function (s) { return { name: s === "" ? "Main" : s, items: map[s] } })
+    }
     function stem(n)    { return ("" + n).replace(/\.[^.]+$/, "") }
 
     // Clear immediately, then load AFTER the open morph has played — listing + thumbnailing ~100
@@ -60,7 +77,8 @@ Flyout {
 
     function reload() {
         status = "Loading…"; items = []; listProc._buf = []
-        listProc.command = ["python3", "-c", root._listPy, root.selMon]
+        listProc.command = ["bash", "-c",
+            "python3 \"$VELUMERON_DIR/assets/scripts/wallpaper-list.py\" \"$1\"", "vtl", root.selMon]
         listProc.running = false; listProc.running = true
         // Sets list (cheap) — refresh alongside.
         setsProc._buf = []; setsProc.command = ["python3", "-c", root._setsPy, root.mon]
@@ -99,37 +117,22 @@ Flyout {
         "s=d.get('wallpaper_sets',{}) or {}; mon=sys.argv[1];" +
         "[print(n+'\\t'+((s[n].get(mon) or (list(s[n].values())[0] if s[n] else '')) or '')) for n in sorted(s)]"
 
-    readonly property string _listPy:
-        "import json,os,sys;" +
-        "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
-          "or os.path.expanduser('~/.config'),'velumeron');" +
-        "p=os.path.join(pu,'gui','settings.json');" +
-        "d=json.load(open(p)) if os.path.exists(p) else {};" +
-        "mon=sys.argv[1];" +
-        "vd=os.environ.get('VELUMERON_DIR','');" +
-        "dirp=(d.get('wallpaper_dirs',{}) or {}).get(mon) or d.get('wallpaper_dir_hor') or os.path.join(vd,'assets/wallpaper/horizontal');" +
-        "sub=bool(d.get('wallpaper_search_subfolders'));" +
-        "exts={'.png','.jpg','.jpeg','.webp','.mp4','.webm','.mkv','.avi','.mov'};" +
-        "dirp=os.path.expanduser(dirp);" +
-        "rows=[];" +
-        "\nif os.path.isdir(dirp):\n" +
-        " for r,ds,fs in os.walk(dirp):\n" +
-        "  if not sub and os.path.abspath(r)!=os.path.abspath(dirp): continue\n" +
-        "  for f in sorted(fs):\n" +
-        "   if os.path.splitext(f)[1].lower() in exts: rows.append(os.path.join(r,f))\n" +
-        "rows.sort(key=lambda x:os.path.basename(x).lower())\n" +
-        "for full in rows: print(full)"
-
     Process {
         id: listProc
         property var _buf: []
-        // Accumulate into a buffer; assign the model ONCE when done (not per line) so the GridView
+        // Accumulate into a buffer; assign the model ONCE when done (not per line) so the grid
         // isn't reset 100× — that O(n²) churn was the stutter.
         stdout: SplitParser {
             onRead: line => {
-                var full = ("" + line).trim()
+                // NO trim before the split: root-level files have an EMPTY rel, so their line
+                // starts with the tab — trimming ate it and dropped every root-level wallpaper.
+                var t = "" + line
+                if (t.startsWith("GROUP:")) { root.grouped = t.slice(6).trim() === "1"; return }
+                var tab = t.indexOf("\t")
+                if (tab < 0) return
+                var full = t.slice(tab + 1)
                 if (full === "") return
-                listProc._buf.push({ path: full, name: full.split("/").pop() })
+                listProc._buf.push({ path: full, name: full.split("/").pop(), sub: t.slice(0, tab) })
             }
         }
         onRunningChanged: if (!running) {
@@ -166,11 +169,11 @@ Flyout {
                     readonly property bool sel: root.view === "grid" && root.selMon === modelData
                     width: Math.max(32, mtl.implicitWidth + 18); height: 26; radius: 7
                     color: sel ? Colors.bgActive
-                         : (mth.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.20) : Colors.bgElement)
+                         : (mth.containsMouse ? Style.tint(Colors.bgActive, 0.20) : Colors.bgElement)
                     Behavior on color { ColorAnimation { duration: 90 } }
                     Text { id: mtl; anchors.centerIn: parent; text: modelData
                            color: parent.sel ? Colors.fgBright : Colors.fgPrimary
-                           font.pixelSize: 12; font.bold: parent.sel; font.family: "FantasqueSansM Nerd Font" }
+                           font.pixelSize: 12; font.bold: parent.sel; font.family: Style.font }
                     MouseArea { id: mth; anchors.fill: parent; hoverEnabled: true
                                 onClicked: { root.view = "grid"; root.selMon = modelData } }
                 }
@@ -179,11 +182,11 @@ Flyout {
                 readonly property bool sel: root.view === "sets"
                 width: stl.implicitWidth + 18; height: 26; radius: 7
                 color: sel ? Colors.bgActive
-                     : (sth.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.20) : Colors.bgElement)
+                     : (sth.containsMouse ? Style.tint(Colors.bgActive, 0.20) : Colors.bgElement)
                 Behavior on color { ColorAnimation { duration: 90 } }
                 Text { id: stl; anchors.centerIn: parent; text: "󰋩 Sets"
                        color: parent.sel ? Colors.fgBright : Colors.fgPrimary
-                       font.pixelSize: 12; font.bold: parent.sel; font.family: "FantasqueSansM Nerd Font" }
+                       font.pixelSize: 12; font.bold: parent.sel; font.family: Style.font }
                 MouseArea { id: sth; anchors.fill: parent; hoverEnabled: true; onClicked: root.view = "sets" }
             }
             // Static / live filter (grid view only).
@@ -194,11 +197,11 @@ Flyout {
                     readonly property bool sel: root.typeFilter === modelData.k
                     width: ftl.implicitWidth + 16; height: 26; radius: 7
                     color: sel ? Colors.bgActive
-                         : (fth.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.20) : Colors.bgElement)
+                         : (fth.containsMouse ? Style.tint(Colors.bgActive, 0.20) : Colors.bgElement)
                     Behavior on color { ColorAnimation { duration: 90 } }
                     Text { id: ftl; anchors.centerIn: parent; text: modelData.l
                            color: parent.sel ? Colors.fgBright : Colors.fgMuted
-                           font.pixelSize: 11; font.bold: parent.sel; font.family: "FantasqueSansM Nerd Font" }
+                           font.pixelSize: 11; font.bold: parent.sel; font.family: Style.font }
                     MouseArea { id: fth; anchors.fill: parent; hoverEnabled: true; onClicked: root.typeFilter = modelData.k }
                 }
             }
@@ -210,58 +213,45 @@ Flyout {
             width:  parent.width
             height: root._rows * root._cellH
 
-            GridView {
+            // ListView of subfolder sections (GridView can't render separators); one Grid per
+            // bucket. The wheel handler below still drives contentY exactly as before.
+            ListView {
             id: grid
             anchors.fill: parent
             clip:   true
-            model:  root.filteredItems
-            cellWidth:  Math.floor(width / root._cols)
-            cellHeight: root._cellH
+            model:  root.groups
+            spacing: 2
+            boundsBehavior: Flickable.StopAtBounds
+            readonly property real cellWidth:  Math.floor(width / root._cols)
+            readonly property real cellHeight: root._cellH
 
-            delegate: Item {
-                id: cell
+            delegate: Column {
+                id: group
                 required property var modelData
-                readonly property bool   isVid: root.isVideo(modelData.name)
-                readonly property string thumb: root._thumbDir + "/" + Qt.md5(modelData.path) + ".jpg"
-                width: grid.cellWidth; height: grid.cellHeight
-                Rectangle {
-                    anchors.fill: parent; anchors.margins: 4
-                    radius: 8; clip: true; color: Colors.bgElement
-                    border.color: Colors.boActive
-                    border.width: root.applying === cell.modelData.path ? 2 : (cHov.containsMouse ? 1 : 0)
-                    Behavior on border.width { NumberAnimation { duration: 80 } }
-                    Image {
-                        id: img
-                        anchors.fill: parent; anchors.margins: 2
-                        source:  cell.isVid ? ("file://" + cell.thumb) : ("file://" + cell.modelData.path)
-                        visible: status === Image.Ready
-                        fillMode: Image.PreserveAspectCrop; asynchronous: true
-                        sourceSize.width: 220; sourceSize.height: 130
-                    }
-                    Text {   // shown while a video's thumbnail is still being generated
-                        visible: cell.isVid && img.status !== Image.Ready
-                        anchors.centerIn: parent; text: "󰕧"; color: Colors.fgMuted
-                        font.family: "FantasqueSansM Nerd Font"; font.pixelSize: 24
-                    }
-                    Rectangle {
-                        visible: cell.isVid
-                        anchors { right: parent.right; bottom: parent.bottom; rightMargin: 6; bottomMargin: 6 }
-                        width: 16; height: 16; radius: 8; color: Qt.rgba(0, 0, 0, 0.5)
-                        Text { anchors.centerIn: parent; text: "▶"; color: Colors.fgBright; font.pixelSize: 8 }
-                    }
-                    MouseArea { id: cHov; anchors.fill: parent; hoverEnabled: true
-                                onClicked: root.apply(cell.modelData.path) }
+                width: grid.width
+
+                Text {
+                    visible: root.grouped && root.groups.length > 1
+                    text:    group.modelData.name + "  ·  " + group.modelData.items.length
+                    color:   Colors.fgMuted
+                    font.pixelSize: 10; font.bold: true; font.letterSpacing: 0.5
+                    font.family: Style.font
+                    topPadding: 4; bottomPadding: 3; leftPadding: 4
                 }
-                // First-frame thumbnail for live wallpapers (cached); reload the Image when ready.
-                Process {
-                    id: thumbProc
-                    command: ["bash", "-c",
-                        "t=\"$1\"; v=\"$2\"; mkdir -p \"$(dirname \"$t\")\"; " +
-                        "[ -f \"$t\" ] || ffmpeg -y -i \"$v\" -vframes 1 -vf scale=320:-1 \"$t\" >/dev/null 2>&1; echo ok",
-                        "vtl", cell.thumb, cell.modelData.path]
-                    onRunningChanged: if (!running) { img.source = ""; img.source = "file://" + cell.thumb }
+                Grid {
+                    columns: root._cols
+                    Repeater {
+                        model: group.modelData.items
+                        delegate: WallThumb {
+                            required property var modelData
+                            width: grid.cellWidth; height: grid.cellHeight
+                            path:   modelData.path
+                            name:   modelData.name
+                            active: root.applying === modelData.path
+                            onPicked: root.apply(modelData.path)
+                        }
+                    }
                 }
-                Component.onCompleted: if (cell.isVid) thumbProc.running = true
             }
             }
 
@@ -294,7 +284,7 @@ Flyout {
                 delegate: Rectangle {
                     required property var modelData
                     width: parent.width; height: 56; radius: 10
-                    color: setHov.containsMouse ? Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.18) : Colors.bgElement
+                    color: setHov.containsMouse ? Style.tint(Colors.bgActive, 0.18) : Colors.bgElement
                     Behavior on color { ColorAnimation { duration: 90 } }
                     Rectangle {
                         id: pv
@@ -308,24 +298,24 @@ Flyout {
                             asynchronous: true; sourceSize.width: 160; sourceSize.height: 100
                         }
                         Text { visible: setImg.status !== Image.Ready; anchors.centerIn: parent
-                               text: "󰋩"; color: Colors.fgMuted; font.family: "FantasqueSansM Nerd Font"; font.pixelSize: 18 }
+                               text: "󰋩"; color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 18 }
                     }
                     Text {
                         anchors { left: pv.right; leftMargin: 12; right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
                         text: modelData.name; elide: Text.ElideRight; color: Colors.fgPrimary
-                        font.pixelSize: 13; font.family: "FantasqueSansM Nerd Font"
+                        font.pixelSize: 13; font.family: Style.font
                     }
                     MouseArea { id: setHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.applySet(modelData.name) }
                 }
             }
             Text { visible: root.sets.length === 0; text: "No sets defined yet — create them in Settings → Wallpaper → Sets"
                    color: Colors.fgMuted; font.pixelSize: 11; wrapMode: Text.WordWrap; width: parent.width
-                   font.family: "FantasqueSansM Nerd Font" }
+                   font.family: Style.font }
         }
 
         Text {
             text:  root.status; color: Colors.fgMuted; font.pixelSize: 11
-            font.family: "FantasqueSansM Nerd Font"; elide: Text.ElideRight; width: parent.width
+            font.family: Style.font; elide: Text.ElideRight; width: parent.width
         }
     }
 }
