@@ -166,29 +166,39 @@ Item {
         }
     }
 
+    // ── Revert countdown — fixed banner above the scroll area so it is visible
+    // no matter where the user is scrolled (the Apply button sits at the bottom).
+    Rectangle {
+        id: revertBanner
+        visible: root.countdown > 0
+        anchors { top: parent.top; left: parent.left; right: parent.right }
+        height: 46
+        radius: Style.rControl
+        color: Style.tint(Style.accent, 0.22)
+        border.width: 1; border.color: Style.accent
+        z: 10
+        Text {
+            anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
+            text: "Keep these settings?  Reverting in " + root.countdown + " s…"
+            color: Colors.fgBright; font.pixelSize: 12; font.bold: true; font.family: Style.font
+        }
+        Row {
+            anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
+            spacing: 8
+            TextButton { label: "Keep"; primary: true; onClicked: root.keep() }
+            TextButton { label: "Revert now"; onClicked: root.revert() }
+        }
+    }
+
     Flickable {
         anchors.fill: parent
+        anchors.topMargin: revertBanner.visible ? revertBanner.height + 8 : 0
         contentHeight: col.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
         Column {
             id: col
             width: parent.width
             topPadding: 4
             spacing: Style.cardGap
-
-            // ── Revert countdown — shown right after an apply ──────────────────
-            Card {
-                visible: root.countdown > 0
-                CardLabel { text: "KEEP THESE SETTINGS?" }
-                SubLabel {
-                    width: parent.width
-                    text: "Reverting to the previous configuration in " + root.countdown + " s."
-                }
-                Row {
-                    spacing: 10
-                    TextButton { label: "Keep"; primary: true; onClicked: root.keep() }
-                    TextButton { label: "Revert now"; onClicked: root.revert() }
-                }
-            }
 
             // ── Arrangement ────────────────────────────────────────────────────
             Card {
@@ -282,8 +292,13 @@ Item {
                 }
                 Toggle {
                     label: "HDR"
+                    sub: "Switches color management to the HDR preset"
                     on: root.selMon ? root.selMon.supports_hdr === true : false
-                    onToggled: root.upd({ supports_hdr: !root.selMon.supports_hdr })
+                    // supports_hdr alone only advertises capability (preset "wide");
+                    // actual HDR output needs cm = "hdr" as well.
+                    onToggled: root.upd(root.selMon.supports_hdr
+                                        ? { supports_hdr: false, cm: "auto" }
+                                        : { supports_hdr: true, cm: "hdr" })
                 }
 
                 Row {

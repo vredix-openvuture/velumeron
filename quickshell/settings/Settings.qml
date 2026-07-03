@@ -313,25 +313,79 @@ PanelWindow {
             z:       5    // above the content pane, so the hover tooltips aren't painted under it
             anchors { top: parent.top; bottom: parent.bottom; left: parent.left }
 
-            // The section list has outgrown short menus (1080p half-height) — let the rail scroll.
-            Flickable {
-                anchors { fill: parent; topMargin: 26; bottomMargin: 8 }
-                contentHeight: railCol.implicitHeight
-                clip: true
-                boundsBehavior: Flickable.StopAtBounds
+            // The section list has outgrown short menus — the rail PAGES instead of
+            // scrolling: every page shows as many icons as fit, Info stays pinned at
+            // the bottom next to the pager arrow, and the mouse wheel flips pages.
+            readonly property var  railItems: root.sections.filter(function (s) {
+                return s.rail !== false && s.key !== "info"
+            })
+            readonly property var  infoMeta: root.sectionMeta("info")
+            readonly property int  iconSz:   Math.max(30, Math.min(42, root.railW - 6))
+            readonly property int  slotH:    iconSz + 4
+            // Space reserved at the bottom: pinned Info icon + pager arrow + gaps.
+            readonly property int  bottomH:  iconSz + 22 + 12
+            readonly property int  perPage:  Math.max(1, Math.floor((height - 26 - bottomH - 8) / slotH))
+            readonly property int  pages:    Math.max(1, Math.ceil(railItems.length / perPage))
+            property int page: 0
+            onPagesChanged: page = Math.min(page, pages - 1)
+            readonly property var pageItems: railItems.slice(page * perPage, (page + 1) * perPage)
 
-                Column {
-                    id: railCol
+            function flip(dir) { rail.page = ((rail.page + dir) % rail.pages + rail.pages) % rail.pages }
+            function ensureVisible(key) {
+                for (var i = 0; i < railItems.length; i++)
+                    if (railItems[i].key === key) { rail.page = Math.floor(i / rail.perPage); return }
+            }
+            Connections {
+                target: root
+                function onActiveSectionChanged() { rail.ensureVisible(root.activeSection) }
+            }
+
+            // Wheel-only layer under the icons (clicks pass through untouched).
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.NoButton
+                onWheel: wheel => rail.flip(wheel.angleDelta.y < 0 ? 1 : -1)
+            }
+
+            Column {
+                anchors { top: parent.top; topMargin: 26; horizontalCenter: parent.horizontalCenter }
+                spacing: 4
+
+                Repeater {
+                    model: rail.pageItems
+                    delegate: RailIcon {
+                        required property var modelData
+                        icon:    modelData.icon
+                        section: modelData.key
+                    }
+                }
+            }
+
+            // Pinned bottom: Info + pager arrow.
+            Column {
+                anchors { bottom: parent.bottom; bottomMargin: 10; horizontalCenter: parent.horizontalCenter }
+                spacing: 4
+
+                RailIcon {
+                    icon:    rail.infoMeta?.icon ?? "󰋽"
+                    section: "info"
+                }
+                Rectangle {
+                    visible: rail.pages > 1
                     anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 4
-
-                    Repeater {
-                        model: root.sections.filter(function (s) { return s.rail !== false })
-                        delegate: RailIcon {
-                            required property var modelData
-                            icon:    modelData.icon
-                            section: modelData.key
-                        }
+                    width: rail.iconSz; height: 18
+                    radius: 6
+                    color: pagerHov.containsMouse ? Style.tint(Style.accent, 0.18) : "transparent"
+                    Text {
+                        anchors.centerIn: parent
+                        text: "󰅀"
+                        color: pagerHov.containsMouse ? Colors.fgBright : Colors.fgMuted
+                        font.pixelSize: 13; font.family: Style.font
+                    }
+                    MouseArea {
+                        id: pagerHov
+                        anchors.fill: parent; hoverEnabled: true
+                        onClicked: rail.flip(1)
                     }
                 }
             }
