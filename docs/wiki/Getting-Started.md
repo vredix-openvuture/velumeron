@@ -2,15 +2,23 @@
 
 ## Installation
 
-Run the interactive installer from the repository root:
+Run the bootstrap from the repository root:
 
 ```bash
 ./welcome_to_velumeron.sh
 ```
 
 It installs the dependencies (see [../dependencies.md](../dependencies.md)), copies the user
-configuration to `~/.config/velumeron/` and wires the Hyprland entry point
-(`~/.config/hypr/hyprland.lua` → the repo's `hypr.lua/`).
+configuration to `~/.config/velumeron/`, wires the Hyprland entry point
+(`~/.config/hypr/hyprland.lua` → the repo's `hypr.lua/`) and configures the monitors
+automatically with their best mode. The only question it asks is whether to install packages.
+
+On the first shell start the **setup wizard** opens (a quickshell overlay): workspaces,
+wallpaper, role/quick apps and avatar — every step optional, everything changeable later in
+Settings. After a package update the same window opens once as a **"What's new"** report, fed
+by `CHANGELOG.md` (`VERSION` vs. the stamp in `~/.config/velumeron/gui/last-seen-version`).
+Force it any time with `velumeron --onboarding` (wizard — writes real config!) or
+`velumeron --onboarding update` (changelog).
 
 Two directories matter afterwards:
 
@@ -32,11 +40,16 @@ the mpv wallpaper plugin on first run and sets the required environment
 ## The settings menu
 
 Click the **Velumeron icon** in the bar (or bind `qs -p $VELUMERON_DIR/quickshell ipc call menu toggle`).
-The menu grows out of the bar corner; the rail on the left switches between sections:
-Home, Launcher, Bar, Style, Wallpaper, OSD, Notifications, Calendar, Lockscreen, Corners,
-Taskbar, Zones, Window tags.
+The menu grows out of the bar corner; the rail on the left (scrollable) switches between
+sections: Home, Launcher, Bar, Style, Wallpaper, OSD, Notifications, Calendar, Lockscreen,
+Corners, Taskbar, Zones, Window tags, Monitors, Workspaces, Autostart, Quick access,
+Peripherals, Window rules.
 
-Every control writes `settings.json` immediately — there is no "Apply" button, the shell reacts live.
+Shell-level controls write `settings.json` immediately — the shell reacts live. The
+Hyprland-level sections (Monitors, Workspaces, Autostart, Quick access, Peripherals, Window
+rules) stage their edits and write `user_settings.lua` on **Apply** (via
+`assets/scripts/user-settings-io.py`), followed by one `hyprctl reload`. Monitor applies show
+a 15-second Keep/Revert countdown in case a mode change blacks out a display.
 
 ## Essential keybinds (defaults)
 
@@ -58,6 +71,12 @@ Keybinds live in `hypr.lua/modules/keybinds.lua`; the keybind cheatsheet overlay
 
 | I want to… | Go to |
 | --- | --- |
+| Resolution, scale, rotation, monitor arrangement | Settings → Monitors (drag to arrange) |
+| Workspace names, default workspace, persistence | Settings → Workspaces |
+| Autostart daemons / apps per workspace | Settings → Autostart |
+| SUPER+F1–F12 quick apps | Settings → Quick access |
+| Cursor theme & size | Settings → Peripherals |
+| Floating / transparent window patterns | Settings → Window rules |
 | Move / restyle the bar, add modules | Settings → Bar |
 | Change wallpaper folders, auto-change | Settings → Wallpaper (gear icon for paths) |
 | Connect Nextcloud / Vikunja | Settings → Calendar |

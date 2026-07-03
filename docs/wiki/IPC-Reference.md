@@ -20,6 +20,7 @@ qs -p "$VELUMERON_DIR/quickshell" ipc call <target> <function>
 | `wallpaper` | `toggle` `open` `close` | Wallpaper quick menu (grows from the module / configured position) |
 | `btop` | `toggle` `close` | btop dropdown terminal |
 | `zones` | `open` `close` | FancyZones overlay (normally driven by the compositor) |
+| `onboarding` | `open` `update` `close` | Setup wizard (`open` — writes real config!) · update changelog · hide without version stamping |
 
 > Function names `show`/`hide` are avoided by convention: `qs ipc call <target> show` collides
 > with qs's built-in target introspection.

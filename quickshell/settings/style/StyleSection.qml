@@ -46,6 +46,34 @@ Item {
         colorStatus = ""
         schemes     = []
         loadProc.running = false; loadProc.running = true
+        appThemeStatusProc.buf = ""
+        appThemeStatusProc.running = false; appThemeStatusProc.running = true
+    }
+
+    // ── App theming (GTK / Qt / global dark-light) — state lives in the system
+    // configs, apply-app-theme.sh reads and toggles it. ──
+    property bool   gtkTheming: false
+    property bool   qtTheming:  false
+    property string appMode:    "dark"
+    Process {
+        id: appThemeStatusProc
+        property string buf: ""
+        command: ["bash", "-c", "\"$VELUMERON_DIR/assets/scripts/apply-app-theme.sh\" status"]
+        stdout: SplitParser { onRead: line => appThemeStatusProc.buf += line }
+        onExited: {
+            try {
+                var d = JSON.parse(appThemeStatusProc.buf)
+                root.gtkTheming = d.gtk === true
+                root.qtTheming  = d.qt === true
+                root.appMode    = d.mode || "dark"
+            } catch (e) {}
+        }
+    }
+    Process { id: appThemeProc; onExited: { appThemeStatusProc.running = false; appThemeStatusProc.running = true } }
+    function appTheme(args) {
+        appThemeProc.command = ["bash", "-c",
+            "\"$VELUMERON_DIR/assets/scripts/apply-app-theme.sh\" " + args]
+        appThemeProc.running = false; appThemeProc.running = true
     }
 
     // Persist one key into settings.json (VtlConfig picks it up on its poll).
@@ -330,6 +358,41 @@ Item {
                         elide: Text.ElideRight; font.family: Style.font
                     }
                     TextButton { primary: true; label: "Apply"; onClicked: root.applyColours() }
+                }
+            }
+
+            // ── App theming — GTK/Qt apps follow the velumeron look ────────────
+            Card {
+                CardLabel { text: "APP THEMING" }
+                Toggle {
+                    label: "Theme GTK apps"
+                    sub:   "adw-gtk3 + live wallust palette (gtk-3.0/4.0)"
+                    on:    root.gtkTheming
+                    onToggled: root.appTheme("gtk " + (root.gtkTheming ? "off" : "on"))
+                }
+                Toggle {
+                    label: "Theme Qt apps"
+                    sub:   "qt5ct/qt6ct custom palette from the live colors"
+                    on:    root.qtTheming
+                    onToggled: root.appTheme("qt " + (root.qtTheming ? "off" : "on"))
+                }
+                SubLabel {
+                    width: parent.width
+                    text: "Palettes update with every wallpaper change; running apps pick the theme "
+                        + "up on their next start."
+                }
+
+                FieldLabel { text: "Global appearance" }
+                Segmented {
+                    equal: true
+                    segments: [{ label: "󰖔  Dark", key: "dark" }, { label: "󰖨  Light", key: "light" }]
+                    current: root.appMode
+                    onPicked: key => root.appTheme("mode " + key)
+                }
+                SubLabel {
+                    width: parent.width
+                    text: "Sets the desktop-wide dark/light preference (xdg color-scheme + GTK variant) "
+                        + "that portal-aware apps and websites follow."
                 }
             }
         }

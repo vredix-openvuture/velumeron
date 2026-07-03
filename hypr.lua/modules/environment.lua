@@ -9,7 +9,9 @@ hl.env("VELUMERON_USER_DIR", VTL_USER_DIR)
 
 -- QT
 hl.env("QT_QPA_PLATFORM",                    "wayland;xcb")
-hl.env("QT_QPA_PLATFORMTHEME",               "qt5ct")
+-- qt5 apps pick qt5ct, qt6 apps fall through to qt6ct (Qt takes the first theme
+-- its version can load) — both read the wallust palette (colors/vutureland.conf).
+hl.env("QT_QPA_PLATFORMTHEME",               "qt5ct:qt6ct")
 --hl.env("QT_STYLE_OVERRIDE",                  "kvantum")
 hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION","1")
 

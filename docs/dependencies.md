@@ -148,7 +148,13 @@ Complete list of everything required for this config to work.
 | `tmux` | Terminal multiplexer |
 | `fastfetch` | System info display |
 | `kvantum` | Qt style override for Qt6 apps |
-| `qt5ct` / `qt6ct` | Qt platform theme |
+| `qt5ct` / `qt6ct` | Qt platform theme — carries the wallust palette to Qt apps (Style → App theming) |
+| `adw-gtk-theme` | GTK3 port of Adwaita — the GTK app theme (Style → App theming, dark/light) |
+| `zenity` | Native file-picker dialogs (wallpaper folders, avatar page) |
+| `brightnessctl` | Laptop panel brightness (brightness keys; ddcutil covers external monitors) |
+| `wl-clipboard` / `clipvault` | Clipboard watcher + history store (clipboard menu) — clipvault is AUR |
+| `ffmpeg` | First-frame thumbnails for live (video) wallpapers |
+| `libnotify` | `notify-send` used by several scripts |
 | `syncthing` | File sync daemon (user-defined autostart) |
 | `nextcloud-client` | Cloud sync (user-defined autostart) |
 | `openrgb` | RGB lighting control (user-defined autostart) |

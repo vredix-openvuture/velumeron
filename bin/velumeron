@@ -36,6 +36,17 @@ case "${1:-}" in
     --panel-toggle)         ipc notify toggle ;;   # notification centre
     --dnd)                  ipc notify dnd ;;       # toggle do-not-disturb
 
+    # ── onboarding: force the wizard / update report ─────────────────────────
+    # velumeron --onboarding          first-run wizard (writes real config!)
+    # velumeron --onboarding update   changelog report for the current release
+    --onboarding)
+        case "${2:-}" in
+            update) ipc onboarding update ;;
+            close)  ipc onboarding close ;;
+            *)      ipc onboarding open ;;
+        esac
+        ;;
+
     # ── daemon: no-op — the shell starts everything via launch-shell.sh ──────
     -d|--daemon) : ;;
 
@@ -52,6 +63,7 @@ velumeron — Hyprland desktop shell launcher
   velumeron -t, --toggle          Toggle the settings menu
   velumeron --panel-toggle        Toggle the notification centre
   velumeron --dnd                 Toggle do-not-disturb
+  velumeron --onboarding [update] Open the setup wizard / update report
   velumeron -e, --end             Stop the shell
 EOF
         ;;

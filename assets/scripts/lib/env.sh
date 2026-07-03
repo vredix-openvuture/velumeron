@@ -14,7 +14,7 @@ if [[ -z "${VELUMERON_DIR:-}" ]]; then
 fi
 export VELUMERON_DIR
 
-VELUMERON_USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/velumeron"
+: "${VELUMERON_USER_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/velumeron}"
 export VELUMERON_USER_DIR
 
 # Effective wallpaper dirs — a user-set custom path (gui/settings.json) if it

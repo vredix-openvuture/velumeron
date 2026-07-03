@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
-# Velumeron setup wizard.
+# Velumeron bootstrap (non-interactive apart from the package install).
+# Seeds the user dir, wires the environment and auto-configures monitors;
+# the interactive part of first-run setup is the onboarding GUI, which the
+# shell opens by itself afterwards (see quickshell/onboarding/).
 #
-#   welcome_to_velumeron.sh           Full interactive first-run setup
+#   welcome_to_velumeron.sh           First-run bootstrap
 #   welcome_to_velumeron.sh --sync    Refresh package templates from
 #                                      $VELUMERON_DIR without touching user
 #                                      state (use after a pacman/yay upgrade)
+#   --sync --no-restart               Same, but never restarts the shell
+#                                      (used by the update-report GUI)
 
 set -euo pipefail
 
@@ -48,12 +53,18 @@ USER_SETTINGS="$VELUMERON_USER_DIR/hypr.lua/user_settings.lua"
 
 # Parse flags
 SYNC_MODE=false
+NO_RESTART=false
 for arg in "$@"; do
     case "$arg" in
         --sync) SYNC_MODE=true ;;
+        # For --sync runs triggered FROM the running shell (update report GUI):
+        # restarting quickshell here would kill the caller and re-trigger the
+        # sync on the next start — an endless loop.
+        --no-restart) NO_RESTART=true ;;
         -h|--help)
-            echo "Usage: $(basename "$0") [--sync]"
-            echo "  --sync   Refresh package templates without re-running setup"
+            echo "Usage: $(basename "$0") [--sync [--no-restart]]"
+            echo "  --sync         Refresh package templates without re-running setup"
+            echo "  --no-restart   With --sync: don't restart the running shell"
             exit 0 ;;
     esac
 done
@@ -97,6 +108,10 @@ sync_templates() {
         "hypr.lua/colors.lua"
         "kitty/colors.conf"
         "rofi/assets/colors.rasi"
+        # Device-specific config (monitors/workspaces/…): a repo/package copy
+        # of this untracked file must never clobber the user's machine setup
+        # via the mtime rule below.
+        "hypr.lua/user_settings.lua"
     )
     is_wallust_output() {
         local rel="$1"
@@ -186,6 +201,34 @@ sync_templates() {
         rm -f "$_link"
         ln -sf "$_target" "$_link"
     done
+
+    # Migrate pre-v0.1.0 hypridle configs: launching hyprlock from before_sleep_cmd
+    # blocked the inhibitor and let the machine suspend mid-lock-init — hyprlock
+    # (and the session) died on wake. The mtime rule above never fixes this for
+    # users who saved timeouts via the GUI (their copy is newer than the package),
+    # so patch the general block in place; the listener timeouts stay untouched.
+    local _hc="$VELUMERON_USER_DIR/hypr.lua/hypridle.conf"
+    if [[ -f "$_hc" ]] && grep -q 'before_sleep_cmd.*launch-hyprlock' "$_hc"; then
+        python3 - "$_hc" <<'PY'
+import re, sys
+p = sys.argv[1]
+c = open(p).read()
+c = re.sub(r'(?m)^(\s*before_sleep_cmd\s*=\s*).*launch-hyprlock\.sh.*$',
+           r'\1loginctl lock-session', c)
+c = re.sub(r'(?m)^(\s*after_sleep_cmd\s*=\s*)$',
+           "\\1hyprctl dispatch 'hl.dsp.dpms(\"on\")'", c)
+if 'inhibit_sleep' not in c:
+    c = re.sub(r'(?m)^(\s*after_sleep_cmd.*)$',
+               r'\1\n    inhibit_sleep           = 3', c, count=1)
+open(p, 'w').write(c)
+PY
+        ok "Migrated hypridle.conf suspend sequencing (lock-before-sleep)"
+        if pgrep -x hypridle >/dev/null 2>&1; then
+            pkill -x hypridle 2>/dev/null || true
+            sleep 0.3
+            setsid -f hypridle >/dev/null 2>&1 || true
+        fi
+    fi
 
     # ── Bundled fonts ─────────────────────────────────────────────────
     # The configs rely on specific fonts (FantasqueSansM Nerd Font, Atomic Age,
@@ -294,7 +337,7 @@ if [[ "$SYNC_MODE" == true ]]; then
     fi
     # Restart the shell (bar + OSD + notifications + settings) if it's running, so
     # the refreshed palette/config takes effect without a re-login.
-    if pgrep -x quickshell >/dev/null 2>&1; then
+    if [[ "$NO_RESTART" != true ]] && pgrep -x quickshell >/dev/null 2>&1; then
         bash "$VELUMERON_DIR/assets/scripts/launch-shell.sh" >/dev/null 2>&1 \
             && ok "Shell restarted"
     fi
@@ -313,9 +356,10 @@ echo "  ${BOLD}${CYAN}╔══════════════════�
 echo "  ${BOLD}${CYAN}║            Welcome to Velumeron                         ║${RST}"
 echo "  ${BOLD}${CYAN}╚══════════════════════════════════════════════════════════╝${RST}"
 echo ""
-echo "  This wizard sets up velumeron on a fresh system."
-echo "  It will start services, configure Hyprland, launch the"
-echo "  QuickShell shell, and set the initial wallpaper."
+echo "  This bootstrap prepares velumeron on a fresh system: packages,"
+echo "  services, Hyprland wiring, monitors (automatic) and the shell."
+echo "  Workspaces, apps, wallpaper and avatar are then configured in the"
+echo "  setup wizard that opens with the shell."
 echo ""
 hr; echo ""
 
@@ -331,6 +375,8 @@ REQUIRED_PKGS=(
     network-manager-applet gnome-keyring
     nextcloud-client localsend
     openrgb ddcutil grim hyprshot python
+    zenity qt5ct qt6ct adw-gtk-theme
+    brightnessctl wl-clipboard clipvault ffmpeg libnotify
 )
 
 if ask_yn "Check and install missing packages?" "y"; then
@@ -380,15 +426,8 @@ say "User Avatar (~/.face)"
 if [[ -f "$HOME/.face" ]]; then
     ok "Found ~/.face — will be shown in the bar's user widget."
 else
-    warn "No user avatar found at ~/.face"
-    echo ""
-    echo "  The bar's user widget displays your profile picture from ~/.face."
-    echo "  Any image file works (PNG, JPG). This is optional — the bar"
-    echo "  will work fine without it, but the avatar area will be empty."
-    echo ""
-    echo "  To add one later:  cp your-photo.png ~/.face"
-    echo ""
-    read -rp "  Press Enter to continue without an avatar, or Ctrl+C to abort. "
+    # Optional; the onboarding GUI offers a picker for it on first start.
+    ok "No ~/.face avatar yet — the setup wizard will offer to add one."
 fi
 
 # ─── 1.5) Seed user dir + environment ────────────────────────────────────────
@@ -406,6 +445,16 @@ fi
 # Copy templates from the package into the user dir
 sync_templates
 ok "Seeded ~/.config/velumeron/ from package templates"
+
+# Genuinely fresh install (this machine has never seen a version): flag the
+# onboarding wizard. Without the marker the shell can't tell "fresh install
+# whose monitors welcome just auto-configured" apart from "existing install
+# updating into the versioned world" — both lack the stamp but have monitors.
+# onboarding-state.py consumes the flag; mark-seen removes it.
+if [[ ! -f "$VELUMERON_USER_DIR/gui/last-seen-version" ]]; then
+    mkdir -p "$VELUMERON_USER_DIR/gui"
+    touch "$VELUMERON_USER_DIR/gui/first-run-pending"
+fi
 
 # Write VELUMERON_DIR / VELUMERON_USER_DIR into systemd user environment
 # (takes effect on next login; we already have them exported in this shell)
@@ -551,28 +600,28 @@ fi
 echo "$_NEW_ENTRY" > "$_HYP_ENTRY"
 ok "Wrote ~/.config/hypr/hyprland.lua (→ $VELUMERON_DIR)"
 
-# ─── 4) Monitor + Workspace setup ────────────────────────────────────────────
+# ─── 4) Monitor + Workspace bootstrap (non-interactive) ─────────────────────
+# Monitors get their best mode automatically; everything else (workspaces,
+# apps, wallpaper, avatar) is asked by the onboarding GUI on first shell start.
 say "Monitor & Workspace setup"
-echo "  Running hyprland.sh in minimal mode (monitors + workspaces only)."
-echo "  Run  ~/.config/velumeron/.setup/hyprland.sh  later for full config."
-echo ""
 
-bash "$VELUMERON_DIR/.setup/hyprland.sh" --minimal
+if command -v hyprctl >/dev/null 2>&1 && hyprctl monitors -j >/dev/null 2>&1 \
+   && ! grep -q 'hl\.monitor' "$USER_SETTINGS" 2>/dev/null; then
+    bash "$VELUMERON_DIR/.setup/hyprland.sh" --autostart
+    ok "Monitors auto-configured with their best settings."
+elif grep -q 'hl\.monitor' "$USER_SETTINGS" 2>/dev/null; then
+    ok "Monitors already configured — keeping the existing setup."
+else
+    ok "Monitors will be auto-configured on the first Hyprland start."
+fi
 
-# ─── 5) Read selected monitors ────────────────────────────────────────────────
 mon1=""
 mon2=""
 if [[ -f "$USER_SETTINGS" ]]; then
     mon1=$(grep -oP '^mon1\s*=\s*"\K[^"]+' "$USER_SETTINGS" 2>/dev/null | head -1 || true)
     mon2=$(grep -oP '^mon2\s*=\s*"\K[^"]+' "$USER_SETTINGS" 2>/dev/null | head -1 || true)
 fi
-
-if [[ -z "$mon1" ]]; then
-    warn "Could not read monitor from user_settings.conf — defaulting to 'DP-2'."
-    mon1="DP-2"
-fi
-
-ok "Primary monitor: $mon1"
+[[ -n "$mon1" ]] && ok "Primary monitor: $mon1"
 [[ -n "$mon2" ]] && ok "Secondary monitor: $mon2"
 
 # ─── 6) Launch the shell ─────────────────────────────────────────────────────
@@ -601,7 +650,10 @@ hr
 echo ""
 echo "  ${BOLD}${GREEN}Velumeron is ready!${RST}"
 echo ""
+echo "  The setup wizard opens with the shell to configure workspaces, apps,"
+echo "  wallpaper and avatar."
+echo ""
 echo "  To reconfigure later:"
-echo "    ${DIM}~/.config/velumeron/.setup/hyprland.sh${RST}  – Hyprland (monitors, workspaces, …)"
-echo "    ${DIM}Super + X${RST}                                – Shell settings (bar, style, …)"
+echo "    ${DIM}Super + X${RST}                                – Settings (monitors, workspaces, …)"
+echo "    ${DIM}~/.config/velumeron/.setup/hyprland.sh${RST}  – CLI fallback (e.g. over SSH)"
 echo ""

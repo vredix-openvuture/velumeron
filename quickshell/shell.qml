@@ -7,7 +7,19 @@ import Quickshell.Hyprland
 ShellRoot {
     // Touch the Templates singleton on startup so its copy-on-write watcher + one-time migration run
     // even before any settings UI is opened (a singleton only instantiates once referenced).
-    Component.onCompleted: { Templates.boot(); void Hyprwindows.windows }
+    // OnboardingState decides whether to open the first-run wizard / post-update changelog.
+    Component.onCompleted: { Templates.boot(); void Hyprwindows.windows; OnboardingState.boot() }
+
+    // IPC: force the onboarding window — `velumeron --onboarding [update]`:
+    //   open   → first-run wizard (pages write real config!)
+    //   update → changelog report for the current release
+    //   close  → hide without stamping the version as seen
+    IpcHandler {
+        target: "onboarding"
+        function open():   void { OnboardingState.openForced("first-run") }
+        function update(): void { OnboardingState.openForced("update") }
+        function close():  void { OnboardingState.close() }
+    }
 
     // IPC: toggle / open / close the corner menu from outside (e.g. a Hyprland keybind):
     //   qs -p <this-dir> ipc call menu toggle
@@ -209,6 +221,13 @@ ShellRoot {
             required property var modelData
             screen: modelData
         }
+    }
+
+    // Onboarding: first-run wizard / post-update changelog, one per screen (renders on the
+    // monitor focused when it opened).
+    Variants {
+        model: Quickshell.screens
+        delegate: OnboardingWindow { required property var modelData; screen: modelData }
     }
 
     // Application launcher: one per screen, shows on the focused monitor (Super+Space).

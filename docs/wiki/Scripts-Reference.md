@@ -17,6 +17,8 @@ Everything lives in `assets/scripts/`. All scripts source `lib/env.sh` for `$VEL
 | `powermode.sh` | Cycle / query power profiles (Performance module) |
 | `apply-theme.sh` / `apply-hyprlock-theme.sh` | Re-apply palette to app configs / hyprlock |
 | `hypridle-set.sh` / `launch-hyprlock.sh` | Idle & lock wiring |
+| `user-settings-io.py` | **The GUI⇄Lua bridge**: reads/writes the marker sections of `user_settings.lua` as JSON (`get/set/validate/init/reload`). Sections: monitors, workspaces, autostart, quickaccess, peripherals, windowrules, roleapps. Preserves everything outside the target section byte-for-byte; refuses to write on damaged markers; strips + preserves the reserved workspaces (10/90/99/111/112/1111); enforces one default workspace per monitor |
+| `onboarding-state.py` | First-run/update decision for the onboarding GUI: compares `VERSION` with `gui/last-seen-version`, slices `CHANGELOG.md`; `state` / `mark-seen` |
 | `float-cascade.sh` | Cascade floating windows |
 | `build-mpv-plugin.sh` | Builds the libmpv → QtQuick wallpaper plugin (`plugins/Velumeron/Mpv`) |
 | `velumeron-config.py` | Legacy settings CLI (predates the in-shell settings) |
@@ -27,6 +29,8 @@ Everything lives in `assets/scripts/`. All scripts source `lib/env.sh` for `$VEL
 | File | Writer → Reader |
 | --- | --- |
 | `$VELUMERON_USER_DIR/gui/settings.json` | Settings UI → whole shell (VtlConfig) |
+| `$VELUMERON_USER_DIR/gui/last-seen-version` | onboarding-state.py `mark-seen` → update-report decision |
+| `$VELUMERON_USER_DIR/hypr.lua/user_settings.lua` | user-settings-io.py / .setup/hyprland.sh → hypr.lua (device config) |
 | `$VELUMERON_USER_DIR/gui/caldav-accounts.json` | caldav-client.py (600) |
 | `$VELUMERON_USER_DIR/quickshell/colors.json` | wallust → Colors.qml (live recolour) |
 | `$VELUMERON_USER_DIR/quickshell/wallpapers.json` | wallpaper-set.sh → wallpaper engine |

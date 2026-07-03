@@ -171,6 +171,12 @@ PanelWindow {
         { key: "zones",         icon: "󰝘", title: "Zones",         comp: zonesComp },
         { key: "layouts",       icon: "󰕴", title: "Layouts",       comp: layoutsComp },
         { key: "windowtags",    icon: "󰓹", title: "Window tags",   comp: windowTagsComp },
+        { key: "monitors",      icon: "󰍺", title: "Monitors",      comp: monitorsComp },
+        { key: "workspaces",    icon: "󱂬", title: "Workspaces",    comp: workspacesComp },
+        { key: "autostart",     icon: "󱓞", title: "Autostart",     comp: autostartComp },
+        { key: "quickaccess",   icon: "󱊫", title: "Quick access",  comp: quickAccessComp },
+        { key: "peripherals",   icon: "󰍽", title: "Peripherals",   comp: peripheralsComp },
+        { key: "windowrules",   icon: "󱪯", title: "Window rules",  comp: windowRulesComp },
         { key: "info",          icon: "󰋽", title: "Info",          comp: null,
           hint: "System information." },
         { key: "network",       rail: false, title: "Network",     comp: networkComp },
@@ -307,16 +313,25 @@ PanelWindow {
             z:       5    // above the content pane, so the hover tooltips aren't painted under it
             anchors { top: parent.top; bottom: parent.bottom; left: parent.left }
 
-            Column {
-                anchors { top: parent.top; topMargin: 26; horizontalCenter: parent.horizontalCenter }
-                spacing: 4
+            // The section list has outgrown short menus (1080p half-height) — let the rail scroll.
+            Flickable {
+                anchors { fill: parent; topMargin: 26; bottomMargin: 8 }
+                contentHeight: railCol.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
 
-                Repeater {
-                    model: root.sections.filter(function (s) { return s.rail !== false })
-                    delegate: RailIcon {
-                        required property var modelData
-                        icon:    modelData.icon
-                        section: modelData.key
+                Column {
+                    id: railCol
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 4
+
+                    Repeater {
+                        model: root.sections.filter(function (s) { return s.rail !== false })
+                        delegate: RailIcon {
+                            required property var modelData
+                            icon:    modelData.icon
+                            section: modelData.key
+                        }
                     }
                 }
             }
@@ -368,6 +383,12 @@ PanelWindow {
             Component { id: zonesComp;     ZonesSection {} }
             Component { id: layoutsComp;   LayoutsSection {} }
             Component { id: keybindsComp;  KeybindsSection {} }
+            Component { id: monitorsComp;    MonitorsSection {} }
+            Component { id: workspacesComp;  WorkspacesSection {} }
+            Component { id: autostartComp;   AutostartSection {} }
+            Component { id: quickAccessComp; QuickAccessSection {} }
+            Component { id: peripheralsComp; PeripheralsSection {} }
+            Component { id: windowRulesComp; WindowRulesSection {} }
 
             // Placeholder for registry entries without a page yet (comp: null).
             Column {

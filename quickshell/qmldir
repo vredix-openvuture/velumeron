@@ -2,6 +2,8 @@
 singleton Colors    1.0 Colors.qml
 singleton VtlConfig 1.0 VtlConfig.qml
 singleton SettingsStore 1.0 SettingsStore.qml
+singleton UserSettings 1.0 UserSettings.qml
+singleton OnboardingState 1.0 onboarding/OnboardingState.qml
 singleton UiState   1.0 UiState.qml
 singleton Style     1.0 Style.qml
 singleton Templates 1.0 Templates.qml
@@ -22,6 +24,9 @@ SelectTile  1.0 common/SelectTile.qml
 PosGrid     1.0 common/PosGrid.qml
 TextButton  1.0 common/TextButton.qml
 WallThumb   1.0 common/WallThumb.qml
+InputField  1.0 common/InputField.qml
+AppField    1.0 common/AppField.qml
+IconGlyphPicker 1.0 common/IconGlyphPicker.qml
 
 # Native wallpaper engine (per-monitor background surface)
 WallpaperWindow   1.0 WallpaperWindow.qml
@@ -116,5 +121,23 @@ TaskbarSection       1.0 settings/taskbar/TaskbarSection.qml
 WindowTagsSection    1.0 settings/windowtags/WindowTagsSection.qml
 WallpaperSection     1.0 settings/theme/WallpaperSection.qml
 LockscreenSection    1.0 settings/lockscreen/LockscreenSection.qml
+AutostartSection     1.0 settings/autostart/AutostartSection.qml
+WorkspacesSection    1.0 settings/workspaces/WorkspacesSection.qml
+WorkspaceRuleEditor  1.0 settings/workspaces/WorkspaceRuleEditor.qml
+MonitorsSection      1.0 settings/monitors/MonitorsSection.qml
+MonitorLayoutGrid    1.0 settings/monitors/MonitorLayoutGrid.qml
+
+# Onboarding (first-run wizard / post-update changelog)
+OnboardingWindow     1.0 onboarding/OnboardingWindow.qml
+WelcomePage          1.0 onboarding/pages/WelcomePage.qml
+WorkspacesPage       1.0 onboarding/pages/WorkspacesPage.qml
+WallpaperPage        1.0 onboarding/pages/WallpaperPage.qml
+AppsPage             1.0 onboarding/pages/AppsPage.qml
+AvatarPage           1.0 onboarding/pages/AvatarPage.qml
+DonePage             1.0 onboarding/pages/DonePage.qml
+ChangelogPage        1.0 onboarding/pages/ChangelogPage.qml
+QuickAccessSection   1.0 settings/quickaccess/QuickAccessSection.qml
+PeripheralsSection   1.0 settings/peripherals/PeripheralsSection.qml
+WindowRulesSection   1.0 settings/windowrules/WindowRulesSection.qml
 WallpaperFolders     1.0 settings/theme/WallpaperFolders.qml
 WallpaperSets        1.0 settings/theme/WallpaperSets.qml

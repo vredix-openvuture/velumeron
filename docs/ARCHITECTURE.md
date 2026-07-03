@@ -87,10 +87,21 @@ default values only (`assets/colors_gtk.css`, `hypr.lua/colors.lua`,
 
 Two modes:
 
-- **Full run** (no args): first-time interactive setup.
+- **Full run** (no args): first-time bootstrap. Interactive only for the package
+  install; monitors are auto-configured (`.setup/hyprland.sh --autostart`). The
+  interactive setup lives in the **onboarding GUI** (`quickshell/onboarding/`):
+  on the first shell start `OnboardingState.boot()` finds no version stamp and no
+  configured monitors → opens the wizard (workspaces / wallpaper / apps / avatar;
+  pages write `user_settings.lua` via `assets/scripts/user-settings-io.py`, one
+  batched `hyprctl reload` at the end). After a package update (repo `VERSION` ≠
+  `gui/last-seen-version`) the same window shows the `CHANGELOG.md` sections since
+  the last-seen version and kicks off `--sync --no-restart` in the background.
 - **`--sync`**: refresh the user dir from the source and reload everything. This
   is the everyday "apply my changes" command on the dev box, and what a client
-  effectively does after a package update.
+  effectively does after a package update. `--no-restart` skips the shell restart
+  (mandatory when the running shell itself triggered the sync — restart would
+  re-trigger it in a loop). `user_settings.lua` is excluded from the sync so a
+  package copy can never clobber the device config.
 
 `sync_templates()` does, in order:
 1. Drops stale top-level symlinks in the user dir (rofi/kitty/swaync/assets/…).
