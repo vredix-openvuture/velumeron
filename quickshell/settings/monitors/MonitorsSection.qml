@@ -165,6 +165,12 @@ Item {
             if (root.countdown === 0) root.revert()
         }
     }
+    // Closing the menu mid-countdown (e.g. clicking into a terminal to verify)
+    // counts as Keep: the click proves the screen is usable, and the invisible
+    // auto-revert would otherwise silently undo the apply. The countdown only
+    // ever reverts while the banner is actually on screen.
+    readonly property bool menuOpen: UiState.openDropdown === "vuture-icon"
+    onMenuOpenChanged: if (!menuOpen && root.countdown > 0) root.keep()
 
     // ── Revert countdown — fixed banner above the scroll area so it is visible
     // no matter where the user is scrolled (the Apply button sits at the bottom).
