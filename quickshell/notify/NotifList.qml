@@ -27,6 +27,15 @@ Item {
 
     function dismissRow(row) { for (var i = 0; i < row.items.length; i++) row.items[i].dismiss() }
 
+    // Which app groups are expanded (clicking a stacked card toggles it). Keyed by app name so
+    // the state survives the rows recompute; reassigned as a copy to retrigger bindings.
+    property var expandedApps: ({})
+    function toggleExpand(app) {
+        var m = Object.assign({}, expandedApps)
+        m[app] = !m[app]
+        expandedApps = m
+    }
+
     Text {
         anchors.centerIn: parent
         visible: root.rows.length === 0
@@ -45,10 +54,22 @@ Item {
             id: item
             required property var modelData
             readonly property var n: modelData.latest
+            readonly property bool stacked:  modelData.count > 1
+            readonly property bool expanded: stacked && root.expandedApps[modelData.app] === true
             width:  ListView.view.width
             radius: 10
-            color:  Colors.bgElement
-            implicitHeight: Math.max(54, ibody.y + ibody.implicitHeight + 14)
+            color:  cardMa.containsMouse && item.stacked ? Style.tint(Colors.bgElement, 0.06) : Colors.bgElement
+            implicitHeight: item.expanded ? igroup.y + igroup.implicitHeight + 14
+                                          : Math.max(54, ibody.y + ibody.implicitHeight + 14)
+
+            // A stacked card expands/collapses on click (✕ sits on top and keeps priority).
+            MouseArea {
+                id: cardMa
+                anchors.fill: parent
+                enabled: item.stacked
+                hoverEnabled: true
+                onClicked: root.toggleExpand(item.modelData.app)
+            }
 
             Text {
                 id: iapp
@@ -59,6 +80,7 @@ Item {
             }
             Text {
                 id: isum
+                visible: !item.expanded
                 anchors { left: iapp.left; right: idel.left; rightMargin: 8; top: iapp.bottom; topMargin: 1 }
                 text: item.n ? item.n.summary : ""; color: Colors.fgBright
                 font.pixelSize: 13; font.bold: true; font.family: Style.font; elide: Text.ElideRight
@@ -66,20 +88,49 @@ Item {
             Text {
                 id: ibody
                 anchors { left: iapp.left; right: parent.right; rightMargin: 16; top: isum.bottom; topMargin: 3 }
-                visible: text !== ""
+                visible: !item.expanded && text !== ""
                 text: item.n ? item.n.body : ""; color: Colors.fgPrimary
                 font.pixelSize: 12; font.family: Style.font
                 wrapMode: Text.WordWrap; textFormat: Text.PlainText
                 maximumLineCount: 5; elide: Text.ElideRight
             }
-            // Group count badge
+            // Expanded stack: every notification of the group, newest first.
+            Column {
+                id: igroup
+                visible: item.expanded
+                anchors { left: iapp.left; right: parent.right; rightMargin: 16; top: iapp.bottom; topMargin: 1 }
+                spacing: 10
+                Repeater {
+                    model: item.expanded ? item.modelData.items.slice().reverse() : []
+                    delegate: Column {
+                        required property var modelData
+                        width: igroup.width
+                        spacing: 3
+                        Text {
+                            width: parent.width
+                            text: modelData.summary; color: Colors.fgBright
+                            font.pixelSize: 13; font.bold: true; font.family: Style.font; elide: Text.ElideRight
+                        }
+                        Text {
+                            width: parent.width
+                            visible: text !== ""
+                            text: modelData.body; color: Colors.fgPrimary
+                            font.pixelSize: 12; font.family: Style.font
+                            wrapMode: Text.WordWrap; textFormat: Text.PlainText
+                            maximumLineCount: 5; elide: Text.ElideRight
+                        }
+                    }
+                }
+            }
+            // Group count badge — doubles as the expand hint on stacked cards
             Rectangle {
                 id: badge
-                visible: item.modelData.count > 1
+                visible: item.stacked
                 anchors { right: idel.left; rightMargin: 6; verticalCenter: iapp.verticalCenter }
                 width: cnt.implicitWidth + 12; height: 16; radius: 8
                 color: Colors.bgActive
-                Text { id: cnt; anchors.centerIn: parent; text: item.modelData.count
+                Text { id: cnt; anchors.centerIn: parent
+                       text: item.modelData.count + (item.expanded ? " ▴" : " ▾")
                        color: Colors.fgBright; font.pixelSize: 9; font.bold: true; font.family: Style.font }
             }
             Rectangle {
