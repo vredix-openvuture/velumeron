@@ -192,7 +192,12 @@ def verb_init():
             print("init:builtin:%s" % t["id"])
             return
     if not settings:
+        # Fresh install: don't just point at the shipped template — APPLY it, so a
+        # new device starts with the curated bar/style instead of bare QML defaults.
         set_active("mirobo", "builtin")
+        mirobo = load_template("builtin", "mirobo")
+        if mirobo is not None:
+            write_settings(mirobo.get("settings", {}))
         print("init:mirobo")
         return
     # Genuinely custom config that matches no preset -> keep it as a private user template.

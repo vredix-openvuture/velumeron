@@ -2,7 +2,12 @@
 
 ## Installation
 
-Run the bootstrap from the repository root:
+**AUR install (recommended):** `yay -S velumeron-git`, then pick the **Velumeron** session at
+your login screen (or run `velumeron-session` from a TTY). The session bootstraps itself —
+config seed, Hyprland entry point, monitor auto-config, default wallpaper — no manual setup
+command needed.
+
+**Repo checkout:** run the bootstrap once from the repository root:
 
 ```bash
 ./welcome_to_velumeron.sh

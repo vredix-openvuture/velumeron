@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Velumeron session entry point — the Exec target of the wayland-sessions
+# desktop file (and the TTY command). Runs the unattended bootstrap, then
+# replaces itself with Hyprland, so a fresh install needs zero manual steps:
+# install package → pick "Velumeron" at the login screen → the setup wizard
+# opens inside the session. The bootstrap is idempotent and near-instant once
+# everything exists, so running it on every login is fine (it also refreshes
+# templates after a package update, complementing the update-report GUI).
+_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+export VELUMERON_DIR="${VELUMERON_DIR:-$(dirname "$_DIR")}"
+export VELUMERON_USER_DIR="${VELUMERON_USER_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/velumeron}"
+
+_LOG_DIR="${XDG_CACHE_HOME:-$HOME/.cache}"
+mkdir -p "$_LOG_DIR"
+bash "$VELUMERON_DIR/welcome_to_velumeron.sh" --auto \
+    >>"$_LOG_DIR/velumeron-session.log" 2>&1 || true
+
+exec Hyprland "$@"

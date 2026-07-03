@@ -54,6 +54,7 @@ USER_SETTINGS="$VELUMERON_USER_DIR/hypr.lua/user_settings.lua"
 # Parse flags
 SYNC_MODE=false
 NO_RESTART=false
+AUTO_MODE=false
 for arg in "$@"; do
     case "$arg" in
         --sync) SYNC_MODE=true ;;
@@ -61,10 +62,15 @@ for arg in "$@"; do
         # restarting quickshell here would kill the caller and re-trigger the
         # sync on the next start — an endless loop.
         --no-restart) NO_RESTART=true ;;
+        # Fully unattended bootstrap, run by velumeron-session before Hyprland
+        # starts: no prompts (packages come from the AUR dependency list), no
+        # daemon/shell launching (autostart.lua does that in-session).
+        --auto) AUTO_MODE=true ;;
         -h|--help)
-            echo "Usage: $(basename "$0") [--sync [--no-restart]]"
+            echo "Usage: $(basename "$0") [--sync [--no-restart]] [--auto]"
             echo "  --sync         Refresh package templates without re-running setup"
             echo "  --no-restart   With --sync: don't restart the running shell"
+            echo "  --auto         Unattended bootstrap (used by velumeron-session)"
             exit 0 ;;
     esac
 done
@@ -350,6 +356,10 @@ if [[ "$SYNC_MODE" == true ]]; then
     exit 0
 fi
 
+# Interactive-only part: banner, package install, avatar note. --auto skips it —
+# packages are guaranteed by the AUR dependency list, the avatar moves to the wizard.
+if [[ "$AUTO_MODE" != true ]]; then
+
 # ─── Header ──────────────────────────────────────────────────────────────────
 clear; echo ""
 echo "  ${BOLD}${CYAN}╔══════════════════════════════════════════════════════════╗${RST}"
@@ -430,12 +440,15 @@ else
     ok "No ~/.face avatar yet — the setup wizard will offer to add one."
 fi
 
+fi  # AUTO_MODE
+
 # ─── 1.5) Seed user dir + environment ────────────────────────────────────────
 # Must run BEFORE we start services — hypridle and friends look for config
 # files in $VELUMERON_USER_DIR.
 say "Setting up ~/.config/velumeron/"
 
 # wallust symlink — wallust expects its config at ~/.config/wallust/
+mkdir -p "$HOME/.config"   # pristine accounts may not have it yet
 if [[ ! -e "$HOME/.config/wallust" ]]; then
     ln -sf "$VELUMERON_DIR/wallust" "$HOME/.config/wallust"
     ok "Linked ~/.config/wallust → velumeron/wallust"
@@ -470,6 +483,9 @@ ok "Wrote ~/.config/environment.d/velumeron.conf"
 systemctl --user import-environment VELUMERON_DIR VELUMERON_USER_DIR 2>/dev/null || true
 
 # ─── 2) Background services ───────────────────────────────────────────────────
+# --auto runs BEFORE the Wayland session exists — autostart.lua starts every
+# daemon in-session, so skip them here.
+if [[ "$AUTO_MODE" != true ]]; then
 say "Starting background services"
 
 AUTOSTART_LUA="$VELUMERON_DIR/hypr.lua/modules/autostart.lua"
@@ -564,6 +580,8 @@ if [[ -f "$USER_SETTINGS" ]]; then
     ' "$USER_SETTINGS")
 fi
 
+fi  # AUTO_MODE
+
 # ─── 3) Hyprland config ───────────────────────────────────────────────────────
 say "Hyprland configuration"
 
@@ -625,19 +643,24 @@ fi
 [[ -n "$mon2" ]] && ok "Secondary monitor: $mon2"
 
 # ─── 6) Launch the shell ─────────────────────────────────────────────────────
+if [[ "$AUTO_MODE" != true ]]; then
 say "Starting the shell"
 # launch-shell.sh → QuickShell (bar, OSD, notifications, settings). Idempotent.
+# (--auto: Hyprland hasn't started yet; autostart.lua launches the shell.)
 if bash "$VELUMERON_DIR/assets/scripts/launch-shell.sh" >/dev/null 2>&1; then
     ok "Shell running."
 else
     warn "Shell did not start cleanly — it will also start on the next Hyprland launch."
 fi
+fi  # AUTO_MODE
 
 # ─── 9) Default wallpaper ─────────────────────────────────────────────────────
 say "Setting default wallpaper"
 
 DEFAULT_WP="$VELUMERON_DIR/assets/wallpaper/horizontal/wp_qUmiue_hor.jpg"
-if [[ -f "$DEFAULT_WP" ]]; then
+if [[ "$AUTO_MODE" == true && -f "$VELUMERON_USER_DIR/quickshell/wallpapers.json" ]]; then
+    ok "Wallpaper already configured — keeping it."
+elif [[ -f "$DEFAULT_WP" ]]; then
     bash "$VELUMERON_DIR/assets/scripts/wallpaper-set.sh" --no-showcase "$DEFAULT_WP"
     ok "Wallpaper set."
 else

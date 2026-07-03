@@ -18,6 +18,10 @@
   rules sections.
 - Style settings: one-click GTK/Qt app theming (adw-gtk3 + wallust palettes
   in qt5ct/qt6ct) and a global dark/light switch.
+- "Velumeron" login session: picking it in the display manager (or running
+  `velumeron-session` from a TTY) bootstraps everything unattended — no
+  manual `velumeron-setup` needed.
+- Fresh installs start with the curated Mirobo bar/style preset applied.
 - Calendar & tasks (CalDAV), zones, layout switcher, btop dropdown and an
   updates bar module.
 - Taskbar, hot corners, rofi successor overlays and template system.

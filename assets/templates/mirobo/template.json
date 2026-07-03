@@ -3,7 +3,7 @@
   "name": "Mirobo",
   "author": "velumeron",
   "builtin": true,
-  "version": 1,
+  "version": 2,
   "settings": {
     "opacity_enabled": true,
     "panel_width_pct": 20,
@@ -14,8 +14,6 @@
     "swaync_margin_top_pct": 20,
     "swaync_width_pct": 20,
     "logo_variant": "full",
-    "wallpaper_dir_hor": "/home/vredix/Bilder/Wallpapers/horizontal",
-    "wallpaper_dir_ver": "/home/vredix/Bilder/Wallpapers/vertical",
     "rofi_source": "sets",
     "panel_side": "left",
     "panel_valign": "bottom",
@@ -30,10 +28,7 @@
     "bar_opacity_value": 0.88,
     "bar_mode": "frame",
     "bar_edges": [
-      "top",
-      "left",
-      "bottom",
-      "right"
+      "top"
     ],
     "bar_thickness": 40,
     "bar_inner_radius": 10,
@@ -70,149 +65,24 @@
         "end": []
       }
     },
-    "bar_module_bg": "none",
-    "bar_module_bg_radius": 6,
+    "bar_module_bg": "module",
+    "bar_module_bg_radius": 8,
     "bar_position": "top",
-    "bar_module_margin": 24,
-    "bar_module_spacing": 22,
+    "bar_module_margin": 4,
+    "bar_module_spacing": 4,
     "bar_colorful": true,
     "colorful_enabled": true,
     "colorful_menus": true,
     "colorful_osd": true,
-    "bar_module_bg_opacity": 0.37,
+    "bar_module_bg_opacity": 0.2,
     "notify_dock": true,
     "notify_position": "bottom-center",
     "osd_style": "dock",
-    "osd_position": "bottom-right",
-    "bar_per_monitor": true,
-    "bar_monitors": {
-      "DP-3": {
-        "bar_edges": [
-          "top",
-          "right"
-        ],
-        "menu_width_pct": 50,
-        "menu_height_pct": 40,
-        "bar_modules_m": {
-          "frame": {
-            "top": {
-              "start": [
-                "submap"
-              ],
-              "center": [
-                "clock"
-              ],
-              "end": []
-            },
-            "left": {
-              "start": [],
-              "center": [
-                "mpris",
-                "volume"
-              ],
-              "end": [
-                "workspaces",
-                "bluetooth",
-                "vuture-icon"
-              ]
-            },
-            "bottom": {
-              "start": [],
-              "center": [],
-              "end": []
-            },
-            "right": {
-              "start": [],
-              "center": [
-                "workspaces"
-              ],
-              "end": [
-                "vuture-icon"
-              ]
-            }
-          }
-        },
-        "bar_module_bg": "group",
-        "bar_module_bg_opacity": 0.3,
-        "bar_module_bg_radius": 4
-      },
-      "DP-2": {
-        "bar_mode": "frame",
-        "bar_modules_m": {
-          "frame": {
-            "top": {
-              "start": [
-                "vuture-icon",
-                "user",
-                "mpris",
-                "performance"
-              ],
-              "center": [
-                "clock",
-                "workspaces",
-                "submap"
-              ],
-              "end": [
-                "volume",
-                "bluetooth",
-                "network",
-                "notiftray",
-                "wallpaper-switcher"
-              ]
-            },
-            "left": {
-              "start": [],
-              "center": [
-                "submap",
-                "workspaces"
-              ],
-              "end": [
-                "bluetooth",
-                "volume",
-                "network",
-                "vuture-icon"
-              ]
-            },
-            "bottom": {
-              "start": [],
-              "center": [],
-              "end": []
-            },
-            "right": {
-              "start": [],
-              "center": [],
-              "end": []
-            }
-          }
-        },
-        "bar_edges": [
-          "top"
-        ],
-        "bar_module_margin": 4,
-        "bar_module_spacing": 4,
-        "bar_module_bg": "module",
-        "bar_module_bg_opacity": 0.2,
-        "bar_icon_size": 14,
-        "bar_font_size": 14,
-        "bar_thickness": 40,
-        "bar_module_bg_radius": 8,
-        "menu_height_pct": 52,
-        "menu_width_pct": 22
-      }
-    },
+    "osd_position": "bottom-center",
+    "bar_per_monitor": false,
     "notify_main_monitor_only": true,
-    "wallpaper_dirs": {
-      "DP-2": "/home/vredix/Bilder/Wallpapers/horizontal",
-      "DP-3": "/home/vredix/Bilder/Wallpapers/vertical"
-    },
     "wallpaper_search_subfolders": true,
     "wallpaper_subfolder_sorting": true,
-    "wallpaper_sets": {
-      "Sunset Vibe": {
-        "DP-2": "/home/vredix/Bilder/Wallpapers/horizontal/purple-women-smoking.jpg",
-        "DP-3": "/home/vredix/Bilder/Wallpapers/vertical/purple-women-smoking.jpg"
-      }
-    },
     "osd_width_px": 300,
     "osd_height_px": 52,
     "notify_center_height": 320,
@@ -236,6 +106,99 @@
     "launcher_dock": true,
     "launcher_fullscreen": false,
     "launcher_width": 800,
-    "launcher_rows": 4
+    "launcher_rows": 4,
+    "corner_actions_enabled": true,
+    "corner_default_dwell": 300,
+    "corner_zones": {
+      "top-left": {
+        "action": {
+          "type": "none",
+          "value": ""
+        },
+        "dwell": null
+      },
+      "bottom-left": {
+        "action": {
+          "type": "launcher",
+          "value": ""
+        },
+        "dwell": null
+      }
+    },
+    "taskbar_enabled": true,
+    "taskbar_position": "bottom-left",
+    "taskbar_style": "dock",
+    "taskbar_visibility": "hover",
+    "taskbar_scope": "monitor",
+    "taskbar_labels": false,
+    "taskbar_icon_size": 34,
+    "taskbar_layer": "over",
+    "taskbar_margin": 12,
+    "window_tags_enabled": true,
+    "window_tags_position": "top-left",
+    "fancy_zones_enabled": true,
+    "calendar_menu_width": 480,
+    "calendar_menu_max_height": 800,
+    "module_settings": {
+      "updates": {
+        "check_minutes": 10,
+        "show_zero": true,
+        "include_flatpak": true,
+        "update_command": "yay -Syu"
+      }
+    },
+    "bar_modules_m": {
+      "frame": {
+        "top": {
+          "start": [
+            "vuture-icon",
+            "user",
+            "performance",
+            "workspaces",
+            "mpris"
+          ],
+          "center": [
+            "clock",
+            "submap"
+          ],
+          "end": [
+            "updates",
+            "volume",
+            "bluetooth",
+            "network",
+            "notiftray",
+            "wallpaper-switcher",
+            "tray"
+          ]
+        },
+        "left": {
+          "start": [],
+          "center": [
+            "submap",
+            "workspaces"
+          ],
+          "end": [
+            "bluetooth",
+            "volume",
+            "network",
+            "vuture-icon"
+          ]
+        },
+        "bottom": {
+          "start": [],
+          "center": [],
+          "end": []
+        },
+        "right": {
+          "start": [],
+          "center": [],
+          "end": []
+        }
+      }
+    },
+    "bar_icon_size": 14,
+    "bar_font_size": 14,
+    "menu_height_pct": 52,
+    "menu_width_pct": 22
   }
 }

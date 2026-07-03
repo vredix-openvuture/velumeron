@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Velumeron
+Comment=Hyprland desktop with the Velumeron shell
+Exec=velumeron-session
+Type=Application
+DesktopNames=Hyprland
