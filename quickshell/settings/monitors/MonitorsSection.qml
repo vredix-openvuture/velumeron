@@ -306,6 +306,25 @@ Item {
                                         ? { supports_hdr: false, cm: "auto" }
                                         : { supports_hdr: true, cm: "hdr" })
                 }
+                Stepper {
+                    visible: root.selMon ? root.selMon.supports_hdr === true : false
+                    label: "SDR brightness"; unit: "%"; min: 100; max: 250; step: 10; labelWidth: 110
+                    value: root.selMon ? Math.round((root.selMon.sdrbrightness || 1) * 100) : 100
+                    onChanged: v => root.upd({ sdrbrightness: v / 100 })
+                }
+                Stepper {
+                    visible: root.selMon ? root.selMon.supports_hdr === true : false
+                    label: "SDR saturation"; unit: "%"; min: 100; max: 150; step: 5; labelWidth: 110
+                    value: root.selMon ? Math.round((root.selMon.sdrsaturation || 1) * 100) : 100
+                    onChanged: v => root.upd({ sdrsaturation: v / 100 })
+                }
+                SubLabel {
+                    visible: root.selMon ? root.selMon.supports_hdr === true : false
+                    width: parent.width
+                    text: "In HDR mode the SDR desktop maps to reference brightness/gamut and looks dim "
+                        + "and washed out — raise these until it matches your usual look "
+                        + "(brightness 150–200 %, saturation 110–125 % are typical)."
+                }
 
                 Row {
                     spacing: 10

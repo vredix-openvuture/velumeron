@@ -48,14 +48,15 @@ Item {
         MouseArea { id: cHov; anchors.fill: parent; hoverEnabled: true; onClicked: cell.picked() }
     }
 
-    // First-frame thumbnail for live wallpapers (cached); reload the Image when ready.
-    Process {
-        id: thumbProc
-        command: ["bash", "-c",
-            "t=\"$1\"; v=\"$2\"; mkdir -p \"$(dirname \"$t\")\"; " +
-            "[ -f \"$t\" ] || ffmpeg -y -i \"$v\" -vframes 1 -vf scale=320:-1 \"$t\" >/dev/null 2>&1; echo ok",
-            "vtl", cell.thumb, cell.path]
-        onRunningChanged: if (!running) { img.source = ""; img.source = "file://" + cell.thumb }
+    // First-frame thumbnail for live wallpapers (cached). Generation goes through the
+    // global ThumbQueue — a per-cell ffmpeg exhausted the shell's file descriptors when
+    // a folder full of videos instantiated hundreds of cells at once.
+    Connections {
+        target: ThumbQueue
+        enabled: cell.isVid
+        function onDone(t) {
+            if (t === cell.thumb) { img.source = ""; img.source = "file://" + cell.thumb }
+        }
     }
-    Component.onCompleted: if (cell.isVid) thumbProc.running = true
+    Component.onCompleted: if (cell.isVid) ThumbQueue.enqueue(cell.path, cell.thumb)
 }

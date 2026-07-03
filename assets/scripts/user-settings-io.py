@@ -180,6 +180,10 @@ def parse_monitors(body):
             "supports_hdr": fraw("supports_hdr", "false") == "true",
             "vrr": int(fraw("vrr", "0")),
             "cm": fstr("cm", "auto"),
+            # SDR content mapping while the display runs in HDR (cm = "hdr"):
+            # without these the whole desktop looks dim and washed out.
+            "sdrbrightness": float(fraw("sdrbrightness", "1")),
+            "sdrsaturation": float(fraw("sdrsaturation", "1")),
         })
     # Array order = var order (mon1 first); unmapped outputs keep file order.
     mons.sort(key=lambda m: int(m["var"][3:]) if m["var"].startswith("mon") else 99)
@@ -321,6 +325,10 @@ def validate_monitors(data):
             errors.append("%s: scale must be within 0.25–4" % o)
         if not POS_RE.match(str(m.get("position", "auto"))):
             errors.append("%s: position must be XxY or auto" % o)
+        if not 0.5 <= float(m.get("sdrbrightness", 1)) <= 3:
+            errors.append("%s: sdrbrightness must be within 0.5–3" % o)
+        if not 0.5 <= float(m.get("sdrsaturation", 1)) <= 2:
+            errors.append("%s: sdrsaturation must be within 0.5–2" % o)
     return errors
 
 
@@ -418,6 +426,13 @@ def emit_monitors(data):
             "    supports_hdr = %s," % ("true" if m.get("supports_hdr") else "false"),
             "    vrr          = %d," % int(m.get("vrr", 0)),
             "    cm           = %s," % lua_quote(m.get("cm", "auto")),
+        ] + (
+            ["    sdrbrightness = %s," % numfmt(m["sdrbrightness"])]
+            if float(m.get("sdrbrightness", 1)) != 1.0 else []
+        ) + (
+            ["    sdrsaturation = %s," % numfmt(m["sdrsaturation"])]
+            if float(m.get("sdrsaturation", 1)) != 1.0 else []
+        ) + [
             "})",
         ]
     return out
