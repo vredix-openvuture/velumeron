@@ -8,7 +8,9 @@ QtObject {
     // User-module glide and the settings home hub, so their icons/commands/order never diverge.
     readonly property var sessionActions: [
         { icon: "󰌾", label: "Lock",     cmd: "loginctl lock-session" },
-        { icon: "󰤄", label: "Suspend",  cmd: "\"$VELUMERON_DIR/assets/scripts/launch-hyprlock.sh\" & sleep 1 && systemctl suspend" },
+        // Locking is handled by hypridle (before_sleep_cmd + inhibit_sleep=3) —
+        // launching hyprlock here as well raced the suspend and crashed on resume.
+        { icon: "󰤄", label: "Suspend",  cmd: "systemctl suspend" },
         { icon: "󰗽", label: "Logout",   cmd: "hyprctl dispatch exit" },
         { icon: "󰜉", label: "Reboot",   cmd: "systemctl reboot" },
         { icon: "󰐥", label: "Shutdown", cmd: "systemctl poweroff" }

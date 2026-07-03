@@ -19,7 +19,9 @@ choice=$(entries | rofi -dmenu -p "" -theme "$THEME")
 
 case "$choice" in
     Settings) setsid "$VELUMERON_DIR/bin/velumeron" -t >/dev/null 2>&1 & ;;
-    Suspend)  "$VELUMERON_DIR/assets/scripts/launch-hyprlock.sh" & sleep 4 && systemctl suspend ;;
+    # Locking on suspend is hypridle's job (before_sleep_cmd + inhibit_sleep=3) —
+    # launching hyprlock here as well raced the suspend and crashed on resume.
+    Suspend)  systemctl suspend ;;
     Shutdown) systemctl poweroff ;;
     Logout)   hyprctl dispatch exit ;;
     Reboot)   systemctl reboot ;;
