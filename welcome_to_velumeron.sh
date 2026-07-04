@@ -235,6 +235,18 @@ PY
             setsid -f hypridle >/dev/null 2>&1 || true
         fi
     fi
+    # Migrate the idle-suspend listener to the guarded script: a bare
+    # `systemctl suspend` on-timeout fires right through video encodes,
+    # builds and playing audio (idle ≠ no work).
+    if [[ -f "$_hc" ]] && grep -Eq '^\s*on-timeout\s*=\s*systemctl suspend\s*$' "$_hc"; then
+        sed -i -E 's|^(\s*on-timeout\s*=\s*)systemctl suspend\s*$|\1~/.config/velumeron/assets/scripts/idle-suspend.sh|' "$_hc"
+        ok "Migrated hypridle.conf idle-suspend to the guarded script"
+        if pgrep -x hypridle >/dev/null 2>&1; then
+            pkill -x hypridle 2>/dev/null || true
+            sleep 0.3
+            setsid -f hypridle >/dev/null 2>&1 || true
+        fi
+    fi
 
     # ── Bundled fonts ─────────────────────────────────────────────────
     # The configs rely on specific fonts (FantasqueSansM Nerd Font, Atomic Age,
