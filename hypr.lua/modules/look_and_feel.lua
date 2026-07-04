@@ -70,6 +70,12 @@ hl.config({
     misc = {
         focus_on_activate  = true,
         disable_autoreload = true,
+        -- Escape hatch for black screens after suspend/resume: Hyprland does NOT
+        -- wake DPMS on input by default — if the post-resume dpms-on fires while
+        -- the outputs are still re-initializing, the session is alive but every
+        -- display stays dark and no key would ever bring them back.
+        key_press_enables_dpms  = true,
+        mouse_move_enables_dpms = true,
     },
 
 

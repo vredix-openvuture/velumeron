@@ -235,6 +235,17 @@ PY
             setsid -f hypridle >/dev/null 2>&1 || true
         fi
     fi
+    # Migrate after_sleep to the retrying wake script: a single dpms-on can fire
+    # before the displays finished re-initializing — session alive, screens dark.
+    if [[ -f "$_hc" ]] && grep -qF "after_sleep_cmd         = hyprctl dispatch 'hl.dsp.dpms(\"on\")'" "$_hc"; then
+        sed -i "s|after_sleep_cmd         = hyprctl dispatch 'hl.dsp.dpms(\"on\")'|after_sleep_cmd         = ~/.config/velumeron/assets/scripts/resume-wake.sh|" "$_hc"
+        ok "Migrated hypridle.conf resume wake to the retrying script"
+        if pgrep -x hypridle >/dev/null 2>&1; then
+            pkill -x hypridle 2>/dev/null || true
+            sleep 0.3
+            setsid -f hypridle >/dev/null 2>&1 || true
+        fi
+    fi
     # Migrate the idle-suspend listener to the guarded script: a bare
     # `systemctl suspend` on-timeout fires right through video encodes,
     # builds and playing audio (idle ≠ no work).
