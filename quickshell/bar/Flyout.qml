@@ -209,14 +209,25 @@ PanelWindow {
             }
         }
 
-        Item {
-            id: body
+        // Content taller than maxH scrolls (wheel/touch) instead of getting cut off.
+        Flickable {
+            id: scroller
             anchors.fill: parent
             anchors.margins: root.inPad
-            implicitHeight: childrenRect.height
+            contentWidth: width
+            contentHeight: body.implicitHeight
+            interactive: contentHeight > height
+            boundsBehavior: Flickable.StopAtBounds
             opacity: panel.contentReveal
             clip: true   // clip the content to the (morphing) panel so it doesn't spill out before
                          // the panel has finished growing — the fillet Shapes (siblings) still overflow.
+
+            Item {
+                id: body
+                width: scroller.width
+                height: implicitHeight
+                implicitHeight: childrenRect.height
+            }
         }
     }
 }
