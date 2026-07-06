@@ -180,7 +180,18 @@ def write_user_template(tid, name, settings, author="you"):
 
 
 def verb_init():
-    if get_active():
+    active = get_active()
+    if active:
+        # Self-heal a wedged first run: an active BUILTIN whose settings never
+        # landed (empty/missing settings.json) means the device is running bare
+        # QML defaults — re-apply the template instead of bailing with "already".
+        # User templates are never overwritten here.
+        if active["source"] == "builtin" and not read_json(settings_path(), {}):
+            tmpl = load_template("builtin", active["id"])
+            if tmpl is not None and tmpl.get("settings"):
+                write_settings(tmpl["settings"])
+                print("init:healed:%s" % active["id"])
+                return
         print("init:already")
         return
     settings = read_json(settings_path(), {})
@@ -194,10 +205,16 @@ def verb_init():
     if not settings:
         # Fresh install: don't just point at the shipped template — APPLY it, so a
         # new device starts with the curated bar/style instead of bare QML defaults.
-        set_active("mirobo", "builtin")
+        # Only claim the template active once it actually loaded: marking it active
+        # with the settings unwritten wedged the device on bare defaults forever
+        # (every later init saw "already"). If the files are missing, leave the
+        # state untouched so the next boot retries.
         mirobo = load_template("builtin", "mirobo")
-        if mirobo is not None:
-            write_settings(mirobo.get("settings", {}))
+        if mirobo is None:
+            print("init:mirobo-missing", file=sys.stderr)
+            return
+        set_active("mirobo", "builtin")
+        write_settings(mirobo.get("settings", {}))
         print("init:mirobo")
         return
     # Genuinely custom config that matches no preset -> keep it as a private user template.
@@ -217,13 +234,23 @@ def verb_sync():
         return
     tmpl = load_template(active["source"], active["id"])
     if tmpl is None:
-        # Active template vanished (e.g. deleted builtin) — re-init and bail.
-        set_active("mirobo", "builtin")
+        # Active template vanished (e.g. deleted builtin) — fall back to mirobo,
+        # APPLYING it (pointing without writing left the device on bare defaults).
+        mirobo = load_template("builtin", "mirobo")
+        if mirobo is not None:
+            set_active("mirobo", "builtin")
+            write_settings(mirobo.get("settings", {}))
         print("sync:reset")
         return
     cur = read_json(settings_path(), {})
     if cur == tmpl.get("settings", {}):
         print("sync:insync")
+        return
+    if not cur and active["source"] == "builtin":
+        # Empty settings.json under an active builtin is a wedged state, never a
+        # deliberate config — re-apply the template instead of forking an empty copy.
+        write_settings(tmpl.get("settings", {}))
+        print("sync:healed:%s" % active["id"])
         return
     if active["source"] == "builtin":
         base = slugify(tmpl.get("name", active["id"])) + "-kopie"
