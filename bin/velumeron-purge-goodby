@@ -1,0 +1,272 @@
+#!/usr/bin/env bash
+# velumeron-purge-goodby — the counterpart to welcome_to_velumeron.sh.
+# Removes velumeron and everything it ever wrote to this machine.
+#
+# SAFE BY DEFAULT: with no flags this is a DRY-RUN that only prints what would
+# happen. Nothing is touched until you pass --execute and type the confirmation.
+#
+#   velumeron-purge-goodby                     dry-run (always safe)
+#   velumeron-purge-goodby --execute           actually remove (asks you to type "goodbye")
+#     --system                also remove the system-level files (needs sudo)
+#     --keep-cache            leave ~/.cache/{velumeron,wallust,wal} alone
+#     --restore-hypr-backup   put the pre-velumeron Hyprland config back in place
+#     --remove-source         also delete $VELUMERON_DIR itself (repo / /usr/share/velumeron)
+#     --force                 override the running-session / dirty-repo guards and
+#                             skip the typed confirmation (for non-interactive use)
+#
+# Packages installed by the setup are NEVER removed — they are listed at the end
+# so you can decide yourself (other software may depend on them).
+
+set -u
+
+_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+VELUMERON_DIR="${VELUMERON_DIR:-$(dirname "$_DIR")}"
+VELUMERON_USER_DIR="${VELUMERON_USER_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/velumeron}"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}"
+
+EXECUTE=0; SYSTEM=0; KEEP_CACHE=0; RESTORE_HYPR=0; REMOVE_SOURCE=0; FORCE=0
+for arg in "$@"; do
+    case "$arg" in
+        --execute)             EXECUTE=1 ;;
+        --system)              SYSTEM=1 ;;
+        --keep-cache)          KEEP_CACHE=1 ;;
+        --restore-hypr-backup) RESTORE_HYPR=1 ;;
+        --remove-source)       REMOVE_SOURCE=1 ;;
+        --force)               FORCE=1 ;;
+        -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "velumeron-purge-goodby: unknown option '$arg' (try --help)" >&2; exit 1 ;;
+    esac
+done
+
+# ── Output helpers ────────────────────────────────────────────────────────────
+N_DONE=0; N_SKIP=0; N_MANUAL=0
+say()    { printf '\n\033[1m%s\033[0m\n' "$1"; }
+mark()   { printf '  %-16s %s\n' "$1" "$2"; }
+did()    { mark "$1" "$2"; N_DONE=$((N_DONE + 1)); }
+skip()   { mark "[skip: $1]" "$2"; N_SKIP=$((N_SKIP + 1)); }
+manual() { mark "[manual]" "$1"; N_MANUAL=$((N_MANUAL + 1)); }
+
+# ── Primitive actions (every path is existence-checked; symlinks are verified
+#    to point at velumeron before they are removed) ───────────────────────────
+ours() {  # does this (symlink target) path live inside velumeron?
+    case "$1" in
+        "$VELUMERON_DIR"/*|"$VELUMERON_DIR"|"$VELUMERON_USER_DIR"/*|"$VELUMERON_USER_DIR") return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+do_rm() {  # do_rm <path> — file or directory created by velumeron
+    local p="$1"
+    [[ -e "$p" || -L "$p" ]] || { skip "missing" "$p"; return; }
+    if (( EXECUTE )); then rm -rf -- "$p"; did "[DELETED]" "$p"
+    else did "[DELETE]" "$p"; fi
+}
+
+do_unlink() {  # do_unlink <link> — remove only if it is OUR symlink
+    local l="$1" t
+    [[ -e "$l" || -L "$l" ]] || { skip "missing" "$l"; return; }
+    [[ -L "$l" ]] || { skip "not a symlink — left alone" "$l"; return; }
+    t="$(readlink -f -- "$l" 2>/dev/null || readlink -- "$l")"
+    ours "$t" || { skip "foreign target ($t)" "$l"; return; }
+    if (( EXECUTE )); then rm -f -- "$l"; did "[UNLINKED]" "$l → $t"
+    else did "[UNLINK]" "$l → $t"; fi
+}
+
+do_gtk_css() {  # remove the wallust @import line the setup appended to gtk.css
+    local f="$1"
+    [[ -f "$f" ]] || { skip "missing" "$f"; return; }
+    grep -q 'wallust\.css' "$f" || { skip "no wallust import" "$f"; return; }
+    # If the file holds nothing but the import (setup created it), drop it whole.
+    if ! grep -q '.' <(grep -v 'wallust\.css' "$f" | grep -v '^[[:space:]]*$'); then
+        if (( EXECUTE )); then rm -f -- "$f"; did "[DELETED]" "$f (only contained the wallust import)"
+        else did "[DELETE]" "$f (only contains the wallust import)"; fi
+    else
+        if (( EXECUTE )); then sed -i '/@import url("wallust\.css");/d' "$f"; did "[EDITED]" "$f (wallust import removed)"
+        else did "[EDIT]" "$f (remove wallust import line)"; fi
+    fi
+}
+
+# ── Guards ────────────────────────────────────────────────────────────────────
+[[ -n "${HOME:-}" && -d "$HOME" ]] || { echo "!! \$HOME is not set — refusing to run." >&2; exit 1; }
+case "$(basename "$VELUMERON_USER_DIR")" in
+    velumeron) : ;;
+    *) echo "!! VELUMERON_USER_DIR='$VELUMERON_USER_DIR' does not look like a velumeron dir — refusing." >&2; exit 1 ;;
+esac
+
+session_active() {
+    local pid
+    for pid in $(pgrep -x quickshell 2>/dev/null); do
+        grep -qz "VELUMERON_DIR=" "/proc/$pid/environ" 2>/dev/null && return 0
+    done
+    return 1
+}
+
+if (( EXECUTE )); then
+    if session_active && (( ! FORCE )); then
+        echo "!! A velumeron shell session is running. Purging under it will kill your desktop."
+        echo "   Log into another session / a TTY first, or repeat with --force."
+        exit 1
+    fi
+    if (( ! FORCE )); then
+        echo "This will remove velumeron and everything it created (see the dry-run)."
+        printf "Type 'goodbye' to continue: "
+        read -r answer
+        [[ "$answer" == "goodbye" ]] || { echo "Aborted — nothing was touched."; exit 1; }
+    fi
+else
+    echo "── DRY-RUN — nothing will be touched. Re-run with --execute to purge. ──"
+fi
+
+main() {
+    # ── User configuration ────────────────────────────────────────────────────
+    say "User configuration"
+    do_rm "$VELUMERON_USER_DIR"
+
+    # ── Hyprland entry point + symlinks (~/.config/hypr) ──────────────────────
+    say "Hyprland integration"
+    do_rm     "$HOME/.config/hypr/hyprland.lua"
+    do_unlink "$HOME/.config/hypr/hypridle.conf"
+    do_unlink "$HOME/.config/hypr/hyprlock.conf"
+    if [[ -f "$HOME/.config/hypr/hyprland.lua.bak" ]]; then
+        if (( RESTORE_HYPR )); then
+            if (( EXECUTE )); then
+                mv -- "$HOME/.config/hypr/hyprland.lua.bak" "$HOME/.config/hypr/hyprland.lua"
+                did "[RESTORED]" "~/.config/hypr/hyprland.lua (from .bak)"
+            else did "[RESTORE]" "~/.config/hypr/hyprland.lua.bak → hyprland.lua"; fi
+        else
+            mark "[keep]" "~/.config/hypr/hyprland.lua.bak (your pre-velumeron config — restore with --restore-hypr-backup)"
+        fi
+    fi
+    if [[ -d "$HOME/.config/hypr.bak" ]]; then
+        if (( RESTORE_HYPR )); then
+            if (( EXECUTE )); then
+                if [[ ! -e "$HOME/.config/hypr" ]] || rmdir -- "$HOME/.config/hypr" 2>/dev/null; then
+                    mv -- "$HOME/.config/hypr.bak" "$HOME/.config/hypr"
+                    did "[RESTORED]" "~/.config/hypr (from ~/.config/hypr.bak)"
+                else
+                    cp -an -- "$HOME/.config/hypr.bak/." "$HOME/.config/hypr/"
+                    did "[RESTORED]" "~/.config/hypr.bak copied into ~/.config/hypr (kept both; no overwrites)"
+                fi
+            else did "[RESTORE]" "~/.config/hypr.bak → ~/.config/hypr"; fi
+        else
+            mark "[keep]" "~/.config/hypr.bak (your pre-velumeron Hyprland config — restore with --restore-hypr-backup)"
+        fi
+    fi
+
+    # ── Wallust ───────────────────────────────────────────────────────────────
+    say "Wallust"
+    do_unlink "$HOME/.config/wallust"
+
+    # ── GTK theming ───────────────────────────────────────────────────────────
+    say "GTK theming (settings.ini stays — only wallust artefacts go)"
+    for v in gtk-3.0 gtk-4.0; do
+        do_rm      "$HOME/.config/$v/wallust.css"
+        do_gtk_css "$HOME/.config/$v/gtk.css"
+    done
+
+    # ── Environment ───────────────────────────────────────────────────────────
+    say "Environment"
+    do_rm "$HOME/.config/environment.d/velumeron.conf"
+
+    # ── Fonts ─────────────────────────────────────────────────────────────────
+    say "Fonts"
+    do_rm "$HOME/.local/share/fonts/velumeron"
+    if (( EXECUTE )) && [[ ! -d "$HOME/.local/share/fonts/velumeron" ]]; then
+        fc-cache -f "$HOME/.local/share/fonts" >/dev/null 2>&1 || true
+    fi
+
+    # ── Caches ────────────────────────────────────────────────────────────────
+    if (( KEEP_CACHE )); then
+        say "Caches (kept — --keep-cache)"
+        for p in "$CACHE_DIR/velumeron" "$CACHE_DIR/wallust" "$CACHE_DIR/wal" "$CACHE_DIR/velumeron-session.log"; do
+            [[ -e "$p" ]] && mark "[keep]" "$p"
+        done
+    else
+        say "Caches"
+        do_rm "$CACHE_DIR/velumeron"
+        do_rm "$CACHE_DIR/wallust"
+        do_rm "$CACHE_DIR/wal"
+        do_rm "$CACHE_DIR/velumeron-session.log"
+    fi
+
+    # ── System-level files (AUR / manual installs; need sudo) ─────────────────
+    say "System-level files"
+    local sys_paths=(
+        /usr/share/wayland-sessions/velumeron.desktop
+        /usr/bin/velumeron-setup
+        /usr/bin/velumeron-session
+        /usr/local/bin/velumeron
+    )
+    local owner
+    for p in "${sys_paths[@]}"; do
+        [[ -e "$p" || -L "$p" ]] || { skip "missing" "$p"; continue; }
+        if owner="$(pacman -Qoq "$p" 2>/dev/null)" && [[ -n "$owner" ]]; then
+            manual "$p is owned by package '$owner' — remove it via: pacman -R $owner"
+            continue
+        fi
+        if (( SYSTEM )); then
+            if (( EXECUTE )); then sudo rm -f -- "$p" && did "[DELETED]" "$p" || manual "$p (sudo rm failed — remove by hand)"
+            else did "[DELETE]" "$p (sudo)"; fi
+        else
+            manual "$p — re-run with --system to remove (needs sudo)"
+        fi
+    done
+    if [[ -d /usr/share/velumeron && "$VELUMERON_DIR" != /usr/share/velumeron ]]; then
+        manual "/usr/share/velumeron exists (packaged install) — remove via pacman, or --remove-source with VELUMERON_DIR=/usr/share/velumeron"
+    fi
+
+    # ── Packages (never removed automatically) ────────────────────────────────
+    say "Packages installed by the setup (NOT removed — decide yourself)"
+    local pkgs=(hypridle hyprlock hyprpolkitagent quickshell rofi-wayland kitty
+                wallust hypremoji mpv qt6-multimedia qt6-declarative cmake ninja
+                playerctl jq socat fastfetch tmux network-manager-applet gnome-keyring
+                nextcloud-client localsend openrgb ddcutil grim hyprshot python
+                zenity qt5ct qt6ct adw-gtk-theme brightnessctl wl-clipboard clipvault
+                ffmpeg libnotify)
+    local installed=()
+    for p in "${pkgs[@]}"; do pacman -Q "$p" &>/dev/null && installed+=("$p"); done
+    if (( ${#installed[@]} )); then
+        printf '  %s\n' "${installed[@]}" | column -c 80 2>/dev/null || printf '  %s\n' "${installed[*]}"
+        mark "[manual]" "remove any you no longer want: sudo pacman -Rns <pkg…>"
+    else
+        mark "[skip]" "none of the setup's packages are installed"
+    fi
+
+    # ── The source tree itself — always last ──────────────────────────────────
+    say "Source tree ($VELUMERON_DIR)"
+    if (( ! REMOVE_SOURCE )); then
+        mark "[keep]" "$VELUMERON_DIR (pass --remove-source to delete it too)"
+    elif [[ ! -d "$VELUMERON_DIR" ]]; then
+        skip "missing" "$VELUMERON_DIR"
+    else
+        local dirty=0
+        if [[ -d "$VELUMERON_DIR/.git" ]]; then
+            [[ -n "$(git -C "$VELUMERON_DIR" status --porcelain 2>/dev/null)" ]] && dirty=1
+            [[ -n "$(git -C "$VELUMERON_DIR" log --branches --not --remotes --oneline 2>/dev/null | head -1)" ]] && dirty=1
+        fi
+        if (( dirty && ! FORCE )); then
+            skip "git repo has uncommitted or unpushed work — commit/push or use --force" "$VELUMERON_DIR"
+        elif (( EXECUTE )); then
+            # main() is fully parsed before it runs, so deleting the script's own
+            # file here is safe; just don't leave the shell sitting in the corpse.
+            cd "$HOME" || exit 1
+            rm -rf -- "$VELUMERON_DIR"
+            did "[DELETED]" "$VELUMERON_DIR"
+        else
+            did "[DELETE]" "$VELUMERON_DIR$( ((dirty)) && echo ' (dirty git tree — only with --force)')"
+        fi
+    fi
+
+    # ── Summary ───────────────────────────────────────────────────────────────
+    say "Summary"
+    if (( EXECUTE )); then
+        echo "  $N_DONE action(s) done, $N_SKIP skipped, $N_MANUAL left for you."
+        echo "  Goodbye. Log out before your next login and pick another session —"
+        echo "  the Velumeron entry may still be listed until the .desktop file is gone."
+    else
+        echo "  $N_DONE action(s) planned, $N_SKIP skipped, $N_MANUAL manual."
+        echo "  Nothing was touched. Run again with --execute to purge for real."
+    fi
+}
+
+main "$@"
