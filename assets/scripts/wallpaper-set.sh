@@ -32,9 +32,18 @@ WALLUST_LOCK="${XDG_RUNTIME_DIR:-/tmp}/vtl-wallust.lock"
 # the main run is belt-and-braces against any other way wallust finds to never exit.
 _wallust() {
     local sub="$1"; shift
+    # Global appearance (Settings → Style → App theming): "light" swaps the configured
+    # dark palette for its light counterpart — only meaningful for `run` (image-derived);
+    # fixed schemes (`cs`) define their colors explicitly.
+    local -a pal=()
+    if [[ "$sub" == "run" ]]; then
+        local _amode
+        _amode=$(cat "$VELUMERON_USER_DIR/wallust/app-mode" 2>/dev/null || echo dark)
+        [[ "$_amode" == "light" ]] && pal=(-p saliencelightdistributed)
+    fi
     timeout -k 5 30 flock -n "$WALLUST_LOCK" \
-        wallust --config-dir "$VELUMERON_DIR/wallust" "$sub" -s "$@" || return
-    ( timeout -k 2 5 wallust --config-dir "$VELUMERON_DIR/wallust" "$sub" -T -q "$@" >/dev/null 2>&1 & )
+        wallust --config-dir "$VELUMERON_DIR/wallust" "$sub" -s "${pal[@]}" "$@" || return
+    ( timeout -k 2 5 wallust --config-dir "$VELUMERON_DIR/wallust" "$sub" -T -q "${pal[@]}" "$@" >/dev/null 2>&1 & )
 }
 
 # Native wallpaper engine: upsert this monitor's entry in wallpapers.json. Quickshell watches the file

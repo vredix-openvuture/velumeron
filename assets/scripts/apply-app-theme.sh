@@ -99,6 +99,23 @@ do_mode() {
     for d in "${GTK_DIRS[@]}"; do
         write_settings_ini "$d" "$theme" "$([[ $1 == dark ]] && echo 1 || echo 0)"
     done
+
+    # The wallust palettes (GTK/Qt/kitty/quickshell) are what apps actually SHOW —
+    # without re-deriving them in the chosen brightness the flip is invisible.
+    # Persist the mode for every future `wallust run` (wallpaper-set.sh reads it),
+    # then re-theme from the current main-monitor wallpaper so it applies now.
+    mkdir -p "$VELUMERON_USER_DIR/wallust"
+    printf '%s\n' "$1" > "$VELUMERON_USER_DIR/wallust/app-mode"
+    local cmode main wp
+    cmode=$(cat "$VELUMERON_USER_DIR/wallust/color-mode" 2>/dev/null || echo auto)
+    if [[ "$cmode" == auto ]]; then
+        main=$(hyprctl monitors -j 2>/dev/null | jq -r '[.[]|select(.focused)][0].name // .[0].name' 2>/dev/null || true)
+        [[ -n "$main" && "$main" != null ]] \
+            && wp=$(jq -r --arg m "$main" '.[$m].path // empty' \
+                    "$VELUMERON_USER_DIR/quickshell/wallpapers.json" 2>/dev/null || true)
+        [[ -n "${wp:-}" && -f "$wp" ]] && \
+            bash "$VELUMERON_DIR/assets/scripts/wallpaper-set.sh" --mon "$main" --file "$wp" >/dev/null 2>&1 || true
+    fi
 }
 
 case "${1:-}" in
