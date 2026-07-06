@@ -595,6 +595,45 @@ def hyprctl(*args):
         return False
 
 
+def apply_cursor_theme(theme, size):
+    """`hyprctl setcursor` only recolours Hyprland's own cursor — running GTK apps
+    follow gsettings (xsettings portal), legacy/X11 apps the ~/.icons/default
+    Inherits chain, and non-gsettings GTK reads settings.ini. Hit all of them so
+    the picker doesn't look dead outside the compositor."""
+    hyprctl("setcursor", theme, str(size))
+    for key, val in (("cursor-theme", theme), ("cursor-size", str(size))):
+        try:
+            subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", key, val],
+                           capture_output=True, timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    icons_default = os.path.expanduser("~/.icons/default")
+    try:
+        os.makedirs(icons_default, exist_ok=True)
+        with open(os.path.join(icons_default, "index.theme"), "w") as f:
+            f.write("[Icon Theme]\nName=Default\nComment=Default cursor (managed by velumeron)\n"
+                    "Inherits=%s\n" % theme)
+    except OSError:
+        pass
+    import configparser
+    for gtk_dir in ("gtk-3.0", "gtk-4.0"):
+        d = os.path.expanduser(os.path.join("~/.config", gtk_dir))
+        p = os.path.join(d, "settings.ini")
+        try:
+            os.makedirs(d, exist_ok=True)
+            c = configparser.RawConfigParser()
+            c.optionxform = str
+            c.read(p)
+            if not c.has_section("Settings"):
+                c.add_section("Settings")
+            c.set("Settings", "gtk-cursor-theme-name", theme)
+            c.set("Settings", "gtk-cursor-theme-size", str(size))
+            with open(p, "w") as f:
+                c.write(f, space_around_delimiters=False)
+        except (OSError, configparser.Error):
+            pass
+
+
 def set_section(name, data, reload_after):
     validator = VALIDATORS[name]
     if name == "workspaces":
@@ -619,7 +658,7 @@ def set_section(name, data, reload_after):
     if name == "peripherals":
         cur = data.get("cursor", {})
         if cur.get("theme"):
-            hyprctl("setcursor", cur["theme"], str(int(cur.get("size", 24))))
+            apply_cursor_theme(cur["theme"], int(cur.get("size", 24)))
 
     if reload_after and not hyprctl("reload"):
         print(json.dumps({"ok": True, "warning": "hyprctl reload failed — changes apply on next reload"}))
