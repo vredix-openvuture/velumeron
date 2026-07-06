@@ -57,13 +57,13 @@ PanelWindow {
         Keys.onReturnPressed:  root.activate(root.sel)
         Keys.onEnterPressed:   root.activate(root.sel)
 
-        Rectangle {
+        StyledRect {
             anchors.centerIn: parent
             width:  rowLay.implicitWidth + 48
             height: 150
             radius: Style.rCard
             color:  Colors.bgPrimary
-            border.width: 1; border.color: Colors.boNormal
+            borderWidth: 1; borderColor: Style.chromeBorder
             opacity: root.reveal
             scale:   0.96 + 0.04 * root.reveal
             MouseArea { anchors.fill: parent }   // swallow clicks so the backdrop doesn't close
@@ -74,15 +74,15 @@ PanelWindow {
                 spacing: 14
                 Repeater {
                     model: root.actions
-                    delegate: Rectangle {
+                    delegate: StyledRect {
                         id: btn
                         required property var modelData
                         required property int index
                         readonly property bool seld: root.sel === index
                         width: 96; height: 110; radius: Style.rControl
                         color: btn.seld ? Style.accent : (bHov.containsMouse ? Style.controlHover : Style.controlFill)
-                        border.width: btn.seld ? 0 : Style.controlBorderW
-                        border.color: Style.controlBorderColor
+                        borderWidth: btn.seld ? 0 : Style.controlBorderW
+                        borderColor: Style.controlBorderColor
                         Behavior on color { ColorAnimation { duration: 90 } }
                         Column {
                             anchors.centerIn: parent; spacing: 10

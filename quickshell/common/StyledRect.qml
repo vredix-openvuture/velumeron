@@ -14,6 +14,11 @@ Item {
     property color color:       "transparent"
     property int   borderWidth: 0
     property color borderColor: "transparent"
+    // Per-corner overrides (docked surfaces square their merged edge); default to `radius`.
+    property int radiusTL: radius
+    property int radiusTR: radius
+    property int radiusBR: radius
+    property int radiusBL: radius
 
     Loader {
         anchors.fill: parent
@@ -23,10 +28,14 @@ Item {
     Component {
         id: rect
         Rectangle {
-            radius:       sr.radius
-            color:        sr.color
-            border.width: sr.borderWidth
-            border.color: sr.borderColor
+            radius:            sr.radius
+            topLeftRadius:     sr.radiusTL
+            topRightRadius:    sr.radiusTR
+            bottomRightRadius: sr.radiusBR
+            bottomLeftRadius:  sr.radiusBL
+            color:             sr.color
+            border.width:      sr.borderWidth
+            border.color:      sr.borderColor
         }
     }
 
@@ -44,9 +53,10 @@ Item {
     }
 
     function _octagon(w, h) {
-        var c = Math.max(0, Math.min(sr.radius, w / 2, h / 2))
-        return "M" + c + ",0 L" + (w - c) + ",0 L" + w + "," + c
-             + " L" + w + "," + (h - c) + " L" + (w - c) + "," + h
-             + " L" + c + "," + h + " L0," + (h - c) + " L0," + c + " Z"
+        function cl(v) { return Math.max(0, Math.min(v, w / 2, h / 2)) }
+        var tl = cl(sr.radiusTL), tr = cl(sr.radiusTR), br = cl(sr.radiusBR), bl = cl(sr.radiusBL)
+        return "M" + tl + ",0 L" + (w - tr) + ",0 L" + w + "," + tr
+             + " L" + w + "," + (h - br) + " L" + (w - br) + "," + h
+             + " L" + bl + "," + h + " L0," + (h - bl) + " L0," + tl + " Z"
     }
 }

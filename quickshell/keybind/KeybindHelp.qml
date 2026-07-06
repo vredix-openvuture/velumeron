@@ -187,15 +187,15 @@ PanelWindow {
     }
 
     // ── Card ────────────────────────────────────────────────────────────────────
-    Rectangle {
+    StyledRect {
         id: card
         anchors.centerIn: parent
         width:  Math.min(parent.width - 80, root.colCount === 2 ? 880 : 520)
         height: Math.min(parent.height - 80, content.implicitHeight + 2 * 22)
-        radius: 16
+        radius: Style.rCard
         color:  Colors.bgPrimary
-        border.width: 1
-        border.color: Colors.boActive
+        borderWidth: 1
+        borderColor: Style.chromeBorder
 
         MouseArea { anchors.fill: parent }   // swallow clicks so the backdrop doesn't close
 
@@ -218,11 +218,11 @@ PanelWindow {
             }
 
             // Search field (revealed with /)
-            Rectangle {
+            StyledRect {
                 visible: root.searching
-                width:  parent.width; height: 34; radius: 8
+                width:  parent.width; height: 34; radius: Style.rControl
                 color:  Colors.bgElement
-                border.width: 1; border.color: Colors.boActive
+                borderWidth: 1; borderColor: Colors.boActive
                 TextField {
                     id: searchField
                     anchors.fill: parent
@@ -281,8 +281,8 @@ PanelWindow {
                                         spacing: 10
                                         visible: root.rowMatches(modelData)
 
-                                        Rectangle {
-                                            width: 118; height: 24; radius: 6
+                                        StyledRect {
+                                            width: 118; height: 24; radius: Style.rTile
                                             color: Style.tint(Colors.bgActive, 0.28)
                                             Text {
                                                 anchors { left: parent.left; leftMargin: 9; verticalCenter: parent.verticalCenter }

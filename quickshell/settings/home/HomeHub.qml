@@ -211,7 +211,7 @@ Item {
         }
     }
 
-    component NavButton: Rectangle {
+    component NavButton: StyledRect {
         id: nb
         property string icon: ""
         property string label: ""
@@ -219,7 +219,7 @@ Item {
         width:  (parent.width - 2 * 10) / 3
         height: 64; radius: Style.rTile
         color: nbHov.containsMouse ? Style.controlHover : Style.controlFill
-        border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+        borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
         Behavior on color { ColorAnimation { duration: 100 } }
         Column {
             anchors.centerIn: parent; spacing: 4
@@ -231,13 +231,13 @@ Item {
         MouseArea { id: nbHov; anchors.fill: parent; hoverEnabled: true; onClicked: nb.trig() }
     }
 
-    component PowerTile: Rectangle {
+    component PowerTile: StyledRect {
         id: pt
         property string icon: ""
         property string cmd:  ""
         width: 48; height: 48; radius: Style.rTile
         color: ptHov.containsMouse ? Style.accent : Style.controlFill
-        border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+        borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
         Behavior on color { ColorAnimation { duration: 120 } }
         Text { anchors.centerIn: parent; text: pt.icon; color: ptHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
                font.pixelSize: 18; font.family: Style.font }

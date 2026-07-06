@@ -61,15 +61,15 @@ PanelWindow {
     }
 
     // Card
-    Rectangle {
+    StyledRect {
         id: card
         anchors.centerIn: parent
         width:  Math.min(920, parent.width * 0.62)
         height: Math.min(700, parent.height * 0.74)
         radius: Style.rCard
         color:  Colors.bgPrimary
-        border.width: 1
-        border.color: Colors.boActive
+        borderWidth: 1
+        borderColor: Style.chromeBorder
 
         // Header
         Item {

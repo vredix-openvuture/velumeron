@@ -70,14 +70,14 @@ PanelWindow {
         MouseArea { anchors.fill: parent; onClicked: UiState.clipboardOpen = false }
     }
 
-    Rectangle {
+    StyledRect {
         id: card
         width:  Math.min(VtlConfig.clipboardWidth, root.width - 80)
         height: Math.min(root.height - 120, 28 + 46 + 10 + VtlConfig.clipboardRows * 52)
         anchors.horizontalCenter: parent.horizontalCenter
         y: (root.height - height) / 2
         radius: Style.rCard; color: Colors.bgPrimary
-        border.width: 1; border.color: Colors.boNormal
+        borderWidth: 1; borderColor: Style.chromeBorder
         opacity: root.reveal
         scale:   0.97 + 0.03 * root.reveal
         MouseArea { anchors.fill: parent }
@@ -85,9 +85,9 @@ PanelWindow {
         Column {
             anchors.fill: parent; anchors.margins: 14; spacing: 10
 
-            Rectangle {
+            StyledRect {
                 width: parent.width; height: 46; radius: Style.rControl; color: Style.controlFill
-                border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+                borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
                 Text { anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
                        text: "󰅍"; color: Colors.fgMuted; font.pixelSize: 18; font.family: Style.font }
                 TextInput {
@@ -110,7 +110,7 @@ PanelWindow {
                 clip: true; model: root.filtered
                 boundsBehavior: Flickable.StopAtBounds
                 highlightMoveDuration: 80
-                delegate: Rectangle {
+                delegate: StyledRect {
                     id: row
                     required property var modelData
                     required property int index

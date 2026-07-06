@@ -172,7 +172,7 @@ Flyout {
         }
 
         // No account yet → point at the settings page (works offline as a plain month view).
-        Rectangle {
+        StyledRect {
             visible: !CalDavService.hasAccounts
             width: parent.width
             height: hintCol.implicitHeight + 20
@@ -215,7 +215,7 @@ Flyout {
                 RailCaption { text: "CALENDARS" }
                 Repeater {
                     model: root.eventCals
-                    delegate: Rectangle {
+                    delegate: StyledRect {
                         id: calRow
                         required property var modelData
                         readonly property bool hidden: VtlConfig.caldavCalHidden(modelData.id)
@@ -310,7 +310,7 @@ Flyout {
                     readonly property int cellW: Math.floor((parent.width - 6 * 4) / 7)
                     Repeater {
                         model: root.gridDays
-                        delegate: Rectangle {
+                        delegate: StyledRect {
                             id: cell
                             required property var modelData
                             readonly property int  k:       root.dayKey(modelData)
@@ -322,8 +322,8 @@ Flyout {
                             radius: Style.rTile
                             color:  isSel ? Style.tint(Style.accent, 0.45)
                                   : cellHov.containsMouse ? Style.controlHover : "transparent"
-                            border.width: isToday ? 1 : 0
-                            border.color: Style.accent
+                            borderWidth: isToday ? 1 : 0
+                            borderColor: Style.accent
                             Behavior on color { ColorAnimation { duration: 90 } }
 
                             Column {
@@ -378,7 +378,7 @@ Flyout {
                     spacing: 4
                     Repeater {
                         model: root.selEvents
-                        delegate: Rectangle {
+                        delegate: StyledRect {
                             id: evRow
                             required property var modelData
                             width: parent.width; height: 40
@@ -590,7 +590,7 @@ Flyout {
     }
 
     // One selectable task-list entry in the rail (General or a concrete list).
-    component TaskListRow: Rectangle {
+    component TaskListRow: StyledRect {
         id: tlr
         property string label: ""
         property color  dot:   "transparent"
@@ -635,7 +635,7 @@ Flyout {
         MouseArea { id: tlrHov; anchors.fill: parent; hoverEnabled: true; onClicked: tlr.pick() }
     }
 
-    component NavBtn: Rectangle {
+    component NavBtn: StyledRect {
         property string sym: ""
         property bool   dim: false
         signal tap()
@@ -648,7 +648,7 @@ Flyout {
     }
 
     // Quick-add text field; Enter submits and clears.
-    component InputRow: Rectangle {
+    component InputRow: StyledRect {
         id: ir
         property string placeholder: ""
         signal submit(string text)
@@ -657,8 +657,8 @@ Flyout {
         height: 32
         radius: Style.rControl
         color:  Style.controlFill
-        border.width: irInput.activeFocus ? 1 : Style.controlBorderW
-        border.color: irInput.activeFocus ? Style.accent : Style.controlBorderColor
+        borderWidth: irInput.activeFocus ? 1 : Style.controlBorderW
+        borderColor: irInput.activeFocus ? Style.accent : Style.controlBorderColor
 
         TextInput {
             id: irInput
@@ -743,7 +743,7 @@ Flyout {
         }
         Repeater {
             model: tgroup.items
-            delegate: Rectangle {
+            delegate: StyledRect {
                 id: task
                 required property var modelData
                 readonly property bool overdue: !modelData.completed && modelData.dueMs > 0

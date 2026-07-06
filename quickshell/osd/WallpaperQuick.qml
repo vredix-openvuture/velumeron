@@ -164,10 +164,10 @@ Flyout {
             width: parent.width; spacing: 6
             Repeater {
                 model: root._mons
-                delegate: Rectangle {
+                delegate: StyledRect {
                     required property string modelData
                     readonly property bool sel: root.view === "grid" && root.selMon === modelData
-                    width: Math.max(32, mtl.implicitWidth + 18); height: 26; radius: 7
+                    width: Math.max(32, mtl.implicitWidth + 18); height: 26; radius: Style.rTile
                     color: sel ? Colors.bgActive
                          : (mth.containsMouse ? Style.tint(Colors.bgActive, 0.20) : Colors.bgElement)
                     Behavior on color { ColorAnimation { duration: 90 } }
@@ -178,9 +178,9 @@ Flyout {
                                 onClicked: { root.view = "grid"; root.selMon = modelData } }
                 }
             }
-            Rectangle {
+            StyledRect {
                 readonly property bool sel: root.view === "sets"
-                width: stl.implicitWidth + 18; height: 26; radius: 7
+                width: stl.implicitWidth + 18; height: 26; radius: Style.rTile
                 color: sel ? Colors.bgActive
                      : (sth.containsMouse ? Style.tint(Colors.bgActive, 0.20) : Colors.bgElement)
                 Behavior on color { ColorAnimation { duration: 90 } }
@@ -192,10 +192,10 @@ Flyout {
             // Static / live filter (grid view only).
             Repeater {
                 model: root.view === "grid" ? [{ k: "all", l: "All" }, { k: "static", l: "Static" }, { k: "live", l: "Live" }] : []
-                delegate: Rectangle {
+                delegate: StyledRect {
                     required property var modelData
                     readonly property bool sel: root.typeFilter === modelData.k
-                    width: ftl.implicitWidth + 16; height: 26; radius: 7
+                    width: ftl.implicitWidth + 16; height: 26; radius: Style.rTile
                     color: sel ? Colors.bgActive
                          : (fth.containsMouse ? Style.tint(Colors.bgActive, 0.20) : Colors.bgElement)
                     Behavior on color { ColorAnimation { duration: 90 } }
@@ -281,9 +281,9 @@ Flyout {
             width: parent.width; spacing: 6
             Repeater {
                 model: root.sets
-                delegate: Rectangle {
+                delegate: StyledRect {
                     required property var modelData
-                    width: parent.width; height: 56; radius: 10
+                    width: parent.width; height: 56; radius: Style.rControl
                     color: setHov.containsMouse ? Style.tint(Colors.bgActive, 0.18) : Colors.bgElement
                     Behavior on color { ColorAnimation { duration: 90 } }
                     Rectangle {

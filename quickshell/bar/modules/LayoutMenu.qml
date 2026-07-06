@@ -67,7 +67,7 @@ Flyout {
 
         Repeater {
             model: root.entries
-            delegate: Rectangle {
+            delegate: StyledRect {
                 id: entry
                 required property var modelData
                 readonly property bool on: root.current === modelData.value
@@ -117,7 +117,7 @@ Flyout {
 
         // Footer: jump to the layout builder.
         Item { width: 1; height: 2 }
-        Rectangle {
+        StyledRect {
             width: parent.width; height: 30
             radius: Style.rTile
             color: editHov.containsMouse ? Style.controlHover : "transparent"

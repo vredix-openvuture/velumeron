@@ -149,24 +149,23 @@ PanelWindow {
     // Border underlay — a subtle boNormal rectangle behind the fill, sticking out by `bw` on the FREE
     // edges only; the docked edge stays flush so the opaque fill (on top) covers it → that side merges
     // borderless into the bar/edge, while the free edges keep a continuous 1px border (like the menus).
-    Rectangle {
+    StyledRect {
         id: cardEdge
         readonly property int bw: 1
-        color:  Colors.boNormal
+        color:  Style.chromeBorder
         x:      card.x      - (root.dockEdge === "left" ? 0 : bw)
         y:      card.y      - (root.dockEdge === "top"  ? 0 : bw)
         width:  card.width  + (root.dockEdge === "left" ? 0 : bw) + (root.dockEdge === "right"  ? 0 : bw)
         height: card.height + (root.dockEdge === "top"  ? 0 : bw) + (root.dockEdge === "bottom" ? 0 : bw)
         radius: Style.rCard + bw
-        topLeftRadius:     (root.dockEdge === "top"    || root.dockEdge === "left")  ? 0 : Style.rCard + bw
-        topRightRadius:    (root.dockEdge === "top"    || root.dockEdge === "right") ? 0 : Style.rCard + bw
-        bottomLeftRadius:  (root.dockEdge === "bottom" || root.dockEdge === "left")  ? 0 : Style.rCard + bw
-        bottomRightRadius: (root.dockEdge === "bottom" || root.dockEdge === "right") ? 0 : Style.rCard + bw
+        radiusTL: (root.dockEdge === "top"    || root.dockEdge === "left")  ? 0 : Style.rCard + bw
+        radiusTR: (root.dockEdge === "top"    || root.dockEdge === "right") ? 0 : Style.rCard + bw
+        radiusBL: (root.dockEdge === "bottom" || root.dockEdge === "left")  ? 0 : Style.rCard + bw
+        radiusBR: (root.dockEdge === "bottom" || root.dockEdge === "right") ? 0 : Style.rCard + bw
         opacity: card.opacity
-        antialiasing: true
     }
 
-    Rectangle {
+    StyledRect {
         id: card
         // Windowed: grow from a nub at slideEdge to the full rect (edge pinned). Fullscreen: full rect.
         readonly property bool morph: !root.fs
@@ -177,12 +176,12 @@ PanelWindow {
         y: (morph &&  root.growV && root.slideEdge === "bottom") ? root.fy + root.fullH - height : root.fy
         radius: Style.rCard
         // Square the corners on the docked edge so the card visually merges into the bar/edge.
-        topLeftRadius:     (root.dockEdge === "top"    || root.dockEdge === "left")  ? 0 : Style.rCard
-        topRightRadius:    (root.dockEdge === "top"    || root.dockEdge === "right") ? 0 : Style.rCard
-        bottomLeftRadius:  (root.dockEdge === "bottom" || root.dockEdge === "left")  ? 0 : Style.rCard
-        bottomRightRadius: (root.dockEdge === "bottom" || root.dockEdge === "right") ? 0 : Style.rCard
+        radiusTL: (root.dockEdge === "top"    || root.dockEdge === "left")  ? 0 : Style.rCard
+        radiusTR: (root.dockEdge === "top"    || root.dockEdge === "right") ? 0 : Style.rCard
+        radiusBL: (root.dockEdge === "bottom" || root.dockEdge === "left")  ? 0 : Style.rCard
+        radiusBR: (root.dockEdge === "bottom" || root.dockEdge === "right") ? 0 : Style.rCard
         color:  Colors.bgPrimary
-        border.width: 0                                   // border is drawn by the cardEdge underlay
+        // border is drawn by the cardEdge underlay
         clip:    true                                     // clip content to the morphing card
         // Background fades in fast so you see the nub grow out of the edge (matches the bar flyouts).
         opacity: root.fs ? root.reveal : Math.min(1.0, root.reveal * 4.0)
@@ -195,9 +194,9 @@ PanelWindow {
             opacity: root.contentReveal      // content fades in once the card has room for it
 
             // Search field.
-            Rectangle {
+            StyledRect {
                 width: parent.width; height: 46; radius: Style.rControl; color: Style.controlFill
-                border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+                borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
                 Text { anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
                        text: "󰍉"; color: Colors.fgMuted; font.pixelSize: 18; font.family: Style.font }
                 TextInput {
@@ -234,7 +233,7 @@ PanelWindow {
                     required property int index
                     width: list.cellWidth; height: list.cellHeight
 
-                    Rectangle {
+                    StyledRect {
                         anchors.fill: parent; anchors.margins: root.grid ? 4 : 0
                         radius: Style.rControl
                         color: row.index === list.currentIndex ? Style.accent

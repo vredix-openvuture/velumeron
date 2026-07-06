@@ -125,13 +125,13 @@ PanelWindow {
             MouseArea { anchors.fill: parent; onClicked: root.cancel() }   // click outside → cancel
         }
 
-        Rectangle {
+        StyledRect {
             id: card
             anchors.centerIn: parent
             width:  Math.min(root.width - 80, strip.contentWidth + 28)
             height: 150
             radius: Style.rCard; color: Colors.bgPrimary
-            border.width: 1; border.color: Colors.boNormal
+            borderWidth: 1; borderColor: Style.chromeBorder
             opacity: root.reveal
             scale:   0.97 + 0.03 * root.reveal
 
@@ -146,15 +146,15 @@ PanelWindow {
                 highlightMoveDuration: 90
                 interactive: false
 
-                delegate: Rectangle {
+                delegate: StyledRect {
                     id: wcard
                     required property var modelData
                     required property int index
                     readonly property bool seld: root.sel === index
                     width: 112; height: strip.height; radius: Style.rControl
                     color: wcard.seld ? Style.accent : (wHov.containsMouse ? Style.controlHover : Style.controlFill)
-                    border.width: wcard.seld ? 0 : Style.controlBorderW
-                    border.color: Style.controlBorderColor
+                    borderWidth: wcard.seld ? 0 : Style.controlBorderW
+                    borderColor: Style.controlBorderColor
                     Behavior on color { ColorAnimation { duration: 90 } }
                     Column {
                         anchors.centerIn: parent; width: parent.width - 16; spacing: 8

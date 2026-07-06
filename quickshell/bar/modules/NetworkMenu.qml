@@ -126,8 +126,8 @@ Flyout {
                     id: nd
                     required property var modelData
                     width: body.width; spacing: 4
-                    Rectangle {
-                        width: parent.width; height: 44; radius: 10
+                    StyledRect {
+                        width: parent.width; height: 44; radius: Style.rControl
                         color: nd.modelData.active ? Style.tint(Colors.bgActive, 0.28)
                              : (rHov.containsMouse ? Style.tint(Colors.bgActive, 0.16) : Colors.bgElement)
                         Behavior on color { ColorAnimation { duration: 100 } }
@@ -150,10 +150,10 @@ Flyout {
                                     onClicked: nd.modelData.active ? root.disconnect(nd.modelData.ssid) : root.connect(nd.modelData) }
                     }
                     // Inline password field for secured, unknown networks.
-                    Rectangle {
+                    StyledRect {
                         visible: root.pwFor === nd.modelData.ssid
-                        width: parent.width; height: 38; radius: 10; color: Colors.bgPrimary
-                        border.width: 1; border.color: Colors.bgActive
+                        width: parent.width; height: 38; radius: Style.rControl; color: Colors.bgPrimary
+                        borderWidth: 1; borderColor: Colors.bgActive
                         TextInput {
                             id: pw
                             anchors { left: parent.left; leftMargin: 12; right: goBtn.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
@@ -193,9 +193,9 @@ Flyout {
             }
             Repeater {
                 model: root.vpns
-                delegate: Rectangle {
+                delegate: StyledRect {
                     required property var modelData
-                    width: parent.width; height: 40; radius: 10
+                    width: parent.width; height: 40; radius: Style.rControl
                     color: modelData.active ? Style.tint(Colors.boActive, 0.22)
                          : (vHov.containsMouse ? Style.tint(Colors.bgActive, 0.16) : Colors.bgElement)
                     Behavior on color { ColorAnimation { duration: 100 } }
@@ -217,10 +217,10 @@ Flyout {
     }
 
     // ── Reusable bits ──────────────────────────────────────────────────────────────
-    component IconBtn: Rectangle {
+    component IconBtn: StyledRect {
         property string icon: ""
         signal trig()
-        width: 28; height: 28; radius: 7; color: iHov.containsMouse ? Colors.bgActive : Colors.bgElement
+        width: 28; height: 28; radius: Style.rTile; color: iHov.containsMouse ? Colors.bgActive : Colors.bgElement
         Behavior on color { ColorAnimation { duration: 100 } }
         Text { anchors.centerIn: parent; text: parent.icon; color: Colors.fgPrimary; font.pixelSize: 13; font.family: Style.font }
         MouseArea { id: iHov; anchors.fill: parent; hoverEnabled: true; onClicked: parent.trig() }

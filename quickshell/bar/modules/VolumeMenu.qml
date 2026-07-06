@@ -50,13 +50,13 @@ Flyout {
         }
         Repeater {
             model: sec.nodes
-            delegate: Rectangle {
+            delegate: StyledRect {
                 id: row
                 required property var modelData
                 readonly property bool isDef: sec.def !== null && modelData === sec.def
                 width:  sec.width
                 height: 50
-                radius: 10
+                radius: Style.rControl
                 color:  rowHov.containsMouse || isDef
                         ? Style.tint(Colors.bgActive, isDef ? 0.30 : 0.16)
                         : Colors.bgElement

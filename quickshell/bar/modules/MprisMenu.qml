@@ -79,10 +79,10 @@ Flyout {
             visible: root._players.length > 1
             Repeater {
                 model: root._players
-                delegate: Rectangle {
+                delegate: StyledRect {
                     required property var modelData
                     readonly property bool cur: modelData === root.player
-                    width: 38; height: 38; radius: 10
+                    width: 38; height: 38; radius: Style.rControl
                     color: cur ? Colors.bgActive
                          : (pHov.containsMouse ? Style.tint(Colors.bgActive, 0.20) : Colors.bgElement)
                     Behavior on color { ColorAnimation { duration: 100 } }

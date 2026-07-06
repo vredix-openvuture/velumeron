@@ -50,14 +50,14 @@ Item {
         spacing: 8
         model:   root.rows
 
-        delegate: Rectangle {
+        delegate: StyledRect {
             id: item
             required property var modelData
             readonly property var n: modelData.latest
             readonly property bool stacked:  modelData.count > 1
             readonly property bool expanded: stacked && root.expandedApps[modelData.app] === true
             width:  ListView.view.width
-            radius: 10
+            radius: Style.rControl
             color:  cardMa.containsMouse && item.stacked ? Style.tint(Colors.bgElement, 0.06) : Colors.bgElement
             implicitHeight: item.expanded ? igroup.y + igroup.implicitHeight + 14
                                           : Math.max(54, ibody.y + ibody.implicitHeight + 14)
