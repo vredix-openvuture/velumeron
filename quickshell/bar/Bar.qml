@@ -38,7 +38,7 @@ PanelWindow {
                                              Colors.bgPrimary.g * (1 - tintAmt) + Colors.bgActive.g * tintAmt,
                                              Colors.bgPrimary.b * (1 - tintAmt) + Colors.bgActive.b * tintAmt, 1)
     readonly property color cFill:   Qt.rgba(cBg.r, cBg.g, cBg.b, bgAlpha)
-    readonly property color cBorder: Style.tint(Colors.boNormal, bgAlpha)
+    readonly property color cBorder: Style.tint(Style.chromeBorder, bgAlpha)
 
     function edgeOn(e) { return VtlConfig.edgeActiveFor(e, root.mon) }
     function thick(e)  { return edgeOn(e) ? VtlConfig.edgeThicknessFor(e, root.mon) : 0 }
@@ -69,23 +69,23 @@ PanelWindow {
     function roundRectPath(x0, y0, x1, y1, rad) {
         var rr = Math.max(0, Math.min(rad, (x1 - x0) / 2, (y1 - y0) / 2))
         return "M" + (x0 + rr) + "," + y0 +
-            " L" + (x1 - rr) + "," + y0 + " A" + rr + "," + rr + " 0 0 1 " + x1 + "," + (y0 + rr) +
-            " L" + x1 + "," + (y1 - rr) + " A" + rr + "," + rr + " 0 0 1 " + (x1 - rr) + "," + y1 +
-            " L" + (x0 + rr) + "," + y1 + " A" + rr + "," + rr + " 0 0 1 " + x0 + "," + (y1 - rr) +
-            " L" + x0 + "," + (y0 + rr) + " A" + rr + "," + rr + " 0 0 1 " + (x0 + rr) + "," + y0 + " Z"
+            " L" + (x1 - rr) + "," + y0 + " " + Style.cornerSeg(rr, x1, (y0 + rr)) +
+            " L" + x1 + "," + (y1 - rr) + " " + Style.cornerSeg(rr, (x1 - rr), y1) +
+            " L" + (x0 + rr) + "," + y1 + " " + Style.cornerSeg(rr, x0, (y1 - rr)) +
+            " L" + x0 + "," + (y0 + rr) + " " + Style.cornerSeg(rr, (x0 + rr), y0) + " Z"
     }
 
     // Rounded rect with per-corner radii (clockwise from top-left).
     function rrPath(x0, y0, x1, y1, rTL, rTR, rBR, rBL) {
         var d = "M" + (x0 + rTL) + "," + y0
         d += " L" + (x1 - rTR) + "," + y0
-        if (rTR > 0) d += " A" + rTR + "," + rTR + " 0 0 1 " + x1 + "," + (y0 + rTR)
+        if (rTR > 0) d += " " + Style.cornerSeg(rTR, x1, (y0 + rTR))
         d += " L" + x1 + "," + (y1 - rBR)
-        if (rBR > 0) d += " A" + rBR + "," + rBR + " 0 0 1 " + (x1 - rBR) + "," + y1
+        if (rBR > 0) d += " " + Style.cornerSeg(rBR, (x1 - rBR), y1)
         d += " L" + (x0 + rBL) + "," + y1
-        if (rBL > 0) d += " A" + rBL + "," + rBL + " 0 0 1 " + x0 + "," + (y1 - rBL)
+        if (rBL > 0) d += " " + Style.cornerSeg(rBL, x0, (y1 - rBL))
         d += " L" + x0 + "," + (y0 + rTL)
-        if (rTL > 0) d += " A" + rTL + "," + rTL + " 0 0 1 " + (x0 + rTL) + "," + y0
+        if (rTL > 0) d += " " + Style.cornerSeg(rTL, (x0 + rTL), y0)
         return d + " Z"
     }
 
@@ -117,13 +117,13 @@ PanelWindow {
     function holePath() {
         var L = holeL, R = holeR, T = holeT, B = holeB
         var d = "M" + (L + rTL) + "," + T + " L" + (R - rTR) + "," + T
-        if (rTR > 0) d += " A" + rTR + "," + rTR + " 0 0 1 " + R + "," + (T + rTR)
+        if (rTR > 0) d += " " + Style.cornerSeg(rTR, R, (T + rTR))
         d += " L" + R + "," + (B - rBR)
-        if (rBR > 0) d += " A" + rBR + "," + rBR + " 0 0 1 " + (R - rBR) + "," + B
+        if (rBR > 0) d += " " + Style.cornerSeg(rBR, (R - rBR), B)
         d += " L" + (L + rBL) + "," + B
-        if (rBL > 0) d += " A" + rBL + "," + rBL + " 0 0 1 " + L + "," + (B - rBL)
+        if (rBL > 0) d += " " + Style.cornerSeg(rBL, L, (B - rBL))
         d += " L" + L + "," + (T + rTL)
-        if (rTL > 0) d += " A" + rTL + "," + rTL + " 0 0 1 " + (L + rTL) + "," + T
+        if (rTL > 0) d += " " + Style.cornerSeg(rTL, (L + rTL), T)
         return d + " Z"
     }
 
@@ -149,7 +149,7 @@ PanelWindow {
         var cTL = left && top, cTR = top && right, cBR = right && bottom, cBL = bottom && left
         var L = holeL, R = holeR, T = holeT, B = holeB
         function ln(sx, sy, ex, ey)        { return { s: [sx, sy], e: [ex, ey], c: "L" + ex + "," + ey } }
-        function ar(sx, sy, ex, ey, rad)   { return { s: [sx, sy], e: [ex, ey], c: "A" + rad + "," + rad + " 0 0 1 " + ex + "," + ey } }
+        function ar(sx, sy, ex, ey, rad)   { return { s: [sx, sy], e: [ex, ey], c: Style.cornerSeg(rad, ex, ey) } }
         var seq = []
         if (cTL)    seq.push(ar(L, T + rTL, L + rTL, T, rTL))
         if (top)    seq.push(ln(L + (cTL ? rTL : 0), T, R - (cTR ? rTR : 0), T))

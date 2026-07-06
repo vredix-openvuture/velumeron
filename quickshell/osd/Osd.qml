@@ -189,7 +189,7 @@ PanelWindow {
         }
         function M(a, d)      { return "M" + XY(a, d) }
         function L(a, d)      { return " L" + XY(a, d) }
-        function A_(r,a,d,w)  { return r <= 0 ? (" L" + XY(a, d))
+        function A_(r,a,d,w)  { return (r <= 0 || (w === 1 && Style.chamfer)) ? (" L" + XY(a, d))
                                               : " A" + r + "," + r + " 0 0 " + (flip ? (1 - w) : w) + " " + XY(a, d) }
         var bd, close
         if (root.perpStart) {            // corner: anchored edge + perpendicular at the a=0 (near) end
@@ -267,13 +267,13 @@ PanelWindow {
                              : (1 - card.reveal) * (root.vside === "top" ? -32 : root.vside === "bottom" ? 32 : 0)
             }
 
-            // Float background — rounded card inset from the edge.
-            Rectangle {
+            // Float background — token-styled card inset from the edge.
+            StyledRect {
                 visible: !root.dock
                 anchors.fill: parent
                 radius: 16
                 color:  root.cardColor
-                border.width: 1; border.color: Colors.boNormal
+                borderWidth: 1; borderColor: Style.chromeBorder
             }
 
             // Dock background — concave fillets that flow into the bar when one is on this edge, or
@@ -302,7 +302,7 @@ PanelWindow {
                 preferredRendererType: Shape.CurveRenderer
                 ShapePath {
                     fillColor: "transparent"
-                    strokeColor: Colors.boNormal
+                    strokeColor: Style.chromeBorder
                     strokeWidth: 1
                     PathSvg { path: root._paths(card.width, card.height)[0] }
                 }

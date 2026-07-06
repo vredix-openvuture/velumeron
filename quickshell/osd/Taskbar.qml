@@ -109,7 +109,7 @@ PanelWindow {
         }
         function M(a, d)      { return "M" + XY(a, d) }
         function L(a, d)      { return " L" + XY(a, d) }
-        function A_(r,a,d,w)  { return r <= 0 ? (" L" + XY(a, d))
+        function A_(r,a,d,w)  { return (r <= 0 || (w === 1 && Style.chamfer)) ? (" L" + XY(a, d))
                                               : " A" + r + "," + r + " 0 0 " + (flip ? (1 - w) : w) + " " + XY(a, d) }
         var bd, close
         if (root.perpStart) {            // corner: perpendicular bar at the a=0 (near) end
@@ -249,7 +249,7 @@ PanelWindow {
                 anchors.fill: parent; anchors.margins: -root.pad
                 preferredRendererType: Shape.CurveRenderer
                 ShapePath {
-                    fillColor: "transparent"; strokeColor: Colors.boNormal; strokeWidth: 1
+                    fillColor: "transparent"; strokeColor: Style.chromeBorder; strokeWidth: 1
                     PathSvg { path: root._paths(root.cardW, root.cardH)[0] }
                 }
             }

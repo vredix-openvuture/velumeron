@@ -95,7 +95,7 @@ PanelWindow {
         function XY(a, d)    { return (a + P) + "," + ((bottom ? (H - d) : d) + P) }
         function M(a, d)     { return "M" + XY(a, d) }
         function L(a, d)     { return " L" + XY(a, d) }
-        function A_(r,a,d,w) { return r <= 0 ? (" L" + XY(a, d))
+        function A_(r,a,d,w) { return (r <= 0 || (w === 1 && Style.chamfer)) ? (" L" + XY(a, d))
                                              : " A" + r + "," + r + " 0 0 " + (bottom ? (1 - w) : w) + " " + XY(a, d) }
         var bd = M(A + f, 0) + A_(f, A, f, 0)        // concave fillet into the edge (far corner)
                + L(A, D - e)  + A_(e, A - e, D, 1)   // free far edge → convex round
