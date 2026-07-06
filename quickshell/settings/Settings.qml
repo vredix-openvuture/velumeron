@@ -341,10 +341,23 @@ PanelWindow {
             }
 
             // Wheel-only layer under the icons (clicks pass through untouched).
+            // Touchpads stream many small angleDeltas per swipe — accumulate to a full
+            // detent (120) and rate-limit so one swipe flips one page, not five.
             MouseArea {
+                id: railWheel
                 anchors.fill: parent
                 acceptedButtons: Qt.NoButton
-                onWheel: wheel => rail.flip(wheel.angleDelta.y < 0 ? 1 : -1)
+                property real _acc: 0
+                Timer { id: flipCooldown; interval: 250 }
+                onWheel: wheel => {
+                    if (flipCooldown.running) return
+                    if ((railWheel._acc > 0) !== (wheel.angleDelta.y > 0)) railWheel._acc = 0
+                    railWheel._acc += wheel.angleDelta.y
+                    if (Math.abs(railWheel._acc) < 120) return
+                    rail.flip(railWheel._acc < 0 ? 1 : -1)
+                    railWheel._acc = 0
+                    flipCooldown.restart()
+                }
             }
 
             Column {
