@@ -23,8 +23,14 @@ assets/icons/.*.png
 # Node modules (panel)
 panel/node_modules/
 
-# Wallpapers — kept local only, never in git (large, per-user content)
-assets/wallpaper/
+# Wallpapers — kept local only, never in git (large, per-user content).
+# Exceptions: the hyprlock theme assets (the shipped lockscreen themes
+# reference them — without these, clients lock to a bare background) and
+# theme-names.txt (read by rofi-wallpaper.sh). `dir/*` instead of `dir/`
+# because git cannot re-include below an excluded directory.
+assets/wallpaper/*
+!assets/wallpaper/hyprlock/
+!assets/wallpaper/theme-names.txt
 
 # Logs and cache
 **/*.log
