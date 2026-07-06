@@ -85,7 +85,9 @@ Item {
     // Monitor-aware getters (pass "" / null for the global value).
     function barModeFor(mon)          { return _bv("bar_mode", mon)          ?? "frame" }
     function barPositionFor(mon)      { return _bv("bar_position", mon)      ?? "top" }
-    function barEdgesFor(mon)         { return _bv("bar_edges", mon)         ?? ["top", "left"] }
+    // Default must stay a single top edge: configs without the key (pre-frame installs,
+    // interrupted first-run init) otherwise boot into a surprise top+left frame.
+    function barEdgesFor(mon)         { return _bv("bar_edges", mon)         ?? ["top"] }
     function barThicknessFor(mon)     { return _bv("bar_thickness", mon)     ?? 36 }
     function barFloatGapFor(mon)      { return _bv("bar_float_gap", mon)     ?? 8 }
     function barInnerRadiusFor(mon)   { return _bv("bar_inner_radius", mon)  ?? 16 }
