@@ -86,8 +86,10 @@ Item {
             }
         }
         onWheel: event => {
-            scrollProc.command = ["pactl", "set-sink-volume", "@DEFAULT_SINK@",
-                                  (event.angleDelta.y > 0 ? "+" : "-") + root._scroll + "%"]
+            // Absolute set, clamped to 0–100: relative pactl steps let the sink run past 100%.
+            var target = root.volume + (event.angleDelta.y > 0 ? root._scroll : -root._scroll)
+            target = Math.max(0, Math.min(100, target))
+            scrollProc.command = ["pactl", "set-sink-volume", "@DEFAULT_SINK@", target + "%"]
             scrollProc.running = false
             scrollProc.running = true
         }
