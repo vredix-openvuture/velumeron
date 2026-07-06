@@ -9,7 +9,8 @@ Row {
     property string barMon: ""   // monitor name, for per-monitor icon/font size
 
     readonly property UPowerDevice dev: UPower.displayDevice
-    readonly property int pct: dev ? Math.round(dev.percentage) : 0
+    // UPowerDevice.percentage is a 0.0–1.0 fraction, not 0–100.
+    readonly property int pct: dev ? Math.round(dev.percentage * 100) : 0
     readonly property bool charging: dev ? (dev.state === UPowerDeviceState.Charging
                                         || dev.state === UPowerDeviceState.FullyCharged
                                         || dev.state === UPowerDeviceState.PendingCharge) : false
