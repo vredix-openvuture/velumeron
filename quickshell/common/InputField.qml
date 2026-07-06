@@ -3,7 +3,7 @@ import QtQuick
 
 // Single-line text input styled like the other controls. Emits edited(text) once
 // on Enter / focus loss (not per keystroke), so callers can mark state dirty cheaply.
-Rectangle {
+StyledRect {
     id: f
     property alias text: input.text
     property alias input: input
@@ -14,8 +14,8 @@ Rectangle {
     height:       34
     radius:       Style.rControl
     color:        Style.controlFill
-    border.width: input.activeFocus ? Math.max(1, Style.controlBorderW) : Style.controlBorderW
-    border.color: input.activeFocus ? Style.accent : Style.controlBorderColor
+    borderWidth:  input.activeFocus ? Math.max(1, Style.controlBorderW) : Style.controlBorderW
+    borderColor:  input.activeFocus ? Style.accent : Style.controlBorderColor
 
     TextInput {
         id: input

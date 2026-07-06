@@ -2,7 +2,7 @@ import ".."
 import QtQuick
 
 // Small text button. `primary` fills with the accent (Apply); otherwise a neutral control surface.
-Rectangle {
+StyledRect {
     id: b
     property string label:   ""
     property bool   primary: false
@@ -12,8 +12,8 @@ Rectangle {
     radius:         Style.rTile
     color:          b.primary ? (h.containsMouse ? Colors.boActive : Style.accent)
                               : (h.containsMouse ? Style.controlHover : Style.controlFill)
-    border.width:   b.primary ? 0 : Style.controlBorderW
-    border.color:   Style.controlBorderColor
+    borderWidth:    b.primary ? 0 : Style.controlBorderW
+    borderColor:    Style.controlBorderColor
 
     Text { id: lbl; anchors.centerIn: parent; text: b.label
            color: b.primary ? Colors.fgBright : Colors.fgPrimary

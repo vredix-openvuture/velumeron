@@ -2,7 +2,7 @@ import ".."
 import QtQuick
 
 // Label (+ optional sub-caption) with a sliding switch. `indent` nudges it right for sub-options.
-Rectangle {
+StyledRect {
     id: tg
     property string label:  ""
     property string sub:    ""
@@ -15,8 +15,8 @@ Rectangle {
     height:       tg.sub !== "" ? 46 : 38
     radius:       Style.rControl
     color:        Style.controlFill
-    border.width: Style.controlBorderW
-    border.color: Style.controlBorderColor
+    borderWidth:  Style.controlBorderW
+    borderColor:  Style.controlBorderColor
 
     Column {
         anchors { left: parent.left; leftMargin: 12; right: knob.left; rightMargin: 10

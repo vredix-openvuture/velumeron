@@ -225,7 +225,7 @@ Item {
                     equal: true
                     current: VtlConfig.uiStyle
                     segments: [{ label: "Flat", key: "flat" }, { label: "Cards", key: "cards" },
-                               { label: "Outlined", key: "outlined" }]
+                               { label: "Outlined", key: "outlined" }, { label: "Futuristic", key: "futuristic" }]
                     onPicked: { VtlConfig.applyLocal("ui_style", key); root.save("ui_style", key) }
                 }
             }

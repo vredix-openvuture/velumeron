@@ -23,12 +23,12 @@ Row {
            font.pixelSize: Style.fsValue; font.family: Style.font }
     StepBtn { sym: "+"; onTap: st.changed(Math.min(st.max, st.value + st.step)) }
 
-    component StepBtn: Rectangle {
+    component StepBtn: StyledRect {
         property string sym: ""
         signal tap()
         width: 26; height: 26; radius: Style.rTile
         color: bh.containsMouse ? Style.controlHover : Style.controlFill
-        border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+        borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
         Text { anchors.centerIn: parent; text: sym; color: Colors.fgPrimary
                font.pixelSize: 14; font.family: Style.font }
         MouseArea { id: bh; anchors.fill: parent; hoverEnabled: true; onClicked: tap() }

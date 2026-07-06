@@ -11,6 +11,7 @@ singleton Hyprwindows 1.0 Hyprwindows.qml
 singleton ThumbQueue 1.0 ThumbQueue.qml
 
 # Shared UI component library (token-driven; used by every settings page)
+StyledRect  1.0 common/StyledRect.qml
 Card        1.0 common/Card.qml
 CardLabel   1.0 common/CardLabel.qml
 FieldLabel  1.0 common/FieldLabel.qml

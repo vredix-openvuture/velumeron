@@ -45,13 +45,13 @@ Column {
         return out.slice(0, af.maxSuggestions)
     }
 
-    Rectangle {
+    StyledRect {
         width:        parent.width
         height:       34
         radius:       Style.rControl
         color:        Style.controlFill
-        border.width: input.activeFocus ? Math.max(1, Style.controlBorderW) : Style.controlBorderW
-        border.color: input.activeFocus ? Style.accent : Style.controlBorderColor
+        borderWidth:  input.activeFocus ? Math.max(1, Style.controlBorderW) : Style.controlBorderW
+        borderColor:  input.activeFocus ? Style.accent : Style.controlBorderColor
 
         TextInput {
             id: input
@@ -76,11 +76,11 @@ Column {
         spacing: 2
         Repeater {
             model: af.matches
-            delegate: Rectangle {
+            delegate: StyledRect {
                 required property var modelData
                 width: af.width; height: 28; radius: Style.rTile
                 color: sHov.containsMouse ? Style.controlHover : Style.controlFill
-                border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+                borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
                 Text {
                     anchors { left: parent.left; leftMargin: 12; right: cmdT.left; rightMargin: 8
                               verticalCenter: parent.verticalCenter }

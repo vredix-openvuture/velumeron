@@ -21,21 +21,21 @@ Flow {
 
     Repeater {
         model: gp.glyphs
-        delegate: Rectangle {
+        delegate: StyledRect {
             required property string modelData
             width: 30; height: 30; radius: Style.rTile
             color: gHov.containsMouse ? Style.controlHover : Style.controlFill
-            border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+            borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
             Text { anchors.centerIn: parent; text: modelData
                    color: Colors.fgPrimary; font.pixelSize: 15; font.family: Style.font }
             MouseArea { id: gHov; anchors.fill: parent; hoverEnabled: true
                         onClicked: { gp.picked(modelData); gp.open = false } }
         }
     }
-    Rectangle {
+    StyledRect {
         width: 52; height: 30; radius: Style.rTile
         color: cHov.containsMouse ? Style.controlHover : Style.controlFill
-        border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+        borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
         Text { anchors.centerIn: parent; text: "clear"
                color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font }
         MouseArea { id: cHov; anchors.fill: parent; hoverEnabled: true

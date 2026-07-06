@@ -3,14 +3,14 @@ import QtQuick
 
 // Titled settings group. Replaces the per-page `component Group` copies. Child controls are declared
 // directly inside it (default content alias) and stacked in a padded column.
-Rectangle {
+StyledRect {
     id: card
     default property alias content: inner.data
     width:        parent ? parent.width : 0
     radius:       Style.rCard
     color:        Style.cardFill
-    border.width: Style.cardBorderW
-    border.color: Style.cardBorderColor
+    borderWidth:  Style.cardBorderW
+    borderColor:  Style.cardBorderColor
     height:       inner.implicitHeight + Style.cardPad * 2
 
     Column {

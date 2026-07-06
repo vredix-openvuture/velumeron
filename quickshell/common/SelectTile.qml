@@ -3,7 +3,7 @@ import QtQuick
 
 // Selectable tile with an optional icon glyph over an optional label (lockscreen themes, position
 // grid cells, monitor buttons). Size is set by the caller (width/height).
-Rectangle {
+StyledRect {
     id: t
     property string icon:     ""
     property string label:    ""
@@ -12,8 +12,8 @@ Rectangle {
     signal clicked()
     radius:       Style.rTile
     color:        selected ? Style.selFill : (h.containsMouse ? Style.controlHover : Style.controlFill)
-    border.width: selected ? Style.selBorderW : Style.controlBorderW
-    border.color: selected ? Style.selBorderColor : Style.controlBorderColor
+    borderWidth:  selected ? Style.selBorderW : Style.controlBorderW
+    borderColor:  selected ? Style.selBorderColor : Style.controlBorderColor
     Behavior on color { ColorAnimation { duration: 100 } }
 
     Column {

@@ -11,11 +11,11 @@ Column {
     width:   parent ? parent.width : 0
     spacing: 4
 
-    Rectangle {
+    StyledRect {
         width: parent.width; height: 34; radius: Style.rControl
         color: ddHov.containsMouse ? Style.controlHover : Style.controlFill
-        border.width: dd.open ? Math.max(1, Style.controlBorderW) : Style.controlBorderW
-        border.color: dd.open ? Style.accent : Style.controlBorderColor
+        borderWidth: dd.open ? Math.max(1, Style.controlBorderW) : Style.controlBorderW
+        borderColor: dd.open ? Style.accent : Style.controlBorderColor
         Behavior on color { ColorAnimation { duration: 100 } }
         Text {
             anchors { left: parent.left; leftMargin: 12; right: chev.left; rightMargin: 8
@@ -34,13 +34,13 @@ Column {
         width: parent.width; spacing: 3
         Repeater {
             model: dd.options
-            delegate: Rectangle {
+            delegate: StyledRect {
                 required property var modelData
                 width: dd.width; height: 30; radius: Style.rTile
                 color: modelData.on ? Style.selFill
                      : (oHov.containsMouse ? Style.controlHover : Style.controlFill)
-                border.width: modelData.on ? Style.selBorderW : Style.controlBorderW
-                border.color: modelData.on ? Style.selBorderColor : Style.controlBorderColor
+                borderWidth: modelData.on ? Style.selBorderW : Style.controlBorderW
+                borderColor: modelData.on ? Style.selBorderColor : Style.controlBorderColor
                 Behavior on color { ColorAnimation { duration: 90 } }
                 Text {
                     anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }

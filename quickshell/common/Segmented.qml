@@ -15,15 +15,15 @@ Row {
 
     Repeater {
         model: sg.segments
-        delegate: Rectangle {
+        delegate: StyledRect {
             required property var modelData
             readonly property bool on: sg.current === modelData.key
             width: sg.equal ? (sg.width - sg.gap * (sg.segments.length - 1)) / sg.segments.length
                             : (lbl.implicitWidth + 18)
             height: 26; radius: Style.rControl
             color: on ? Style.selFill : (h.containsMouse ? Style.controlHover : Style.controlFill)
-            border.width: on ? Style.selBorderW : Style.controlBorderW
-            border.color: on ? Style.selBorderColor : Style.controlBorderColor
+            borderWidth: on ? Style.selBorderW : Style.controlBorderW
+            borderColor: on ? Style.selBorderColor : Style.controlBorderColor
             Behavior on color { ColorAnimation { duration: 100 } }
             Text { id: lbl; anchors.centerIn: parent; text: modelData.label
                    color: on ? Style.selText : Colors.fgPrimary
