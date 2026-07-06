@@ -31,6 +31,11 @@ panel/node_modules/
 assets/wallpaper/*
 !assets/wallpaper/hyprlock/
 !assets/wallpaper/theme-names.txt
+# The branded default wallpaper ships too (welcome_to_velumeron.sh sets it on
+# first run); everything else in horizontal/ and all of vertical/ stays local.
+!assets/wallpaper/horizontal/
+assets/wallpaper/horizontal/*
+!assets/wallpaper/horizontal/velumeron_with_raven.png
 
 # Logs and cache
 **/*.log

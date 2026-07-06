@@ -680,14 +680,18 @@ fi  # AUTO_MODE
 # ─── 9) Default wallpaper ─────────────────────────────────────────────────────
 say "Setting default wallpaper"
 
-DEFAULT_WP="$VELUMERON_DIR/assets/wallpaper/horizontal/wp_qUmiue_hor.jpg"
+# Prefer the shipped branded wallpaper; fall back to whatever the horizontal
+# wallpaper dir holds so a renamed default can't silently skip this step again.
+DEFAULT_WP="$VELUMERON_DIR/assets/wallpaper/horizontal/velumeron_with_raven.png"
+[[ -f "$DEFAULT_WP" ]] || DEFAULT_WP=$(find "$VELUMERON_DIR/assets/wallpaper/horizontal" -maxdepth 1 \
+    -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' \) 2>/dev/null | sort | head -1)
 if [[ "$AUTO_MODE" == true && -f "$VELUMERON_USER_DIR/quickshell/wallpapers.json" ]]; then
     ok "Wallpaper already configured — keeping it."
-elif [[ -f "$DEFAULT_WP" ]]; then
+elif [[ -n "$DEFAULT_WP" && -f "$DEFAULT_WP" ]]; then
     bash "$VELUMERON_DIR/assets/scripts/wallpaper-set.sh" --no-showcase "$DEFAULT_WP"
     ok "Wallpaper set."
 else
-    warn "Default wallpaper not found: $DEFAULT_WP"
+    warn "No default wallpaper found in $VELUMERON_DIR/assets/wallpaper/horizontal"
 fi
 
 # ─── Done ─────────────────────────────────────────────────────────────────────
