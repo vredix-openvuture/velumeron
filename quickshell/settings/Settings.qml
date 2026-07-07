@@ -155,27 +155,33 @@ PanelWindow {
     // ── Section registry — ONE list drives the rail, the page loader and the titles ──
     // (rail: false → reachable only via navigation, e.g. the home hub's sub-pages; comp: null →
     // the placeholder page with `hint`.) Component ids resolve file-wide, so forward refs are fine.
+    // Rail order groups by altitude: hardware/system first (monitors → peripherals),
+    // then the shell chrome and look, then window behaviour. Info stays pinned at
+    // the rail bottom regardless of its position here.
     readonly property var sections: [
         { key: "home",          icon: "󰋜", title: "Velumeron",     comp: homeComp },
-        { key: "launcher",      icon: "󰀻", title: "Launcher",      comp: launcherComp },
+        // ── Hardware & system ──
+        { key: "monitors",      icon: "󰍺", title: "Monitors",      comp: monitorsComp },
+        { key: "workspaces",    icon: "󱂬", title: "Workspaces",    comp: workspacesComp },
+        { key: "peripherals",   icon: "󰍽", title: "Peripherals",   comp: peripheralsComp },
+        { key: "autostart",     icon: "󱓞", title: "Autostart",     comp: autostartComp },
+        { key: "quickaccess",   icon: "󱊫", title: "Quick access",  comp: quickAccessComp },
+        // ── Shell chrome & look ──
         { key: "bar",           icon: "󰕮", title: "Bar",           comp: barComp },
+        { key: "taskbar",       icon: "󱂩", title: "Taskbar",       comp: taskbarComp },
         { key: "style",         icon: "󰏘", title: "Style",         comp: styleComp },
         { key: "wallpaper",     icon: "󰸉", title: "Wallpaper",     comp: wallpaperComp },
+        { key: "lockscreen",    icon: "󰌾", title: "Lockscreen",    comp: lockComp },
+        { key: "launcher",      icon: "󰀻", title: "Launcher",      comp: launcherComp },
         { key: "osd",           icon: "󰍹", title: "OSD",           comp: osdComp },
         { key: "notifications", icon: "󰂚", title: "Notifications", comp: notifyComp },
         { key: "calendar",      icon: "󰃭", title: "Calendar",      comp: calendarComp },
-        { key: "lockscreen",    icon: "󰌾", title: "Lockscreen",    comp: lockComp },
+        // ── Windows & input behaviour ──
         { key: "keybinds",      icon: "󰌌", title: "Keybindings",   comp: keybindsComp },
         { key: "corners",       icon: "󰊓", title: "Hot corners",   comp: cornersComp },
-        { key: "taskbar",       icon: "󱂩", title: "Taskbar",       comp: taskbarComp },
         { key: "zones",         icon: "󰝘", title: "Zones",         comp: zonesComp },
         { key: "layouts",       icon: "󰕴", title: "Layouts",       comp: layoutsComp },
         { key: "windowtags",    icon: "󰓹", title: "Window tags",   comp: windowTagsComp },
-        { key: "monitors",      icon: "󰍺", title: "Monitors",      comp: monitorsComp },
-        { key: "workspaces",    icon: "󱂬", title: "Workspaces",    comp: workspacesComp },
-        { key: "autostart",     icon: "󱓞", title: "Autostart",     comp: autostartComp },
-        { key: "quickaccess",   icon: "󱊫", title: "Quick access",  comp: quickAccessComp },
-        { key: "peripherals",   icon: "󰍽", title: "Peripherals",   comp: peripheralsComp },
         { key: "windowrules",   icon: "󱪯", title: "Window rules",  comp: windowRulesComp },
         { key: "info",          icon: "󰋽", title: "Info",          comp: null,
           hint: "System information." },
