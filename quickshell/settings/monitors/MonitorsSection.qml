@@ -196,7 +196,59 @@ Item {
         }
     }
 
+    // Arrange takeover: the canvas gets the whole pane (no Flickable underneath,
+    // so dragging a monitor can never scroll the page) plus a fixed snap raster.
+    property bool arranging: false
+
+    Item {
+        visible: root.arranging
+        anchors.fill: parent
+        anchors.topMargin: revertBanner.visible ? revertBanner.height + 8 : 0
+
+        Item {
+            id: arrHdr
+            anchors { top: parent.top; left: parent.left; right: parent.right }
+            height: 34
+            CardLabel { text: "ARRANGEMENT"; anchors.verticalCenter: parent.verticalCenter }
+            TextButton {
+                anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                label: "Done"; primary: true
+                onClicked: root.arranging = false
+            }
+        }
+        MonitorLayoutGrid {
+            anchors { top: arrHdr.bottom; topMargin: 6; left: parent.left; right: parent.right
+                      bottom: arrFoot.top; bottomMargin: 8 }
+            gridStep: 120
+            monitors: root.mons
+            selected: root.selected
+            onSelect: o => root.selected = o
+            onChanged: m => { root.mons = m; root.dirty = true }
+        }
+        Column {
+            id: arrFoot
+            anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
+            spacing: 8
+            SubLabel {
+                width: parent.width
+                text: "Drag a monitor to arrange — it snaps to the raster, flush edges win. "
+                    + "Monitors set to automatic position don't move."
+            }
+            Row {
+                spacing: 10
+                TextButton { label: "Apply & reload"; primary: root.dirty; onClicked: root.apply() }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.dirty ? "unsaved changes" : root.status
+                    color: root.dirty ? Colors.fgUrgent : Colors.fgMuted
+                    font.pixelSize: Style.fsSub; font.family: Style.font
+                }
+            }
+        }
+    }
+
     Flickable {
+        visible: !root.arranging
         anchors.fill: parent
         anchors.topMargin: revertBanner.visible ? revertBanner.height + 8 : 0
         contentHeight: col.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
@@ -206,19 +258,36 @@ Item {
             topPadding: 4
             spacing: Style.cardGap
 
-            // ── Arrangement ────────────────────────────────────────────────────
+            // ── Arrangement (preview — arranging happens in the takeover) ──────
             Card {
-                CardLabel { text: "ARRANGEMENT" }
-                MonitorLayoutGrid {
+                Item {
+                    width: parent.width; height: 22
+                    CardLabel { text: "ARRANGEMENT"; anchors.verticalCenter: parent.verticalCenter }
+                    TextButton {
+                        anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                        label: "󰊓  Arrange"
+                        onClicked: root.arranging = true
+                    }
+                }
+                Item {
                     width: parent.width
-                    monitors: root.mons
-                    selected: root.selected
-                    onSelect: o => root.selected = o
-                    onChanged: m => { root.mons = m; root.dirty = true }
+                    height: preview.implicitHeight
+                    MonitorLayoutGrid {
+                        id: preview
+                        width: parent.width; height: parent.height
+                        interactive: false
+                        monitors: root.mons
+                        selected: root.selected
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.arranging = true
+                    }
                 }
                 SubLabel {
                     width: parent.width
-                    text: "Drag a monitor to arrange. Monitors set to automatic position don't move."
+                    text: "Click to open the arrange view (fixed snap raster)."
                 }
                 Flow {
                     width: parent.width; spacing: 6

@@ -11,6 +11,8 @@ Item {
 
     property var monitors: []        // helper JSON shape (+ _live {x,y} injected by the section)
     property string selected: ""
+    property bool interactive: true  // false = preview only (the section opens the arrange overlay)
+    property real gridStep: 0        // fixed snap grid in layout px (0 = edge snapping only)
     signal changed(var monitors)
     signal select(string output)
 
@@ -47,7 +49,10 @@ Item {
         }
         return { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) }
     }
-    readonly property real k: Math.min((width - 24) / bbox.w, (implicitHeight - 24) / bbox.h)
+    readonly property real k: Math.min((width - 24) / bbox.w, (height - 24) / bbox.h)
+
+    // Quantize a layout coordinate to the fixed snap grid (no-op when off).
+    function gridQuant(v) { return gridStep > 0 ? Math.round(v / gridStep) * gridStep : v }
 
     // Snap a dragged rect (layout coords) against the other monitors, then normalize.
     function snapRect(output, lx, ly) {
@@ -94,7 +99,9 @@ Item {
     }
 
     function commitDrag(output, lx, ly) {
-        var s = grid.snapRect(output, lx, ly)
+        // Fixed grid first, then edge snapping may refine (flush alignment wins
+        // over the raster when both are in reach), then overlap resolution.
+        var s = grid.snapRect(output, grid.gridQuant(lx), grid.gridQuant(ly))
         s = grid.unoverlap(output, s.x, s.y)
         // Normalize: the layout's min corner becomes 0x0 (positions stay non-negative).
         var minX = s.x, minY = s.y
@@ -120,6 +127,42 @@ Item {
         color:  Style.tint(Colors.bgPrimary, 0.55)
         border.width: Style.controlBorderW
         border.color: Style.controlBorderColor
+    }
+
+    // Fixed snap raster (only when gridStep is set). Lines run at the snap pitch,
+    // thinned to keep at least ~14 px on screen so the raster never turns to noise.
+    Canvas {
+        id: rasterCanvas
+        anchors.fill: parent
+        anchors.margins: 2
+        visible: grid.gridStep > 0
+        opacity: 0.5
+        onPaint: {
+            var ctx = getContext("2d")
+            ctx.clearRect(0, 0, width, height)
+            if (grid.gridStep <= 0 || grid.k <= 0) return
+            var step = grid.gridStep * grid.k
+            while (step < 14) step *= 2
+            ctx.strokeStyle = Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.18)
+            ctx.lineWidth = 1
+            // Anchor the raster to layout origin 0x0 (mapped at 12 - bbox*k, minus the 2px inset).
+            var ox = (10 - grid.bbox.x * grid.k) % step
+            var oy = (10 - grid.bbox.y * grid.k) % step
+            for (var x = ox; x < width; x += step) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke()
+            }
+            for (var y = oy; y < height; y += step) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke()
+            }
+        }
+        Connections {
+            target: grid
+            function onKChanged()        { rasterCanvas.requestPaint() }
+            function onGridStepChanged() { rasterCanvas.requestPaint() }
+        }
+        onVisibleChanged: if (visible) requestPaint()
+        onWidthChanged:  requestPaint()
+        onHeightChanged: requestPaint()
     }
 
     Repeater {
@@ -159,6 +202,8 @@ Item {
 
             MouseArea {
                 anchors.fill: parent
+                enabled: grid.interactive
+                preventStealing: true   // inside a Flickable the drag must never scroll the page
                 cursorShape: monRect.modelData.position === "auto" ? Qt.ArrowCursor : Qt.SizeAllCursor
                 property real pressX: 0
                 property real pressY: 0
@@ -169,8 +214,14 @@ Item {
                 }
                 onPositionChanged: mouse => {
                     if (monRect.modelData.position === "auto") return
-                    monRect.x += mouse.x - pressX
-                    monRect.y += mouse.y - pressY
+                    var nx = monRect.x + mouse.x - pressX
+                    var ny = monRect.y + mouse.y - pressY
+                    if (grid.gridStep > 0) {
+                        // Live raster feel: the rect steps along the grid while dragging.
+                        nx = 12 + (grid.gridQuant(grid.bbox.x + (nx - 12) / grid.k) - grid.bbox.x) * grid.k
+                        ny = 12 + (grid.gridQuant(grid.bbox.y + (ny - 12) / grid.k) - grid.bbox.y) * grid.k
+                    }
+                    monRect.x = nx; monRect.y = ny
                     moved = true
                 }
                 onReleased: {
