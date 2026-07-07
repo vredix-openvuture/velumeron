@@ -39,11 +39,27 @@ case "${1:-}" in
     # ── onboarding: force the wizard / update report ─────────────────────────
     # velumeron --onboarding          first-run wizard (writes real config!)
     # velumeron --onboarding update   changelog report for the current release
-    --onboarding)
+    # (also available as the standalone `velumeron-welcome` command)
+    --onboarding|--welcome)
         case "${2:-}" in
             update) ipc onboarding update ;;
             close)  ipc onboarding close ;;
             *)      ipc onboarding open ;;
+        esac
+        ;;
+
+    # ── everyday actions (thin wrappers over the shipped scripts) ────────────
+    --lock)   exec bash "${VELUMERON_DIR:-$_DIR/..}/assets/scripts/launch-hyprlock.sh" ;;
+    --wallpaper)
+        case "${2:-}" in
+            random|"") exec bash "${VELUMERON_DIR:-$_DIR/..}/assets/scripts/wallpaper-random.sh" ;;
+            *)         exec bash "${VELUMERON_DIR:-$_DIR/..}/assets/scripts/wallpaper-set.sh" --no-showcase "$2" ;;
+        esac
+        ;;
+    --mode)
+        case "${2:-}" in
+            dark|light) exec bash "${VELUMERON_DIR:-$_DIR/..}/assets/scripts/apply-app-theme.sh" mode "$2" ;;
+            *)          echo "usage: velumeron --mode dark|light" >&2; exit 2 ;;
         esac
         ;;
 
@@ -64,6 +80,10 @@ velumeron — Hyprland desktop shell launcher
   velumeron --panel-toggle        Toggle the notification centre
   velumeron --dnd                 Toggle do-not-disturb
   velumeron --onboarding [update] Open the setup wizard / update report
+                                  (also: velumeron-welcome)
+  velumeron --lock                Lock the screen (hyprlock)
+  velumeron --wallpaper [FILE]    Set a wallpaper (no arg / 'random' → random)
+  velumeron --mode dark|light     Desktop-wide dark/light appearance
   velumeron -e, --end             Stop the shell
 EOF
         ;;

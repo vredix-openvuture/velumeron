@@ -1,5 +1,6 @@
 import "../.."
 import QtQuick
+import Quickshell
 
 // Wizard page 1: greeting. Monitors were configured automatically — say so.
 Item {
@@ -10,10 +11,16 @@ Item {
         width: parent.width * 0.8
         spacing: 18
 
-        Text {
+        Image {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: ""
-            color: Colors.bgActive; font.pixelSize: 54; font.family: Style.font
+            width: Math.min(parent.width, 420)
+            fillMode: Image.PreserveAspectFit
+            // Banner variant follows the palette: light glyphs on dark themes and vice versa.
+            readonly property real _lum: 0.299 * Colors.bgPrimary.r + 0.587 * Colors.bgPrimary.g
+                                       + 0.114 * Colors.bgPrimary.b
+            source: (Quickshell.env("VELUMERON_DIR") || "") + "/assets/"
+                    + (_lum < 0.5 ? "velumeron_banner-white.png" : "velumeron_banner-black.png")
+            asynchronous: true
         }
         Text {
             anchors.horizontalCenter: parent.horizontalCenter

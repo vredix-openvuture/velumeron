@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# velumeron-welcome — (re)launch the Velumeron welcome / onboarding wizard.
+#   velumeron-welcome            open the wizard
+#   velumeron-welcome update     changelog report for the current release
+exec "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/velumeron" --onboarding "$@"
