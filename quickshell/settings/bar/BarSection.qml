@@ -267,6 +267,57 @@ Item {
         modules = m
         saveModules(m)
     }
+    // Move across groups (start/center/end) of the same edge: remove at fromIdx,
+    // insert into the target group at toIdx.
+    function moveModuleAcross(edge, fromGroup, toGroup, fromIdx, toIdx) {
+        if (fromGroup === toGroup) { moveModule(edge, fromGroup, fromIdx, toIdx); return }
+        var m = JSON.parse(JSON.stringify(modules))
+        var src = (m[edge] && m[edge][fromGroup]) ? m[edge][fromGroup] : []
+        if (fromIdx < 0 || fromIdx >= src.length) return
+        var item = src.splice(fromIdx, 1)[0]
+        if (!m[edge]) m[edge] = {}
+        m[edge][fromGroup] = src
+        var dst = m[edge][toGroup] || []
+        dst.splice(Math.max(0, Math.min(toIdx, dst.length)), 0, item)
+        m[edge][toGroup] = dst
+        modules = m
+        saveModules(m)
+    }
+
+    // ── Chip-drag state (cross-zone drop + insertion cursor) ─────────────────────
+    // Zones register their drop area + chip flow here; the dragged chip publishes
+    // the hovered zone/index so every zone can draw the insertion cursor live.
+    property var    zoneAreas: ({})     // grp → drop-area Rectangle
+    property var    zoneFlows: ({})     // grp → chip Flow
+    property bool   chipDragging: false
+    property string dragFromGrp: ""     // where the dragged chip lives
+    property string hoverGrp:    ""     // zone currently under the pointer ("" = none)
+    property int    hoverIdx:    -1     // insertion index there
+    // Map a scene point to (zone, insertion index). `excludeItem` is the dragged
+    // slot — it keeps its layout spot while its chip visual moves, so skip it when
+    // counting chips before the pointer.
+    function dragHitTest(sceneX, sceneY, excludeItem) {
+        for (var g in zoneAreas) {
+            var area = zoneAreas[g]
+            if (!area || !area.visible) continue
+            var p = area.mapFromItem(null, sceneX, sceneY)
+            if (p.x < 0 || p.y < 0 || p.x > area.width || p.y > area.height) continue
+            var flow = zoneFlows[g]
+            var fp = flow.mapFromItem(null, sceneX, sceneY)
+            var idx = 0
+            for (var i = 0; i < flow.children.length; i++) {
+                var c = flow.children[i]
+                if (c === excludeItem || c.index === undefined || !c.visible) continue
+                var cx = c.x + c.width / 2, cy = c.y + c.height / 2
+                // Flow wraps: a chip counts as "before" when it sits on an earlier
+                // row, or on the same row left of the pointer.
+                if (cy < fp.y - c.height / 2
+                    || (Math.abs(cy - fp.y) <= c.height / 2 && cx < fp.x)) idx++
+            }
+            return { grp: g, idx: idx }
+        }
+        return null
+    }
 
     // ── Header: per-monitor toggle + monitor picker (fixed) ─────────────────────────
     Column {
@@ -722,19 +773,50 @@ Item {
         }
 
         Rectangle {
+            id: dropArea
             width:  parent.width
             height: Math.max(40, chipFlow.implicitHeight + 12)
             radius: 10
-            color:  Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.06)
+            color:  Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b,
+                            root.chipDragging && root.hoverGrp === zone.grp ? 0.14 : 0.06)
             border.width: 1
-            border.color: Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.15)
+            border.color: Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b,
+                                  root.chipDragging && root.hoverGrp === zone.grp ? 0.5 : 0.15)
             Behavior on height { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+            Component.onCompleted: {
+                root.zoneAreas[zone.grp] = dropArea
+                root.zoneFlows[zone.grp] = chipFlow
+            }
 
             Text {
                 anchors.centerIn: parent
                 visible: zone.mods.length === 0
                 text:  "empty — add with +"
                 color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
+            }
+
+            // Insertion cursor: a thin accent bar at the drop position while a chip
+            // hovers this zone. Position derives from the chip before/after hoverIdx.
+            Rectangle {
+                id: insCursor
+                visible: root.chipDragging && root.hoverGrp === zone.grp
+                width: 2; radius: 1
+                color: Style.accent
+                readonly property var _geo: {
+                    if (!visible) return { x: 6, y: 6, h: 28 }
+                    var idx = root.hoverIdx, n = 0, last = null
+                    for (var i = 0; i < chipFlow.children.length; i++) {
+                        var c = chipFlow.children[i]
+                        if (c.index === undefined || !c.visible || c._dragSource === true) continue
+                        if (n === idx)
+                            return { x: 6 + c.x - 4, y: 6 + c.y, h: c.height }
+                        last = c; n++
+                    }
+                    if (last !== null)
+                        return { x: 6 + last.x + last.width + 2, y: 6 + last.y, h: last.height }
+                    return { x: 6, y: 6, h: 28 }
+                }
+                x: _geo.x; y: _geo.y; height: _geo.h
             }
 
             Flow {
@@ -747,6 +829,7 @@ Item {
                         id: slot
                         required property string modelData
                         required property int    index
+                        readonly property bool _dragSource: dragMA.drag.active
                         width:  chipV.width
                         height: chipV.height
 
@@ -758,26 +841,40 @@ Item {
                             color:  dragMA.drag.active ? Style.accent : Style.controlFill
                             border.width: dragMA.drag.active ? 1 : 0
                             border.color: Colors.boActive
+                            opacity: dragMA.drag.active ? 0.85 : 1
                             z: dragMA.drag.active ? 50 : 0
 
                             // Drag layer (below the row, so the × button still gets its clicks).
+                            // The chip can leave its zone: the hit test tracks which zone is
+                            // hovered + the insertion index there (drives the insertion cursor);
+                            // release drops within the zone OR across groups.
                             MouseArea {
                                 id: dragMA
                                 anchors.fill: parent
                                 drag.target: chipV
                                 drag.axis:   Drag.XAndYAxis
                                 cursorShape: Qt.SizeAllCursor
+                                function _track() {
+                                    var c = chipV.mapToItem(null, chipV.width / 2, chipV.height / 2)
+                                    var hit = root.dragHitTest(c.x, c.y, slot)
+                                    root.hoverGrp = hit ? hit.grp : ""
+                                    root.hoverIdx = hit ? hit.idx : -1
+                                }
+                                onPressed: root.dragFromGrp = zone.grp
+                                onPositionChanged: if (drag.active) { root.chipDragging = true; _track() }
                                 onReleased: {
-                                    var myCenter = slot.x + chipV.x + chipV.width / 2
-                                    var toIdx = 0
-                                    var sibs = slot.parent.children
-                                    for (var i = 0; i < sibs.length; i++) {
-                                        var c = sibs[i]
-                                        if (c === slot || c.index === undefined) continue
-                                        if (c.x + c.width / 2 < myCenter) toIdx++
-                                    }
+                                    var wasDrag = root.chipDragging
+                                    var grp = root.hoverGrp, idx = root.hoverIdx
+                                    root.chipDragging = false
+                                    root.hoverGrp = ""; root.hoverIdx = -1
                                     chipV.x = 0; chipV.y = 0
-                                    root.moveModule(root.activeEdge, zone.grp, slot.index, toIdx)
+                                    if (!wasDrag || grp === "") return   // click, or dropped outside every zone
+                                    root.moveModuleAcross(root.activeEdge, zone.grp, grp, slot.index, idx)
+                                }
+                                onCanceled: {
+                                    root.chipDragging = false
+                                    root.hoverGrp = ""; root.hoverIdx = -1
+                                    chipV.x = 0; chipV.y = 0
                                 }
                             }
                             Row {
