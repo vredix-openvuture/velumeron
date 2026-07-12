@@ -65,7 +65,6 @@ qt5ct            = { src = "vutureland.conf",      dst = "~/.config/qt5ct/colors
 qt6ct            = { src = "vutureland.conf",      dst = "~/.config/qt6ct/colors/vutureland.conf"}
 
 kitty_vuture     = { src = "colors-kitty.conf",    dst = "~/.config/velumeron/kitty/colors.conf"}
-rofi_vuture      = { src = "colors-rofi.conf",     dst = "~/.config/velumeron/rofi/assets/colors.rasi"}
 colors_vuture    = { src = "colors_gtk.css",       dst = "~/.config/velumeron/assets/colors_gtk.css" }
 qs_colors        = { src = "colors.json",          dst = "~/.config/velumeron/quickshell/colors.json" }
 obsidian_nexus   = { src = "obsidian-colors.css",  dst = "~/DEV/OBSIDIAN-nexus-DEV/.obsidian/snippets/wallust-colors.css" }

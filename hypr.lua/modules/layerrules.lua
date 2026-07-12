@@ -13,17 +13,6 @@ hl.layer_rule({
     xray         = true,
 })
 
--- Rofi
-hl.layer_rule({
-    name         = "rofi",
-    match        = { namespace = "(.*rofi.*)" },
-    blur         = true,
-    blur_popups  = true,
-    ignore_alpha = 0.1,
-    dim_around   = true,
-    animation    = "slidefade bottom 80%",
-    xray         = true,
-})
 
 -- Waybar
 hl.layer_rule({

@@ -101,7 +101,7 @@ sync_templates() {
     mkdir -p "$VELUMERON_USER_DIR"
 
     # Drop stale symlinks left over from older versions of this script
-    for _dir in rofi kitty assets hypr.lua waybar-modular; do
+    for _dir in kitty assets hypr.lua waybar-modular; do
         [[ -L "$VELUMERON_USER_DIR/$_dir" ]] && rm -f "$VELUMERON_USER_DIR/$_dir"
     done
     # waybar is retired — remove any previously-seeded copy so it can't linger.
@@ -113,7 +113,6 @@ sync_templates() {
         "assets/colors_hyprland.conf"
         "hypr.lua/colors.lua"
         "kitty/colors.conf"
-        "rofi/assets/colors.rasi"
         # Device-specific config (monitors/workspaces/…): a repo/package copy
         # of this untracked file must never clobber the user's machine setup
         # via the mtime rule below.
@@ -126,7 +125,7 @@ sync_templates() {
     }
 
     # Sync these subtrees
-    for _dir in kitty rofi hypr.lua; do
+    for _dir in kitty hypr.lua; do
         local src="$VELUMERON_DIR/$_dir"
         local dst="$VELUMERON_USER_DIR/$_dir"
         [[ -d "$src" ]] || continue
@@ -386,8 +385,8 @@ if [[ "$SYNC_MODE" == true ]]; then
             && ok "Shell restarted"
     fi
     # Pre-generate wallpaper thumbnails for the picker.
-    if [[ -x "$VELUMERON_DIR/rofi/assets/generate-thumbnail.sh" ]]; then
-        ( "$VELUMERON_DIR/rofi/assets/generate-thumbnail.sh" >/dev/null 2>&1 ) &
+    if [[ -x "$VELUMERON_DIR/assets/scripts/generate-thumbnail.sh" ]]; then
+        ( "$VELUMERON_DIR/assets/scripts/generate-thumbnail.sh" >/dev/null 2>&1 ) &
         ok "Generating wallpaper thumbnails in the background"
     fi
     echo ""
@@ -416,7 +415,7 @@ say "Package installation"
 
 REQUIRED_PKGS=(
     hypridle hyprlock hyprpolkitagent
-    quickshell rofi-wayland kitty
+    quickshell kitty
     wallust hypremoji
     mpv qt6-multimedia qt6-declarative cmake ninja   # native wallpaper engine (libmpv→QtQuick plugin)
     playerctl jq socat fastfetch tmux

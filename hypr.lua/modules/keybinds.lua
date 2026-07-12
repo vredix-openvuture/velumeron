@@ -139,11 +139,6 @@ hl.bind(MOD .. " + mouse:274", hl.dsp.window.float({ action = "toggle" }))
 hl.bind(MOD .. " + CONTROL + mouse_up",   hl.dsp.focus({ workspace = "m+1" }))
 hl.bind(MOD .. " + CONTROL + mouse_down", hl.dsp.focus({ workspace = "m-1" }))
 
--- Click outside rofi closes it (non-consuming → click still reaches the app)
-hl.bind("mouse:272",
-    hl.dsp.exec_cmd(VTL_USER_DIR .. "/rofi/assets/close-on-click.sh"),
-    { mouse = true, non_consuming = true, release = true })
-
 
 -- ══════════════════════════════════════════════════════
 -- Medientasten (XF86)

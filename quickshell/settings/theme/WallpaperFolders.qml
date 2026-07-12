@@ -99,7 +99,7 @@ Item {
     Process {
         id: thumbsProc
         command: ["bash", "-c",
-            "setsid bash \"$VELUMERON_DIR/rofi/assets/generate-thumbnail.sh\" </dev/null >/dev/null 2>&1 &"]
+            "setsid bash \"$VELUMERON_DIR/assets/scripts/generate-thumbnail.sh\" </dev/null >/dev/null 2>&1 &"]
     }
     Timer { id: clearTimer; interval: 3000; onTriggered: root.folderStatus = "" }
 

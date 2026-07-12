@@ -12,7 +12,7 @@ SHARE    = $(DESTDIR)$(PREFIX)/share/velumeron
 BIN      = $(DESTDIR)$(PREFIX)/bin
 SESSIONS = $(DESTDIR)$(PREFIX)/share/wayland-sessions
 
-PAYLOAD = assets bin docs fastfetch gamemode hypr.lua kitty quickshell rofi \
+PAYLOAD = assets bin docs fastfetch gamemode hypr.lua kitty quickshell \
           wallust .setup welcome_to_velumeron.sh VERSION CHANGELOG.md README.md LICENSE
 
 .PHONY: install
