@@ -1,0 +1,191 @@
+{
+ "id": "wobbly",
+ "name": "Wobbly",
+ "author": "velumeron",
+ "builtin": true,
+ "version": 3,
+ "settings": {
+  "opacity_enabled": true,
+  "panel_width_pct": 20,
+  "panel_height_pct": 80,
+  "menu_theme": "follow",
+  "opacity_value": 0.88,
+  "sidebar_labels": true,
+  "swaync_margin_top_pct": 20,
+  "swaync_width_pct": 20,
+  "logo_variant": "full",
+  "rofi_source": "sets",
+  "panel_side": "left",
+  "panel_valign": "bottom",
+  "sidebar_autohide": true,
+  "shell_backend": "quickshell",
+  "bar_modules_left": [],
+  "bar_modules_center": [
+   "clock"
+  ],
+  "bar_modules_right": [],
+  "bar_opacity_enabled": false,
+  "bar_opacity_value": 0.88,
+  "bar_mode": "float",
+  "bar_edges": [
+   "bottom"
+  ],
+  "bar_thickness": 42,
+  "bar_inner_radius": 18,
+  "bar_modules": {
+   "top": {
+    "start": [],
+    "center": [],
+    "end": []
+   },
+   "left": {
+    "start": [],
+    "center": [],
+    "end": []
+   },
+   "bottom": {
+    "start": [],
+    "center": [
+     "vuture-icon",
+     "workspaces",
+     "clock",
+     "group:bubbles",
+     "notiftray"
+    ],
+    "end": []
+   },
+   "right": {
+    "start": [],
+    "center": [],
+    "end": []
+   }
+  },
+  "bar_module_bg": "module",
+  "bar_module_bg_radius": 12,
+  "bar_position": "bottom",
+  "bar_module_margin": 8,
+  "bar_module_spacing": 10,
+  "bar_colorful": true,
+  "colorful_enabled": true,
+  "colorful_menus": true,
+  "colorful_osd": true,
+  "bar_module_bg_opacity": 0.3,
+  "notify_dock": true,
+  "notify_position": "bottom-center",
+  "osd_style": "dock",
+  "osd_position": "bottom-center",
+  "bar_per_monitor": false,
+  "notify_main_monitor_only": true,
+  "wallpaper_search_subfolders": true,
+  "wallpaper_subfolder_sorting": true,
+  "osd_width_px": 300,
+  "osd_height_px": 52,
+  "notify_center_height": 320,
+  "notify_center_width": 360,
+  "wallpaper_quick_position": "bottom-center",
+  "wallpaper_quick_rows": 4,
+  "wallpaper_quick_preview": 260,
+  "wallpaper_quick_cols": 2,
+  "wallpaper_auto_minutes": 14,
+  "wallpaper_transition": "random",
+  "wallpaper_transition_ms": 1400,
+  "wallpaper_slide_dir": "left",
+  "transition_style_bar": "auto",
+  "transition_style_edge": "auto",
+  "wallpaper_auto_mode": "silent",
+  "wallpaper_auto_order": "random_all",
+  "ui_style": "wobbly",
+  "launcher_cols": 6,
+  "launcher_position": "bottom-center",
+  "launcher_blur": false,
+  "launcher_dock": true,
+  "launcher_fullscreen": false,
+  "launcher_width": 800,
+  "launcher_rows": 4,
+  "corner_actions_enabled": true,
+  "corner_default_dwell": 300,
+  "corner_zones": {
+   "top-left": {
+    "action": {
+     "type": "none",
+     "value": ""
+    },
+    "dwell": null
+   },
+   "bottom-left": {
+    "action": {
+     "type": "launcher",
+     "value": ""
+    },
+    "dwell": null
+   }
+  },
+  "taskbar_enabled": true,
+  "taskbar_position": "bottom-left",
+  "taskbar_style": "dock",
+  "taskbar_visibility": "hover",
+  "taskbar_scope": "monitor",
+  "taskbar_labels": false,
+  "taskbar_icon_size": 34,
+  "taskbar_layer": "over",
+  "taskbar_margin": 12,
+  "window_tags_enabled": true,
+  "window_tags_position": "top-left",
+  "fancy_zones_enabled": true,
+  "calendar_menu_width": 480,
+  "calendar_menu_max_height": 800,
+  "module_settings": {
+   "updates": {
+    "check_minutes": 10,
+    "show_zero": true,
+    "include_flatpak": true,
+    "update_command": "yay -Syu"
+   },
+   "group:bubbles": {
+    "label": "Bubbles",
+    "icon": "󰐱",
+    "members": [
+     "volume",
+     "bluetooth",
+     "mpris"
+    ]
+   }
+  },
+  "bar_modules_m": {
+   "float": {
+    "top": {
+     "start": [],
+     "center": [],
+     "end": []
+    },
+    "left": {
+     "start": [],
+     "center": [],
+     "end": []
+    },
+    "bottom": {
+     "start": [],
+     "center": [
+      "vuture-icon",
+      "workspaces",
+      "clock",
+      "group:bubbles",
+      "notiftray"
+     ],
+     "end": []
+    },
+    "right": {
+     "start": [],
+     "center": [],
+     "end": []
+    }
+   }
+  },
+  "bar_icon_size": 14,
+  "bar_font_size": 14,
+  "menu_height_pct": 52,
+  "menu_width_pct": 22,
+  "ui_font": "Fredoka",
+  "bar_float_gap": 14
+ }
+}

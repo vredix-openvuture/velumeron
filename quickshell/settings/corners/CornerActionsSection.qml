@@ -98,7 +98,7 @@ Item {
             var e = list[i]
             if (!e || e.noDisplay) continue
             var n = e.name || ""
-            if (q === "" || n.toLowerCase().indexOf(q) >= 0) out.push({ id: e.id || n, name: n })
+            if (Fuzzy.match(q, n)) out.push({ id: e.id || n, name: n })
         }
         out.sort(function (a, b) { return (a.name || "").localeCompare(b.name || "") })
         return out.slice(0, 8)

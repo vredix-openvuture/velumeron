@@ -36,6 +36,15 @@ fi
 export QML_IMPORT_PATH="$QS_PKG_DIR/plugins${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}"
 export QSG_RHI_BACKEND=opengl
 
+# Memory: the shell keeps ~40 layer-shell windows alive (menus/flyouts/OSD per screen). The
+# default threaded render loop gives EACH window its own render thread + GL context — measured
+# ~660 MB RSS. The basic loop shares one render thread/context across all windows (~370 MB RSS,
+# private dirty halved to ~190 MB). Trade-off: animations render serially on one thread — if
+# that ever ranks as jank, remove QSG_RENDER_LOOP. MALLOC_ARENA_MAX curbs per-thread glibc
+# arena bloat on top.
+export QSG_RENDER_LOOP=basic
+export MALLOC_ARENA_MAX=2
+
 pkill -x quickshell 2>/dev/null || true
 sleep 0.15
 

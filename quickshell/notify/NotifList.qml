@@ -39,7 +39,7 @@ Item {
     Text {
         anchors.centerIn: parent
         visible: root.rows.length === 0
-        text:   "No notifications"
+        text:   Wording.s("notif.empty")
         color:  Colors.fgMuted; font.pixelSize: 13; font.family: Style.font
     }
 
@@ -71,17 +71,29 @@ Item {
                 onClicked: root.toggleExpand(item.modelData.app)
             }
 
+            // Source header — accent-coloured upper-cased label + a soft rule, so the service the
+            // notification came from reads as a distinct heading above the message (matches the popup).
             Text {
                 id: iapp
                 anchors { left: parent.left; right: badge.left; top: parent.top
                           leftMargin: 16; rightMargin: 8; topMargin: 14 }
-                text: item.n ? item.n.appName : ""; color: Colors.fgMuted
+                text: item.n ? item.n.appName : ""; color: Colors.bgActive
                 font.pixelSize: 10; font.family: Style.font; elide: Text.ElideRight
+                font.bold: true; font.capitalization: Font.AllUppercase; font.letterSpacing: 0.6
+            }
+            Rectangle {
+                id: iappRule
+                visible: iapp.text !== ""
+                anchors { left: iapp.left; right: parent.right; rightMargin: 16
+                          top: iapp.bottom; topMargin: 5 }
+                height: 1
+                color: Style.tint(Colors.boNormal, 0.55)
             }
             Text {
                 id: isum
                 visible: !item.expanded
-                anchors { left: iapp.left; right: idel.left; rightMargin: 8; top: iapp.bottom; topMargin: 1 }
+                anchors { left: iapp.left; right: idel.left; rightMargin: 8
+                          top: iappRule.visible ? iappRule.bottom : iapp.bottom; topMargin: iappRule.visible ? 6 : 1 }
                 text: item.n ? item.n.summary : ""; color: Colors.fgBright
                 font.pixelSize: 13; font.bold: true; font.family: Style.font; elide: Text.ElideRight
             }
@@ -98,7 +110,8 @@ Item {
             Column {
                 id: igroup
                 visible: item.expanded
-                anchors { left: iapp.left; right: parent.right; rightMargin: 16; top: iapp.bottom; topMargin: 1 }
+                anchors { left: iapp.left; right: parent.right; rightMargin: 16
+                          top: iappRule.visible ? iappRule.bottom : iapp.bottom; topMargin: iappRule.visible ? 6 : 1 }
                 spacing: 10
                 Repeater {
                     model: item.expanded ? item.modelData.items.slice().reverse() : []

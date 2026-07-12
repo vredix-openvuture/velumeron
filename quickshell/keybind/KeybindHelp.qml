@@ -169,9 +169,9 @@ PanelWindow {
     }
 
     function rowMatches(b) {
-        var q = root.query.trim().toLowerCase()
+        var q = root.query.trim()
         if (q === "") return true
-        return b.k.toLowerCase().indexOf(q) >= 0 || b.d.toLowerCase().indexOf(q) >= 0
+        return Fuzzy.match(q, b.k) || Fuzzy.match(q, b.d)
     }
 
     // ── Keyboard ──────────────────────────────────────────────────────────────

@@ -29,27 +29,57 @@ Row {
     readonly property int    _max:       VtlConfig.moduleSetting("workspaces", "max_workspaces", 10)
     readonly property bool   _showNum:   VtlConfig.moduleSetting("workspaces", "show_number", true)
 
+    // Forensics for the cold-start mis-association (ws1 pinned on the wrong bar,
+    // 2026-07-11): silent unless the live monitor OBJECT disagrees with the raw
+    // IPC json — the signature of the stale event-graph state.
+    Timer {
+        interval: 8000; running: true
+        onTriggered: {
+            var vs = Hyprland.workspaces.values
+            for (var i = 0; i < vs.length; i++) {
+                var om = vs[i].monitor?.name ?? "", im = vs[i].lastIpcObject?.monitor ?? ""
+                if (om !== "" && im !== "" && om !== im)
+                    console.warn("[workspaces] ws", vs[i].id, "monitor object says", om,
+                                 "but IPC json says", im, "— stale Hyprland event graph")
+            }
+        }
+    }
+
     Repeater {
         model: Hyprland.workspaces
         delegate: Item {
             id: wsDot
             required property HyprlandWorkspace modelData
 
-            // Captured once at creation — no closure capture bug, no Bound pragma needed
-            readonly property var    ipc:     modelData.lastIpcObject
             readonly property int    wsId:    modelData.id
-            // Resolve the owning monitor via lastIpcObject too: empty *persistent*
-            // workspaces can report a null modelData.monitor, which would hide them.
-            readonly property string wsMon:   modelData.monitor?.name ?? ipc?.monitor ?? ""
+            // Owning monitor: PREFER the raw IPC json — it is re-fetched by the
+            // startup refreshWorkspaces() calls (shell.qml) and carries proper
+            // notifies, while the linked monitor OBJECT can latch a stale
+            // association when the shell cold-starts mid-event-stream (that
+            // painted ws1 as a foreign active pill on the other bar). The object
+            // name stays as fallback for empty persistent workspaces whose json
+            // hasn't arrived yet.
+            readonly property string wsMon:   modelData.lastIpcObject?.monitor ?? modelData.monitor?.name ?? ""
             readonly property bool   isMine:  wsMon === root.monitor?.name
-            readonly property bool   isActive: root.monitor?.activeWorkspace?.id === modelData.id
+            // Active pill = the monitor's own active workspace. READ IT FROM THE IPC JSON, never the
+            // linked objects: when a secondary monitor gains focus, Quickshell.Hyprland latches its
+            // monitor→activeWorkspace pointer to the wrong workspace (seen 2026-07-11: DP-3 focused
+            // on ws6, but monitor.activeWorkspace.id said 1 and ws6.active flipped false — so no pill
+            // lit at all), and a refreshMonitors() only re-fills lastIpcObject, not that object link.
+            // lastIpcObject.activeWorkspace.id stays correct through it. Matching the monitor's one
+            // active id (gated by isMine) also means exactly one pill per monitor — never two.
+            readonly property int    monActiveId: root.monitor?.lastIpcObject?.activeWorkspace?.id
+                                                  ?? root.monitor?.activeWorkspace?.id ?? -1
+            readonly property bool   isActive: isMine && monActiveId === modelData.id
             readonly property bool   show:    modelData.id > 0 && modelData.id <= root._max
             readonly property bool   hovered: dotHover.containsMouse
             // Only the active workspace gets the full icon size; the rest sit a little smaller.
             readonly property int    dotD:    isActive ? root._is : root._is - 5
 
-            // Persistent workspaces (this monitor) are always shown; plus the active one.
-            visible: show && (isMine || isActive)
+            // Persistent workspaces (this monitor) are always shown; a foreign workspace
+            // that becomes active here flips its monitor association first, so isMine
+            // already covers it.
+            visible: show && isMine
             width:   visible ? (isActive ? root._is + 14 : dotD) : 0
             height:  root._is
 

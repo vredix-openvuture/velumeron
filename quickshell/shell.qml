@@ -10,6 +10,58 @@ ShellRoot {
     // OnboardingState decides whether to open the first-run wizard / post-update changelog.
     Component.onCompleted: { Templates.boot(); void Hyprwindows.windows; OnboardingState.boot() }
 
+    // Cold-start resync: Quickshell.Hyprland builds its workspace→monitor /
+    // monitor→activeWorkspace graph from the event socket and can latch a bogus
+    // association when the shell boots mid-stream — the bar then pinned ws1 as the
+    // other monitor's active pill until the next workspace event (seen 2026-07-11,
+    // typically right after wallust's qs_reload restart on a wallpaper change).
+    // Two forced re-queries shortly after startup make the graph converge.
+    Timer { running: true; interval: 1500
+            onTriggered: { Hyprland.refreshMonitors(); Hyprland.refreshWorkspaces() } }
+    Timer { running: true; interval: 6000
+            onTriggered: { Hyprland.refreshMonitors(); Hyprland.refreshWorkspaces() } }
+    // …and keep it converged for the whole session: the same stale association can also latch
+    // AFTER boot (seen 2026-07-11 as the active pill missing on a secondary monitor — ws6 active on
+    // DP-3 but no lit pill). Quickshell.Hyprland's own event processing does NOT self-correct it;
+    // only a forced IPC re-query does. So re-query on the workspace / focused-monitor events,
+    // debounced into one refresh so rapid switching never spams the socket.
+    Timer { id: wsResync; interval: 120
+            onTriggered: { Hyprland.refreshMonitors(); Hyprland.refreshWorkspaces() } }
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) {
+            switch (event.name) {
+            case "workspace":        case "workspacev2":
+            case "focusedmon":       case "focusedmonv2":
+            case "moveworkspace":    case "moveworkspacev2":
+            case "createworkspace":  case "createworkspacev2":
+            case "destroyworkspace": case "destroyworkspacev2":
+                wsResync.restart()
+            }
+        }
+    }
+
+    // Hand the active ui_style to Hyprland whenever it changes — from the Style picker, a template
+    // activation, or any settings edit — so window decoration (border / glow / shadow / rounding)
+    // follows the shell look. hyprland.lua reads <USER_DIR>/active-theme and loads themes/<style>.lua.
+    // `cur` is a live binding on VtlConfig.uiStyle; `_last` snapshots the value at startup so a
+    // normal start (decoration already set from the persisted active-theme) doesn't fire a reload.
+    Process { id: styleHyprProc }
+    QtObject {
+        id: styleHypr
+        property string cur:   VtlConfig.uiStyle
+        property string _last: ""
+        Component.onCompleted: styleHypr._last = styleHypr.cur
+        onCurChanged: {
+            if (styleHypr._last === styleHypr.cur) return
+            styleHypr._last = styleHypr.cur
+            styleHyprProc.command = ["bash", "-c",
+                "\"$VELUMERON_DIR/assets/scripts/apply-ui-style.sh\" " + JSON.stringify(styleHypr.cur)]
+            styleHyprProc.running = false
+            styleHyprProc.running = true
+        }
+    }
+
     // IPC: force the onboarding window — `velumeron --onboarding [update]`:
     //   open   → first-run wizard (pages write real config!)
     //   update → changelog report for the current release
@@ -294,6 +346,10 @@ ShellRoot {
     // Module flyouts (hover/IPC-grown panels): one of each per screen.
     Variants {
         model: Quickshell.screens
+        delegate: PerformanceMenu { required property var modelData; screen: modelData }
+    }
+    Variants {
+        model: Quickshell.screens
         delegate: VolumeMenu { required property var modelData; screen: modelData }
     }
     Variants {
@@ -307,6 +363,12 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         delegate: NetworkMenu { required property var modelData; screen: modelData }
+    }
+    // One generic GroupMenu per screen serves every dynamic "group:<n>" module (only one flyout
+    // is ever open, so it re-binds to whichever group opened — no per-instance windows needed).
+    Variants {
+        model: Quickshell.screens
+        delegate: GroupMenu { required property var modelData; screen: modelData }
     }
     Variants {
         model: Quickshell.screens

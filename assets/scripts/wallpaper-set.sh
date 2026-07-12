@@ -32,18 +32,52 @@ WALLUST_LOCK="${XDG_RUNTIME_DIR:-/tmp}/vtl-wallust.lock"
 # the main run is belt-and-braces against any other way wallust finds to never exit.
 _wallust() {
     local sub="$1"; shift
-    # Global appearance (Settings → Style → App theming): "light" swaps the configured
-    # dark palette for its light counterpart — only meaningful for `run` (image-derived);
-    # fixed schemes (`cs`) define their colors explicitly.
+    # NOTE: the palettes always stay in the user's configured brightness. The global dark/light
+    # appearance switch (apply-app-theme.sh mode) deliberately does NOT flow in here anymore —
+    # it flips only xdg color-scheme + GTK variant, never the shell/terminal palette.
     local -a pal=()
+    local -a extra=()
     if [[ "$sub" == "run" ]]; then
-        local _amode
-        _amode=$(cat "$VELUMERON_USER_DIR/wallust/app-mode" 2>/dev/null || echo dark)
-        [[ "$_amode" == "light" ]] && pal=(-p saliencelightdistributed)
+        # User-configurable wallust options (Settings → Style → Colours → Auto options).
+        # Stored in $VELUMERON_USER_DIR/wallust/options.json; merged into the `run` call.
+        local _opts_file="$VELUMERON_USER_DIR/wallust/options.json"
+        if [[ -f "$_opts_file" ]]; then
+            eval "$(python3 - "$_opts_file" <<'PY'
+import json, sys
+opts = {}
+try: opts = json.load(open(sys.argv[1]))
+except: pass
+# Each flag and its value MUST be separate array elements: a single "-p value" word reaches
+# clap as one token whose value starts with a space -> "invalid value", and the silent
+# `|| return` swallowed that — every recolour died as soon as options.json existed.
+out = []
+p = opts.get("palette", "")
+if p: out += ["-p", p]
+b = opts.get("backend", "")
+if b: out += ["-b", b]
+c = opts.get("colorspace", "")
+if c: out += ["-c", c]
+s = opts.get("saturation", 0)
+if s and int(s) > 0: out += ["--saturation", str(int(s))]
+if opts.get("check_contrast"): out.append("-k")
+print("extra=(" + " ".join(repr(x) for x in out) + ")")
+PY
+)"
+        fi
     fi
-    timeout -k 5 30 flock -n "$WALLUST_LOCK" \
-        wallust --config-dir "$VELUMERON_DIR/wallust" "$sub" -s "${pal[@]}" "$@" || return
-    ( timeout -k 2 5 wallust --config-dir "$VELUMERON_DIR/wallust" "$sub" -T -q "${pal[@]}" "$@" >/dev/null 2>&1 & )
+    # WAIT for the lock (bounded) instead of -n: a template switch racing an auto-rotate tick
+    # used to silently DROP its recolour — wallpaper changed, palette stayed stale. The hard
+    # timeout still reaps any wedged run, so waiting is safe.
+    if ! timeout -k 5 45 flock -w 30 "$WALLUST_LOCK" \
+        wallust --config-dir "$VELUMERON_DIR/wallust" "$sub" -s "${pal[@]}" "${extra[@]}" "$@"; then
+        # The ImageMagick `wal` backend (also the wallust.toml default) refuses near-monochrome
+        # images ("couldn't generate a suitable palette") — retry with the robust `resized`
+        # backend so SOME palette always lands instead of silently keeping the previous
+        # wallpaper's colours.
+        timeout -k 5 45 flock -w 30 "$WALLUST_LOCK" \
+            wallust --config-dir "$VELUMERON_DIR/wallust" "$sub" -s -b resized "$@" || return
+    fi
+    ( timeout -k 2 5 wallust --config-dir "$VELUMERON_DIR/wallust" "$sub" -T -q "${pal[@]}" "${extra[@]}" "$@" >/dev/null 2>&1 & )
 }
 
 # Native wallpaper engine: upsert this monitor's entry in wallpapers.json. Quickshell watches the file
@@ -88,10 +122,14 @@ if [[ -z "$set_id" && -z "$hor_file" && -z "$ver_file" && ( -z "$mon_arg" || -z 
     exit 1
 fi
 
-# ── Wallust source — derive the colour theme from the MAIN (focused) monitor's
-# wallpaper, so the theme only changes when the main monitor's wallpaper is
-# swapped (changing a secondary monitor leaves the theme untouched). ──────────
-_main_mon=$(hyprctl monitors -j 2>/dev/null | jq -r '[.[] | select(.focused)][0].name' 2>/dev/null)
+# ── Wallust source — derive the colour theme from the MAIN monitor's wallpaper,
+# so the theme only changes when the main monitor's wallpaper is swapped (changing
+# a secondary monitor leaves the theme untouched). "Main" = the monitor with the
+# lowest Hyprland id — the SAME rule the shell uses everywhere (notifications
+# main-only, minimal secondary bars). NOT the focused monitor: picking a wallpaper
+# for a secondary screen focuses it, and a focused-based rule then wrongly treated
+# that secondary as main and recoloured off it. ──────────────────────────────────
+_main_mon=$(hyprctl monitors -j 2>/dev/null | jq -r 'sort_by(.id)[0].name' 2>/dev/null)
 [[ -z "$_main_mon" || "$_main_mon" == "null" ]] && \
     _main_mon=$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].name' 2>/dev/null)
 _main_vertical=$(hyprctl monitors -j 2>/dev/null | jq -r \
@@ -107,7 +145,7 @@ _main_vertical=$(hyprctl monitors -j 2>/dev/null | jq -r \
 
 # ── Per-monitor single apply (per-monitor picker / quick-menu) ──────────────────────────────────
 # Set exactly ONE monitor and leave the others untouched; derive the colour theme only when the
-# main (focused) monitor's wallpaper changed. Fully separate from the legacy --hor/--ver/--set path.
+# MAIN monitor's wallpaper changed. Fully separate from the legacy --hor/--ver/--set path.
 if [[ -n "$mon_arg" && -n "$file_arg" ]]; then
     [[ -f "$file_arg" ]] || { echo "wallpaper-set: file not found: $file_arg" >&2; exit 1; }
     _ext="${file_arg##*.}"
@@ -116,8 +154,8 @@ if [[ -n "$mon_arg" && -n "$file_arg" ]]; then
     # image or live video). No awww/mpvpaper, and no workspace "showcase" — the GPU crossfade is clean.
     _engine_set "$mon_arg" "$file_arg"
 
-    # Derive the colour theme only when the MAIN (focused) monitor's wallpaper changed (image, or a
-    # video's first frame). wallust's own [hooks] update colors.json — quickshell recolours live.
+    # Derive the colour theme only when the MAIN monitor's wallpaper changed (image, or a video's
+    # first frame). wallust's own [hooks] update colors.json — quickshell recolours live.
     _cmode=$(cat "$VELUMERON_USER_DIR/wallust/color-mode" 2>/dev/null || echo "auto")
     if [[ "$mon_arg" == "$_main_mon" && "$_cmode" == "auto" ]]; then
         case "${_ext,,}" in
@@ -142,9 +180,12 @@ if [[ -n "$set_id" && -f "$SETS_JSON" ]]; then
     fi
     [[ -n "$wf" ]] && wallust_src=$(find "$WP_H" "$WP_V" -maxdepth 1 -name "$wf" 2>/dev/null | head -1)
 elif [[ "$_main_vertical" == "true" ]]; then
-    wallust_src="$ver_file"   # main is vertical → theme from the vertical wallpaper
+    # Main is vertical → theme from the vertical wallpaper; fall back to whichever file WAS
+    # given (a --hor-only call — e.g. a template's wallpaper — must still recolour even when
+    # the focused monitor happens to be the portrait one).
+    wallust_src="${ver_file:-$hor_file}"
 else
-    wallust_src="$hor_file"   # main is horizontal → theme from the horizontal one
+    wallust_src="${hor_file:-$ver_file}"
 fi
 
 # ── Apply wallpaper per monitor (hand each to the native engine) ──────────

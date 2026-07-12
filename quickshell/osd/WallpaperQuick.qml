@@ -159,7 +159,7 @@ Flyout {
         anchors { left: parent.left; right: parent.right; top: parent.top }
         spacing: 10
 
-        // Tab bar: one tab per monitor (target for the change) + a Sets tab.
+        // Row 1 — WHERE: one tab per monitor (target for the change) + the Sets tab.
         Flow {
             width: parent.width; spacing: 6
             Repeater {
@@ -189,9 +189,19 @@ Flyout {
                        font.pixelSize: 12; font.bold: parent.sel; font.family: Style.font }
                 MouseArea { id: sth; anchors.fill: parent; hoverEnabled: true; onClicked: root.view = "sets" }
             }
-            // Static / live filter (grid view only).
+        }
+        // Visible divider between the WHERE row and the WHAT row.
+        Rectangle {
+            visible: root.view === "grid"
+            width: parent.width; height: 1
+            color: Style.tint(Colors.boNormal, 0.55)
+        }
+        // Row 2 — WHAT: static / live filter (grid view only).
+        Flow {
+            width: parent.width; spacing: 6
+            visible: root.view === "grid"
             Repeater {
-                model: root.view === "grid" ? [{ k: "all", l: "All" }, { k: "static", l: "Static" }, { k: "live", l: "Live" }] : []
+                model: [{ k: "all", l: "All" }, { k: "static", l: "Static" }, { k: "live", l: "Live" }]
                 delegate: StyledRect {
                     required property var modelData
                     readonly property bool sel: root.typeFilter === modelData.k
@@ -279,31 +289,42 @@ Flyout {
         Column {
             visible: root.view === "sets"
             width: parent.width; spacing: 6
+            // Big preview cards: the set's image fills the card (16:9-ish), name on a gradient
+            // strip at the bottom — the tiny 76px thumb told you nothing about the set.
             Repeater {
                 model: root.sets
                 delegate: StyledRect {
                     required property var modelData
-                    width: parent.width; height: 56; radius: Style.rControl
-                    color: setHov.containsMouse ? Style.tint(Colors.bgActive, 0.18) : Colors.bgElement
-                    Behavior on color { ColorAnimation { duration: 90 } }
+                    width: parent.width
+                    height: Math.round(width * 0.42)
+                    radius: Style.rControl
+                    clip: true
+                    color: Colors.bgPrimary
+                    borderWidth: setHov.containsMouse ? 2 : Style.controlBorderW
+                    borderColor: setHov.containsMouse ? Style.accent : Style.controlBorderColor
+                    Image {
+                        id: setImg
+                        anchors.fill: parent; anchors.margins: 2
+                        source: modelData.preview !== "" ? ("file://" + modelData.preview) : ""
+                        visible: status === Image.Ready; fillMode: Image.PreserveAspectCrop
+                        asynchronous: true; sourceSize.width: 480
+                    }
+                    Text { visible: setImg.status !== Image.Ready; anchors.centerIn: parent
+                           text: "󰋩"; color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 30 }
                     Rectangle {
-                        id: pv
-                        anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
-                        width: 76; height: 44; radius: 7; clip: true; color: Colors.bgPrimary
-                        Image {
-                            id: setImg
-                            anchors.fill: parent
-                            source: modelData.preview !== "" ? ("file://" + modelData.preview) : ""
-                            visible: status === Image.Ready; fillMode: Image.PreserveAspectCrop
-                            asynchronous: true; sourceSize.width: 160; sourceSize.height: 100
+                        anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                        height: 30
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: "transparent" }
+                            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.75) }
                         }
-                        Text { visible: setImg.status !== Image.Ready; anchors.centerIn: parent
-                               text: "󰋩"; color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 18 }
                     }
                     Text {
-                        anchors { left: pv.right; leftMargin: 12; right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                        text: modelData.name; elide: Text.ElideRight; color: Colors.fgPrimary
-                        font.pixelSize: 13; font.family: Style.font
+                        anchors { left: parent.left; leftMargin: 10; right: parent.right; rightMargin: 10
+                                  bottom: parent.bottom; bottomMargin: 6 }
+                        text: modelData.name; elide: Text.ElideRight; color: "white"
+                        font.pixelSize: 13; font.bold: true; font.family: Style.font
+                        style: Text.Outline; styleColor: Qt.rgba(0, 0, 0, 0.5)
                     }
                     MouseArea { id: setHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.applySet(modelData.name) }
                 }

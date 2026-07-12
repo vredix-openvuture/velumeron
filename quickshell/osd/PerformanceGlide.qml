@@ -6,7 +6,9 @@ import QtQuick
 BarGlide {
     id: g
     mine:            UiState.perfMon === g.mon && g.mon !== ""
-    shown:           UiState.perfHover
+    // Hover preview only — the click flyout (PerformanceMenu) supersedes it, so hide the glide while
+    // that panel is open (it grows from the same spot).
+    shown:           UiState.perfHover && UiState.flyout !== "performance"
     edge:            UiState.perfEdge
     anchorX:         UiState.perfAnchorX
     anchorY:         UiState.perfAnchorY

@@ -34,14 +34,13 @@ Column {
     readonly property int _cap: 120
     readonly property var results: {
         if (gp._db === null || gp.query.length < 2) return []
-        var q = gp.query.toLowerCase(), out = []
+        var q = gp.query, out = []
         for (var name in gp._db) {
-            if (name.indexOf(q) >= 0) {
-                out.push({ name: name, g: gp._db[name] })
-                if (out.length > gp._cap) break
-            }
+            var s = Fuzzy.score(q, name)
+            if (s >= 0) out.push({ name: name, g: gp._db[name], s: s })
         }
-        return out
+        out.sort(function (a, b) { return b.s !== a.s ? b.s - a.s : a.name.localeCompare(b.name) })
+        return out.slice(0, gp._cap)
     }
 
     readonly property var glyphs: [

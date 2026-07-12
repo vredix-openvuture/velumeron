@@ -6,6 +6,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 
 Item {
     id: root
@@ -54,9 +55,13 @@ Item {
     readonly property real   opacityValue:    _data.opacity_value     ?? 0.88
     readonly property string menuTheme:       _data.menu_theme        ?? "follow"
     readonly property string logoVariant:     _data.logo_variant      ?? "full"
-    readonly property string uiStyle:         _data.ui_style          ?? "flat"   // flat | cards | outlined
+    readonly property string uiStyle:         _data.ui_style          ?? "flat"   // flat|cards|outlined|futuristic|grimoire|straight|wobbly|nostalgic|sketch|cupertino
+    readonly property string uiFont:          _data.ui_font           ?? ""        // main display font family; "" = default (Style.iconFont)
 
     readonly property bool   lowMemoryMode:   _data.low_memory_mode   ?? false
+    // Fuzzy search across every searchbar (launcher, clipboard, icon picker …). ON = fzf-style
+    // subsequence match; OFF = plain substring. Read by the shared Fuzzy singleton.
+    readonly property bool   fuzzySearch:     _data.fuzzy_search      ?? true
 
     // ── Bar layout (mode / position / edges) ──────────────────────────────────
     // mode: "dock"  — flush to one edge, reserves space.
@@ -69,6 +74,24 @@ Item {
     // getters with their own monitor name; the no-arg / global properties below are kept for
     // the settings editor and back-compat (they resolve the global value).
     readonly property bool barPerMonitor: _data.bar_per_monitor ?? false
+
+    // With more than one monitor connected, every NON-main monitor (main = lowest Hyprland id, the
+    // same rule the notification "main only" option uses) gets a stripped-down bar: just the clock
+    // at the start and the submap + workspace indicator at the end of its primary edge. Keeps the
+    // secondary screens uncluttered without per-monitor hand-configuring. Toggle in Settings → Bar.
+    readonly property bool secondaryBarsMinimal: _data.secondary_bars_minimal ?? true
+    function _mainMonName() {
+        var vs = Hyprland.monitors.values
+        if (!vs.length) return ""
+        var m = vs[0]
+        for (var i = 1; i < vs.length; i++) if (vs[i].id < m.id) m = vs[i]
+        return m.name
+    }
+    function isSecondaryMinimal(mon) {
+        if (!secondaryBarsMinimal || !mon) return false
+        if (Hyprland.monitors.values.length < 2) return false   // single monitor → full bar
+        return mon !== _mainMonName()
+    }
 
     function _monObj(mon) {
         if (!barPerMonitor || !mon) return null
@@ -112,13 +135,20 @@ Item {
         var ms = _data.module_settings
         return (ms && ms[key] && ms[key][name] !== undefined && ms[key][name] !== "") ? ms[key][name] : def
     }
-    function moduleFontFor(key, def)     { return moduleSetting(key, "font", def ?? "FantasqueSansM Nerd Font") }
+    // Resolved main display font (blank ui_font → the default nerd face). Also the fallback for a
+    // bar module's font, so the template/user font flows to the bar unless a module overrides it.
+    readonly property string uiFontResolved: uiFont !== "" ? uiFont : "FantasqueSansM Nerd Font"
+    function moduleFontFor(key, def)     { return moduleSetting(key, "font", def ?? uiFontResolved) }
     function moduleFontSizeFor(key, mon) { return moduleSetting(key, "font_size", barFontSizeFor(mon)) }
     function moduleIconSizeFor(key, mon) { return moduleSetting(key, "icon_size", barIconSizeFor(mon)) }
     function moduleColorName(key)        { return moduleSetting(key, "color", "") }   // "" = module default
     // Colour resolves in the module (it imports Colors): Colors[moduleColorName(key)] ?? default.
 
-    function activeEdgesFor(mon)      { return barModeFor(mon) === "frame" ? barEdgesFor(mon) : [barPositionFor(mon)] }
+    function activeEdgesFor(mon) {
+        var m = barModeFor(mon)
+        if (m === "none") return []                      // no bar at all
+        return m === "frame" ? barEdgesFor(mon) : [barPositionFor(mon)]
+    }
     function edgeActiveFor(edge, mon) { return activeEdgesFor(mon).indexOf(edge) >= 0 }
 
     // Per-edge module model, stored separately per bar mode so dock / float / frame each keep
@@ -126,6 +156,16 @@ Item {
     //   bar_modules_m.<mode>.<edge>.<group>  (per-monitor override → global)
     // Falls back to the old flat bar_modules.<edge>.<group>, then to the legacy top/sidebar keys.
     function barModulesForMode(edge, group, mon, mode) {
+        // Non-main monitors (multi-monitor) get the minimal bar on their primary edge only:
+        // clock at the start, submap + workspaces at the end. Everything else empty.
+        if (isSecondaryMinimal(mon)) {
+            var edges = activeEdgesFor(mon)
+            var primary = edges.length ? edges[0] : "top"
+            if (edge !== primary) return []
+            if (group === "start") return ["clock"]
+            if (group === "end")   return ["submap", "workspaces"]
+            return []
+        }
         var o = _monObj(mon)
         var store = (o && o.bar_modules_m) ? o.bar_modules_m : _data.bar_modules_m
         var m = (store && store[mode]) ? store[mode] : null
@@ -242,11 +282,19 @@ Item {
     // (it hangs on a bare monitor edge, e.g. fullscreen / no bar there). Each surface resolves a
     // per-surface override first, then the global default for that context. Surfaces pass their key
     // ("menu" "osd" "notify_popup" "notify_center" "flyout") + their live context.
-    function transitionGlobalRaw(ctx)     { return _data["transition_style_" + ctx] ?? "fillet" }       // ctx: bar | edge
+    // "auto" (the default) resolves from the active ui_style, so switching the style live also
+    // re-shapes how panels merge: hard-edged styles merge straight, soft ones keep the fillet.
+    function transitionAutoStyle() {
+        var s = _data.ui_style ?? "flat"
+        return (s === "straight" || s === "nostalgic" || s === "outlined" || s === "futuristic")
+               ? "straight" : "fillet"
+    }
+    function transitionGlobalRaw(ctx)     { return _data["transition_style_" + ctx] ?? "auto" }       // ctx: bar | edge
     function transitionMenuRaw(menu, ctx) { return _data["transition_style_" + menu + "_" + ctx] ?? "global" }
     function transitionStyleFor(menu, ctx) {
         var v = transitionMenuRaw(menu, ctx)
-        return v === "global" ? transitionGlobalRaw(ctx) : v
+        if (v === "global") v = transitionGlobalRaw(ctx)
+        return v === "auto" ? transitionAutoStyle() : v
     }
     function transitionFilletFor(menu, ctx)   { return transitionStyleFor(menu, ctx) === "fillet" }
     function transitionMergeAllFor(menu, ctx) { return transitionStyleFor(menu, ctx) !== "straight_origin" }
@@ -364,6 +412,9 @@ Item {
     readonly property int    taskbarIconSize:   _data.taskbar_icon_size  ?? 24
     readonly property int    taskbarMargin:     _data.taskbar_margin     ?? 12
     readonly property string taskbarLayer:      _data.taskbar_layer      ?? "over"    // over | reserve (like bar)
+    // Pinned apps (desktop-entry ids, in dock order). Pinned entries always show — running or
+    // not — ahead of the unpinned running windows; right-click a dock item pins/unpins it.
+    readonly property var    taskbarPinned:     _data.taskbar_pinned     ?? []
     // ── Window tags (Settings → Window tags) ─────────────────────────────────────
     // A small name chip on the edge/corner of every window that fades out when the cursor comes near.
     readonly property bool   windowTagsEnabled:  _data.window_tags_enabled   ?? false
@@ -411,6 +462,11 @@ Item {
     // Flyout size: width is fixed, height auto-fits the content up to the max.
     readonly property int    calendarMenuWidth:     _data.calendar_menu_width      ?? 380
     readonly property int    calendarMenuMaxH:      _data.calendar_menu_max_height ?? 700
+    // Percent-of-screen sizing supersedes the px keys above (users had those pinned
+    // in settings.json, so changed defaults alone would never enlarge the menu).
+    readonly property int    calendarMenuWidthPct:  _data.calendar_menu_width_pct  ?? 50
+    readonly property int    calendarMenuHeightPct: _data.calendar_menu_height_pct ?? 40
+    readonly property string todoDefaultProject:    _data.todo_default_project     ?? ""
 
     // ── Tiling layouts (Settings → Layouts + the bar's Layout module) ─────────
     // custom_layouts: [{name, kind: columns|rows|grid|main_stack, gap, ratio, side}] — the

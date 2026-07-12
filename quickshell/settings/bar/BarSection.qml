@@ -57,6 +57,7 @@ Item {
         { key: "tasks",       label: "Tasks",         icon: "󱂩" },
         { key: "updates",     label: "Updates",       icon: "󰚰" },
         { key: "layout",      label: "Layout",        icon: "󰕴" },
+        { key: "__new_group", label: "New group…",    icon: "󰐱" },
     ]
     // Modules grouped by theme/task for the Add-module sub-page.
     readonly property var categories: [
@@ -64,13 +65,16 @@ Item {
         { title: "Connectivity",   keys: ["network", "vpn", "bluetooth", "tray"] },
         { title: "Media & sound",  keys: ["volume", "mpris"] },
         { title: "Workspace",      keys: ["workspaces", "submap", "tasks", "layout"] },
-        { title: "System & personal", keys: ["notiftray", "user", "wallpaper-switcher", "vuture-icon"] }
+        { title: "System & personal", keys: ["notiftray", "user", "wallpaper-switcher", "vuture-icon"] },
+        { title: "Custom",         keys: ["__new_group"] }
     ]
     function labelFor(k) {
+        if (("" + k).indexOf("group:") === 0) return VtlConfig.moduleSetting(k, "label", "Group")
         for (var i = 0; i < registry.length; i++) if (registry[i].key === k) return registry[i].label
         return k
     }
     function iconFor(k) {
+        if (("" + k).indexOf("group:") === 0) return VtlConfig.moduleSetting(k, "icon", "󰐱")
         for (var i = 0; i < registry.length; i++) if (registry[i].key === k) return registry[i].icon
         return ""
     }
@@ -152,19 +156,37 @@ Item {
     function save(key, value) { saveKey(key, value, editMon) }
 
     // Persist the module map under bar_modules_m.<currentMode> (per-monitor when editing one),
-    // merging so the other modes/monitors are left untouched.
-    function saveModules(map) {
-        var py = "import json,os,sys;" +
-            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
-              "or os.path.expanduser('~/.config'),'velumeron');" +
-            "p=os.path.join(pu,'gui','settings.json');" +
-            "os.makedirs(os.path.dirname(p),exist_ok=True);" +
-            "d=json.load(open(p)) if os.path.exists(p) else {};" +
-            "v=json.loads(sys.argv[1]);mode=sys.argv[2];m=sys.argv[3];" +
-            "t=(d.setdefault('bar_monitors',{}).setdefault(m,{}) if m else d);" +
-            "t.setdefault('bar_modules_m',{})[mode]=v;" +
+    // merging so the other modes/monitors are left untouched. `purgeKey` (a "group:<n>" instance)
+    // additionally drops that key's module_settings entry IF it is no longer referenced anywhere —
+    // same script, so the purge can't race the map write.
+    function saveModules(map, purgeKey) {
+        var py = [
+            "import json,os,sys",
+            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') or os.path.expanduser('~/.config'),'velumeron')",
+            "p=os.path.join(pu,'gui','settings.json')",
+            "os.makedirs(os.path.dirname(p),exist_ok=True)",
+            "d=json.load(open(p)) if os.path.exists(p) else {}",
+            "v=json.loads(sys.argv[1]);mode=sys.argv[2];m=sys.argv[3];k=sys.argv[4]",
+            "t=(d.setdefault('bar_monitors',{}).setdefault(m,{}) if m else d)",
+            "t.setdefault('bar_modules_m',{})[mode]=v",
+            "def arrs(node):",
+            " out=[]",
+            " for eg in (node or {}).values():",
+            "  if isinstance(eg,dict):",
+            "   for a in eg.values():",
+            "    if isinstance(a,list): out.extend(a)",
+            " return out",
+            "if k:",
+            " used=[]",
+            " for mm in (d.get('bar_modules_m') or {}).values(): used+=arrs(mm)",
+            " used+=arrs(d.get('bar_modules'))",
+            " for mo in (d.get('bar_monitors') or {}).values():",
+            "  for mm in ((mo or {}).get('bar_modules_m') or {}).values(): used+=arrs(mm)",
+            "  used+=arrs((mo or {}).get('bar_modules'))",
+            " if k not in used and isinstance(d.get('module_settings'),dict): d['module_settings'].pop(k,None)",
             "open(p,'w').write(json.dumps(d,indent=2))"
-        saveProc.command = ["python3", "-c", py, JSON.stringify(map), root.mode, editMon]
+        ].join("\n")
+        saveProc.command = ["python3", "-c", py, JSON.stringify(map), root.mode, editMon, purgeKey || ""]
         saveProc.running = false
         saveProc.running = true
     }
@@ -253,7 +275,46 @@ Item {
         if (m[edge] && m[edge][group])
             m[edge][group] = m[edge][group].filter(function(x) { return x !== key })
         modules = m
-        saveModules(m)
+        // Removing a group chip cleans up its module_settings once no arrangement references it.
+        saveModules(m, ("" + key).indexOf("group:") === 0 ? key : "")
+    }
+
+    // ── Dynamic group instances ("group:g<N>") ─────────────────────────────────────
+    // Next free instance key: scan every arrangement (all modes, legacy map, every monitor
+    // override, the possibly-unsaved local map) plus module_settings, then take g<N+…>.
+    function nextGroupKey() {
+        var used = {}
+        function mark(node) {
+            if (!node) return
+            for (var e in node) { var eg = node[e]; if (!eg) continue
+                for (var g in eg) { var arr = eg[g]
+                    if (arr && arr.length) for (var i = 0; i < arr.length; i++) used[arr[i]] = true } }
+        }
+        var d = VtlConfig._data || {}
+        var mm = d.bar_modules_m || {}
+        for (var mo in mm) mark(mm[mo])
+        mark(d.bar_modules)
+        var bm = d.bar_monitors || {}
+        for (var mn in bm) {
+            var mmm = (bm[mn] || {}).bar_modules_m || {}
+            for (var md in mmm) mark(mmm[md])
+            mark((bm[mn] || {}).bar_modules)
+        }
+        var ms = d.module_settings || {}
+        for (var k in ms) used[k] = true
+        mark(root.modules)
+        var n = 1
+        while (used["group:g" + n]) n++
+        return "group:g" + n
+    }
+    // Create a fresh group in the given zone and jump straight into its customize page
+    // (name / icon / members). No module_settings seed: members default to [] via moduleSetting,
+    // and a parallel write here would race saveModules on settings.json.
+    function addGroup(edge, group) {
+        var key = nextGroupKey()
+        addModule(edge, group, key)
+        customizeKey = key
+        loadFonts()
     }
     // Reorder within a group: pull the item at fromIdx and re-insert it at toIdx.
     function moveModule(edge, group, fromIdx, toIdx) {
@@ -348,6 +409,33 @@ Item {
                     Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
                 }
                 MouseArea { anchors.fill: parent; onClicked: root.setPerMonitor(!root.perMonitor) }
+            }
+        }
+
+        // Minimal bar on every non-main monitor (only with more than one connected).
+        Rectangle {
+            width: parent.width; height: 40; radius: 10; color: Style.controlFill
+            Column {
+                anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                spacing: 1
+                Text { text: "Minimal secondary bars"; color: Colors.fgPrimary; font.pixelSize: 13
+                       font.family: Style.font }
+                Text { text: "Non-main monitors show only clock + submap / workspaces"; color: Colors.fgMuted
+                       font.pixelSize: 10; font.family: Style.font }
+            }
+            Rectangle {
+                anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                width: 42; height: 22; radius: 11
+                color: VtlConfig.secondaryBarsMinimal ? Style.accent : Colors.bgPrimary
+                Behavior on color { ColorAnimation { duration: 120 } }
+                Rectangle {
+                    width: 16; height: 16; radius: 8; color: Colors.fgBright
+                    anchors.verticalCenter: parent.verticalCenter
+                    x: VtlConfig.secondaryBarsMinimal ? parent.width - width - 3 : 3
+                    Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                }
+                MouseArea { anchors.fill: parent
+                            onClicked: root.saveKey("secondary_bars_minimal", !VtlConfig.secondaryBarsMinimal, "") }
             }
         }
 
@@ -583,7 +671,11 @@ Item {
                                                font.pixelSize: 12; font.family: Style.font }
                                     }
                                     MouseArea { id: chHov; anchors.fill: parent; hoverEnabled: true
-                                        onClicked: { var p = root.addTarget.split(":"); root.addModule(p[0], p[1], chip.modelData) } }
+                                        onClicked: {
+                                            var p = root.addTarget.split(":")
+                                            if (chip.modelData === "__new_group") root.addGroup(p[0], p[1])
+                                            else                                  root.addModule(p[0], p[1], chip.modelData)
+                                        } }
                                 }
                             }
                         }
@@ -991,19 +1083,22 @@ Item {
         property int    step:  5
         signal changed(int v)
         spacing: 8
+        // Snap to the step grid so − / + always land on a clean multiple of `step`.
+        function _up()   { return (Math.floor(st.value / st.step) + 1) * st.step }
+        function _down() { return Math.max(0, (Math.ceil(st.value / st.step) - 1) * st.step) }
         Text { anchors.verticalCenter: parent.verticalCenter; width: 78; text: st.label
                color: Colors.fgPrimary; font.pixelSize: 12; font.family: Style.font }
         Rectangle {
             width: 26; height: 26; radius: 6; color: mh.containsMouse ? Style.accent : Style.controlFill
             Text { anchors.centerIn: parent; text: "−"; color: Colors.fgPrimary; font.pixelSize: 14 }
-            MouseArea { id: mh; anchors.fill: parent; hoverEnabled: true; onClicked: st.changed(st.value - st.step) }
+            MouseArea { id: mh; anchors.fill: parent; hoverEnabled: true; onClicked: st.changed(st._down()) }
         }
         Text { anchors.verticalCenter: parent.verticalCenter; width: 34; horizontalAlignment: Text.AlignHCenter
                text: st.value; color: Colors.fgBright; font.pixelSize: 13; font.family: Style.font }
         Rectangle {
             width: 26; height: 26; radius: 6; color: ph2.containsMouse ? Style.accent : Style.controlFill
             Text { anchors.centerIn: parent; text: "+"; color: Colors.fgPrimary; font.pixelSize: 14 }
-            MouseArea { id: ph2; anchors.fill: parent; hoverEnabled: true; onClicked: st.changed(st.value + st.step) }
+            MouseArea { id: ph2; anchors.fill: parent; hoverEnabled: true; onClicked: st.changed(st._up()) }
         }
     }
 

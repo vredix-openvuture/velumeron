@@ -11,7 +11,7 @@ Item {
     property var now: new Date()
 
     // Per-module customization (Settings → Bar → Module → gear).
-    readonly property string _font:     VtlConfig.moduleFontFor("clock", "Audiowide")
+    readonly property string _font:     VtlConfig.moduleFontFor("clock")
     readonly property int    _fs:       VtlConfig.moduleFontSizeFor("clock", root.barMon)
     readonly property color  _col:      Colors[VtlConfig.moduleColorName("clock")] ?? Colors.fgBright
     readonly property string _timeFmt:  VtlConfig.moduleSetting("clock", "time_format", "hh:mm")
@@ -48,9 +48,10 @@ Item {
         }
     }
 
-    // A task is overdue or due today → a small accent dot beside the time (CalDAV, Settings → Calendar).
+    // A task is overdue or due today → a small accent dot beside the time (unified
+    // Vikunja + CalDAV model, Settings → Calendar).
     Rectangle {
-        visible: CalDavService.dueCount > 0
+        visible: TodoService.dueCount > 0
         anchors { left: label.right; leftMargin: 3; top: label.top; topMargin: 1 }
         width: 5; height: 5; radius: 2.5
         color: Colors.boActive

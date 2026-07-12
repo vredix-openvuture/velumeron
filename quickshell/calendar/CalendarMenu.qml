@@ -4,35 +4,46 @@ import QtQuick
 import Quickshell.Io
 import Quickshell.Wayland
 
-// Calendar + tasks flyout — grows out of the bar from the Clock module (click). A month grid
-// with per-calendar event dots, the selected day's events, and a task list, all backed by
-// CalDavService (Nextcloud Calendar, Nextcloud Tasks, Vikunja — anything CalDAV). Quick-add
-// rows create events ("14:00 Standup" → timed, otherwise all-day) and todos in place.
-// Each tab has a left rail: the calendar tab toggles per-calendar visibility (same
-// caldav_hidden map the settings page uses), the tasks tab switches between "General"
-// (everything) and a single task list.
+// Calendar + tasks flyout — grows out of the bar from the Clock module (click) as the QUICK
+// VIEW next to the velorganize app (focused working; footer button launches it). Sized as a
+// percentage of the screen: a two-column calendar tab (month grid | day agenda + quick-add)
+// and a tasks tab with the unified project tree (ProjectRail: Vikunja projects/subprojects +
+// CalDAV lists via TodoService) beside the grouped TaskBoard (subtasks indent under their
+// parents). Quick-add rows create events ("14:00 Standup" → timed, otherwise all-day) and
+// tasks in place; the calendar rail toggles per-calendar visibility (caldav_hidden).
 Flyout {
     id: root
     flyoutId: "calendar"
-    panelW:   VtlConfig.calendarMenuWidth
-    maxH:     VtlConfig.calendarMenuMaxH
+    panelW:   Math.max(560, Math.round(sw * VtlConfig.calendarMenuWidthPct / 100))
+    maxH:     Math.round(sh * VtlConfig.calendarMenuHeightPct / 100)
+
+    // Fixed height for the tab bodies so the flyout opens at its full size and the
+    // rail / list / agenda columns scroll individually inside it.
+    readonly property int contentH: maxH - 2 * inPad - 30 /*tabs*/ - 18 /*footer*/ - 36 /*gaps*/
 
     // Text input (quick-add) + the Escape shortcut need the keyboard while open.
     WlrLayershell.keyboardFocus: isOpen && !UiState.pickerOpen
                                  ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
-    property string tab:       "calendar"        // calendar | tasks
-    property var    today:     new Date()
-    property int    viewYear:  today.getFullYear()
-    property int    viewMonth: today.getMonth()  // 0-based
-    property var    selDay:    new Date()
-    property bool   showDone:  false
-    property string taskList:  ""                // "" = General (all lists), else a calendar id
+    property string tab:        "calendar"       // calendar | tasks
+    property var    today:      new Date()
+    property int    viewYear:   today.getFullYear()
+    property int    viewMonth:  today.getMonth() // 0-based
+    property var    selDay:     new Date()
+    property string selProject: ""               // "" = all projects (TaskBoard filter)
 
     onIsOpenChanged: if (isOpen) {
         root.today = new Date()
         root.goToday()
-        CalDavService.sync()
+        TodoService.sync()   // also triggers CalDavService.sync()
+    }
+
+    // The velorganize app — the "focused working" counterpart of this quick view.
+    Process { id: launchProc }
+    function launchApp() {
+        launchProc.command = ["bash", "-c", "setsid -f velorganize >/dev/null 2>&1"]
+        launchProc.running = false; launchProc.running = true
+        UiState.flyout = ""
     }
     function goToday() {
         root.viewYear  = root.today.getFullYear()
@@ -46,9 +57,9 @@ Flyout {
     }
 
     // ── Layout: a left rail beside each tab's content ────────────────────────────
-    readonly property int railW:  120
+    readonly property int railW:     130        // calendar tab: visibility toggles
+    readonly property int projRailW: 220        // tasks tab: project tree
     readonly property var eventCals: CalDavService.calendars.filter(c => c.vevent)
-    readonly property var todoCals:  CalDavService.calendars.filter(c => c.vtodo)
     readonly property int mainW: root.panelW - 2 * root.inPad - root.railW - 12
 
     // ── Date helpers ─────────────────────────────────────────────────────────────
@@ -95,44 +106,13 @@ Flyout {
         return l
     }
 
-    // ── Task grouping (filtered to the rail's selected list; "" = General) ────────
-    // Midnight boundary for overdue/today buckets — re-evaluated on every sync (void touches
-    // the dependency), so a shell left running for days doesn't classify against a stale "today".
-    readonly property real _day0: {
-        void CalDavService.data
-        return new Date(new Date().setHours(0, 0, 0, 0)).getTime()
-    }
-    readonly property real _dayEnd: root._day0 + 86400000
-    function inList(t) { return root.taskList === "" || t.cal === root.taskList }
-    readonly property var overdueTodos:  CalDavService.todos.filter(t => root.inList(t) && !t.completed && t.dueMs > 0 && t.dueMs <  root._day0)
-    readonly property var todayTodos:    CalDavService.todos.filter(t => root.inList(t) && !t.completed && t.dueMs >= root._day0 && t.dueMs < root._dayEnd)
-    readonly property var upcomingTodos: CalDavService.todos.filter(t => root.inList(t) && !t.completed && (t.dueMs === 0 || t.dueMs >= root._dayEnd))
-    readonly property var doneTodos:     CalDavService.todos.filter(t => root.inList(t) && t.completed).slice(0, 12)
-    readonly property int openCount:     overdueTodos.length + todayTodos.length + upcomingTodos.length
-    readonly property int allOpenCount: {
-        var n = 0, ts = CalDavService.todos
-        for (var i = 0; i < ts.length; i++) if (!ts[i].completed) n++
-        return n
-    }
-    function openCountFor(calId) {
-        var n = 0, ts = CalDavService.todos
-        for (var i = 0; i < ts.length; i++) if (!ts[i].completed && ts[i].cal === calId) n++
-        return n
-    }
+    // Task bucketing/counters live in TaskBoard now; the tab badge reads TodoService.
 
-    // Quick-add targets — a selected task list wins; General falls back to the remembered
-    // default (settings.json), else the first writable calendar.
+    // Event quick-add target — the remembered default (settings.json), else the
+    // first writable calendar.
     readonly property string eventCal: {
         var cs = CalDavService.eventCalendars
         var want = VtlConfig.caldavDefaultEventCal
-        for (var i = 0; i < cs.length; i++) if (cs[i].id === want) return want
-        return cs.length > 0 ? cs[0].id : ""
-    }
-    readonly property string todoCal: {
-        var cs = CalDavService.todoCalendars
-        if (root.taskList !== "")
-            for (var j = 0; j < cs.length; j++) if (cs[j].id === root.taskList) return root.taskList
-        var want = VtlConfig.caldavDefaultTodoCal
         for (var i = 0; i < cs.length; i++) if (cs[i].id === want) return want
         return cs.length > 0 ? cs[0].id : ""
     }
@@ -167,7 +147,7 @@ Flyout {
             equal: true
             current: root.tab
             segments: [{ label: "Calendar", key: "calendar" },
-                       { label: "Tasks" + (root.allOpenCount > 0 ? "  " + root.allOpenCount : ""), key: "tasks" }]
+                       { label: "Tasks" + (TodoService.openCount > 0 ? "  " + TodoService.openCount : ""), key: "tasks" }]
             onPicked: key => root.tab = key
         }
 
@@ -200,11 +180,17 @@ Flyout {
             }
         }
 
-        // ══ CALENDAR TAB ═════════════════════════════════════════════════════════
+        // ══ CALENDAR TAB — rail | month grid | day agenda ═════════════════════════
         Row {
             visible: root.tab === "calendar"
             width:   parent.width
+            height:  root.contentH
             spacing: 12
+
+            readonly property int avail:   (root.eventCals.length > 0 ? root.mainW
+                                                                      : root.panelW - 2 * root.inPad)
+            readonly property int gridW:   Math.round((avail - 12) * 0.55)
+            readonly property int agendaW: avail - 12 - gridW
 
             // Left rail: show/hide each calendar (event dots + agenda react immediately).
             Column {
@@ -262,9 +248,10 @@ Flyout {
                 }
             }
 
-            // Main: month grid + selected day's agenda + quick add.
+            // Month grid column.
             Column {
-                width: root.eventCals.length > 0 ? root.mainW : root.panelW - 2 * root.inPad
+                id: gridCol
+                width: parent.gridW
                 spacing: 10
 
                 // Month header: ‹ month year › + jump-to-today
@@ -318,7 +305,8 @@ Flyout {
                             readonly property bool isToday: k === root.dayKey(root.today)
                             readonly property bool isSel:   k === root.dayKey(root.selDay)
                             readonly property var  evs:     root.eventsByDay[k] ?? []
-                            width: grid.cellW; height: 38
+                            width: grid.cellW
+                            height: Math.max(38, Math.round(grid.cellW * 0.62))   // grow with the panel
                             radius: Style.rTile
                             color:  isSel ? Style.tint(Style.accent, 0.45)
                                   : cellHov.containsMouse ? Style.controlHover : "transparent"
@@ -364,16 +352,28 @@ Flyout {
                     }
                 }
 
-                Rectangle { width: parent.width; height: 1; color: Style.tint(Colors.boNormal, 0.35) }
+            }
 
-                // Selected day: its events + the quick-add row.
+            // Day agenda column: the selected day's events + the quick-add row.
+            Column {
+                width: parent.agendaW
+                spacing: 10
+
                 Text {
                     text:  Qt.formatDate(root.selDay, "dddd, MMM d")
-                    color: Colors.fgMuted; font.pixelSize: 11; font.bold: true
+                    color: Colors.fgMuted; font.pixelSize: 12; font.bold: true
                     font.letterSpacing: 0.5; font.family: Style.font
                 }
 
+                Flickable {
+                    width:  parent.width
+                    height: Math.min(agendaCol.implicitHeight, root.contentH - 130)
+                    contentHeight: agendaCol.implicitHeight
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+
                 Column {
+                    id: agendaCol
                     width: parent.width
                     spacing: 4
                     Repeater {
@@ -433,6 +433,7 @@ Flyout {
                         font.pixelSize: 11; font.family: Style.font
                     }
                 }
+                }
 
                 InputRow {
                     id: addEventInput
@@ -449,121 +450,78 @@ Flyout {
             }
         }
 
-        // ══ TASKS TAB ════════════════════════════════════════════════════════════
+        // ══ TASKS TAB — project tree | grouped board (unified TodoService model) ══
         Row {
             visible: root.tab === "tasks"
             width:   parent.width
+            height:  root.contentH
             spacing: 12
 
-            // Left rail: General (all lists) on top, then one entry per task list.
-            Column {
-                width: root.railW
-                spacing: 4
-                visible: root.todoCals.length > 0
-
-                RailCaption { text: "LISTS" }
-                TaskListRow {
-                    label: "General"
-                    dot:   "transparent"
-                    icon:  "󰒺"
-                    count: root.allOpenCount
-                    on:    root.taskList === ""
-                    onPick: root.taskList = ""
-                }
-                Repeater {
-                    model: root.todoCals
-                    delegate: TaskListRow {
-                        required property var modelData
-                        label: modelData.name
-                        dot:   CalDavService.colorFor(modelData.id)
-                        count: root.openCountFor(modelData.id)
-                        on:    root.taskList === modelData.id
-                        onPick: root.taskList = modelData.id
-                    }
-                }
+            ProjectRail {
+                width:  root.projRailW
+                height: root.contentH
+                visible: TodoService.projects.length > 0
+                selectedId: root.selProject
+                onPick: id => root.selProject = id
             }
 
-            // Main: quick add + the grouped task list.
-            Column {
-                width: root.todoCals.length > 0 ? root.mainW : root.panelW - 2 * root.inPad
-                spacing: 10
-
-                InputRow {
-                    visible: CalDavService.todoCalendars.length > 0
-                    placeholder: root.taskList === "" ? "new task…"
-                        : "new task in " + (CalDavService.calById(root.taskList)?.name ?? "list") + "…"
-                    onSubmit: text => { if (root.todoCal !== "") CalDavService.addTodo(root.todoCal, text) }
-                }
-
-                Flickable {
-                    width:  parent.width
-                    height: Math.min(taskCol.implicitHeight, 430)
-                    contentHeight: taskCol.implicitHeight
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
-
-                    Column {
-                        id: taskCol
-                        width: parent.width
-                        spacing: 4
-
-                        TaskGroup { title: "OVERDUE";  items: root.overdueTodos;  urgent: true }
-                        TaskGroup { title: "TODAY";    items: root.todayTodos }
-                        TaskGroup { title: "UPCOMING"; items: root.upcomingTodos }
-
-                        // Completed — collapsed behind a count.
-                        Item { width: 1; height: 4; visible: root.doneTodos.length > 0 }
-                        Row {
-                            visible: root.doneTodos.length > 0
-                            spacing: 6
-                            Text {
-                                text: (root.showDone ? "▾" : "▸") + "  COMPLETED  " + root.doneTodos.length
-                                color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-                                font.letterSpacing: 0.5; font.family: Style.font
-                                MouseArea { anchors.fill: parent; anchors.margins: -4
-                                            onClicked: root.showDone = !root.showDone }
-                            }
-                        }
-                        TaskGroup { title: ""; items: root.showDone ? root.doneTodos : [] }
-
-                        Text {
-                            visible: CalDavService.hasAccounts && root.openCount === 0 && root.doneTodos.length === 0
-                            text: "all clear ✓"; color: Colors.fgMuted
-                            font.pixelSize: 11; font.family: Style.font
-                        }
-                    }
-                }
+            TaskBoard {
+                width: TodoService.projects.length > 0
+                       ? root.panelW - 2 * root.inPad - root.projRailW - 12
+                       : root.panelW - 2 * root.inPad
+                filterProject: root.selProject
+                boardH: root.contentH - 42   // minus its own quick-add row
             }
         }
 
-        // ── Footer: sync state + manual refresh + settings ───────────────────────
+        // ── Footer: sync state + open-the-app + manual refresh + settings ─────────
         Item {
             width: parent.width; height: 18
+            readonly property bool busy: CalDavService.syncing || TodoService.syncing
+            readonly property string err: CalDavService.lastError !== "" ? CalDavService.lastError
+                                                                         : TodoService.lastError
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: CalDavService.lastError !== "" ? "󰀦 " + CalDavService.lastError
-                    : CalDavService.syncing          ? "syncing…"
+                text: parent.err !== "" ? "󰀦 " + parent.err
+                    : parent.busy       ? "syncing…"
                     : CalDavService.data.syncedAt > 0
                       ? "synced " + Qt.formatTime(new Date(CalDavService.data.syncedAt), "hh:mm")
                       : ""
-                color: CalDavService.lastError !== "" ? Colors.bgHover : Colors.fgMuted
+                color: parent.err !== "" ? Colors.bgHover : Colors.fgMuted
                 font.pixelSize: 10; font.family: Style.font
-                width: parent.width - 50; elide: Text.ElideRight
+                width: parent.width - 150; elide: Text.ElideRight
             }
             Row {
                 anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                 spacing: 10
+                // The focused-working counterpart: open the velorganize app.
+                Item {
+                    width: appRow.width; height: 18
+                    Row {
+                        id: appRow
+                        spacing: 4
+                        anchors.verticalCenter: parent.verticalCenter
+                        Text { text: "󱂬"; color: appHov.containsMouse ? Colors.fgBright : Colors.fgMuted
+                               font.pixelSize: 13; font.family: Style.font
+                               anchors.verticalCenter: parent.verticalCenter }
+                        Text { text: "velorganize"; color: appHov.containsMouse ? Colors.fgBright : Colors.fgMuted
+                               font.pixelSize: 10; font.family: Style.font
+                               anchors.verticalCenter: parent.verticalCenter }
+                    }
+                    MouseArea { id: appHov; anchors.fill: parent; anchors.margins: -4
+                                hoverEnabled: true; onClicked: root.launchApp() }
+                }
                 Text {
                     id: syncBtn
                     text: "󰑐"; color: syncHov.containsMouse ? Colors.fgBright : Colors.fgMuted
                     font.pixelSize: 13; font.family: Style.font
                     RotationAnimation on rotation {
-                        running: CalDavService.syncing; from: 0; to: 360
+                        running: CalDavService.syncing || TodoService.syncing; from: 0; to: 360
                         duration: 900; loops: Animation.Infinite
                         onRunningChanged: if (!running) syncBtn.rotation = 0
                     }
                     MouseArea { id: syncHov; anchors.fill: parent; anchors.margins: -4
-                                hoverEnabled: true; onClicked: CalDavService.sync() }
+                                hoverEnabled: true; onClicked: TodoService.sync() }
                 }
                 Text {
                     text: "󰒓"; color: gearHov.containsMouse ? Colors.fgBright : Colors.fgMuted
@@ -587,52 +545,6 @@ Flyout {
     component RailCaption: Text {
         color: Colors.fgMuted
         font.pixelSize: 9; font.bold: true; font.letterSpacing: 0.5; font.family: Style.font
-    }
-
-    // One selectable task-list entry in the rail (General or a concrete list).
-    component TaskListRow: StyledRect {
-        id: tlr
-        property string label: ""
-        property color  dot:   "transparent"
-        property string icon:  ""
-        property int    count: 0
-        property bool   on:    false
-        signal pick()
-        width: root.railW; height: 26
-        radius: Style.rTile
-        color: on ? Style.tint(Style.accent, 0.35)
-             : tlrHov.containsMouse ? Style.controlHover : "transparent"
-        Behavior on color { ColorAnimation { duration: 90 } }
-
-        Rectangle {
-            visible: tlr.icon === ""
-            anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
-            width: 7; height: 7; radius: 3.5
-            color: tlr.dot
-        }
-        Text {
-            visible: tlr.icon !== ""
-            anchors { left: parent.left; leftMargin: 4; verticalCenter: parent.verticalCenter }
-            text: tlr.icon; color: tlr.on ? Colors.fgBright : Colors.fgMuted
-            font.pixelSize: 11; font.family: Style.font
-        }
-        Text {
-            anchors { left: parent.left; leftMargin: 19; right: cnt.left; rightMargin: 4
-                      verticalCenter: parent.verticalCenter }
-            elide: Text.ElideRight
-            text:  tlr.label
-            color: tlr.on ? Colors.fgBright : Colors.fgPrimary
-            font.pixelSize: 10; font.family: Style.font; font.bold: tlr.on
-        }
-        Text {
-            id: cnt
-            anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
-            visible: tlr.count > 0
-            text:  tlr.count
-            color: tlr.on ? Colors.fgBright : Colors.fgMuted
-            font.pixelSize: 9; font.family: Style.font
-        }
-        MouseArea { id: tlrHov; anchors.fill: parent; hoverEnabled: true; onClicked: tlr.pick() }
     }
 
     component NavBtn: StyledRect {
@@ -724,97 +636,4 @@ Flyout {
         }
     }
 
-    // One captioned group of task rows (empty → collapses entirely).
-    component TaskGroup: Column {
-        id: tgroup
-        property string title:  ""
-        property var    items:  []
-        property bool   urgent: false
-        width: parent ? parent.width : 0
-        spacing: 4
-        visible: items.length > 0
-
-        Text {
-            visible: tgroup.title !== ""
-            text:  tgroup.title
-            color: tgroup.urgent ? Colors.bgHover : Colors.fgMuted
-            font.pixelSize: 10; font.bold: true; font.letterSpacing: 0.5; font.family: Style.font
-            topPadding: 4
-        }
-        Repeater {
-            model: tgroup.items
-            delegate: StyledRect {
-                id: task
-                required property var modelData
-                readonly property bool overdue: !modelData.completed && modelData.dueMs > 0
-                                                && modelData.dueMs < root._day0
-                width: tgroup.width; height: 34
-                radius: Style.rTile
-                color:  taskHov.containsMouse ? Style.controlHover : Style.controlFill
-                Behavior on color { ColorAnimation { duration: 90 } }
-
-                // Round check — click to complete / reopen.
-                Rectangle {
-                    id: check
-                    anchors { left: parent.left; leftMargin: 9; verticalCenter: parent.verticalCenter }
-                    width: 17; height: 17; radius: 8.5
-                    color: task.modelData.completed ? Style.accent : "transparent"
-                    border.width: 1
-                    border.color: task.modelData.completed ? Style.accent
-                                : checkHov.containsMouse ? Style.accent : Colors.fgMuted
-                    Behavior on color { ColorAnimation { duration: 120 } }
-                    Text {
-                        anchors.centerIn: parent
-                        visible: task.modelData.completed || checkHov.containsMouse
-                        text: "󰄬"; color: task.modelData.completed ? Colors.fgBright : Colors.fgMuted
-                        font.pixelSize: 10; font.family: Style.font
-                    }
-                    MouseArea { id: checkHov; anchors.fill: parent; anchors.margins: -5
-                                hoverEnabled: true
-                                onClicked: CalDavService.toggleTodo(task.modelData) }
-                }
-
-                Text {
-                    anchors { left: check.right; leftMargin: 9; right: dueChip.left; rightMargin: 8
-                              verticalCenter: parent.verticalCenter }
-                    elide: Text.ElideRight
-                    text:  task.modelData.summary
-                    color: task.modelData.completed ? Colors.fgMuted : Colors.fgPrimary
-                    font.pixelSize: 12; font.family: Style.font
-                    font.strikeout: task.modelData.completed
-                }
-
-                Row {
-                    id: dueChip
-                    anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
-                    spacing: 6
-                    Text {
-                        visible: task.modelData.dueMs > 0 && !taskHov.containsMouse
-                        anchors.verticalCenter: parent.verticalCenter
-                        text:  Qt.formatDate(new Date(task.modelData.dueMs), "MMM d")
-                        color: task.overdue ? Colors.bgHover : Colors.fgMuted
-                        font.pixelSize: 10; font.family: Style.font; font.bold: task.overdue
-                    }
-                    Rectangle {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 6; height: 6; radius: 3
-                        visible: !taskHov.containsMouse && root.taskList === ""
-                        color: CalDavService.colorFor(task.modelData.cal)
-                    }
-                    Text {
-                        visible: taskHov.containsMouse
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "󰅖"; color: tDelHov.containsMouse ? Colors.fgBright : Colors.fgMuted
-                        font.pixelSize: 12; font.family: Style.font
-                        MouseArea { id: tDelHov; anchors.fill: parent; anchors.margins: -5
-                                    hoverEnabled: true
-                                    onClicked: CalDavService.deleteItem(task.modelData.cal,
-                                                                        task.modelData.href) }
-                    }
-                }
-                MouseArea { id: taskHov; anchors.fill: parent; hoverEnabled: true
-                            acceptedButtons: Qt.NoButton }
-            }
-        }
-    }
 }

@@ -15,7 +15,13 @@ hl.config({
     cursor = {
         sync_gsettings_theme = true,
         no_hardware_cursors  = true,
-        no_warps             = true,
+        -- no_warps used to be true, which made cross-monitor workspace keybinds
+        -- feel dead: Super+6 focused DP-3's already-visible workspace, the cursor
+        -- stayed behind on the other monitor, and follow_mouse snapped the focus
+        -- straight back — "nothing happened". Warping the cursor along makes the
+        -- switch tangible.
+        no_warps                 = false,
+        warp_on_change_workspace = true,
         default_monitor      = mon1,  -- from user_settings
         zoom_factor          = 1,
         hide_on_key_press    = true,

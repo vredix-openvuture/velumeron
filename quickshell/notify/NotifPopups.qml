@@ -95,8 +95,7 @@ PanelWindow {
         function XY(a, d)    { return (a + P) + "," + ((bottom ? (H - d) : d) + P) }
         function M(a, d)     { return "M" + XY(a, d) }
         function L(a, d)     { return " L" + XY(a, d) }
-        function A_(r,a,d,w) { return (r <= 0 || (w === 1 && Style.chamfer)) ? (" L" + XY(a, d))
-                                             : " A" + r + "," + r + " 0 0 " + (bottom ? (1 - w) : w) + " " + XY(a, d) }
+        function A_(r,a,d,w) { return Style.pathCorner(r, w, bottom, XY(a, d)) }
         var bd = M(A + f, 0) + A_(f, A, f, 0)        // concave fillet into the edge (far corner)
                + L(A, D - e)  + A_(e, A - e, D, 1)   // free far edge → convex round
                + L(e, D)      + A_(e, 0, D - e, 1)   // convex round
@@ -214,7 +213,7 @@ PanelWindow {
             ShapePath {
                 fillColor: "transparent"
                 strokeColor: card.borderColor
-                strokeWidth: 1
+                strokeWidth: Style.chromeBorderWidth
                 PathSvg { path: root._paths(card.width, card.height)[0] }
             }
         }
@@ -230,28 +229,51 @@ PanelWindow {
             }
         }
 
-        // App image / icon
-        IconImage {
+        // App icon — ALWAYS shown: the notification's own image/icon hint, else the sending app's
+        // desktop-entry icon (resolved by NotifService.iconFor), else a generic bell fallback.
+        Item {
             id: img
             anchors { left: parent.left; top: parent.top; leftMargin: 16; topMargin: 16 + card.topExtra }
             width: 34; height: 34
-            visible: source != ""
-            source: (card.notif && card.notif.image) ? card.notif.image
-                  : (card.notif && card.notif.appIcon) ? card.notif.appIcon : ""
+            IconImage {
+                id: appImg
+                anchors.fill: parent
+                visible: source != ""
+                source: NotifService.iconFor(card.notif)
+            }
+            Text {
+                anchors.centerIn: parent
+                visible: !appImg.visible
+                text: "󰂚"; color: Colors.fgMuted
+                font.pixelSize: 26; font.family: Style.iconFont
+            }
         }
 
+        // Source header — the service the notification came from ("notify-send", "Spotify" …).
+        // Rendered as an accent-coloured, upper-cased label so it reads as a distinct heading, with
+        // a soft rule under it separating the source from the message below.
         Text {
             id: appName
-            anchors { left: img.visible ? img.right : parent.left; leftMargin: img.visible ? 12 : 18
+            anchors { left: img.right; leftMargin: 12
                       right: closeBtn.left; rightMargin: 10; top: parent.top; topMargin: 16 + card.topExtra }
             text:  card.notif ? card.notif.appName : ""
-            color: Colors.fgMuted
+            color: Colors.bgActive
             font.pixelSize: 10; font.family: Style.font
+            font.bold: true; font.capitalization: Font.AllUppercase; font.letterSpacing: 0.6
             elide: Text.ElideRight
+        }
+        Rectangle {
+            id: appRule
+            visible: appName.text !== ""
+            anchors { left: appName.left; right: parent.right; rightMargin: 16
+                      top: appName.bottom; topMargin: 5 }
+            height: 1
+            color: Style.tint(Colors.boNormal, 0.55)
         }
         Text {
             id: summary
-            anchors { left: appName.left; right: closeBtn.left; rightMargin: 8; top: appName.bottom; topMargin: 1 }
+            anchors { left: appName.left; right: closeBtn.left; rightMargin: 8
+                      top: appRule.visible ? appRule.bottom : appName.bottom; topMargin: appRule.visible ? 6 : 1 }
             text:  card.notif ? card.notif.summary : ""
             color: Colors.fgBright
             font.pixelSize: 13; font.bold: true; font.family: Style.font

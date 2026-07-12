@@ -52,27 +52,29 @@ PanelWindow {
                                      ? VtlConfig.edgeThicknessFor(mEdge, root.mon)
                                        + (VtlConfig.barFloatingFor(root.mon) ? VtlConfig.barFloatGapFor(root.mon) : 0)
                                      : 0
+    // A floating bar gets a floating panel: no merges into the bar, a fully-rounded free outline,
+    // offset from the bar's inner face by the same gap — docking into a bar that itself floats
+    // reads as glued-on. Cupertino detaches ALWAYS: macOS menus are free dropdowns under the
+    // strip, never panels growing out of it.
+    readonly property bool   detached:  root.edgeBar && (VtlConfig.barFloatingFor(root.mon) || Style.isCupertino)
+    readonly property int    detachGap: detached ? Math.max(6, VtlConfig.barFloatingFor(root.mon)
+                                                               ? VtlConfig.barFloatGapFor(root.mon) : 8) : 0
     // An icon in the start/end group merges the menu into that end of the bar (the concave
     // L-transition); the perpendicular target is the side bar if present, else the bare screen edge.
     readonly property string startEdge: vert ? "top"    : "left"
     readonly property string endEdge:   vert ? "bottom" : "right"
     readonly property string _tctx:      root.edgeBar ? "bar" : "edge"
     readonly property bool   _mergeAll:  VtlConfig.transitionMergeAllFor("flyout", root._tctx)
-    readonly property bool   mergeStart: mGroup === "start" && root.edgeBar && _mergeAll
-    readonly property bool   mergeEnd:   mGroup === "end"   && root.edgeBar && _mergeAll
+    readonly property bool   mergeStart: mGroup === "start" && root.edgeBar && _mergeAll && !detached
+    readonly property bool   mergeEnd:   mGroup === "end"   && root.edgeBar && _mergeAll && !detached
     readonly property int    sideStart:  (mergeStart && VtlConfig.edgeActiveFor(startEdge, root.mon)) ? VtlConfig.edgeThicknessFor(startEdge, root.mon) : 0
     readonly property int    sideEnd:    (mergeEnd   && VtlConfig.edgeActiveFor(endEdge,   root.mon)) ? VtlConfig.edgeThicknessFor(endEdge,   root.mon)   : 0
 
-    readonly property int edgeR:  VtlConfig.barInnerRadiusFor(root.mon)
+    readonly property int edgeR:  Style.panelR(VtlConfig.barInnerRadiusFor(root.mon))
     readonly property int flareR: VtlConfig.barInnerRadiusFor(root.mon)
     readonly property int seam:   2
     readonly property int pad:    flareR + seam + 2
-    readonly property color cardColor: {
-        var t = VtlConfig.menuColorful ? 0.12 : 0.0
-        return Qt.rgba(Colors.bgPrimary.r * (1 - t) + Colors.bgActive.r * t,
-                       Colors.bgPrimary.g * (1 - t) + Colors.bgActive.g * t,
-                       Colors.bgPrimary.b * (1 - t) + Colors.bgActive.b * t, 1)
-    }
+    readonly property color cardColor: Style.panelColor(VtlConfig.menuColorful)
 
     // Outline in (a, d) space — a runs along the bar, d is the depth away from it — mapped onto the
     // actual edge. Returns [borderOpen, fillClosed]; the fill closes back through the merged edges.
@@ -96,10 +98,17 @@ PanelWindow {
         }
         function M(a, d)     { return "M" + XY(a, d) }
         function L(a, d)     { return " L" + XY(a, d) }
-        function A_(r,a,d,w) { return (r <= 0 || (w === 1 && Style.chamfer)) ? (" L" + XY(a, d))
-                                             : " A" + r + "," + r + " 0 0 " + (flip ? (1 - w) : w) + " " + XY(a, d) }
+        function A_(r,a,d,w) { return Style.pathCorner(r, w, flip, XY(a, d)) }
 
         var bd, close
+        if (root.detached) {                      // floating bar → free-floating panel, all corners convex
+            bd = M(A - e, 0) + A_(e, A, e, 1)
+               + L(A, D - e) + A_(e, A - e, D, 1)
+               + L(e, D)     + A_(e, 0, D - e, 1)
+               + L(0, e)     + A_(e, e, 0, 1)
+               + " Z"
+            return [bd, bd]
+        }
         if (mergeStart && !mergeEnd) {            // sidebar at the near end (classic L)
             bd = M(ca1 + f, 0) + A_(f, ca1, f, 0)
                + L(ca1, D - e) + A_(e, ca1 - e, D, 1)
@@ -178,11 +187,11 @@ PanelWindow {
         readonly property real along: root.mergeStart ? 0
                                     : root.mergeEnd   ? alongMax
                                     : Math.max(0, Math.min(anchor - (root.vert ? height : width) / 2, alongMax))
-        x: root.mEdge === "left"  ? root.barT
-         : root.mEdge === "right" ? root.sw - root.barT - width
+        x: root.mEdge === "left"  ? root.barT + root.detachGap
+         : root.mEdge === "right" ? root.sw - root.barT - root.detachGap - width
          : along
-        y: root.mEdge === "top"    ? root.barT
-         : root.mEdge === "bottom" ? root.sh - root.barT - height
+        y: root.mEdge === "top"    ? root.barT + root.detachGap
+         : root.mEdge === "bottom" ? root.sh - root.barT - root.detachGap - height
          : along
 
         MouseArea { anchors.fill: parent; z: 0 }   // block click-through (keep the flyout open)
@@ -204,7 +213,7 @@ PanelWindow {
             anchors.margins:       -root.pad
             preferredRendererType: Shape.CurveRenderer
             ShapePath {
-                fillColor: "transparent"; strokeColor: Style.chromeBorder; strokeWidth: 1
+                fillColor: "transparent"; strokeColor: Style.chromeBorder; strokeWidth: Style.chromeBorderWidth
                 PathSvg { path: root.borderPath(panel.width, panel.height) }
             }
         }

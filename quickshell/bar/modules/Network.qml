@@ -52,7 +52,7 @@ Item {
         if (bps >= 1024)    return Math.round(bps / 1024) + " KB/s"
         return Math.round(bps) + " B/s"
     }
-    readonly property string _netStats: "󰇚 " + _fmt(downRate) + "    󰕒 " + _fmt(upRate)
+    readonly property string _netStats: "󰇚 " + _fmt(downRate) + "    󰕒 " + _fmt(upRate)
     function _publishGlide() {
         var c = root.mapToItem(null, root.width / 2, root.height / 2)
         UiState.netAnchorX = c.x; UiState.netAnchorY = c.y

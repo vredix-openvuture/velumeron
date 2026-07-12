@@ -42,10 +42,16 @@ PanelWindow {
         }
     }
 
-    // Menu dimensions — a % of the monitor (set in Settings → Bar; per-monitor capable, so
-    // vertical monitors can use a wider menu). Clamped to a sane minimum.
-    readonly property int menuW:  screen ? Math.max(260, Math.round(screen.width  * VtlConfig.menuWidthPctFor(root.mon)  / 100)) : 300
-    readonly property int menuH:  screen ? Math.max(320, Math.round(screen.height * VtlConfig.menuHeightPctFor(root.mon) / 100)) : 540
+    // Menu dimensions — a % of the monitor (set in Settings → Bar; per-monitor capable). A % of a
+    // NARROW (e.g. portrait) monitor collapses the menu until the content truncates, so guard both
+    // axes: never smaller than a usable floor, never larger than 94% of the screen (so the floor
+    // itself can't overflow a small monitor either).
+    readonly property int menuW:  screen
+        ? Math.min(Math.round(screen.width  * 0.94),
+                   Math.max(420, Math.round(screen.width  * VtlConfig.menuWidthPctFor(root.mon)  / 100))) : 300
+    readonly property int menuH:  screen
+        ? Math.min(Math.round(screen.height * 0.94),
+                   Math.max(460, Math.round(screen.height * VtlConfig.menuHeightPctFor(root.mon) / 100))) : 540
 
     // ── How the menu merges into the bar ─────────────────────────────────────────
     // The menu butts against its anchored edge (mEdge) and, on an L-bar, also blends into the
@@ -67,21 +73,25 @@ PanelWindow {
     // that's hidden (fullscreen).
     // Transition style depends on whether the menu hangs on a bar or a bare screen edge.
     readonly property string _tctx:    root.edgeBar ? "bar" : "edge"
+    // A floating bar gets a floating menu: no merges, fully-rounded free outline, offset by the
+    // same gap — docking into a bar that itself floats reads as glued-on. Cupertino detaches
+    // ALWAYS: macOS menus are free dropdowns under the strip.
+    readonly property bool detached:  root.edgeBar && (VtlConfig.barFloatingFor(root.mon) || Style.isCupertino)
+    readonly property int  detachGap: detached ? Math.max(6, VtlConfig.barFloatingFor(root.mon)
+                                                             ? VtlConfig.barFloatGapFor(root.mon) : 8) : 0
     // The perpendicular (corner) merge is suppressed by the "origin edge only" transition style.
     readonly property bool _mergeAll:  VtlConfig.transitionMergeAllFor("menu", root._tctx)
-    readonly property bool mergeStart: mGroup === "start" && root.edgeBar && _mergeAll
-    readonly property bool mergeEnd:   mGroup === "end"   && root.edgeBar && _mergeAll
+    readonly property bool mergeStart: mGroup === "start" && root.edgeBar && _mergeAll && !detached
+    readonly property bool mergeEnd:   mGroup === "end"   && root.edgeBar && _mergeAll && !detached
     readonly property int  sideStart:  (mergeStart && VtlConfig.edgeActiveFor(startEdge, root.mon)) ? VtlConfig.edgeThicknessFor(startEdge, root.mon) : 0
     readonly property int  sideEnd:    (mergeEnd   && VtlConfig.edgeActiveFor(endEdge,   root.mon)) ? VtlConfig.edgeThicknessFor(endEdge,   root.mon)   : 0
 
-    // Content-corner radius + concave-fillet radius both track the bar's inner radius.
-    readonly property int edgeR:  VtlConfig.barInnerRadiusFor(root.mon)
+    // Content-corner radius + concave-fillet radius both track the bar's inner radius
+    // (cupertino rounds generously via panelR).
+    readonly property int edgeR:  Style.panelR(VtlConfig.barInnerRadiusFor(root.mon))
     readonly property int flareR: VtlConfig.barInnerRadiusFor(root.mon)
-    // Menu fill — optionally accent-tinted ("colorful").
-    readonly property real  _tint: VtlConfig.menuColorful ? 0.12 : 0.0
-    readonly property color cFill: Qt.rgba(Colors.bgPrimary.r * (1 - _tint) + Colors.bgActive.r * _tint,
-                                           Colors.bgPrimary.g * (1 - _tint) + Colors.bgActive.g * _tint,
-                                           Colors.bgPrimary.b * (1 - _tint) + Colors.bgActive.b * _tint, 1)
+    // Menu fill — optionally accent-tinted ("colorful"); frosted under cupertino.
+    readonly property color cFill: Style.panelColor(VtlConfig.menuColorful)
     // Overlap the anchored bar edge by a hair so LBar's own inner border line is hidden.
     readonly property int seam:   2
     // Grow the fill/border Shapes by `pad` on every side so the fillet wedges + seam (which spill
@@ -119,10 +129,17 @@ PanelWindow {
         }
         function M(a, d)     { return "M" + XY(a, d) }
         function L(a, d)     { return " L" + XY(a, d) }
-        function A_(r,a,d,w) { return (r <= 0 || (w === 1 && Style.chamfer)) ? (" L" + XY(a, d))
-                                             : " A" + r + "," + r + " 0 0 " + (flip ? (1 - w) : w) + " " + XY(a, d) }
+        function A_(r,a,d,w) { return Style.pathCorner(r, w, flip, XY(a, d)) }
 
         var bd, close
+        if (root.detached) {                      // floating bar → free-floating panel, all corners convex
+            bd = M(A - e, 0) + A_(e, A, e, 1)
+               + L(A, D - e) + A_(e, A - e, D, 1)
+               + L(e, D)     + A_(e, 0, D - e, 1)
+               + L(0, e)     + A_(e, e, 0, 1)
+               + " Z"
+            return [bd, bd]
+        }
         if (mergeStart && !mergeEnd) {            // sidebar at the near end (classic L)
             bd = M(ca1 + f, 0) + A_(f, ca1, f, 0)         // concave fillet into the bar
                + L(ca1, D - e) + A_(e, ca1 - e, D, 1)     // free far edge → convex round
@@ -183,6 +200,7 @@ PanelWindow {
         { key: "layouts",       icon: "󰕴", title: "Layouts",       comp: layoutsComp },
         { key: "windowtags",    icon: "󰓹", title: "Window tags",   comp: windowTagsComp },
         { key: "windowrules",   icon: "󱪯", title: "Window rules",  comp: windowRulesComp },
+        { key: "backup",        icon: "󰆓", title: "Import / Export", comp: backupComp },
         { key: "info",          icon: "󰋽", title: "Info",          comp: null,
           hint: "System information." },
         { key: "network",       rail: false, title: "Network",     comp: networkComp },
@@ -193,7 +211,9 @@ PanelWindow {
         return null
     }
     function sectionTitle(s) { return root.sectionMeta(s)?.title ?? s }
-    function sectionHint(s)  { return root.sectionMeta(s)?.hint  ?? "" }
+    // info's hint goes through Wording so the persona re-voices it; routing it here (not in the
+    // sections array) keeps the array non-reactive — a style switch must not reload the open page.
+    function sectionHint(s)  { return s === "info" ? Wording.s("hint.info") : (root.sectionMeta(s)?.hint ?? "") }
 
     // The menu is opened globally (one instance per screen) but shows on a single monitor. It LATCHES
     // to the monitor focused at open time (UiState.menuMon) and stays there — it does NOT follow the
@@ -271,11 +291,11 @@ PanelWindow {
         readonly property real along: root.mergeStart ? 0
                                     : root.mergeEnd   ? alongMax
                                     : Math.max(0, Math.min(root.mStart - collapsed / 2, alongMax))
-        x: root.mEdge === "left"  ? root.barT
-         : root.mEdge === "right" ? root.sw - root.barT - width
+        x: root.mEdge === "left"  ? root.barT + root.detachGap
+         : root.mEdge === "right" ? root.sw - root.barT - root.detachGap - width
          : along
-        y: root.mEdge === "top"    ? root.barT
-         : root.mEdge === "bottom" ? root.sh - root.barT - height
+        y: root.mEdge === "top"    ? root.barT + root.detachGap
+         : root.mEdge === "bottom" ? root.sh - root.barT - root.detachGap - height
          : along
 
         // Block click-through to the desktop, but stay BELOW the rail/content widgets
@@ -306,7 +326,7 @@ PanelWindow {
             ShapePath {
                 fillColor:   "transparent"
                 strokeColor: Style.chromeBorder
-                strokeWidth: 1
+                strokeWidth: Style.chromeBorderWidth
                 PathSvg { path: root.borderPath(menu.width, menu.height) }
             }
         }
@@ -446,6 +466,7 @@ PanelWindow {
             Component { id: launcherComp;  LauncherSection  {} }
             Component { id: wallpaperComp; WallpaperSection {} }
             Component { id: styleComp;     StyleSection     {} }
+            Component { id: backupComp;    BackupSection    {} }
             Component { id: osdComp;       OsdSection       {} }
             Component { id: notifyComp;    NotifSettings    {} }
             Component { id: lockComp;      LockscreenSection {} }
@@ -491,7 +512,7 @@ PanelWindow {
 
 
     // ── Rail icon button ──────────────────────────────────────────────────────
-    component RailIcon: Rectangle {
+    component RailIcon: Item {
         id: ri
         property string icon:    ""
         property string section: ""
@@ -504,11 +525,17 @@ PanelWindow {
         readonly property int sz: Math.max(30, Math.min(42, root.railW - 6))
         width:  ri.sz
         height: ri.sz
-        radius: Math.round(ri.sz * 0.3)
-        color:  ri.active
-                ? Style.accent
-                : (riHov.containsMouse ? Style.tint(Style.accent, 0.18) : "transparent")
-        Behavior on color { ColorAnimation { duration: 100 } }
+
+        // The selection/hover chip goes through StyledRect so it picks up the active variant's
+        // corners (round / chamfer / scallop) instead of staying a plain rounded square.
+        StyledRect {
+            anchors.fill: parent
+            radius: Style.rTile
+            color:  ri.active
+                    ? Style.accent
+                    : (riHov.containsMouse ? Style.tint(Style.accent, 0.18) : "transparent")
+            Behavior on color { ColorAnimation { duration: 100 } }
+        }
 
         Text {
             anchors.centerIn: parent

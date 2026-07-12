@@ -176,7 +176,7 @@ PanelWindow {
                                 onClicked: { root.sel = wcard.index; root.confirm() } }
                 }
                 Text { visible: root.wins.length === 0; anchors.centerIn: parent
-                       text: "No open windows"; color: Colors.fgMuted; font.pixelSize: 13; font.family: Style.font }
+                       text: Wording.s("windows.none"); color: Colors.fgMuted; font.pixelSize: 13; font.family: Style.font }
             }
         }
     }

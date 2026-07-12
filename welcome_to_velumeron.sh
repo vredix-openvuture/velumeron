@@ -283,6 +283,21 @@ PY
         fi
     fi
 
+    # ── Fontconfig: UI-font icon fallback ─────────────────────────────
+    # The shell's icons are Nerd-Font glyphs; the bundled per-template UI display fonts carry none.
+    # Pin FantasqueSansM Nerd Font as their explicit glyph fallback so icons always render whatever
+    # main font a template (or Settings → Style → Font) selects. Idempotent.
+    local _fc_src="$VELUMERON_DIR/assets/fontconfig/velumeron-ui-fallback.conf"
+    local _fc_dst="$HOME/.config/fontconfig/conf.d/50-velumeron-ui-fallback.conf"
+    if [[ -f "$_fc_src" ]]; then
+        mkdir -p "$(dirname "$_fc_dst")"
+        if [[ ! -f "$_fc_dst" || "$_fc_src" -nt "$_fc_dst" ]]; then
+            cp "$_fc_src" "$_fc_dst"
+            command -v fc-cache >/dev/null 2>&1 && fc-cache -f >/dev/null 2>&1 || true
+            ok "UI-font icon fallback installed"
+        fi
+    fi
+
     # ── GTK theme + palette wiring ────────────────────────────────────
     # For wallust colours to actually take effect in GTK apps, two things
     # must be true:

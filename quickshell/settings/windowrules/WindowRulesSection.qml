@@ -109,7 +109,7 @@ Item {
             var c = ws[i].cls || ""
             if (c === "" || seen[c]) continue
             seen[c] = true
-            if (c.toLowerCase().indexOf(q) < 0) continue
+            if (!Fuzzy.match(q, c)) continue
             if (taken.some(function (t) { return t.label.toLowerCase() === c.toLowerCase() })) continue
             out.push({ cls: c, title: ws[i].title || "" })
         }

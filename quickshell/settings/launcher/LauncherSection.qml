@@ -32,6 +32,17 @@ Item {
             topPadding: 4
             spacing: Style.cardGap
 
+            // ── Search (applies to every searchbar in the shell) ──────────────
+            Card {
+                CardLabel { text: "SEARCH" }
+                Toggle {
+                    label: "Fuzzy search"
+                    sub:   "Match letters in order (\"fm\" → File Manager). Off = plain substring. Applies to every searchbar — launcher, clipboard, icon picker, keybinds…"
+                    on:    VtlConfig.fuzzySearch
+                    onToggled: root.save("fuzzy_search", !VtlConfig.fuzzySearch)
+                }
+            }
+
             // ── Mode ──────────────────────────────────────────────────────────
             Card {
                 CardLabel { text: "MODE" }

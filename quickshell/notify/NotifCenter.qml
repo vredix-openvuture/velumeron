@@ -69,18 +69,21 @@ PanelWindow {
     readonly property string startEdge: vert ? "top"    : "left"
     readonly property string endEdge:   vert ? "bottom" : "right"
     readonly property string _tctx:    root.edgeBar ? "bar" : "edge"
+    // A floating bar gets a floating panel: no merges, fully-rounded free outline, offset by the
+    // same gap (see Settings.qml/Flyout.qml — same treatment on every bar-grown surface).
+    // Cupertino detaches ALWAYS: macOS panels are free dropdowns under the strip.
+    readonly property bool detached:  root.edgeBar && (VtlConfig.barFloatingFor(root.mon) || Style.isCupertino)
+    readonly property int  detachGap: detached ? Math.max(6, VtlConfig.barFloatingFor(root.mon)
+                                                             ? VtlConfig.barFloatGapFor(root.mon) : 8) : 0
     readonly property bool _mergeAll:  VtlConfig.transitionMergeAllFor("notify_center", root._tctx)
-    readonly property bool mergeStart: mGroup === "start" && root.edgeBar && _mergeAll
-    readonly property bool mergeEnd:   mGroup === "end"   && root.edgeBar && _mergeAll
+    readonly property bool mergeStart: mGroup === "start" && root.edgeBar && _mergeAll && !detached
+    readonly property bool mergeEnd:   mGroup === "end"   && root.edgeBar && _mergeAll && !detached
     readonly property int  sideStart:  (mergeStart && VtlConfig.edgeActiveFor(startEdge, root.mon)) ? VtlConfig.edgeThicknessFor(startEdge, root.mon) : 0
     readonly property int  sideEnd:    (mergeEnd   && VtlConfig.edgeActiveFor(endEdge,   root.mon)) ? VtlConfig.edgeThicknessFor(endEdge,   root.mon)   : 0
 
-    readonly property int edgeR:  VtlConfig.barInnerRadiusFor(root.mon)
+    readonly property int edgeR:  Style.panelR(VtlConfig.barInnerRadiusFor(root.mon))
     readonly property int flareR: VtlConfig.barInnerRadiusFor(root.mon)
-    readonly property real  _tint: VtlConfig.osdColorful ? 0.12 : 0.0
-    readonly property color cFill: Qt.rgba(Colors.bgPrimary.r * (1 - _tint) + Colors.bgActive.r * _tint,
-                                           Colors.bgPrimary.g * (1 - _tint) + Colors.bgActive.g * _tint,
-                                           Colors.bgPrimary.b * (1 - _tint) + Colors.bgActive.b * _tint, 1)
+    readonly property color cFill: Style.panelColor(VtlConfig.osdColorful)
     // Overlap the anchored bar edge by a hair so the bar's own inner border line is hidden.
     readonly property int seam:   2
     // Grow the Shapes by `pad` on every side so the fillet wedges + seam (outside the panel rect)
@@ -108,10 +111,17 @@ PanelWindow {
         }
         function M(a, d)     { return "M" + XY(a, d) }
         function L(a, d)     { return " L" + XY(a, d) }
-        function A_(r,a,d,w) { return (r <= 0 || (w === 1 && Style.chamfer)) ? (" L" + XY(a, d))
-                                             : " A" + r + "," + r + " 0 0 " + (flip ? (1 - w) : w) + " " + XY(a, d) }
+        function A_(r,a,d,w) { return Style.pathCorner(r, w, flip, XY(a, d)) }
 
         var bd, close
+        if (root.detached) {                      // floating bar → free-floating panel, all corners convex
+            bd = M(A - e, 0) + A_(e, A, e, 1)
+               + L(A, D - e) + A_(e, A - e, D, 1)
+               + L(e, D)     + A_(e, 0, D - e, 1)
+               + L(0, e)     + A_(e, e, 0, 1)
+               + " Z"
+            return [bd, bd]
+        }
         if (mergeStart && !mergeEnd) {            // perpendicular arm at the near end (classic L)
             bd = M(ca1 + f, 0) + A_(f, ca1, f, 0)
                + L(ca1, D - e) + A_(e, ca1 - e, D, 1)
@@ -176,11 +186,11 @@ PanelWindow {
         readonly property real along: root.mergeStart ? 0
                                     : root.mergeEnd   ? alongMax
                                     : Math.max(0, Math.min(root.mStart - collapsed / 2, alongMax))
-        x: root.mEdge === "left"  ? root.barT
-         : root.mEdge === "right" ? root.scrW - root.barT - width
+        x: root.mEdge === "left"  ? root.barT + root.detachGap
+         : root.mEdge === "right" ? root.scrW - root.barT - root.detachGap - width
          : along
-        y: root.mEdge === "top"    ? root.barT
-         : root.mEdge === "bottom" ? root.scrH - root.barT - height
+        y: root.mEdge === "top"    ? root.barT + root.detachGap
+         : root.mEdge === "bottom" ? root.scrH - root.barT - root.detachGap - height
          : along
 
         // Block click-through to the desktop, but stay below the content widgets (z:0).
@@ -205,7 +215,7 @@ PanelWindow {
             ShapePath {
                 fillColor:   "transparent"
                 strokeColor: Style.chromeBorder
-                strokeWidth: 1
+                strokeWidth: Style.chromeBorderWidth
                 PathSvg { path: root.borderPath(panel.width, panel.height) }
             }
         }
@@ -227,7 +237,7 @@ PanelWindow {
 
                 Text {
                     anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                    text: "Notifications"; color: Colors.fgBright
+                    text: Wording.s("notif.title"); color: Colors.fgBright
                     font.pixelSize: 15; font.bold: true; font.family: Style.font
                 }
                 Row {

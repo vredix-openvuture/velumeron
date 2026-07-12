@@ -68,6 +68,7 @@ kitty_vuture     = { src = "colors-kitty.conf",    dst = "~/.config/velumeron/ki
 rofi_vuture      = { src = "colors-rofi.conf",     dst = "~/.config/velumeron/rofi/assets/colors.rasi"}
 colors_vuture    = { src = "colors_gtk.css",       dst = "~/.config/velumeron/assets/colors_gtk.css" }
 qs_colors        = { src = "colors.json",          dst = "~/.config/velumeron/quickshell/colors.json" }
+obsidian_nexus   = { src = "obsidian-colors.css",  dst = "~/DEV/OBSIDIAN-nexus-DEV/.obsidian/snippets/wallust-colors.css" }
 
 [hooks]
 hyprland_lua_colors = "~/.config/velumeron/assets/scripts/wallust/hyprland_lua-colors.sh && hyprctl reload"

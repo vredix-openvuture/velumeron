@@ -15,6 +15,21 @@ Singleton {
     property var  _deadlines: ({})                 // notification.id → epoch-ms expiry (0 = never)
     readonly property var model: server.trackedNotifications   // ObjectModel — history
 
+    // Best icon source for a notification, so a toast/entry can ALWAYS show the sending app's icon:
+    // its own image hint (album art …) → its app-icon hint → the sending app's desktop-entry icon
+    // (resolved from the desktop-entry hint, else heuristically from the app name). "" only when
+    // nothing at all resolves — callers then fall back to a generic glyph.
+    function iconFor(n) {
+        if (!n) return ""
+        if (n.image) return n.image
+        if (n.appIcon)
+            return (("" + n.appIcon).indexOf("/") === 0 || ("" + n.appIcon).indexOf("file:") === 0)
+                 ? n.appIcon : Quickshell.iconPath(n.appIcon, "application-x-executable")
+        var e = n.desktopEntry ? DesktopEntries.byId(n.desktopEntry) : null
+        if (!e && n.appName) e = DesktopEntries.heuristicLookup(n.appName)
+        return (e && e.icon) ? Quickshell.iconPath(e.icon, "application-x-executable") : ""
+    }
+
     NotificationServer {
         id: server
         keepOnReload:        false

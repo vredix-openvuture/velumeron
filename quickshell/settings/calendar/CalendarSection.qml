@@ -188,19 +188,19 @@ Item {
                     segments: [{ label: "Monday", key: "monday" }, { label: "Sunday", key: "sunday" }]
                     onPicked: key => root.save("calendar_first_day", key)
                 }
-                FieldLabel { text: "Menu size" }
+                FieldLabel { text: "Menu size (screen %)" }
                 Stepper {
-                    label: "Width"; unit: "px"
-                    value: VtlConfig.calendarMenuWidth; step: 20; min: 320; max: 560
-                    onChanged: v => root.save("calendar_menu_width", v)
+                    label: "Width"; unit: "%"
+                    value: VtlConfig.calendarMenuWidthPct; step: 4; min: 30; max: 95
+                    onChanged: v => root.save("calendar_menu_width_pct", v)
                 }
                 Stepper {
-                    label: "Max height"; unit: "px"
-                    value: VtlConfig.calendarMenuMaxH; step: 20; min: 400; max: 1200
-                    onChanged: v => root.save("calendar_menu_max_height", v)
+                    label: "Height"; unit: "%"
+                    value: VtlConfig.calendarMenuHeightPct; step: 4; min: 40; max: 95
+                    onChanged: v => root.save("calendar_menu_height_pct", v)
                 }
                 SubLabel { width: parent.width
-                           text: "Height fits the content and stops growing at the maximum." }
+                           text: "The quick view sizes itself as a share of the screen." }
                 Row {
                     spacing: 10
                     TextButton {

@@ -151,7 +151,7 @@ QtObject {
     // A bar module publishes its id + screen anchor (screen-local coords) + edge on click; the
     // matching per-screen <X>Menu overlay grows a panel out of the bar at that anchor. Only one
     // flyout is open at a time; click-outside / Escape / re-click closes it.
-    property string flyout:        ""    // "" | "volume" | "mpris"
+    property string flyout:        ""    // "" | "volume" | "mpris" | … | "group:<n>" (dynamic group instances)
     property real   flyoutAnchorX: 0
     property real   flyoutAnchorY: 0
     property string flyoutEdge:    "top"

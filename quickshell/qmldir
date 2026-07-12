@@ -6,6 +6,8 @@ singleton UserSettings 1.0 UserSettings.qml
 singleton OnboardingState 1.0 onboarding/OnboardingState.qml
 singleton UiState   1.0 UiState.qml
 singleton Style     1.0 Style.qml
+singleton Fuzzy     1.0 Fuzzy.qml
+singleton Wording   1.0 Wording.qml
 singleton Templates 1.0 Templates.qml
 singleton Hyprwindows 1.0 Hyprwindows.qml
 singleton ThumbQueue 1.0 ThumbQueue.qml
@@ -42,6 +44,7 @@ SessionOverlay    1.0 session/SessionOverlay.qml
 Bar               1.0 bar/Bar.qml
 EdgeExclusiveZone 1.0 bar/EdgeExclusiveZone.qml
 Flyout            1.0 bar/Flyout.qml
+GroupMenu         1.0 bar/GroupMenu.qml
 
 # OSD (volume / brightness)
 Osd               1.0 osd/Osd.qml
@@ -60,8 +63,11 @@ WindowTags        1.0 windowtags/WindowTags.qml
 # Keybind cheatsheet overlay
 KeybindHelp       1.0 keybind/KeybindHelp.qml
 
-# Calendar + tasks (CalDAV: Nextcloud Calendar / Tasks, Vikunja)
+# Calendar + tasks (CalDAV: Nextcloud Calendar / Tasks; Vikunja REST for the project tree)
 singleton CalDavService 1.0 calendar/CalDavService.qml
+singleton TodoService   1.0 calendar/TodoService.qml
+ProjectRail             1.0 calendar/ProjectRail.qml
+TaskBoard               1.0 calendar/TaskBoard.qml
 CalendarMenu            1.0 calendar/CalendarMenu.qml
 CalendarSection         1.0 settings/calendar/CalendarSection.qml
 LayoutsSection          1.0 settings/layouts/LayoutsSection.qml
@@ -86,10 +92,15 @@ Workspaces      1.0 bar/modules/Workspaces.qml
 Tasks           1.0 bar/modules/Tasks.qml
 Submap          1.0 bar/modules/Submap.qml
 Volume          1.0 bar/modules/Volume.qml
+PerformanceMenu 1.0 bar/modules/PerformanceMenu.qml
 VolumeMenu      1.0 bar/modules/VolumeMenu.qml
+VolumeMenuBody  1.0 bar/modules/VolumeMenuBody.qml
 MprisMenu       1.0 bar/modules/MprisMenu.qml
+MprisMenuBody   1.0 bar/modules/MprisMenuBody.qml
 BluetoothMenu   1.0 bar/modules/BluetoothMenu.qml
+BluetoothMenuBody 1.0 bar/modules/BluetoothMenuBody.qml
 NetworkMenu            1.0 bar/modules/NetworkMenu.qml
+NetworkMenuBody        1.0 bar/modules/NetworkMenuBody.qml
 Battery         1.0 bar/modules/Battery.qml
 Mpris           1.0 bar/modules/Mpris.qml
 Performance     1.0 bar/modules/Performance.qml
@@ -106,6 +117,7 @@ Tray            1.0 bar/modules/Tray.qml
 NotifButton     1.0 bar/modules/NotifButton.qml
 Updates         1.0 bar/modules/Updates.qml
 LayoutSwitcher  1.0 bar/modules/LayoutSwitcher.qml
+GroupModule     1.0 bar/modules/GroupModule.qml
 LayoutMenu      1.0 bar/modules/LayoutMenu.qml
 
 # Settings menu (the corner dropdown) + its pages
@@ -116,6 +128,7 @@ BluetoothManager     1.0 settings/home/BluetoothManager.qml
 BarSection           1.0 settings/bar/BarSection.qml
 ModuleCustomize      1.0 settings/bar/ModuleCustomize.qml
 StyleSection         1.0 settings/style/StyleSection.qml
+BackupSection        1.0 settings/backup/BackupSection.qml
 OsdSection           1.0 settings/osd/OsdSection.qml
 LauncherSection      1.0 settings/launcher/LauncherSection.qml
 CornerActionsSection 1.0 settings/corners/CornerActionsSection.qml
@@ -123,6 +136,7 @@ TaskbarSection       1.0 settings/taskbar/TaskbarSection.qml
 WindowTagsSection    1.0 settings/windowtags/WindowTagsSection.qml
 WallpaperSection     1.0 settings/theme/WallpaperSection.qml
 LockscreenSection    1.0 settings/lockscreen/LockscreenSection.qml
+LockPreviewTile      1.0 settings/lockscreen/LockPreviewTile.qml
 AutostartSection     1.0 settings/autostart/AutostartSection.qml
 WorkspacesSection    1.0 settings/workspaces/WorkspacesSection.qml
 WorkspaceRuleEditor  1.0 settings/workspaces/WorkspaceRuleEditor.qml

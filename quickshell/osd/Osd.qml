@@ -189,8 +189,7 @@ PanelWindow {
         }
         function M(a, d)      { return "M" + XY(a, d) }
         function L(a, d)      { return " L" + XY(a, d) }
-        function A_(r,a,d,w)  { return (r <= 0 || (w === 1 && Style.chamfer)) ? (" L" + XY(a, d))
-                                              : " A" + r + "," + r + " 0 0 " + (flip ? (1 - w) : w) + " " + XY(a, d) }
+        function A_(r,a,d,w)  { return Style.pathCorner(r, w, flip, XY(a, d)) }
         var bd, close
         if (root.perpStart) {            // corner: anchored edge + perpendicular at the a=0 (near) end
             bd = M(A + f, 0) + A_(f, A, f, 0)        // concave fillet into the anchored bar (far end)
@@ -303,7 +302,7 @@ PanelWindow {
                 ShapePath {
                     fillColor: "transparent"
                     strokeColor: Style.chromeBorder
-                    strokeWidth: 1
+                    strokeWidth: Style.chromeBorderWidth
                     PathSvg { path: root._paths(card.width, card.height)[0] }
                 }
             }

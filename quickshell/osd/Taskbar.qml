@@ -36,7 +36,78 @@ PanelWindow {
         }
         return all.filter(function (w) { return w.monitorId === root.monId })
     }
-    readonly property bool enabled: VtlConfig.taskbarEnabledFor(root.mon) && root.items.length > 0
+
+    // ── Pinned apps (macOS-dock style) ──────────────────────────────────────────────────────────
+    // taskbar_pinned holds desktop-entry ids in dock order. Pinned tiles always show (launcher when
+    // not running, focus when running, dot = running); unpinned running windows follow after.
+    // Right-click pins/unpins; dragging a pinned tile along the strip reorders it (persisted).
+    readonly property var pinned: VtlConfig.taskbarPinned || []
+    function entryFor(cls) {
+        if (!cls) return null
+        var c = ("" + cls).toLowerCase()
+        var m = DesktopEntries.applications
+        var v = (m && m.values !== undefined) ? m.values : (m || [])
+        for (var i = 0; i < v.length; i++) {
+            var e = v[i]
+            if (!e) continue
+            if ((("" + (e.id || "")).toLowerCase() === c)
+                || (("" + (e.startupClass || "")).toLowerCase() === c)) return e
+        }
+        for (var j = 0; j < v.length; j++) {           // relaxed: id contains the class
+            var e2 = v[j]
+            if (e2 && ("" + (e2.id || "")).toLowerCase().indexOf(c) >= 0) return e2
+        }
+        return null
+    }
+    function entryById(id) {
+        var m = DesktopEntries.applications
+        var v = (m && m.values !== undefined) ? m.values : (m || [])
+        for (var i = 0; i < v.length; i++)
+            if (v[i] && ("" + (v[i].id || "")).toLowerCase() === ("" + id).toLowerCase()) return v[i]
+        return null
+    }
+    // Dock model: one tile per pin (bound to its running window when there is one), then every
+    // remaining running window. Tiles: { key, pin(bool), id, entry, win }.
+    readonly property var dockItems: {
+        var wins = root.items, out = [], used = {}
+        for (var i = 0; i < root.pinned.length; i++) {
+            var id = root.pinned[i], win = null
+            for (var j = 0; j < wins.length; j++) {
+                if (used[wins[j].address]) continue
+                var e = root.entryFor(wins[j].cls)
+                if (e && ("" + e.id).toLowerCase() === ("" + id).toLowerCase()) {
+                    win = wins[j]; used[wins[j].address] = true; break
+                }
+            }
+            out.push({ key: "pin:" + id, pin: true, id: id, entry: root.entryById(id), win: win })
+        }
+        for (var k = 0; k < wins.length; k++) {
+            if (used[wins[k].address]) continue
+            var e2 = root.entryFor(wins[k].cls)
+            out.push({ key: "win:" + wins[k].address, pin: false,
+                       id: e2 ? e2.id : "", entry: e2, win: wins[k] })
+        }
+        return out
+    }
+    function togglePin(id) {
+        if (!id) return
+        var arr = (VtlConfig.taskbarPinned || []).slice()
+        var i = arr.indexOf(id)
+        if (i >= 0) arr.splice(i, 1); else arr.push(id)
+        SettingsStore.set("taskbar_pinned", arr)
+    }
+    function movePin(id, delta) {
+        var arr = (VtlConfig.taskbarPinned || []).slice()
+        var i = arr.indexOf(id)
+        if (i < 0) return
+        var j = Math.max(0, Math.min(arr.length - 1, i + delta))
+        if (j === i) return
+        arr.splice(i, 1); arr.splice(j, 0, id)
+        SettingsStore.set("taskbar_pinned", arr)
+    }
+
+    readonly property bool enabled: VtlConfig.taskbarEnabledFor(root.mon)
+                                    && (root.items.length > 0 || root.pinned.length > 0)
 
     // ── Placement + dock geometry (ported from osd/Osd.qml) ─────────────────────────────────────
     readonly property var    _pp:   VtlConfig.taskbarPosition.split("-")
@@ -67,14 +138,8 @@ PanelWindow {
     readonly property int    seam:     root.barThk  + 24
     readonly property int    perpSeam: root.perpThk + 24
     readonly property int    pad:      root.flareR + Math.max(root.seam, root.perpSeam)
-    // Same accent-tinted background the bar / OSD use, so the taskbar matches (Settings → Style →
-    // Colorful). Blend bgPrimary → bgActive by a small amount when the OSD colorful flag is on.
-    readonly property color  cardColor: {
-        var t = VtlConfig.osdColorful ? 0.12 : 0.0
-        return Qt.rgba(Colors.bgPrimary.r * (1 - t) + Colors.bgActive.r * t,
-                       Colors.bgPrimary.g * (1 - t) + Colors.bgActive.g * t,
-                       Colors.bgPrimary.b * (1 - t) + Colors.bgActive.b * t, 1)
-    }
+    // Shared panel fill (accent-tintable, frosted under cupertino — see Style.panelColor).
+    readonly property color  cardColor: Style.panelColor(VtlConfig.osdColorful)
 
     readonly property int cardW: Math.min(root.sw - 16, content.implicitWidth)
     readonly property int cardH: Math.min(root.sh - 16, content.implicitHeight)
@@ -109,8 +174,7 @@ PanelWindow {
         }
         function M(a, d)      { return "M" + XY(a, d) }
         function L(a, d)      { return " L" + XY(a, d) }
-        function A_(r,a,d,w)  { return (r <= 0 || (w === 1 && Style.chamfer)) ? (" L" + XY(a, d))
-                                              : " A" + r + "," + r + " 0 0 " + (flip ? (1 - w) : w) + " " + XY(a, d) }
+        function A_(r,a,d,w)  { return Style.pathCorner(r, w, flip, XY(a, d)) }
         var bd, close
         if (root.perpStart) {            // corner: perpendicular bar at the a=0 (near) end
             bd = M(A + f, 0) + A_(f, A, f, 0)
@@ -147,9 +211,19 @@ PanelWindow {
     WlrLayershell.namespace:     "velumeron-taskbar"
     WlrLayershell.exclusiveZone: -1
 
+    // While hidden, hover mode arms only a thin strip hugging the monitor edge — revealing a full
+    // card-height away from the edge felt hair-triggered. Once revealed the zone grows to card +
+    // edge gap so the pointer can travel onto the items without dropping the hover.
+    readonly property int armDepth: 6
     readonly property var haRect: {
         if (!root.hoverMode) return [openX, openY, cardW, cardH]
         var de = root.dockEdge
+        if (!root.revealed) {
+            if (de === "bottom") return [openX, root.sh - armDepth, cardW, armDepth]
+            if (de === "top")    return [openX, 0,                  cardW, armDepth]
+            if (de === "left")   return [0,                  openY, armDepth, cardH]
+            if (de === "right")  return [root.sw - armDepth, openY, armDepth, cardH]
+        }
         if (de === "bottom") return [openX, openY, cardW, root.sh - openY]
         if (de === "top")    return [openX, 0,     cardW, openY + cardH]
         if (de === "left")   return [0,     openY, openX + cardW, cardH]
@@ -228,7 +302,7 @@ PanelWindow {
                 anchors.fill: parent
                 radius: Style.rCard
                 color: root.cardColor
-                border.width: 1; border.color: Colors.boNormal
+                border.width: Style.chromeBorderWidth; border.color: Style.chromeBorder
             }
 
             // Dock fill — flows into the bar with concave fillets (or a straight merge), grown by `pad`
@@ -249,7 +323,7 @@ PanelWindow {
                 anchors.fill: parent; anchors.margins: -root.pad
                 preferredRendererType: Shape.CurveRenderer
                 ShapePath {
-                    fillColor: "transparent"; strokeColor: Style.chromeBorder; strokeWidth: 1
+                    fillColor: "transparent"; strokeColor: Style.chromeBorder; strokeWidth: Style.chromeBorderWidth
                     PathSvg { path: root._paths(root.cardW, root.cardH)[0] }
                 }
             }
@@ -270,18 +344,21 @@ PanelWindow {
                     flow: root.horiz ? Grid.LeftToRight : Grid.TopToBottom
 
                     Repeater {
-                        model: root.items
+                        model: root.dockItems
                         delegate: Rectangle {
                             id: it
                             required property var modelData
-                            readonly property bool foc: modelData.focused
+                            readonly property bool running: !!modelData.win
+                            readonly property bool foc: running && modelData.win.focused
                             readonly property int  isz: VtlConfig.taskbarIconSize
-                            readonly property bool showLabel: VtlConfig.taskbarLabels && root.horiz
+                            readonly property bool showLabel: VtlConfig.taskbarLabels && root.horiz && running
                             implicitWidth:  showLabel ? Math.min(200, isz + 10 + lbl.implicitWidth + 20) : (isz + 12)
                             implicitHeight: isz + 12
                             radius: Style.rControl
                             color: it.foc ? Style.accent : (ihov.containsMouse ? Style.controlHover : "transparent")
                             Behavior on color { ColorAnimation { duration: 100 } }
+                            scale: ihov.dragging ? 1.12 : 1.0
+                            Behavior on scale { NumberAnimation { duration: 100 } }
 
                             Row {
                                 anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
@@ -289,7 +366,12 @@ PanelWindow {
                                 Image {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: it.isz; height: it.isz
-                                    source: Quickshell.iconPath(it.modelData.cls, "application-x-executable")
+                                    // Pinned tiles resolve their icon from the desktop entry; window
+                                    // tiles from the window class (entry icon as the nicer fallback).
+                                    source: Quickshell.iconPath(
+                                                it.modelData.win ? it.modelData.win.cls
+                                                                 : (it.modelData.entry?.icon ?? ""),
+                                                it.modelData.entry?.icon ?? "application-x-executable")
                                     sourceSize.width: 48; sourceSize.height: 48; asynchronous: true
                                 }
                                 Text {
@@ -297,15 +379,53 @@ PanelWindow {
                                     visible: it.showLabel
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: it.showLabel ? Math.min(150, implicitWidth) : 0
-                                    text: it.modelData.title
+                                    text: it.modelData.win?.title ?? ""
                                     color: it.foc ? Colors.fgBright : Colors.fgPrimary
                                     font.pixelSize: 12; font.family: Style.font; elide: Text.ElideRight
                                 }
                             }
+                            // macOS-style running dot on the strip's outer side.
+                            Rectangle {
+                                visible: it.running && it.modelData.pin
+                                width: 4; height: 4; radius: 2
+                                color: it.foc ? Colors.fgBright : Colors.fgMuted
+                                anchors.horizontalCenter: root.horiz ? parent.horizontalCenter : undefined
+                                anchors.verticalCenter:   root.horiz ? undefined : parent.verticalCenter
+                                anchors.bottom: root.horiz ? parent.bottom : undefined
+                                anchors.right:  root.horiz ? undefined : parent.right
+                                anchors.bottomMargin: root.horiz ? 1 : 0
+                                anchors.rightMargin:  root.horiz ? 0 : 1
+                            }
                             MouseArea {
                                 id: ihov
                                 anchors.fill: parent; hoverEnabled: true
-                                onClicked: Hyprland.dispatch("hl.dsp.focus({ window = \"address:" + it.modelData.address + "\" })")
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                                // Drag a pinned tile one slot at a time along the strip to reorder
+                                // (live via SettingsStore → VtlConfig, so tiles swap under the cursor).
+                                property bool dragging: false
+                                property real pressA: 0
+                                onPressed: e => { pressA = root.horiz ? e.x : e.y; dragging = false }
+                                onPositionChanged: e => {
+                                    if (!pressed || !it.modelData.pin) return
+                                    var a = root.horiz ? e.x : e.y
+                                    var step = (root.horiz ? it.width : it.height) + 6
+                                    var slots = Math.round((a - pressA) / step)
+                                    if (slots !== 0) {
+                                        dragging = true
+                                        root.movePin(it.modelData.id, slots > 0 ? 1 : -1)
+                                        pressA = a
+                                    }
+                                }
+                                onReleased: Qt.callLater(function () { ihov.dragging = false })
+                                onClicked: e => {
+                                    if (ihov.dragging) return
+                                    if (e.button === Qt.RightButton) { root.togglePin(it.modelData.id); return }
+                                    if (e.button === Qt.MiddleButton) { it.modelData.entry?.execute(); return }
+                                    if (it.running)
+                                        Hyprland.dispatch("hl.dsp.focus({ window = \"address:" + it.modelData.win.address + "\" })")
+                                    else
+                                        it.modelData.entry?.execute()
+                                }
                             }
                         }
                     }

@@ -38,7 +38,7 @@ Column {
             var n = e.name || ""
             var cmd = ("" + (e.execString || "")).replace(/ ?%[a-zA-Z]/g, "").trim()
             if (cmd === "") cmd = e.id || n
-            if (n.toLowerCase().indexOf(q) >= 0 || cmd.toLowerCase().indexOf(q) >= 0)
+            if (Fuzzy.match(q, n) || Fuzzy.match(q, cmd))
                 out.push({ name: n, cmd: cmd })
         }
         out.sort(function (a, b) { return a.name.localeCompare(b.name) })

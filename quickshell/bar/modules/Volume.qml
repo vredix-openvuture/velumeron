@@ -86,8 +86,13 @@ Item {
             }
         }
         onWheel: event => {
-            // Absolute set, clamped to 0–100: relative pactl steps let the sink run past 100%.
-            var target = root.volume + (event.angleDelta.y > 0 ? root._scroll : -root._scroll)
+            // Snap to the step grid (0, 5, 10 …) rather than adding to the current level, so a sink
+            // sitting at e.g. 18% lands on 20 / 15 and stays on clean multiples. Absolute set,
+            // clamped to 0–100 (relative pactl steps would let the sink run past 100%).
+            var s = Math.max(1, root._scroll)
+            var target = event.angleDelta.y > 0
+                       ? (Math.floor(root.volume / s) + 1) * s
+                       : (Math.ceil(root.volume / s) - 1) * s
             target = Math.max(0, Math.min(100, target))
             scrollProc.command = ["pactl", "set-sink-volume", "@DEFAULT_SINK@", target + "%"]
             scrollProc.running = false

@@ -19,9 +19,9 @@ PanelWindow {
 
     property var items: []   // raw clipvault list lines
     readonly property var filtered: {
-        var q = search.text.trim().toLowerCase()
+        var q = search.text.trim()
         if (q === "") return root.items
-        return root.items.filter(function (l) { return ("" + l).toLowerCase().indexOf(q) >= 0 })
+        return root.items.filter(function (l) { return Fuzzy.match(q, "" + l) })
     }
     onFilteredChanged: list.currentIndex = 0
 
@@ -100,7 +100,7 @@ PanelWindow {
                     Keys.onEnterPressed:  root.launchSel()
                     Keys.onEscapePressed: UiState.clipboardOpen = false
                     Text { anchors.fill: parent; verticalAlignment: Text.AlignVCenter; visible: search.text === ""
-                           text: "Search clipboard…"; color: Colors.fgMuted; font: search.font }
+                           text: Wording.s("clipboard.search"); color: Colors.fgMuted; font: search.font }
                 }
             }
 

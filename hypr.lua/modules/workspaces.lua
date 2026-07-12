@@ -28,9 +28,14 @@ local function _persistent_rules()
 end
 
 -- Move every persistent workspace to its bound monitor; only_mon limits the
--- sweep to one output (reconnect case). monitor vars (mon1/mon2/…) are globals
--- set by user_settings.lua.
-local function _rehome(only_mon)
+-- sweep to one output (reconnect case) AND skips the default-focus pass below,
+-- so it never steals focus. monitor vars (mon1/mon2/…) are globals set by
+-- user_settings.lua. GLOBAL on purpose: resume-wake.sh invokes this per monitor
+-- via `hyprctl eval` after wake — on this hardware the DRM connectors stay
+-- "connected" across suspend/resume, so monitor.added never fires, yet the
+-- resume still relocated persistent workspaces (ws1 woke up on the wrong
+-- output, 2026-07-11).
+function VTL_rehome_workspaces(only_mon)
     local rules = _persistent_rules()
     for _, r in ipairs(rules) do
         local target = _G[r.var]
@@ -62,7 +67,7 @@ hl.on("monitor.added", function(mon)
     pcall(function()
         local name = (type(mon) == "string") and mon or (mon and mon.name)
         if not name or name == "" then return end
-        _rehome(name)
+        VTL_rehome_workspaces(name)
     end)
 end)
 
@@ -71,6 +76,6 @@ end)
 -- first — the rules only bind workspaces created later. One sweep puts every
 -- persistent workspace where the settings say it belongs.
 hl.on("hyprland.start", function()
-    pcall(_rehome)
+    pcall(VTL_rehome_workspaces)
 end)
 

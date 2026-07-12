@@ -31,18 +31,21 @@ QtObject {
     readonly property color color14: _c("color14", "#BE944B")
     readonly property color color15: _c("color15", "#EBD8B8")
 
-    // Semantic aliases — mirrors colors_gtk.css
-    readonly property color bgPrimary:   color0
-    readonly property color bgElement:   color1
-    readonly property color bgSecondary: color2
-    readonly property color bgActive:    color3
-    readonly property color bgHover:     color4
-    readonly property color boNormal:    color5
-    readonly property color boActive:    color6
-    readonly property color fgPrimary:   color7
-    readonly property color fgMuted:     color8
-    readonly property color fgUrgent:    color13
-    readonly property color fgBright:    color15
+    // Semantic aliases — mirrors colors_gtk.css.
+    // Cupertino deliberately IGNORES the wallust palette for the shell UI: macOS reads as fixed
+    // neutral greys + the system blue, no matter the wallpaper (terminals/GTK keep wallust).
+    readonly property bool _mac: VtlConfig.uiStyle === "cupertino"
+    readonly property color bgPrimary:   _mac ? "#1c1c1e" : color0
+    readonly property color bgElement:   _mac ? "#2c2c2e" : color1
+    readonly property color bgSecondary: _mac ? "#3a3a3c" : color2
+    readonly property color bgActive:    _mac ? "#0a84ff" : color3
+    readonly property color bgHover:     _mac ? "#3a3a3c" : color4
+    readonly property color boNormal:    _mac ? "#48484a" : color5
+    readonly property color boActive:    _mac ? "#0a84ff" : color6
+    readonly property color fgPrimary:   _mac ? "#e5e5e7" : color7
+    readonly property color fgMuted:     _mac ? "#98989d" : color8
+    readonly property color fgUrgent:    _mac ? "#ff453a" : color13
+    readonly property color fgBright:    _mac ? "#ffffff" : color15
 
     function _parse(t) { try { if (t && ("" + t).trim() !== "") root.p = JSON.parse(t) } catch (e) { /* keep last good */ } }
 

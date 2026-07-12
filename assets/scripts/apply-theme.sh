@@ -20,9 +20,22 @@ mode="${1:-auto}"
 mkdir -p "$(dirname "$MODE_FILE")"
 
 if [[ "$mode" != "fixed" || -z "${2:-}" ]]; then
-    # Automatic: just record the mode. Colours are re-derived on the next
-    # wallpaper change (handled by wallpaper-set.sh), exactly like the old GUI.
+    # Automatic: record the mode then immediately re-derive from the current wallpaper
+    # so that changes to wallust options (palette, backend, …) take effect right away.
     printf 'auto\n' > "$MODE_FILE"
+    _wp=$(python3 - "$VELUMERON_USER_DIR" <<'PY' 2>/dev/null || echo ""
+import json, os, sys
+d = os.path.join(sys.argv[1], "quickshell", "wallpapers.json")
+try:
+    data = json.load(open(d))
+    v = next(iter(data.values()))
+    print(v.get("path", ""))
+except: pass
+PY
+)
+    if [[ -n "$_wp" && -f "$_wp" ]]; then
+        bash "$VELUMERON_DIR/assets/scripts/wallpaper-set.sh" "$_wp" --no-showcase
+    fi
     exit 0
 fi
 
@@ -35,16 +48,23 @@ fi
 
 printf 'fixed:%s\n' "$scheme" > "$MODE_FILE"
 
-# Generate the palette from the fixed scheme. `wallust cs` skips the configured
-# [hooks], so run the post-processing steps ourselves (same as the old GUI).
+# Generate the palette from the fixed scheme. `wallust cs` skips the configured [hooks], so run
+# the post-processing steps ourselves (same as the old GUI). This themes the terminals / GTK /
+# firefox from the raw ANSI scheme.
 wallust --config-dir "$WALLUST_CFG" cs "$scheme_path"
 
+# The shell reads quickshell/colors.json through SEMANTIC aliases (surfaces, borders, one accent);
+# feeding it the raw ANSI scheme paints surfaces bright red/green/blue. Rebuild just that one file
+# as quiet background shades + a signature accent. Terminals keep the untouched ANSI scheme.
+qs_colors="$VELUMERON_USER_DIR/quickshell/colors.json"
+mkdir -p "$(dirname "$qs_colors")"
+python3 "$SCRIPT_DIR/lib/fixed-scheme-colors.py" "$scheme_path" "$qs_colors" 2>/dev/null || true
+
 bash "$VELUMERON_DIR/assets/scripts/wallust/hyprland_lua-colors.sh" 2>/dev/null || true
-hyprctl reload                  >/dev/null 2>&1 || true
-pywalfox update                 >/dev/null 2>&1 || true
+hyprctl reload  >/dev/null 2>&1 || true
+pywalfox update >/dev/null 2>&1 || true
 
-# Reload the active bar backend. Detached into its own session so that, when the
-# quickshell backend restarts itself, killing the old instance can't abort us.
-setsid bash "$VELUMERON_DIR/assets/scripts/launch-shell.sh" </dev/null >/dev/null 2>&1 &
-
+# NO shell restart: quickshell watches colors.json (FileView in Colors.qml) and recolours in
+# place, so the bar, the open settings menu and every panel stay put. Applying a fixed scheme is
+# now seamless and live — exactly like an automatic wallpaper-driven colour change.
 exit 0

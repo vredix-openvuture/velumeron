@@ -7,6 +7,7 @@ Item {
     property bool vertical: false   // set by ModSlot: rotate to read along a vertical sidebar
     property string barMon:  ""     // monitor name, for per-monitor icon/font size
     property string barEdge: "top"  // set by Bar; drives the hover-glide direction
+    property string barGroup: "start" // set by Bar; start/end → the click flyout merges into that corner
 
     // Report the inner Row as our implicit size so wrappers / Loaders size to us.
     implicitWidth:  innerRow.width
@@ -44,7 +45,9 @@ Item {
     // off in the module's customization, and prefixes its icon above (when set).
     readonly property string _statsStr: {
         var parts = []
-        function add(icon, txt) { parts.push(icon !== "" ? (icon + " " + txt) : txt) }
+        // En-space (½ em) after the icon — a plain space is too narrow under non-Nerd display fonts
+        // (Fredoka) and glues the glyph to its value.
+        function add(icon, txt) { parts.push(icon !== "" ? (icon + " " + txt) : txt) }
         if (VtlConfig.moduleSetting("performance", "glide_cpu_usage", true))                       add(root.iconCpuUsage, root.cpuPct.toFixed(0) + "%")
         if (VtlConfig.moduleSetting("performance", "glide_cpu_temp",  true))                       add(root.iconCpuTemp,  root.cpuTemp + "°")
         if (VtlConfig.moduleSetting("performance", "glide_memory",    true))                       add(root.iconMemory,   root.memPct.toFixed(0) + "%")
@@ -106,39 +109,21 @@ Item {
     }
 
     // MouseArea anchored to the Row, not parent (avoids size-change feedback loop).
-    // Left click cycles the power profile; right click drops the themed btop terminal
-    // out of the bar at this module (btop-drop.sh — size via the module's gear settings).
+    // Left click grows the native performance panel (PerformanceMenu) out of the bar — live system
+    // stats + power-mode buttons, the replacement for the old right-click btop terminal.
     MouseArea {
         anchors.fill:    innerRow
         hoverEnabled:    true
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        acceptedButtons: Qt.LeftButton
         onEntered: root.hovered = true
         onExited:  root.hovered = false
-        onClicked: mouse => {
-            if (mouse.button === Qt.RightButton) {
-                var c = root.mapToItem(null, root.width / 2, root.height / 2)
-                var along = (root.barEdge === "left" || root.barEdge === "right") ? c.y : c.x
-                btopProc.command = ["bash", "-c",
-                    "\"$VELUMERON_DIR/assets/scripts/btop-drop.sh\" " +
-                    "'" + root.barMon + "' " + Math.round(along) + " " + root.barEdge]
-                btopProc.running = false; btopProc.running = true
-            } else {
-                cycleProc.running = false; cycleProc.running = true
-            }
+        onClicked: {
+            var c = root.mapToItem(null, root.width / 2, root.height / 2)
+            UiState.toggleFlyout("performance", c.x, c.y, root.barEdge, root.barGroup, root.barMon)
         }
     }
 
     // ── Processes ─────────────────────────────────────────────────────────────
-
-    Process { id: btopProc }
-
-    Process {
-        id: cycleProc
-        command: ["bash", "-c", "$VELUMERON_DIR/assets/scripts/powermode.sh"]
-        onRunningChanged: {
-            if (!running) { profileProc.running = false; profileProc.running = true }
-        }
-    }
 
     Process {
         id: profileProc

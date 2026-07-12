@@ -29,14 +29,15 @@ PanelWindow {
     readonly property int  gap: floating ? VtlConfig.barFloatGapFor(root.mon) : 0
     // Dock leaves a little air at the two ends (reuses the gap value) and stays flush to its edge.
     readonly property int  air: dockMode ? VtlConfig.barFloatGapFor(root.mon) : 0
-    readonly property int  r:   VtlConfig.barInnerRadiusFor(root.mon)
+    readonly property int  r:   Style.chromeR(VtlConfig.barInnerRadiusFor(root.mon))
     readonly property real bgAlpha: VtlConfig.barOpacityEnabled ? VtlConfig.barOpacityValue : 1.0
 
-    // Bar background: optionally tinted with a little accent ("colorful").
+    // Bar background: optionally tinted with a little accent ("colorful"); neutral-frosted under
+    // cupertino (Style.frost — the compositor blur supplies the colour, not the theme).
     readonly property real tintAmt:  VtlConfig.barColorful ? 0.12 : 0.0
-    readonly property color cBg:     Qt.rgba(Colors.bgPrimary.r * (1 - tintAmt) + Colors.bgActive.r * tintAmt,
+    readonly property color cBg:     Style.frost(Qt.rgba(Colors.bgPrimary.r * (1 - tintAmt) + Colors.bgActive.r * tintAmt,
                                              Colors.bgPrimary.g * (1 - tintAmt) + Colors.bgActive.g * tintAmt,
-                                             Colors.bgPrimary.b * (1 - tintAmt) + Colors.bgActive.b * tintAmt, 1)
+                                             Colors.bgPrimary.b * (1 - tintAmt) + Colors.bgActive.b * tintAmt, 1))
     readonly property color cFill:   Qt.rgba(cBg.r, cBg.g, cBg.b, bgAlpha)
     readonly property color cBorder: Style.tint(Style.chromeBorder, bgAlpha)
 
@@ -137,10 +138,43 @@ PanelWindow {
         return "M0,0 L" + sw + ",0 L" + sw + "," + sh + " L0," + sh + " Z " + holePath()
     }
 
+    // Dock border: OPEN outline along the content side + the two ends only — the edge that
+    // touches the monitor border draws no line (a docked strip visually continues into the
+    // bezel). Clockwise, so cornerSeg's sweep matches rrPath's.
+    function dockBorderPath() {
+        var p = VtlConfig.barPositionFor(root.mon)
+        var s = root.stripRect(p)
+        var x0 = s[0], y0 = s[1], x1 = s[0] + s[2], y1 = s[1] + s[3]
+        var rad = Math.min(r, s[2] / 2, s[3] / 2)
+        if (p === "bottom")                                    // screen edge = bottom
+            return "M" + x0 + "," + y1 + " L" + x0 + "," + (y0 + rad)
+                 + " " + Style.cornerSeg(rad, x0 + rad, y0)
+                 + " L" + (x1 - rad) + "," + y0
+                 + " " + Style.cornerSeg(rad, x1, y0 + rad)
+                 + " L" + x1 + "," + y1
+        if (p === "left")                                      // screen edge = left
+            return "M" + x0 + "," + y0 + " L" + (x1 - rad) + "," + y0
+                 + " " + Style.cornerSeg(rad, x1, y0 + rad)
+                 + " L" + x1 + "," + (y1 - rad)
+                 + " " + Style.cornerSeg(rad, x1 - rad, y1)
+                 + " L" + x0 + "," + y1
+        if (p === "right")                                     // screen edge = right
+            return "M" + x1 + "," + y1 + " L" + (x0 + rad) + "," + y1
+                 + " " + Style.cornerSeg(rad, x0, y1 - rad)
+                 + " L" + x0 + "," + (y0 + rad)
+                 + " " + Style.cornerSeg(rad, x0 + rad, y0)
+                 + " L" + x1 + "," + y0
+        return "M" + x1 + "," + y0 + " L" + x1 + "," + (y1 - rad)   // top → screen edge = top
+             + " " + Style.cornerSeg(rad, x1 - rad, y1)
+             + " L" + (x0 + rad) + "," + y1
+             + " " + Style.cornerSeg(rad, x0, y1 - rad)
+             + " L" + x0 + "," + y0
+    }
+
     // Border: the floating outline, or only the *interior* hole edges (the ones not on
     // the screen border), stitched with rounded corners between adjacent interior edges.
     function borderPath() {
-        if (dockMode) return dockPath()
+        if (dockMode) return dockBorderPath()
         if (floating) {
             var f = floatRect()
             return roundRectPath(f[0], f[1], f[2], f[3], r)
@@ -210,13 +244,15 @@ PanelWindow {
     }
     // ── Border ─────────────────────────────────────────────────────────────────
     // CurveRenderer for a smooth inner-edge stroke (a single open/closed outline, no hole).
+    // Cupertino draws no bar outline at all — the macOS strip is just a frosted band.
     Shape {
         anchors.fill: parent
+        visible: !Style.isCupertino
         preferredRendererType: Shape.CurveRenderer
         ShapePath {
             fillColor:   "transparent"
             strokeColor: root.cBorder
-            strokeWidth: 1
+            strokeWidth: Style.chromeBorderWidth
             PathSvg { path: root.borderPath() }
         }
     }
@@ -287,11 +323,14 @@ PanelWindow {
         readonly property bool hasAny:     mg.contentLen > 1
 
         visible: mg.keys.length > 0
-        implicitWidth:  (mg.horiz ? rowLay.implicitWidth  : colLay.implicitWidth)  + 2 * mg.pad
-        implicitHeight: (mg.horiz ? rowLay.implicitHeight : colLay.implicitHeight) + 2 * mg.pad
+        // Pad only the along-axis (breathing room at the pill's two ends). The cross-axis is left
+        // at the content height — which, with each slot now sized to the bar thickness, equals the
+        // strip breadth, so the group never overflows the bar.
+        implicitWidth:  mg.horiz ? (rowLay.implicitWidth  + 2 * mg.pad) : colLay.implicitWidth
+        implicitHeight: mg.horiz ? rowLay.implicitHeight : (colLay.implicitHeight + 2 * mg.pad)
         width: implicitWidth; height: implicitHeight
 
-        Rectangle {
+        StyledRect {
             visible: mg.groupBg && mg.hasAny
             anchors.centerIn: parent
             // Length: span the group. Cross-axis: inset from the bar thickness so the pill keeps a
@@ -344,17 +383,24 @@ PanelWindow {
         readonly property bool hasContent: ldr.item !== null && ms.iw > 1 && ms.ih > 1
         // Uniform cross-axis size for the per-module background, so every pill is the same width.
         readonly property int  bgCross: VtlConfig.barIconSize + 2 * ms.pad
+        // The bar's own thickness — used as the uniform cross-axis for group/none modules so they
+        // all centre on the bar's mid-line (see below).
+        readonly property int  barT:    VtlConfig.edgeThicknessFor(ms.edge, root.mon)
 
         // NOTE: never gate the slot's own `visible` on a measured size — that stops layout and
         // sticks the slot at 0. Empty modules report a ~0 implicit size, so the slot collapses on
         // its own; the background below just hides when there's nothing to frame.
-        // module-bg: uniform cross-axis (= bgCross), content-length along the bar + equal pad.
+        //   module-bg  → uniform cross-axis (= bgCross), content-length along the bar + equal pad.
+        //   group/none → NO pill, but still give every slot the *full bar thickness* on the cross
+        //                axis so a tall text module and a small icon centre on one line instead of
+        //                top-aligning at their own heights (the "everything at different heights,
+        //                stuck together" look). The along-axis stays content-sized.
         implicitWidth:  !ms.hasContent ? 0
                       : ms.moduleBg ? (ms.rotated ? ms.bgCross : ms.iw + 2 * ms.pad)
-                      : (ms.rotated ? ms.ih : ms.iw) + 2 * ms.pad
+                      : (ms.horiz ? ms.iw : ms.barT)
         implicitHeight: !ms.hasContent ? 0
                       : ms.moduleBg ? (ms.rotated ? ms.iw + 2 * ms.pad : ms.bgCross)
-                      : (ms.rotated ? ms.iw : ms.ih) + 2 * ms.pad
+                      : (ms.horiz ? ms.barT : (ms.rotated ? ms.iw : ms.ih))
         width: implicitWidth; height: implicitHeight
         // The Column (vertical edges) left-aligns its children on the cross axis, so narrower
         // modules wouldn't line up under wider ones — centre each slot horizontally instead.
@@ -363,7 +409,7 @@ PanelWindow {
         // Passive hover tracking — runs alongside each module's own MouseArea (doesn't consume
         // clicks), so the per-module background can react to hover like the icon/text already do.
         HoverHandler { id: msHover }
-        Rectangle {
+        StyledRect {
             visible: ms.moduleBg && ms.hasContent
             anchors.fill: parent
             radius: VtlConfig.barModuleBgRadiusFor(root.mon)
@@ -386,12 +432,18 @@ PanelWindow {
                 // Monitor name (string) for per-monitor sizing (font/icon). Distinct from
                 // VutureIcon's `barMonitor`, which is the HyprlandMonitor object.
                 if (item && item.hasOwnProperty("barMon"))   item.barMon   = root.mon
+                // Full module key for dynamic instances (group:<n>) — their settings live under
+                // module_settings[<full key>].
+                if (item && item.hasOwnProperty("instanceKey")) item.instanceKey = ms.mkey
             }
         }
     }
 
     // ── Map module key → Component ────────────────────────────────────────────
     function componentFor(key) {
+        // Dynamic group instances: "group:<n>" all share one component; the concrete instance
+        // (members/icon/label under module_settings[key]) is wired via the injected instanceKey.
+        if (("" + key).indexOf("group:") === 0) return groupComp
         switch (key) {
             case "vuture-icon":  return vutureIconComp
             case "clock":        return clockComp
@@ -435,4 +487,5 @@ PanelWindow {
     Component { id: vpnComp;         VPN         {} }
     Component { id: updatesComp;     Updates     {} }
     Component { id: layoutComp;      LayoutSwitcher {} }
+    Component { id: groupComp;       GroupModule {} }
 }

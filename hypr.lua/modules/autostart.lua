@@ -55,6 +55,12 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("hyprctl setcursor " .. cur_theme .. " " .. tostring(cur_size))
     hl.exec_cmd(desktop_shell)
 
+    -- The GTK portal backend (xdg-desktop-portal-gtk) draws the file-chooser dialogs that GTK4
+    -- apps (zenity → the wallpaper folder picker) delegate to. Activated this early it can cache a
+    -- light look before the theme settles and then open every dialog light. Bounce it once the
+    -- session is up so its dialogs match the current dark/light mode.
+    hl.exec_cmd("bash -c 'sleep 5; " .. VTL_DIR .. "/assets/scripts/apply-app-theme.sh refresh-portals'")
+
     -- ── Workspace startup apps (from user_settings) ───
     for _, item in ipairs(start_apps) do
         if item.app ~= "" then

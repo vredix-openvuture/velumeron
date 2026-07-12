@@ -35,6 +35,9 @@ QtObject {
     function duplicate(source, id, name) { _mut((name && name.length) ? ["duplicate", source, id, name]
                                                                       : ["duplicate", source, id]) }
     function create(name)                { _mut(["new", name || ""]) }
+    // Theme-builder flow: snapshot the current settings as a new user template AND activate it,
+    // so every builder step edits the fresh template live (copy-on-write persists into it).
+    function createAndBuild(name)        { _mut(["new", name || "", "activate"]) }
     function rename(id, name)            { if (name && name.length) _mut(["rename", id, name]) }
     function remove(id)                  { _mut(["delete", id]) }
     function refresh() {

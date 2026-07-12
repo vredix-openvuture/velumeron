@@ -9,6 +9,7 @@
 #   apply-app-theme.sh gtk on|off      adw-gtk3 theme + wallust palette import
 #   apply-app-theme.sh qt on|off       qt5ct/qt6ct custom palette (vutureland)
 #   apply-app-theme.sh mode dark|light xdg color-scheme + GTK variant
+#   apply-app-theme.sh refresh-portals restart the GTK portal backend (re-theme file dialogs)
 set -euo pipefail
 source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh"
 
@@ -92,6 +93,10 @@ PY
 
 do_mode() {
     [[ "$1" == dark || "$1" == light ]] || { echo "usage: apply-app-theme.sh mode dark|light" >&2; exit 2; }
+    # ONLY the desktop-wide preference: xdg color-scheme + the GTK theme variant. Deliberately
+    # does NOT touch the wallust pipeline: re-deriving a light palette here flipped colors.json
+    # (making the shell unreadable) and recoloured kitty — terminals and the shell keep their
+    # own colours; this switch is for portal-aware apps and websites.
     gsettings set org.gnome.desktop.interface color-scheme "prefer-$1" 2>/dev/null || true
     local theme
     if gtk_active; then theme=$(theme_for "$1"); else theme="Adwaita"; fi
@@ -99,23 +104,21 @@ do_mode() {
     for d in "${GTK_DIRS[@]}"; do
         write_settings_ini "$d" "$theme" "$([[ $1 == dark ]] && echo 1 || echo 0)"
     done
+    # Drop the old behaviour's palette marker so future wallpaper changes never re-derive a
+    # light palette again.
+    rm -f "$VELUMERON_USER_DIR/wallust/app-mode" 2>/dev/null || true
+    # The GTK portal backend caches its dialog look — refresh it so file choosers flip too.
+    refresh_portals
+}
 
-    # The wallust palettes (GTK/Qt/kitty/quickshell) are what apps actually SHOW —
-    # without re-deriving them in the chosen brightness the flip is invisible.
-    # Persist the mode for every future `wallust run` (wallpaper-set.sh reads it),
-    # then re-theme from the current main-monitor wallpaper so it applies now.
-    mkdir -p "$VELUMERON_USER_DIR/wallust"
-    printf '%s\n' "$1" > "$VELUMERON_USER_DIR/wallust/app-mode"
-    local cmode main wp
-    cmode=$(cat "$VELUMERON_USER_DIR/wallust/color-mode" 2>/dev/null || echo auto)
-    if [[ "$cmode" == auto ]]; then
-        main=$(hyprctl monitors -j 2>/dev/null | jq -r '[.[]|select(.focused)][0].name // .[0].name' 2>/dev/null || true)
-        [[ -n "$main" && "$main" != null ]] \
-            && wp=$(jq -r --arg m "$main" '.[$m].path // empty' \
-                    "$VELUMERON_USER_DIR/quickshell/wallpapers.json" 2>/dev/null || true)
-        [[ -n "${wp:-}" && -f "$wp" ]] && \
-            bash "$VELUMERON_DIR/assets/scripts/wallpaper-set.sh" --mon "$main" --file "$wp" >/dev/null 2>&1 || true
-    fi
+# xdg-desktop-portal-gtk renders the file-chooser dialogs that GTK4 apps (zenity 4 → the wallpaper
+# folder picker) delegate to via GtkFileChooserNative. That backend reads its light/dark look ONCE
+# at startup; when it is activated early at login — before the color-scheme/theme has settled — it
+# gets stuck light and every portal dialog opens light despite `color-scheme=prefer-dark`. Bouncing
+# the service makes it re-read the current scheme. try-restart is a no-op if it isn't running (then
+# the next on-demand activation reads the settled theme anyway), so this is always safe.
+refresh_portals() {
+    systemctl --user try-restart xdg-desktop-portal-gtk.service 2>/dev/null || true
 }
 
 case "${1:-}" in
@@ -128,5 +131,6 @@ case "${1:-}" in
     gtk)  do_gtk "${2:-}" ;;
     qt)   do_qt "${2:-}" ;;
     mode) do_mode "${2:-}" ;;
+    refresh-portals) refresh_portals ;;
     *)    grep '^#   apply' "$0" | sed 's/^# *//' >&2; exit 2 ;;
 esac

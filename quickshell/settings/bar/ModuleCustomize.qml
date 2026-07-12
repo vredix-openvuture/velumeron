@@ -32,6 +32,12 @@ Item {
 
     // ── Per-module specific settings (descriptor-driven) ──────────────────────────
     function specFor(key) {
+        // Dynamic group instances ("group:<n>"): name, icon, and the member list that the
+        // Control-Center flyout stacks (toggle order = stacking order).
+        if (("" + key).indexOf("group:") === 0) return [
+            { type: "text",    name: "label",   label: "Group name", def: "Group" },
+            { type: "text",    name: "icon",    label: "Icon glyph", def: "󰐱" },
+            { type: "modules", name: "members", label: "Members",    def: [] } ]
         switch (key) {
         case "clock": return [
             { type: "dropdown", name: "time_format", label: "Time format", def: "hh:mm",
@@ -52,7 +58,9 @@ Item {
             { type: "stepper", name: "btop_height_pct", label: "btop height %", def: 55, min: 20, max: 90, step: 5 } ]
         case "battery": return [
             { type: "toggle",  name: "show_percent",  label: "Show percentage", def: true },
-            { type: "stepper", name: "low_threshold", label: "Low at %", def: 10, min: 5, max: 50, step: 5 } ]
+            { type: "stepper", name: "low_threshold", label: "Low at %", def: 10, min: 5, max: 50, step: 5 },
+            { type: "toggle",  name: "low_warning",   label: "Warn when low", def: true },
+            { type: "toggle",  name: "show_devices",  label: "Show mouse/keyboard", def: true } ]
         case "network":     return [ { type: "toggle", name: "show_ssid", label: "Show SSID", def: true } ]
         case "workspaces":  return [
             { type: "stepper", name: "max_workspaces", label: "Max workspaces", def: 10, min: 1, max: 20, step: 1 },
@@ -146,6 +154,7 @@ Item {
                                        : modelData.type === "dropdown" ? dropdownC
                                        : modelData.type === "stepper"  ? stepperC
                                        : modelData.type === "text"     ? textC
+                                       : modelData.type === "modules"  ? modulesC
                                        : null
                         onLoaded: { item.spec = modelData }
                     }
@@ -200,6 +209,71 @@ Item {
         id: stepperC
         SpecStepper { property var spec; specRef: spec }
     }
+    // Member picker for group instances: toggle a module in/out of the group; the number badge
+    // shows its position in the flyout stack (= activation order).
+    Component {
+        id: modulesC
+        Column {
+            id: memRoot
+            property var spec
+            width: parent ? parent.width : 0
+            spacing: 6
+            readonly property var groupable: [
+                { key: "volume",    label: "Volume",    icon: "󰕾" },
+                { key: "bluetooth", label: "Bluetooth", icon: "󰂯" },
+                { key: "network",   label: "Network",   icon: "󰈀" },
+                { key: "mpris",     label: "Media",     icon: "󰝚" }
+            ]
+            readonly property var members: memRoot.spec ? root.ms(memRoot.spec.name, memRoot.spec.def) : []
+            function toggleMember(k) {
+                if (!memRoot.spec) return
+                var arr = (memRoot.members || []).slice()
+                var i = arr.indexOf(k)
+                if (i >= 0) arr.splice(i, 1); else arr.push(k)
+                root.changed(memRoot.spec.name, arr)
+            }
+            FieldLabel { text: memRoot.spec ? memRoot.spec.label : "" }
+            Text { text: "Toggle to include — activation order = stacking order in the flyout."
+                   color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font }
+            Repeater {
+                model: memRoot.groupable
+                delegate: Rectangle {
+                    id: memRow
+                    required property var modelData
+                    readonly property int memIdx: memRoot.members ? memRoot.members.indexOf(modelData.key) : -1
+                    readonly property bool on: memIdx >= 0
+                    width: parent ? parent.width : 0
+                    height: 38; radius: 10
+                    color: on ? Style.tint(Style.accent, 0.22)
+                         : (memHov.containsMouse ? Style.tint(Style.accent, 0.12) : Style.controlFill)
+                    Behavior on color { ColorAnimation { duration: 90 } }
+                    Row {
+                        anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                        spacing: 8
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: memRow.modelData.icon
+                               color: memRow.on ? Colors.fgBright : Colors.fgMuted
+                               font.pixelSize: 14; font.family: Style.font }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: memRow.modelData.label
+                               color: memRow.on ? Colors.fgBright : Colors.fgPrimary
+                               font.pixelSize: 13; font.family: Style.font }
+                    }
+                    Rectangle {
+                        anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                        width: 22; height: 22; radius: 11
+                        color: memRow.on ? Style.accent : Colors.bgPrimary
+                        Behavior on color { ColorAnimation { duration: 90 } }
+                        Text { anchors.centerIn: parent
+                               text: memRow.on ? ("" + (memRow.memIdx + 1)) : "+"
+                               color: memRow.on ? Colors.fgBright : Colors.fgMuted
+                               font.pixelSize: 11; font.bold: true; font.family: Style.font }
+                    }
+                    MouseArea { id: memHov; anchors.fill: parent; hoverEnabled: true
+                                onClicked: memRoot.toggleMember(memRow.modelData.key) }
+                }
+            }
+        }
+    }
+
     Component {
         id: textC
         Column {

@@ -8,6 +8,10 @@ copy-on-write: whenever settings.json diverges from the active template, the cha
 that template; if the active template is a shipped built-in, it is first forked into a private user
 copy so the built-in is never mutated.
 
+A template MAY carry a top-level "wallpaper" (path, relative to $VELUMERON_DIR or absolute): on
+activate it is applied via wallpaper-set.sh, so wallust re-derives the colours from it — colours
+stay wallpaper-driven, never pinned. Missing file / absent field = the current wallpaper stays.
+
 Layout:
   $VELUMERON_DIR/assets/templates/<id>/template.json      built-in, READ-ONLY (shipped in the repo)
   $VELUMERON_USER_DIR/templates/<id>/template.json         user, writable
@@ -144,12 +148,19 @@ def scan(source):
         t = read_json(os.path.join(root, tid, "template.json"), None)
         if not isinstance(t, dict):
             continue
+        s = t.get("settings", {}) if isinstance(t.get("settings"), dict) else {}
         out.append({
             "id": t.get("id", tid),
             "name": t.get("name", tid),
             "author": t.get("author", ""),
             "builtin": source == "builtin",
             "source": source,
+            # Preview metadata for the template cards (Settings → Style).
+            "ui_style": s.get("ui_style", "flat"),
+            "ui_font": s.get("ui_font", ""),
+            "bar_mode": s.get("bar_mode", "frame"),
+            "bar_position": s.get("bar_position", "top"),
+            "wallpaper": resolve_wallpaper(t) or "",
         })
     return out
 
@@ -165,15 +176,39 @@ def set_active(tid, source):
     write_json(active_path(), {"id": tid, "source": source})
 
 
-def write_user_template(tid, name, settings, author="you"):
-    write_json(template_path("user", tid), {
+def write_user_template(tid, name, settings, author="you", wallpaper=None):
+    obj = {
         "id": tid,
         "name": name,
         "author": author,
         "builtin": False,
         "version": 1,
         "settings": settings,
-    })
+    }
+    if wallpaper:
+        obj["wallpaper"] = wallpaper
+    write_json(template_path("user", tid), obj)
+
+
+def resolve_wallpaper(tmpl):
+    """Absolute path of a template's wallpaper, or None (unset / file missing)."""
+    wp = tmpl.get("wallpaper")
+    if not wp:
+        return None
+    path = wp if os.path.isabs(wp) else os.path.join(repo_dir(), wp)
+    return path if os.path.isfile(path) else None
+
+
+def apply_wallpaper(tmpl):
+    """Fire-and-forget wallpaper-set.sh for the template's wallpaper (wallust then re-derives the
+    colours from the image). Silent no-op when the template ships none or the file is gone."""
+    path = resolve_wallpaper(tmpl)
+    if not path:
+        return
+    import subprocess
+    script = os.path.join(repo_dir(), "assets", "scripts", "wallpaper-set.sh")
+    subprocess.Popen(["bash", script, "--no-showcase", "--no-waybar", "--hor", path],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 # ── Verbs ────────────────────────────────────────────────────────────────────────────────────────
@@ -243,7 +278,12 @@ def verb_sync():
         print("sync:reset")
         return
     cur = read_json(settings_path(), {})
-    if cur == tmpl.get("settings", {}):
+    # Device-bound keys don't count as divergence: activate preserves them across switches, and
+    # they must never fork a builtin (a user template still persists them below, which is fine —
+    # user templates are local to this device anyway).
+    def _strip(s):
+        return {k: v for k, v in s.items() if k not in DEVICE_KEYS}
+    if _strip(cur) == _strip(tmpl.get("settings", {})):
         print("sync:insync")
         return
     if not cur and active["source"] == "builtin":
@@ -256,7 +296,7 @@ def verb_sync():
         base = slugify(tmpl.get("name", active["id"])) + "-kopie"
         tid = unique_user_id(base)
         write_user_template(tid, tmpl.get("name", active["id"]) + " (Kopie)", cur,
-                            author=tmpl.get("author", "you"))
+                            author=tmpl.get("author", "you"), wallpaper=tmpl.get("wallpaper"))
         set_active(tid, "user")
         print("sync:forked:%s" % tid)
     else:
@@ -265,13 +305,27 @@ def verb_sync():
         print("sync:synced:%s" % active["id"])
 
 
+# Settings that describe THIS DEVICE / user, not a look — they survive template switches.
+# A template full-replace used to throw these away (losing e.g. per-monitor wallpaper folders
+# and bluetooth aliases on every switch; wallpaper_sets and taskbar pins met the same fate
+# until 2026-07-11).
+DEVICE_KEYS = ("wallpaper_dirs", "bt_aliases", "bt_groups", "bar_per_monitor", "bar_monitors",
+               "wallpaper_sets", "taskbar_pinned")
+
+
 def verb_activate(source, tid):
     tmpl = load_template(source, tid)
     if tmpl is None:
         print("activate:notfound", file=sys.stderr)
         sys.exit(1)
+    cur = read_json(settings_path(), {})
+    new = dict(tmpl.get("settings", {}))          # full replace -> unset keys revert to defaults
+    for k in DEVICE_KEYS:                         # … except device-bound state: the CURRENT value
+        if k in cur:                              # always wins (templates snapshot these keys too,
+            new[k] = cur[k]                       # so "only when absent" would never fire)
     set_active(tid, source)                       # active first, so a following sync is a no-op
-    write_settings(tmpl.get("settings", {}))      # full replace -> unset keys revert to defaults
+    write_settings(new)                           # (sync compares device-stripped — no fork)
+    apply_wallpaper(tmpl)                         # optional per-template wallpaper (colours follow)
     print("activate:%s:%s" % (source, tid))
 
 
@@ -291,14 +345,16 @@ def verb_duplicate(source, tid, name=None):
     name = name or (tmpl.get("name", tid) + " (Kopie)")
     newid = unique_user_id(slugify(name))
     write_user_template(newid, name, dict(tmpl.get("settings", {})),
-                        author=tmpl.get("author", "you"))
+                        author=tmpl.get("author", "you"), wallpaper=tmpl.get("wallpaper"))
     print("duplicate:%s" % newid)
 
 
-def verb_new(name=None):
+def verb_new(name=None, activate=False):
     name = name or "Neues Template"
     newid = unique_user_id(slugify(name))
     write_user_template(newid, name, read_json(settings_path(), {}))
+    if activate:                       # theme-builder flow: snapshot becomes the live canvas
+        set_active(newid, "user")
     print("new:%s" % newid)
 
 
@@ -325,6 +381,86 @@ def verb_delete(tid):
     print("delete:%s" % tid)
 
 
+# ── Import / Export ──────────────────────────────────────────────────────────
+# A portable single-file bundle of the user's configuration: the effective settings, the wallust
+# palette options, and every private user template. Device-bound keys (monitors / bluetooth aliases
+# / per-monitor wallpaper folders — see DEVICE_KEYS) are carried in the bundle for a same-machine
+# backup, but on IMPORT they are re-taken from THIS device so restoring someone else's export never
+# drags in foreign monitor/wallpaper paths.
+
+def _wallust_path(*parts):
+    return os.path.join(user_dir(), "wallust", *parts)
+
+
+def verb_export(path):
+    import datetime
+    bundle = {
+        "_velumeron_export": 1,
+        "exported_at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "settings": read_json(settings_path(), {}),
+        "active_template": get_active() or {},
+        "user_templates": {},
+    }
+    wopts = read_json(_wallust_path("options.json"), None)
+    if isinstance(wopts, dict):
+        bundle["wallust_options"] = wopts
+    cm = _wallust_path("color-mode")
+    if os.path.isfile(cm):
+        try:
+            bundle["color_mode"] = open(cm, encoding="utf-8").read().strip()
+        except OSError:
+            pass
+    root = user_root()
+    if os.path.isdir(root):
+        for tid in sorted(os.listdir(root)):
+            t = read_json(os.path.join(root, tid, "template.json"), None)
+            if isinstance(t, dict):
+                bundle["user_templates"][tid] = t
+
+    path = os.path.abspath(os.path.expanduser(path))
+    if not os.path.splitext(path)[1]:
+        path += ".json"
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(bundle, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    print("export:ok:%s" % path)
+
+
+def verb_import(path):
+    path = os.path.abspath(os.path.expanduser(path))
+    data = read_json(path, None)
+    if not isinstance(data, dict) or not data.get("_velumeron_export"):
+        print("import:invalid", file=sys.stderr)
+        sys.exit(1)
+
+    new_settings = data.get("settings")
+    if isinstance(new_settings, dict):
+        cur = read_json(settings_path(), {})
+        for k in DEVICE_KEYS:            # keep this device's hardware-bound keys
+            if k in cur:
+                new_settings[k] = cur[k]
+        write_settings(new_settings)
+
+    if isinstance(data.get("wallust_options"), dict):
+        write_json(_wallust_path("options.json"), data["wallust_options"])
+    if isinstance(data.get("color_mode"), str):
+        os.makedirs(_wallust_path(), exist_ok=True)
+        with open(_wallust_path("color-mode"), "w", encoding="utf-8") as f:
+            f.write(data["color_mode"] + "\n")
+
+    for tid, t in (data.get("user_templates") or {}).items():
+        if isinstance(t, dict) and "/" not in tid and tid not in ("", ".", ".."):
+            write_json(template_path("user", tid), t)
+
+    act = data.get("active_template") or {}
+    aid, asrc = act.get("id"), act.get("source")
+    if aid and load_template(asrc, aid) is not None:
+        set_active(aid, asrc)
+
+    print("import:ok")
+
+
 def main():
     args = sys.argv[1:]
     if not args:
@@ -337,9 +473,12 @@ def main():
         "list": lambda: verb_list(),
         "activate": lambda: verb_activate(rest[0], rest[1]),
         "duplicate": lambda: verb_duplicate(rest[0], rest[1], rest[2] if len(rest) > 2 else None),
-        "new": lambda: verb_new(rest[0] if rest else None),
+        "new": lambda: verb_new(rest[0] if rest else None,
+                                len(rest) > 1 and rest[1] == "activate"),
         "rename": lambda: verb_rename(rest[0], rest[1]),
         "delete": lambda: verb_delete(rest[0]),
+        "export": lambda: verb_export(rest[0]),
+        "import": lambda: verb_import(rest[0]),
     }
     fn = dispatch.get(verb)
     if not fn:

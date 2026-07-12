@@ -118,6 +118,11 @@ PanelWindow {
             cache:    false
             asynchronous: true
             smooth:   true
+            // Cap the DECODE near the monitor size (long edge × 1.25 for crop headroom): a 4K+
+            // file otherwise sits fully decoded in RAM — w×h×4 bytes per slot, per monitor.
+            // Only one dimension is set so the aspect ratio survives (0 = auto).
+            sourceSize.width:  root.height > root.width ? 0 : Math.round(root.width * 1.25)
+            sourceSize.height: root.height > root.width ? Math.round(root.height * 1.25) : 0
         }
         // Live video — isolated MpvVideo, kept alive once created; shown only for video entries.
         Loader {

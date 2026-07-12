@@ -94,27 +94,33 @@ PanelWindow {
         var v = (m && m.values !== undefined) ? m.values : (m || [])
         return v.filter(function (a) { return a && !a.noDisplay })
     }
-    function _match(a, q) {
-        return ((a.name || "").toLowerCase().indexOf(q) >= 0)
-            || ((a.genericName || "").toLowerCase().indexOf(q) >= 0)
-            || ((a.comment || "").toLowerCase().indexOf(q) >= 0)
-            || (("" + (a.keywords || "")).toLowerCase().indexOf(q) >= 0)
+    // Best match score across an app's fields (name full weight, metadata discounted but still a
+    // hit). Routes through the shared Fuzzy singleton so the global toggle switches fuzzy/substring.
+    function _score(a, q) {
+        var xs = []
+        var sn = Fuzzy.score(q, a.name || "");                 if (sn >= 0) xs.push(sn)
+        var sg = Fuzzy.score(q, a.genericName || "");          if (sg >= 0) xs.push(sg - 6)
+        var sc = Fuzzy.score(q, a.comment || "");              if (sc >= 0) xs.push(sc - 10)
+        var sk = Fuzzy.score(q, "" + (a.keywords || ""));      if (sk >= 0) xs.push(sk - 10)
+        return xs.length ? Math.max.apply(null, xs) : -1e9
     }
     readonly property var filtered: {
-        var q = search.text.trim().toLowerCase()
+        var q = search.text.trim()
         var arr = root.allApps.slice()
         if (q === "") {
             arr.sort(function (a, b) { return (a.name || "").localeCompare(b.name || "") })
             return arr
         }
-        arr = arr.filter(function (a) { return root._match(a, q) })
-        arr.sort(function (a, b) {
-            var as = (a.name || "").toLowerCase().indexOf(q) === 0 ? 0 : 1
-            var bs = (b.name || "").toLowerCase().indexOf(q) === 0 ? 0 : 1
-            if (as !== bs) return as - bs
-            return (a.name || "").localeCompare(b.name || "")
+        var scored = []
+        for (var i = 0; i < arr.length; i++) {
+            var s = root._score(arr[i], q)
+            if (s > -1e8) scored.push({ a: arr[i], s: s })
+        }
+        scored.sort(function (x, y) {
+            if (y.s !== x.s) return y.s - x.s
+            return (x.a.name || "").localeCompare(y.a.name || "")
         })
-        return arr
+        return scored.map(function (o) { return o.a })
     }
     onFilteredChanged: list.currentIndex = 0
 
@@ -212,7 +218,7 @@ PanelWindow {
                     Keys.onEnterPressed:  root.launch(list.currentIndex)
                     Keys.onEscapePressed: UiState.launcherOpen = false
                     Text { anchors.fill: parent; verticalAlignment: Text.AlignVCenter; visible: search.text === ""
-                           text: "Search apps…"; color: Colors.fgMuted; font: search.font }
+                           text: Wording.s("launcher.search"); color: Colors.fgMuted; font: search.font }
                 }
             }
 
@@ -289,7 +295,7 @@ PanelWindow {
                     }
                 }
                 Text { visible: root.filtered.length === 0; anchors.centerIn: parent
-                       text: "No matches"; color: Colors.fgMuted; font.pixelSize: 13; font.family: Style.font }
+                       text: Wording.s("launcher.noMatches"); color: Colors.fgMuted; font.pixelSize: 13; font.family: Style.font }
             }
         }
     }
