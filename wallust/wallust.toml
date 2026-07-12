@@ -72,6 +72,9 @@ obsidian_nexus   = { src = "obsidian-colors.css",  dst = "~/DEV/OBSIDIAN-nexus-D
 [hooks]
 hyprland_lua_colors = "~/.config/velumeron/assets/scripts/wallust/hyprland_lua-colors.sh && hyprctl reload"
 pywalfox_update     = "pywalfox update"
+# Re-assemble the velumeron starship config with the fresh palette — but only
+# when that integration is enabled (Settings → Integrations); a no-op otherwise.
+starship_integration = "bash ~/.config/velumeron/assets/scripts/integrations.sh refresh 2>/dev/null || true"
 # swaync_update / waybar_update hooks retired: the shell is quickshell (qs_reload
 # applies the new palette); swaync and waybar are no longer launched.
 # Bump gtk.css mtime so GTK file-monitors see a change and reload the palette.

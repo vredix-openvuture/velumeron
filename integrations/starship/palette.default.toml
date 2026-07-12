@@ -1,0 +1,39 @@
+# Velumeron default starship palette — a static violet/teal dark scheme used
+# until wallust has generated a wallpaper palette at
+# ~/.cache/wallust/starship-palette.toml. Same key set as
+# wallust/templates/starship-palette.toml so both slot in interchangeably.
+[palettes.noctalia]
+# Standard colours
+blue      = "#7aa2f7"
+red       = "#f7768e"
+green     = "#9ece6a"
+yellow    = "#e0af68"
+cyan      = "#7dcfff"
+magenta   = "#bb9af7"
+white     = "#c8c3d8"
+black     = "#11101a"
+# Extended palette (Catppuccin-compatible names)
+rosewater = "#f5cfa0"
+flamingo  = "#f0a35e"
+pink      = "#f7a8d8"
+mauve     = "#a78bfa"
+maroon    = "#f7768e"
+peach     = "#f0a35e"
+teal      = "#63d0c0"
+sky       = "#7dcfff"
+sapphire  = "#5aa7e0"
+lavender  = "#b4a0f0"
+# Text shades
+text      = "#e6e2f0"
+subtext1  = "#b9b4cc"
+subtext0  = "#9a95ad"
+# Surface shades
+overlay2  = "#4a4760"
+overlay1  = "#3a3750"
+overlay0  = "#2c2a3d"
+surface2  = "#3a3750"
+surface1  = "#2c2a3d"
+surface0  = "#232132"
+base      = "#16151f"
+mantle    = "#1a1925"
+crust     = "#11101a"

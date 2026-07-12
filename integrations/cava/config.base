@@ -1,0 +1,24 @@
+# ── Velumeron cava ─────────────────────────────────────────────────────────
+# Managed by velumeron's Settings → Integrations panel. The [color] section
+# below is regenerated from the wallust palette on every theme change; toggle
+# the integration off to restore your own ~/.config/cava/config.
+
+[general]
+framerate = 60
+autosens = 1
+overshoot = 0
+bars = 0
+bar_width = 2
+bar_spacing = 1
+
+[input]
+method = pulse
+source = auto
+
+[output]
+method = ncurses
+channels = stereo
+mono_option = average
+
+[smoothing]
+noise_reduction = 77

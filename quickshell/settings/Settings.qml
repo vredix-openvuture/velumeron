@@ -183,6 +183,7 @@ PanelWindow {
         { key: "peripherals",   icon: "󰍽", title: "Peripherals",   comp: peripheralsComp },
         { key: "autostart",     icon: "󱓞", title: "Autostart",     comp: autostartComp },
         { key: "quickaccess",   icon: "󱊫", title: "Quick access",  comp: quickAccessComp },
+        { key: "integrations",  icon: "󰐱", title: "Integrations",  comp: integrationsComp },
         // ── Shell chrome & look ──
         { key: "bar",           icon: "󰕮", title: "Bar",           comp: barComp },
         { key: "taskbar",       icon: "󱂩", title: "Taskbar",       comp: taskbarComp },
@@ -480,6 +481,7 @@ PanelWindow {
             Component { id: monitorsComp;    MonitorsSection {} }
             Component { id: workspacesComp;  WorkspacesSection {} }
             Component { id: autostartComp;   AutostartSection {} }
+            Component { id: integrationsComp; IntegrationsSection {} }
             Component { id: quickAccessComp; QuickAccessSection {} }
             Component { id: peripheralsComp; PeripheralsSection {} }
             Component { id: windowRulesComp; WindowRulesSection {} }

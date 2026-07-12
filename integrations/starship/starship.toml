@@ -1,0 +1,122 @@
+# ── Velumeron starship — Pastel Powerline shape, wallust colours ────────────
+# The shape is starship's official "Pastel Powerline" preset; the six segment
+# colours come from the current wallpaper palette. The [palettes.velumeron]
+# block (segment bg/fg pairs + ok/err) is appended automatically by
+# integrations.sh from the live palette — don't hand-edit the generated file,
+# edit this base. (Named "velumeron" so velumeron's fish config, which cats a
+# [palettes.noctalia] block onto this file, can't collide with it.)
+"$schema" = 'https://starship.rs/config-schema.json'
+
+palette = "velumeron"
+
+format = """
+[](os_bg)\
+$os\
+$username\
+[](fg:os_bg bg:dir_bg)\
+$directory\
+[](fg:dir_bg bg:git_bg)\
+$git_branch\
+$git_status\
+[](fg:git_bg bg:lang_bg)\
+$nodejs\
+$rust\
+$python\
+$golang\
+$package\
+[](fg:lang_bg bg:docker_bg)\
+$docker_context\
+[](fg:docker_bg bg:time_bg)\
+$time\
+[ ](fg:time_bg)\
+$line_break$character"""
+
+[os]
+disabled = false
+style = 'fg:os_fg bg:os_bg'
+format = '[ $symbol ]($style)'
+
+[os.symbols]
+Arch     = '󰣇'
+CachyOS  = '󰣇'
+EndeavourOS = ''
+Artix    = '󰣇'
+Debian   = '󰣚'
+Ubuntu  = '󰕈'
+Fedora  = '󰣛'
+Manjaro = ''
+NixOS   = '󱄅'
+Macos   = '󰀵'
+Windows = '󰍲'
+Linux   = '󰌽'
+
+[username]
+show_always = true
+style_user = 'fg:os_fg bg:os_bg'
+style_root = 'fg:os_fg bg:os_bg'
+format = '[ $user ]($style)'
+
+[directory]
+style = 'fg:dir_fg bg:dir_bg'
+format = '[ $path ]($style)'
+truncation_length = 3
+truncation_symbol = '…/'
+read_only = ' 󰌾'
+
+[directory.substitutions]
+'Documents' = '󰈙 '
+'Downloads' = ' '
+'Music'     = '󰝚 '
+'Pictures'  = ' '
+'Developer' = '󰲋 '
+'DEV'       = '󰲋 '
+
+[git_branch]
+symbol = ''
+style = 'fg:git_fg bg:git_bg'
+format = '[ $symbol $branch ]($style)'
+
+[git_status]
+style = 'fg:git_fg bg:git_bg'
+format = '[$all_status$ahead_behind ]($style)'
+
+[nodejs]
+symbol = ''
+style = 'fg:lang_fg bg:lang_bg'
+format = '[ $symbol ($version) ]($style)'
+
+[rust]
+symbol = ''
+style = 'fg:lang_fg bg:lang_bg'
+format = '[ $symbol ($version) ]($style)'
+
+[python]
+symbol = ''
+style = 'fg:lang_fg bg:lang_bg'
+format = '[ $symbol ($version) ]($style)'
+
+[golang]
+symbol = ''
+style = 'fg:lang_fg bg:lang_bg'
+format = '[ $symbol ($version) ]($style)'
+
+[package]
+symbol = '󰏗 '
+style = 'fg:lang_fg bg:lang_bg'
+format = '[ $symbol ($version) ]($style)'
+
+[docker_context]
+symbol = ' '
+style = 'fg:docker_fg bg:docker_bg'
+format = '[ $symbol $context ]($style)'
+
+[time]
+disabled = false
+time_format = '%R'
+style = 'fg:time_fg bg:time_bg'
+format = '[ 󰥔 $time ]($style)'
+
+[character]
+success_symbol = '[❯](bold ok)'
+error_symbol = '[❯](bold err)'
+vimcmd_symbol = '[❮](bold ok)'

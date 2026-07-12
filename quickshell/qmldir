@@ -138,6 +138,7 @@ WallpaperSection     1.0 settings/theme/WallpaperSection.qml
 LockscreenSection    1.0 settings/lockscreen/LockscreenSection.qml
 LockPreviewTile      1.0 settings/lockscreen/LockPreviewTile.qml
 AutostartSection     1.0 settings/autostart/AutostartSection.qml
+IntegrationsSection  1.0 settings/integrations/IntegrationsSection.qml
 WorkspacesSection    1.0 settings/workspaces/WorkspacesSection.qml
 WorkspaceRuleEditor  1.0 settings/workspaces/WorkspaceRuleEditor.qml
 MonitorsSection      1.0 settings/monitors/MonitorsSection.qml
