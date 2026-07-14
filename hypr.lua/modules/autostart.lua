@@ -26,22 +26,6 @@ hl.on("hyprland.start", function()
     -- Initialize submap state tracker
     hl.exec_cmd("echo 'normal' > /tmp/hypr-submap")
 
-    -- ── System daemons ────────────────────────────────
-    -- hypridle reads ~/.config/hypr/hypridle.conf (symlink seeded by setup);
-    -- older versions also accepted -c <path> but some recent builds ignore it.
-    hl.exec_cmd("hypridle")
-    -- awww-daemon retired: wallpapers are now drawn by the native quickshell engine (WallpaperWindow),
-    -- which reads ~/.config/velumeron/quickshell/wallpapers.json.
-    hl.exec_cmd("nm-applet")
-    hl.exec_cmd("systemctl --user start hyprpolkitagent")
-    hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
-    -- Notifications + OSD are now part of quickshell (notify/, osd/); the old Python
-    -- notify daemon and OSD daemon are retired. (swaync stays off too.)
-    hl.exec_cmd(VTL_DIR .. "/assets/scripts/brightness.sh warm")
-    hl.exec_cmd("wl-paste --watch clipvault store")
-    hl.exec_cmd(VTL_DIR .. "/assets/scripts/float-cascade.sh")
-
-
     -- ── Device-specific daemons (from user_settings) ──
     for _, cmd in ipairs(exec_once_daemons) do
         if cmd ~= "" then
@@ -49,11 +33,15 @@ hl.on("hyprland.start", function()
         end
     end
 
-    -- ── Cursor and shell ──────────────────────────────
-    -- desktop_shell → launch-shell.sh → QuickShell (bar, OSD, notifications, settings).
-    -- The old Python GUI daemon is retired, so nothing else needs starting here.
+    -- ── Cursor, then all Velumeron services ───────────
+    -- Every daemon we own (hypridle, nm-applet, hyprpolkitagent, gnome-keyring,
+    -- brightness, clipvault, float-cascade) AND the QuickShell shell are started
+    -- by one script — the same single source of truth that `velumeron start` /
+    -- `velumeron end` drive, so autostart and the CLI can never drift.
+    -- (awww-daemon/swaync/Python notify+OSD are retired; wallpapers, notifications
+    -- and the OSD are native to quickshell now.)
     hl.exec_cmd("hyprctl setcursor " .. cur_theme .. " " .. tostring(cur_size))
-    hl.exec_cmd(desktop_shell)
+    hl.exec_cmd(VTL_DIR .. "/assets/scripts/velumeron-services.sh start")
 
     -- The GTK portal backend (xdg-desktop-portal-gtk) draws the file-chooser dialogs that GTK4
     -- apps (zenity → the wallpaper folder picker) delegate to. Activated this early it can cache a

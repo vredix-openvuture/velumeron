@@ -63,17 +63,30 @@ case "${1:-}" in
         esac
         ;;
 
+    # ── whole-session services: start / stop everything we own ───────────────
+    # start → daemons (hypridle, nm-applet, polkit, keyring, brightness,
+    #         clipvault, float-cascade) + the QuickShell shell. Idempotent.
+    # end   → tears all of the above down. Same single source of truth that
+    #         hypr.lua autostart uses, so the two never drift.
+    start)   exec bash "${VELUMERON_DIR:-$_DIR/..}/assets/scripts/velumeron-services.sh" start ;;
+    restart) exec bash "${VELUMERON_DIR:-$_DIR/..}/assets/scripts/velumeron-services.sh" restart ;;
+    status)  exec bash "${VELUMERON_DIR:-$_DIR/..}/assets/scripts/velumeron-services.sh" status ;;
+
     # ── daemon: no-op — the shell starts everything via launch-shell.sh ──────
     -d|--daemon) : ;;
 
-    # ── stop the shell ──────────────────────────────────────────────────────
-    -e|--end) pkill -x quickshell 2>/dev/null || true ;;
+    # ── stop the whole session (shell + all our daemons) ─────────────────────
+    end|-e|--end) exec bash "${VELUMERON_DIR:-$_DIR/..}/assets/scripts/velumeron-services.sh" stop ;;
 
     -h|--help)
         cat <<'EOF'
 velumeron — Hyprland desktop shell launcher
 
-  velumeron quickshell            Start / restart the QuickShell shell
+  velumeron start                 Start ALL Velumeron services (daemons + shell)
+  velumeron end                   Stop ALL Velumeron services
+  velumeron restart               Restart everything
+  velumeron status                Show which services are up
+  velumeron quickshell            Start / restart only the QuickShell shell
   velumeron quickshell --gui-panel Toggle the GUI panel
   velumeron --keybind-help [ctx]  Keybind cheatsheet (ctx: window|apps|system)
   velumeron -t, --toggle          Toggle the settings menu
@@ -84,7 +97,7 @@ velumeron — Hyprland desktop shell launcher
   velumeron --lock                Lock the screen (hyprlock)
   velumeron --wallpaper [FILE]    Set a wallpaper (no arg / 'random' → random)
   velumeron --mode dark|light     Desktop-wide dark/light appearance
-  velumeron -e, --end             Stop the shell
+  velumeron -e, --end             Stop ALL Velumeron services (alias of 'end')
 EOF
         ;;
 
