@@ -4,7 +4,6 @@ import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Hyprland
 
 // Native application launcher (replaces the rofi `drun` launcher). A search card over a dim backdrop;
 // types to filter Quickshell.DesktopEntries, arrows to move, Enter to launch, Esc / click-out to close.
@@ -13,9 +12,9 @@ import Quickshell.Hyprland
 PanelWindow {
     id: root
 
-    property HyprlandMonitor monitor: Hyprland.monitorFor(root.screen)
+    property var monitor: Compositor.monitorFor(root.screen)
     readonly property string mon: monitor?.name ?? ""
-    readonly property bool onFocused: monitor !== null && monitor === Hyprland.focusedMonitor
+    readonly property bool onFocused: monitor !== null && monitor === Compositor.focusedMonitor
     readonly property bool isOpen: UiState.launcherOpen
     // Latch to the monitor it was opened on (UiState.launcherMon) — stays there even if focus moves.
     readonly property bool active: isOpen && root.mon !== "" && root.mon === UiState.launcherMon

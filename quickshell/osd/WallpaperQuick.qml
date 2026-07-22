@@ -2,7 +2,6 @@ import ".."
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
 
 // Wallpaper quick-menu: grows out of the bar (Flyout) on the focused monitor and lets you swap that
 // monitor's wallpaper from its folder — the quickshell successor to the old rofi wallpaper-switcher.

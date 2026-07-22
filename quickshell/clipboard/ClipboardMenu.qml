@@ -3,7 +3,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Hyprland
 
 // Clipboard history (replaces rofi/assets/clipvault.sh). A searchable list of clipvault entries over a
 // dim backdrop; type to filter, arrows to move, Enter/click copies the entry back via wl-copy. One per
@@ -12,7 +11,7 @@ import Quickshell.Hyprland
 PanelWindow {
     id: root
 
-    property HyprlandMonitor monitor: Hyprland.monitorFor(root.screen)
+    property var monitor: Compositor.monitorFor(root.screen)
     readonly property string mon: monitor?.name ?? ""
     readonly property bool isOpen: UiState.clipboardOpen
     readonly property bool active: isOpen && root.mon !== "" && root.mon === UiState.clipboardMon

@@ -1,7 +1,6 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import Quickshell.Io
 // Velumeron.Mpv is isolated in wallpaper/VideoSurface.qml (loaded via Loader) so a missing plugin
 // can never stop the shell from loading.
@@ -13,7 +12,7 @@ import Quickshell.Io
 PanelWindow {
     id: root
 
-    property HyprlandMonitor monitor: Hyprland.monitorFor(root.screen)
+    property var monitor: Compositor.monitorFor(root.screen)
     readonly property string mon: monitor?.name ?? ""
 
     WlrLayershell.layer:     WlrLayer.Background

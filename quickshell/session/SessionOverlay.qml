@@ -3,7 +3,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Hyprland
 
 // Session / power menu (replaces rofi/assets/session-menu.sh). A centred row of power actions over a
 // dim backdrop; arrows/Tab move, Enter activates, Esc / click-out closes. One per screen; shows on the
@@ -11,7 +10,7 @@ import Quickshell.Hyprland
 PanelWindow {
     id: root
 
-    property HyprlandMonitor monitor: Hyprland.monitorFor(root.screen)
+    property var monitor: Compositor.monitorFor(root.screen)
     readonly property string mon: monitor?.name ?? ""
     readonly property bool isOpen: UiState.sessionOpen
     readonly property bool active: isOpen && root.mon !== "" && root.mon === UiState.sessionMon

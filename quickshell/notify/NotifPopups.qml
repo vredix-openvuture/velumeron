@@ -3,7 +3,6 @@ import QtQuick
 import QtQuick.Shapes
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import Quickshell.Widgets
 import Quickshell.Services.Notifications
 
@@ -14,12 +13,12 @@ import Quickshell.Services.Notifications
 PanelWindow {
     id: root
 
-    property HyprlandMonitor monitor: Hyprland.monitorFor(root.screen)
-    readonly property bool onActiveMonitor: monitor !== null && monitor === Hyprland.focusedMonitor
+    property var monitor: Compositor.monitorFor(root.screen)
+    readonly property bool onActiveMonitor: monitor !== null && monitor === Compositor.focusedMonitor
 
     // Main monitor = lowest Hyprland id; used for the "only on main monitor" option.
     readonly property var mainMon: {
-        var vs = Hyprland.monitors.values
+        var vs = Compositor.monitors.values
         if (!vs.length) return null
         var m = vs[0]
         for (var i = 1; i < vs.length; i++) if (vs[i].id < m.id) m = vs[i]
@@ -31,7 +30,7 @@ PanelWindow {
     // Fullscreen hides the bar → dock to the bare edge then.
     property bool fullscreen: false
     Connections {
-        target: Hyprland
+        target: Compositor
         function onRawEvent(event) {
             if (event.name === "fullscreen") root.fullscreen = (("" + event.data).trim() === "1")
         }

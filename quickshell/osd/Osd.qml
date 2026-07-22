@@ -3,7 +3,6 @@ import QtQuick
 import QtQuick.Shapes
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import Quickshell.Services.Pipewire
 
 // On-screen display: volume / brightness (poked via UiState.osdSerial from the `osd` IPC)
@@ -14,8 +13,8 @@ import Quickshell.Services.Pipewire
 PanelWindow {
     id: root
 
-    property HyprlandMonitor monitor: Hyprland.monitorFor(root.screen)
-    readonly property bool onActiveMonitor: monitor !== null && monitor === Hyprland.focusedMonitor
+    property var monitor: Compositor.monitorFor(root.screen)
+    readonly property bool onActiveMonitor: monitor !== null && monitor === Compositor.focusedMonitor
 
     // Current content
     property string kind:   "volume"   // volume | brightness | workspace
@@ -70,7 +69,7 @@ PanelWindow {
 
     // ── Workspace trigger (Hyprland workspacev2 → "id,name") ───────────────────────
     Connections {
-        target: Hyprland
+        target: Compositor
         function onRawEvent(event) {
             if (!root._ready || !VtlConfig.osdWorkspace || root.monitor === null) return
             if (event.name !== "workspacev2") return
@@ -99,7 +98,7 @@ PanelWindow {
     // card docks to the bare screen edge instead of the (absent) bar.
     property bool fullscreen: false
     Connections {
-        target: Hyprland
+        target: Compositor
         function onRawEvent(event) {
             if (event.name === "fullscreen") root.fullscreen = (("" + event.data).trim() === "1")
         }
@@ -386,9 +385,9 @@ PanelWindow {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 8
                     Repeater {
-                        model: Hyprland.workspaces
+                        model: Compositor.workspaces
                         delegate: Rectangle {
-                            required property HyprlandWorkspace modelData
+                            required property var modelData
                             readonly property string wsMon:  modelData.monitor?.name ?? modelData.lastIpcObject?.monitor ?? ""
                             readonly property bool   isMine: wsMon === root.monitor?.name
                             readonly property bool   isActive: modelData.id === root.wsId && isMine

@@ -3,7 +3,6 @@ import QtQuick
 import QtQuick.Controls
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Hyprland
 
 // Keybind cheatsheet overlay (replaces the old GTK gui/keybind_help.py).
 // Shown via the `keybind` IPC handler → UiState.keybindContext:
@@ -18,7 +17,7 @@ PanelWindow {
     readonly property string ctx: UiState.keybindContext
     visible: ctx !== ""
 
-    readonly property string mon:  Hyprland.monitorFor(root.screen)?.name ?? ""
+    readonly property string mon:  Compositor.monitorFor(root.screen)?.name ?? ""
     readonly property int    scrW: screen ? screen.width  : 1920
     readonly property int    scrH: screen ? screen.height : 1080
     readonly property var    _lr:  VtlConfig.lockRect(root.mon, root.scrW, root.scrH)

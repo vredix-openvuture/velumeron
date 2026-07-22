@@ -3,7 +3,6 @@ import QtQuick
 import QtQuick.Shapes
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import Quickshell.Widgets
 
 // Notification centre — a history panel that grows out of the bar from the notiftray bell, exactly
@@ -13,12 +12,12 @@ import Quickshell.Widgets
 PanelWindow {
     id: root
 
-    property HyprlandMonitor monitor: Hyprland.monitorFor(root.screen)
+    property var monitor: Compositor.monitorFor(root.screen)
     readonly property string mon: monitor?.name ?? ""
     // Latched to the bell's monitor at open (UiState.notifMon) so the centre stays where it was
     // opened instead of following the focus; falls back to the focused monitor if nothing latched.
     readonly property bool onActiveMonitor: monitor !== null &&
-        (UiState.notifMon !== "" ? root.mon === UiState.notifMon : monitor === Hyprland.focusedMonitor)
+        (UiState.notifMon !== "" ? root.mon === UiState.notifMon : monitor === Compositor.focusedMonitor)
     readonly property bool isOpen: UiState.notifCenterOpen
     readonly property bool active: isOpen && onActiveMonitor
     onIsOpenChanged: if (isOpen) NotifService.unread = 0   // opening the centre clears the bell badge
@@ -32,7 +31,7 @@ PanelWindow {
     // Bar hidden by a fullscreen window → grow straight out of the bare screen edge.
     property bool monFullscreen: false
     Connections {
-        target: Hyprland
+        target: Compositor
         function onRawEvent(event) {
             if (event.name === "fullscreen") root.monFullscreen = (("" + event.data).trim() === "1")
         }

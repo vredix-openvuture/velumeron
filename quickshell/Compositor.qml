@@ -22,8 +22,9 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 
-QtObject {
+Item {
     id: comp
+    visible: false
 
     // ── Monitors ──────────────────────────────────────────────────────────────
     // Focused monitor — by far the most common Hyprland usage across the shell
@@ -36,10 +37,35 @@ QtObject {
     // have ONE compositor facade instead of mixing Quickshell.screens with Hyprland.
     readonly property var screens: Quickshell.screens
 
+    // Map a per-surface `screen` to its compositor monitor object. Consumers read
+    // .name / .activeWorkspace / .id off it and compare it against focusedMonitor.
+    // Passed through verbatim today (a HyprlandMonitor); type the RESULT `var`, not
+    // HyprlandMonitor, so a backend can return its own monitor shape.
+    function monitorFor(screen) { return Hyprland.monitorFor(screen) }
+
+    // Monitor / workspace lists the shell reads (the "main monitor" heuristic, the
+    // workspace OSD). Passed through today; a backend supplies its own equivalents.
+    readonly property var monitors:   Hyprland.monitors
+    readonly property var workspaces: Hyprland.workspaces
+
     // Force the monitor/workspace graph to re-query (shell.qml's cold-start resync
     // uses this — the Hyprland event graph can latch a stale association at boot).
     function refreshMonitors()   { Hyprland.refreshMonitors() }
     function refreshWorkspaces() { Hyprland.refreshWorkspaces() }
+
+    // ── Events ────────────────────────────────────────────────────────────────
+    // Re-emit the compositor's raw event stream so features connect to Compositor
+    // instead of importing Quickshell.Hyprland. CAVEAT: the payload is Hyprland's
+    // verbatim today (event.name is "workspacev2" / "fullscreen" / …) — this relocates
+    // the coupling off the import, but handlers still know Hyprland's event names. A
+    // niri/sway backend will add NEUTRAL signals (workspaceChanged, fullscreenChanged…)
+    // that handlers migrate onto; until then, moving Connections{target:Hyprland} →
+    // target:Compositor is what removes the hard import dependency.
+    signal rawEvent(var event)
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) { comp.rawEvent(event) }
+    }
 
     // ── Actions ───────────────────────────────────────────────────────────────
     // Raw dispatch escape hatch — the literal string still travels to Hyprland. Prefer

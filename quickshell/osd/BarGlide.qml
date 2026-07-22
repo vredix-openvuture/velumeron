@@ -3,7 +3,6 @@ import QtQuick
 import QtQuick.Shapes
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Hyprland
 
 // Reusable "glide": a small pill that slides OUT OF THE BAR (and back) from a bar module's position,
 // glued to the bar's inner face with the same dock transition the OSD / menus use (concave fillets,
@@ -17,7 +16,7 @@ PanelWindow {
     id: root
     default property alias content: bodyWrap.data
 
-    property HyprlandMonitor monitor: Hyprland.monitorFor(root.screen)
+    property var monitor: Compositor.monitorFor(root.screen)
     readonly property string mon: monitor?.name ?? ""
     property bool   mine:    false
     property bool   shown:   false        // the module's hover / open trigger

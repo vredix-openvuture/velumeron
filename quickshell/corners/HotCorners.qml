@@ -3,7 +3,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Hyprland
 
 // Hot corners / screen edges (KDE-style): a transparent overlay per monitor whose INPUT region is
 // just the enabled trigger zones (corners + edge centres) — everything else clicks through. Push the
@@ -14,7 +13,7 @@ import Quickshell.Hyprland
 PanelWindow {
     id: root
 
-    property HyprlandMonitor monitor: Hyprland.monitorFor(root.screen)
+    property var monitor: Compositor.monitorFor(root.screen)
     readonly property string mon: monitor?.name ?? ""
     readonly property int sw: screen ? screen.width  : 1920
     readonly property int sh: screen ? screen.height : 1080
@@ -22,7 +21,7 @@ PanelWindow {
     // Global fullscreen flag (Hyprland "fullscreen>>0/1") — same source the other surfaces use.
     property bool monFullscreen: false
     Connections {
-        target: Hyprland
+        target: Compositor
         function onRawEvent(event) {
             if (event.name === "fullscreen") root.monFullscreen = (("" + event.data).trim() === "1")
         }
