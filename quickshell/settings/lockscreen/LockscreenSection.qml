@@ -3,47 +3,36 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Lockscreen & suspend. Pick a hyprlock theme (hypr.lua/hyprlock-themes/*.conf, applied via
-// apply-hyprlock-theme.sh, active one remembered in the .hyprlock-theme marker) and set the
-// idle→lock and idle→suspend timeouts (hypr.lua/hypridle.conf). Uses the shared common components.
+// Lockscreen & suspend. The lockscreen is the native quickshell lock (lock/Lock.qml). Its look is a
+// PRESET — a named snapshot of the VtlConfig.lock* keys (LockPresets.qml / lockscreen-config.py),
+// shipped default "mirobo" + user presets built in the LockEditor overlay ("Build your own"). Mirrors
+// Settings → Style (templates + your palettes). The Timers card still writes hypr.lua/hypridle.conf.
 Item {
     id: root
 
-    property var themes:     []      // [{ name, active }]
     property int lockMin:    6
     property int suspendMin: 14
 
+    Component.onCompleted: { reload(); LockPresets.refresh() }
+    onVisibleChanged: if (visible) { reload(); LockPresets.refresh() }
+    function reload() { readProc.running = false; readProc.running = true }
+
     function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s }
 
-    Component.onCompleted: reload()
-    onVisibleChanged: if (visible) reload()
-    function reload() { root.themes = []; readProc.running = false; readProc.running = true }
+    // Open the build-your-own editor on the monitor the settings menu is on (mirrors StyleSection's
+    // "Build your own" → PaletteEditor). seed = a preset object to edit, or null = fresh from live.
+    function openEditor(seed) {
+        UiState.lockEditorSeed = seed || null
+        UiState.lockEditorMon  = UiState.menuMon
+        UiState.openDropdown   = ""
+        UiState.lockEditorOpen = true
+    }
 
-    // Besides name+active, each theme line carries a mini layout summary parsed from its .conf
-    // (first = main-monitor block): background path or "screenshot", blur on/off, and the clock
-    // label / input-field alignments — enough for LockPreviewTile to draw a faithful mock.
+    // ── Timers: parse the two hypridle.conf timeouts (lock, then suspend) ────────────────────────
     readonly property string _readPy: [
-        "import os,glob,re",
+        "import os,re",
         "vd=os.environ.get('VELUMERON_DIR','')",
         "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.expanduser('~/.config/velumeron')",
-        "td=os.path.join(vd,'hypr.lua/hyprlock-themes')",
-        "mk=os.path.join(pu,'hypr.lua/.hyprlock-theme')",
-        "act=open(mk).read().strip() if os.path.exists(mk) else ''",
-        "def sec(c,n):",
-        " m=re.search(n+r'\\s*\\{([^}]*)\\}',c)",
-        " return m.group(1) if m else ''",
-        "def kv(b,k,d=''):",
-        " m=re.search(r'\\b'+k+r'\\s*=\\s*(.+)',b)",
-        " return m.group(1).strip() if m else d",
-        "for f in sorted(glob.glob(os.path.join(td,'*.conf'))):",
-        " n=os.path.splitext(os.path.basename(f))[0]",
-        " c=re.sub(r'\\{\\{[^}]*\\}\\}','',open(f).read())",   // {{monN}} placeholders would end [^}]* early
-        " bg=sec(c,'background'); lb=sec(c,'label'); inp=sec(c,'input-field')",
-        " p=kv(bg,'path','screenshot')",
-        " p=p if p=='screenshot' else os.path.expanduser(p)",
-        " blur=1 if int(kv(bg,'blur_passes','0') or 0)>0 else 0",
-        " print('THEME\\t%s\\t%d\\t%s\\t%d\\t%s\\t%s\\t%s\\t%s'%(n,1 if n==act else 0,p,blur,",
-        "  kv(lb,'halign','center'),kv(lb,'valign','center'),kv(inp,'halign','center'),kv(inp,'valign','center')))",
         "cf=os.path.join(pu,'hypr.lua/hypridle.conf')",
         "cf=cf if os.path.exists(cf) else os.path.join(vd,'hypr.lua/hypridle.conf')",
         "c=open(cf).read() if os.path.exists(cf) else ''",
@@ -58,42 +47,9 @@ Item {
     }
     function _ingest(t) {
         var p = t.split("\t"); if (p.length < 2) return
-        if (p[0] === "THEME")
-            root.themes = root.themes.concat([{
-                name: p[1], active: p[2] === "1",
-                bg: p[3] || "screenshot", blur: p[4] === "1",
-                lh: p[5] || "center", lv: p[6] || "center",
-                ih: p[7] || "center", iv: p[8] || "center" }])
-        else if (p[0] === "LOCK")    root.lockMin    = Math.max(1, Math.round(parseInt(p[1]) / 60))
+        if      (p[0] === "LOCK")    root.lockMin    = Math.max(1, Math.round(parseInt(p[1]) / 60))
         else if (p[0] === "SUSPEND") root.suspendMin = Math.max(0, Math.round(parseInt(p[1]) / 60))
     }
-
-    // Current wallpaper of the first image-wallpapered monitor — backdrop for `screenshot` themes.
-    property string wallPath: ""
-    function _wall(t) {
-        try {
-            var all = JSON.parse(t)
-            for (var k in all)
-                if (all[k] && all[k].path && (all[k].type || "image") === "image") { root.wallPath = all[k].path; return }
-            root.wallPath = ""
-        } catch (e) { /* keep last good */ }
-    }
-    readonly property FileView _wallFv: FileView {
-        path: (Quickshell.env("VELUMERON_USER_DIR") || (Quickshell.env("HOME") + "/.config/velumeron")) + "/quickshell/wallpapers.json"
-        watchChanges: true
-        onLoaded:      root._wall(text())
-        onFileChanged: reload()
-    }
-
-    function applyTheme(name) {
-        themeProc.command = ["bash", "-c",
-            "\"$VELUMERON_DIR/assets/scripts/apply-hyprlock-theme.sh\" " + JSON.stringify(name)]
-        themeProc.running = false; themeProc.running = true
-        root.themes = root.themes.map(function (t) { return Object.assign({}, t, { active: t.name === name }) })
-    }
-    Process { id: themeProc }
-
-    // Rewrite both timeouts + restart hypridle.
     function commitTimes() {
         timeProc.command = ["bash", "-c",
             "\"$VELUMERON_DIR/assets/scripts/hypridle-set.sh\" "
@@ -111,26 +67,57 @@ Item {
             topPadding: 4
             spacing: Style.cardGap
 
-            // ── Theme ─────────────────────────────────────────────────────────
+            // ── Presets (built-in) ────────────────────────────────────────────
             Card {
-                CardLabel { text: "LOCKSCREEN THEME" }
+                CardLabel { text: "PRESETS" }
                 Flow {
+                    id: presetGrid
                     width: parent.width; spacing: 8
+                    readonly property real cw: (width - spacing) / 2
                     Repeater {
-                        model: root.themes
-                        delegate: LockPreviewTile {
+                        model: LockPresets.presets.filter(function (p) { return p.source === "builtin" })
+                        delegate: LockPresetCard {
                             required property var modelData
-                            label:    root.cap(modelData.name)
-                            bg:       modelData.bg
-                            blur:     modelData.blur
-                            lh: modelData.lh; lv: modelData.lv
-                            ih: modelData.ih; iv: modelData.iv
-                            wallPath: root.wallPath
-                            selected: modelData.active
-                            onClicked: root.applyTheme(modelData.name)
+                            preset: modelData
+                            width: presetGrid.cw
                         }
                     }
-                    SubLabel { visible: root.themes.length === 0; text: "No hyprlock themes found" }
+                }
+                TextButton { width: parent.width; label: "󰏘  Build your own"; primary: true
+                             onClicked: root.openEditor(null) }
+            }
+
+            // ── Your lockscreens (user presets) ───────────────────────────────
+            Card {
+                visible: root._userPresets.length > 0
+                CardLabel { text: "YOUR LOCKSCREENS" }
+                Repeater {
+                    model: root._userPresets
+                    delegate: StyledRect {
+                        required property var modelData
+                        width: parent.width; height: 40; radius: Style.rControl
+                        readonly property bool active: modelData.active
+                        color: active ? Style.selFill : (rHov.containsMouse ? Style.controlHover : Style.controlFill)
+                        borderWidth: active ? Style.selBorderW : Style.controlBorderW
+                        borderColor: active ? Style.selBorderColor : Style.controlBorderColor
+                        Text {
+                            anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                            text: modelData.name; color: active ? Style.selText : Colors.fgPrimary
+                            font.family: Style.font; font.pixelSize: 13
+                        }
+                        MouseArea { id: rHov; anchors.fill: parent; hoverEnabled: true
+                                    onClicked: LockPresets.activate(modelData.source, modelData.id) }
+                        Row {
+                            anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                            spacing: 4
+                            Text { text: "󰏫"; color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 16
+                                   MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor
+                                               onClicked: root.openEditor(modelData) } }
+                            Text { text: "󰩹"; color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 16
+                                   MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor
+                                               onClicked: LockPresets.remove(modelData.id) } }
+                        }
+                    }
                 }
             }
 
@@ -144,6 +131,64 @@ Item {
                           value: root.suspendMin; onChanged: { root.suspendMin = v; root.commitTimes() } }
                 SubLabel { width: parent.width
                            text: "Idle time before the lockscreen appears, then before the system suspends." }
+            }
+        }
+    }
+
+    readonly property var _userPresets: LockPresets.presets.filter(function (p) { return p.source === "user" })
+
+    // Mini lock-preview tile for a built-in preset (mirrors StyleSection's TemplateCard).
+    component LockPresetCard: Item {
+        id: lc
+        property var preset
+        readonly property bool active: preset.active
+        height: 128
+        StyledRect {
+            anchors.fill: parent
+            radius: Style.rCard
+            color: lc.active ? Style.selFill : Style.controlFill
+            borderWidth: lc.active ? Style.selBorderW : Style.controlBorderW
+            borderColor: lc.active ? Style.selBorderColor : Style.controlBorderColor
+            Column {
+                anchors.fill: parent; anchors.margins: 10; spacing: 8
+                // mini mock: dark blurred backdrop with a small centred card + dots
+                Rectangle {
+                    width: parent.width; height: parent.height - lblRow.height - parent.spacing
+                    radius: Style.rControl; clip: true
+                    color: Qt.rgba(0, 0, 0, 0.5)
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.35) }
+                        GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.6) }
+                    }
+                    StyledRect {
+                        anchors.centerIn: parent
+                        width: parent.height * 0.62; height: width
+                        radius: Style.rTile
+                        color: Style.cardFill
+                        borderWidth: 1; borderColor: Style.cardBorderColor
+                        Column {
+                            anchors.centerIn: parent; spacing: 4
+                            Rectangle { anchors.horizontalCenter: parent.horizontalCenter
+                                        width: 16; height: 16; radius: 8; color: Colors.bgElement }
+                            Row { anchors.horizontalCenter: parent.horizontalCenter; spacing: 3
+                                  Repeater { model: 3; delegate: Rectangle { width: 4; height: 4; radius: 2; color: Colors.fgBright } } }
+                        }
+                    }
+                }
+                Row {
+                    id: lblRow
+                    width: parent.width; spacing: 6
+                    Text { text: root.cap(lc.preset.name); color: lc.active ? Style.selText : Colors.fgPrimary
+                           font.family: Style.font; font.pixelSize: 13; elide: Text.ElideRight
+                           width: parent.width - (lc.active ? checkT.width + parent.spacing : 0) }
+                    Text { id: checkT; visible: lc.active; text: "✓"; color: Style.selText
+                           font.family: Style.font; font.pixelSize: 13 }
+                }
+            }
+            MouseArea {
+                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                onClicked: lc.active ? root.openEditor(lc.preset)
+                                     : LockPresets.activate(lc.preset.source, lc.preset.id)
             }
         }
     }

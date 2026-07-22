@@ -24,7 +24,7 @@ screen_record  = screen_record or ""
 bitwarden      = bitwarden     or "bitwarden"
 
 on_sleep       = "systemctl suspend"
-on_lock        = VTL_DIR      .. "/assets/scripts/launch-hyprlock.sh"
+on_lock        = "qs -p " .. VTL_DIR .. "/quickshell ipc call lock lock"   -- native quickshell lock (direct IPC, like session_menu)
 session_menu   = "qs -p " .. VTL_DIR .. "/quickshell ipc call session toggle"
 
 

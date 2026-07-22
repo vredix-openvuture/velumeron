@@ -30,7 +30,7 @@ PanelWindow {
         reveal = active ? 1 : 0
         if (active) { search.text = ""; list.currentIndex = 0; root.load(); search.forceActiveFocus() }
     }
-    Behavior on reveal { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+    Behavior on reveal { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.003 } }
     visible: active || root.reveal > 0.01
 
     color: "transparent"
@@ -78,8 +78,8 @@ PanelWindow {
         y: (root.height - height) / 2
         radius: Style.rCard; color: Colors.bgPrimary
         borderWidth: 1; borderColor: Style.chromeBorder
-        opacity: root.reveal
-        scale:   0.97 + 0.03 * root.reveal
+        opacity: Style.elG01(root.reveal)
+        scale:   0.97 + 0.03 * Style.elG01(root.reveal)
         MouseArea { anchors.fill: parent }
 
         Column {

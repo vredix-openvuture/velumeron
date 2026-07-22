@@ -54,11 +54,15 @@ PanelWindow {
                                      + (VtlConfig.barFloatingFor(root.mon) ? VtlConfig.barFloatGapFor(root.mon) : 0)
                                    : 0
 
-    // Panel size — width + height from Settings → Notifications (height 0 = auto-fill the frame).
-    readonly property int panelW: Math.max(220, VtlConfig.notifyCenterWidth)
+    // Panel size — width + height from Settings → Notifications. 0 = match the settings menu
+    // (same percent-of-screen formula as Settings.qml), so the centre defaults to the menu's size.
+    readonly property int menuW: Math.max(420, Math.round(root.scrW * VtlConfig.menuWidthPctFor(root.mon)  / 100))
+    readonly property int menuH: Math.round(root.scrH * VtlConfig.menuHeightPctFor(root.mon) / 100)
+    readonly property int panelW: VtlConfig.notifyCenterWidth > 0
+                                  ? Math.max(220, VtlConfig.notifyCenterWidth) : root.menuW
     readonly property int panelH: VtlConfig.notifyCenterHeight > 0
                                   ? Math.max(200, Math.min(VtlConfig.notifyCenterHeight, root.scrH - 2 * root.barT - 16))
-                                  : Math.max(360, Math.min(root.scrH - 2 * root.barT - 24, root._lr[3] - 16))
+                                  : Math.max(360, Math.min(root.menuH, root.scrH - 2 * root.barT - 24, root._lr[3] - 16))
 
     // ── How the panel merges into the bar (ported from Settings.qml) ───────────────
     // It butts its anchored edge (mEdge) and, on an L-bar, blends into the perpendicular arm at the
@@ -86,12 +90,13 @@ PanelWindow {
     readonly property color cFill: Style.panelColor(VtlConfig.osdColorful)
     // Overlap the anchored bar edge by a hair so the bar's own inner border line is hidden.
     readonly property int seam:   2
-    // Grow the Shapes by `pad` on every side so the fillet wedges + seam (outside the panel rect)
-    // still render; path coords are emitted in panel-local space + pad.
-    readonly property int pad:    flareR + seam + 2
+    // Grow the Shapes by `pad` on every side so the fillet wedges + seam + the elastic bulge (all
+    // outside the panel rect) still render; path coords are emitted in panel-local space + pad.
+    readonly property int pad:    flareR + seam + 2 + Math.ceil(Math.max(Style.elTopBulge, Style.elSideBulge))
 
     // ── Outline builder (returns [borderD, fillD] in panel-local + pad coords) ──────
-    function _paths(W, H) {
+    // bT / bS = live elastic bulge (px) for the far edge / free side edges; 0 at rest → straight.
+    function _paths(W, H, bT, bS) {
         var horizA = (mEdge === "top" || mEdge === "bottom")
         var A = horizA ? W : H
         var D = horizA ? H : W
@@ -109,44 +114,52 @@ PanelWindow {
             else                         { x = a;     y = d     }   // top
             return (x + pad) + "," + (y + pad)
         }
-        function M(a, d)     { return "M" + XY(a, d) }
-        function L(a, d)     { return " L" + XY(a, d) }
-        function A_(r,a,d,w) { return Style.pathCorner(r, w, flip, XY(a, d)) }
+        var cur = [0, 0]
+        function M(a, d)     { cur = [a, d]; return "M" + XY(a, d) }
+        function L(a, d)     { cur = [a, d]; return " L" + XY(a, d) }
+        function A_(r,a,d,w) { cur = [a, d]; return Style.pathCorner(r, w, flip, XY(a, d)) }
+        // Bulged line: quadratic from cur → (a,d), control = midpoint + (na,nd)·b (outward normal).
+        function LB(a, d, na, nd, b) {
+            var ma = (cur[0] + a) / 2 + na * b
+            var md = (cur[1] + d) / 2 + nd * b
+            cur = [a, d]
+            return " Q" + XY(ma, md) + " " + XY(a, d)
+        }
 
         var bd, close
         if (root.detached) {                      // floating bar → free-floating panel, all corners convex
             bd = M(A - e, 0) + A_(e, A, e, 1)
-               + L(A, D - e) + A_(e, A - e, D, 1)
-               + L(e, D)     + A_(e, 0, D - e, 1)
-               + L(0, e)     + A_(e, e, 0, 1)
+               + LB(A, D - e,  1, 0, bS) + A_(e, A - e, D, 1)
+               + LB(e, D,      0, 1, bT) + A_(e, 0, D - e, 1)
+               + LB(0, e,     -1, 0, bS) + A_(e, e, 0, 1)
                + " Z"
             return [bd, bd]
         }
         if (mergeStart && !mergeEnd) {            // perpendicular arm at the near end (classic L)
             bd = M(ca1 + f, 0) + A_(f, ca1, f, 0)
-               + L(ca1, D - e) + A_(e, ca1 - e, D, 1)
-               + L(ca0 + f, D) + A_(f, ca0, D + f, 0)
+               + LB(ca1, D - e,  1, 0, bS) + A_(e, ca1 - e, D, 1)
+               + LB(ca0 + f, D,  0, 1, bT) + A_(f, ca0, D + f, 0)
             close = L(0, D + f) + L(0, -s) + L(ca1 + f, -s) + " Z"
         } else if (mergeEnd && !mergeStart) {     // perpendicular arm at the far end
             bd = M(ca1, D + f) + A_(f, ca1 - f, D, 0)
-               + L(e, D)       + A_(e, 0, D - e, 1)
-               + L(0, f)       + A_(f, -f, 0, 0)
+               + LB(e, D,  0, 1, bT) + A_(e, 0, D - e, 1)
+               + LB(0, f, -1, 0, bS) + A_(f, -f, 0, 0)
             close = L(-f, -s) + L(A, -s) + L(A, D + f) + " Z"
         } else if (mergeStart && mergeEnd) {      // arms at both ends (U-bar)
             bd = M(ca1, D + f) + A_(f, ca1 - f, D, 0)
-               + L(ca0 + f, D) + A_(f, ca0, D + f, 0)
+               + LB(ca0 + f, D, 0, 1, bT) + A_(f, ca0, D + f, 0)
             close = L(0, D + f) + L(0, -s) + L(A, -s) + L(A, D + f) + " Z"
         } else {                                  // free tab — concave fillets on both bar corners
             bd = M(A + f, 0) + A_(f, A, f, 0)
-               + L(A, D - e) + A_(e, A - e, D, 1)
-               + L(e, D)     + A_(e, 0, D - e, 1)
-               + L(0, f)     + A_(f, -f, 0, 0)
+               + LB(A, D - e,  1, 0, bS) + A_(e, A - e, D, 1)
+               + LB(e, D,      0, 1, bT) + A_(e, 0, D - e, 1)
+               + LB(0, f,     -1, 0, bS) + A_(f, -f, 0, 0)
             close = L(-f, -s) + L(A + f, -s) + " Z"
         }
         return [bd, bd + close]
     }
-    function borderPath(W, H) { return _paths(W, H)[0] }
-    function fillPath(W, H)   { return _paths(W, H)[1] }
+    function borderPath(W, H, bT, bS) { return _paths(W, H, bT, bS)[0] }
+    function fillPath(W, H, bT, bS)   { return _paths(W, H, bT, bS)[1] }
 
     visible: root.active || root.reveal > 0.01
     color:   "transparent"
@@ -176,8 +189,15 @@ PanelWindow {
         // Content fades in only once there's room for it.
         readonly property real contentReveal: Math.max(0.0, Math.min(1.0, (root.reveal - 0.5) / 0.45))
 
-        width:   collapsed + (root.panelW - collapsed) * root.reveal
-        height:  collapsed + (root.panelH - collapsed) * root.reveal
+        // Elastic emergence — spring error drives the edge bulge + a touch of size overshoot.
+        readonly property real target: root.onActiveMonitor ? (root.isOpen ? 1.0 : 0.0) : 0.0
+        readonly property real elDim:  Math.min(width, height)
+        readonly property real bulgeT: Style.elBulge(root.reveal, target, Style.elTopBulge,  elDim)
+        readonly property real bulgeS: Style.elBulge(root.reveal, target, Style.elSideBulge, elDim)
+        readonly property real sizeF:  Style.elSizeF(root.reveal, target)
+
+        width:   collapsed + (root.panelW - collapsed) * sizeF
+        height:  collapsed + (root.panelH - collapsed) * sizeF
         opacity: Math.min(1.0, root.reveal * 4.0)
 
         // Centre the morph nub on the bell and clamp along the edge; start/end groups snap to the
@@ -204,7 +224,7 @@ PanelWindow {
             ShapePath {
                 fillColor:   root.cFill
                 strokeWidth: -1
-                PathSvg { path: root.fillPath(panel.width, panel.height) }
+                PathSvg { path: root.fillPath(panel.width, panel.height, panel.bulgeT, panel.bulgeS) }
             }
         }
         // ── Border (content-side only) ──────────────────────────────────────────
@@ -216,7 +236,7 @@ PanelWindow {
                 fillColor:   "transparent"
                 strokeColor: Style.chromeBorder
                 strokeWidth: Style.chromeBorderWidth
-                PathSvg { path: root.borderPath(panel.width, panel.height) }
+                PathSvg { path: root.borderPath(panel.width, panel.height, panel.bulgeT, panel.bulgeS) }
             }
         }
 

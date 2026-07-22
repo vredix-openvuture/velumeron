@@ -19,6 +19,20 @@ WALLUST_CFG="$VELUMERON_DIR/wallust"
 mode="${1:-auto}"
 mkdir -p "$(dirname "$MODE_FILE")"
 
+# Custom palette (from the build-your-own editor): a ready-made flat colors.json. Copy it straight
+# into place — quickshell's Colors.qml watches the file and recolours the whole shell live. `custom`
+# mode is preserved on wallpaper changes (wallust only re-derives under `auto`). Terminals / Hyprland
+# borders keep their last wallust palette (no ANSI/colors.lua regeneration here).
+if [[ "$mode" == "custom" ]]; then
+    src="${2:-}"
+    if [[ ! -f "$src" ]]; then echo "apply-theme: custom palette not found: $src" >&2; exit 1; fi
+    printf 'custom\n' > "$MODE_FILE"
+    qs_colors="$VELUMERON_USER_DIR/quickshell/colors.json"
+    mkdir -p "$(dirname "$qs_colors")"
+    cp "$src" "$qs_colors"
+    exit 0
+fi
+
 if [[ "$mode" != "fixed" || -z "${2:-}" ]]; then
     # Automatic: record the mode then immediately re-derive from the current wallpaper
     # so that changes to wallust options (palette, backend, …) take effect right away.

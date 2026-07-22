@@ -5,7 +5,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 
 // Calendar + tasks flyout — grows out of the bar from the Clock module (click) as the QUICK
-// VIEW next to the velorganize app (focused working; footer button launches it). Sized as a
+// VIEW next to the velora app (focused working; footer button launches it). Sized as a
 // percentage of the screen: a two-column calendar tab (month grid | day agenda + quick-add)
 // and a tasks tab with the unified project tree (ProjectRail: Vikunja projects/subprojects +
 // CalDAV lists via TodoService) beside the grouped TaskBoard (subtasks indent under their
@@ -38,10 +38,10 @@ Flyout {
         TodoService.sync()   // also triggers CalDavService.sync()
     }
 
-    // The velorganize app — the "focused working" counterpart of this quick view.
+    // The velora app — the "focused working" counterpart of this quick view.
     Process { id: launchProc }
     function launchApp() {
-        launchProc.command = ["bash", "-c", "setsid -f velorganize >/dev/null 2>&1"]
+        launchProc.command = ["bash", "-c", "setsid -f velora >/dev/null 2>&1"]
         launchProc.running = false; launchProc.running = true
         UiState.flyout = ""
     }
@@ -494,7 +494,7 @@ Flyout {
             Row {
                 anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                 spacing: 10
-                // The focused-working counterpart: open the velorganize app.
+                // The focused-working counterpart: open the velora app.
                 Item {
                     width: appRow.width; height: 18
                     Row {
@@ -504,7 +504,7 @@ Flyout {
                         Text { text: "󱂬"; color: appHov.containsMouse ? Colors.fgBright : Colors.fgMuted
                                font.pixelSize: 13; font.family: Style.font
                                anchors.verticalCenter: parent.verticalCenter }
-                        Text { text: "velorganize"; color: appHov.containsMouse ? Colors.fgBright : Colors.fgMuted
+                        Text { text: "velora"; color: appHov.containsMouse ? Colors.fgBright : Colors.fgMuted
                                font.pixelSize: 10; font.family: Style.font
                                anchors.verticalCenter: parent.verticalCenter }
                     }

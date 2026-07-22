@@ -50,7 +50,7 @@ hl.bind(MOD .. " + W",      hl.dsp.exec_cmd("[float] " .. browser_float))
 hl.bind(MOD .. " + E",      hl.dsp.exec_cmd("[float] " .. filemanager))
 hl.bind(MOD .. " + C",      hl.dsp.window.close())
 hl.bind(MOD .. " + F",      hl.dsp.window.float({ action = "toggle" }))
-hl.bind(MOD .. " + S",      hl.dsp.exec_cmd(notifications))
+hl.bind(MOD .. " + N",      hl.dsp.exec_cmd(notifications))
 -- MOD+B (Waybar toggle) retired with waybar; key is free for a future quickshell bar toggle.
 hl.bind(MOD .. " + X",      hl.dsp.exec_cmd(VTL_DIR .. "/bin/velumeron -t"))
 hl.bind(MOD .. " + V",      hl.dsp.exec_cmd(clipboard))

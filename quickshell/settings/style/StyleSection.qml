@@ -3,13 +3,18 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Style settings — deliberately minimal. The main page holds exactly three things:
-//   1. STYLE     — preview cards for each shipped style. Only Mirobo is built out and selectable
-//      right now (its own forks included); every other style is parked as a dimmed "SOON" card and
-//      returns once it is finished. Clicking the active card re-opens the customiser.
-//   2. APPEARANCE — the desktop-wide dark/light preference + GTK/Qt app theming
-//   3. BUILD A THEME — opens the builder sub-page: name it, then assemble bar, menus, launcher,
-//      font and colours. Every step edits the fresh template LIVE — copy-on-write persists it.
+// Style settings — the main page holds:
+//   1. STYLE      — preview cards for each shipped style. Only Mirobo is built out and selectable
+//      right now; every other style is parked as a dimmed "SOON" card and returns once finished.
+//      Clicking a card APPLIES it (full-replace of settings.json, device keys + colours untouched);
+//      clicking the active card opens the builder.
+//   2. COLOURS    — palette source (wallust auto / fixed scheme). Always here, independent of the
+//      style/template — persisted in wallust/color-mode + options.json, never inside a template.
+//   3. APPEARANCE — the desktop-wide dark/light preference + GTK/Qt app theming.
+//   4. BUILD A THEME — the builder sub-page: adjust bar, menus, launcher, font on the LIVE config,
+//      then optionally snapshot the result as a named preset. No auto-forking — changing a setting
+//      only writes settings.json (it never spawns a template); see Templates.qml.
+//   5. MOTION     — the elastic "soft-mass" emergence knobs.
 // The raw UI-style picker is parked with the other styles (it jumped straight into unfinished ones);
 // the machinery all stays in the code for when the styles come back.
 Item {
@@ -39,6 +44,98 @@ Item {
         saturation:     20,
         check_contrast: true
     })
+
+    // ── Live colour preview ──
+    // The COLOURS card shows a sample of the palette. So you can SEE what a wallust option would do
+    // before committing it with Apply, a candidate palette is re-derived from the current wallpaper
+    // whenever an option changes (auto mode → preview-palette.py runs wallust into a throwaway
+    // config, no side effects; fixed mode → the picked scheme's own colours). Empty until the first
+    // compute; every consumer falls back to the live Colors singleton meanwhile.
+    property var    previewColors: ({})
+    property bool   previewBusy:   false
+    property string _pvBuf:        ""
+    readonly property string _previewCli: (Quickshell.env("VELUMERON_DIR") || "") + "/assets/scripts/lib/preview-palette.py"
+
+    // Candidate colour for palette slot n (0..15): the computed palette in auto mode, the selected
+    // fixed scheme in fixed mode, else `fb` (the live value) until a real one lands.
+    function _pcol(n, fb) {
+        var src = root.autoMode ? root.previewColors : (root.schemeColors[root.selected] || {})
+        var v = src["color" + n]
+        return (typeof v === "string" && v.charAt(0) === "#") ? v : fb
+    }
+    function _computePreview() {
+        if (!root.autoMode) return
+        var o = root.wallustOpts || ({})
+        previewProc.command = ["python3", root._previewCli,
+                               "" + (o.palette ?? ""), "" + (o.backend ?? ""), "" + (o.colorspace ?? ""),
+                               "" + (o.saturation ?? 0), (o.check_contrast ? "1" : "0")]
+        previewProc.running = false; previewProc.running = true
+    }
+    // Re-derive the preview (debounced) whenever the options change or auto mode is switched on.
+    onWallustOptsChanged: if (root.autoMode) previewDebounce.restart()
+    onAutoModeChanged:    if (root.autoMode) { previewDebounce.restart(); presetPreviewDebounce.restart() }
+
+    // ── Generation presets ("Look") ──
+    // Human-named starting points, each a curated wallust palette + colorspace + backend + a default
+    // vividness. Picking one writes all of them at once (setOpts); Vividness / Keep-text-readable
+    // below still fine-tune on top. Each row carries its OWN mini preview (presetPreviews), computed
+    // from the current wallpaper via preview-palette.py — see _computePresetPreviews. Easy to extend:
+    // add an entry here (any palette from the wallust.toml list + lab/lch/salience + a backend).
+    // Every preset here is contrast-checked (WCAG bg/fg ≥ 7 with check_contrast on) so the result
+    // stays readable — earlier "Bold" (harddark+salience) and "Complementary" (darkcomp) were dropped
+    // for muddy, low-contrast palettes. They differ by the derivation METHOD (palette / colorspace /
+    // backend), not just saturation (that's what Vividness is for).
+    readonly property var genPresets: [
+        { key: "balanced", name: "Balanced", desc: "Even, natural colours from the whole image.",
+          palette: "saliencedarkdistributed", colorspace: "lab",      backend: "wal",  saturation: 20 },
+        { key: "vibrant",  name: "Vibrant",  desc: "Bold and saturated — the colours pop.",
+          palette: "saliencedarkbalanced",    colorspace: "salience", backend: "wal",  saturation: 45 },
+        { key: "soft",     name: "Soft",     desc: "Gentle, muted tones — easy on the eyes.",
+          palette: "saliencedarklow",         colorspace: "lab",      backend: "wal",  saturation: 10 },
+        { key: "rich",     name: "Rich",     desc: "Smooth, deep accents on a near-black base.",
+          palette: "saliencedark",            colorspace: "lch",      backend: "wal",  saturation: 28 },
+        { key: "precise",  name: "Precise",  desc: "Sampled from the whole image — exact, faithful accents.",
+          palette: "saliencedarkdistributed", colorspace: "lch",      backend: "full", saturation: 20 }
+    ]
+    // A preset is "active" when the derivation dials match (vividness is an independent override).
+    function _presetActive(p) {
+        var o = root.wallustOpts || ({})
+        return (o.palette ?? "") === p.palette
+            && (o.colorspace ?? "") === p.colorspace
+            && (o.backend ?? "") === p.backend
+    }
+    function _applyPreset(p) {
+        // Force check_contrast on with every preset so the result always stays readable (the user can
+        // still turn it off via "Keep text readable" afterwards).
+        root.setOpts({ palette: p.palette, colorspace: p.colorspace, backend: p.backend,
+                       saturation: p.saturation, check_contrast: true })
+    }
+
+    // Per-preset mini previews: run preview-palette.py once per preset on the current wallpaper — a
+    // small SERIAL queue so we never fork all five wallust runs at once → presetPreviews[key] = palette.
+    property var    presetPreviews: ({})
+    property var    _presetQueue:   []
+    property string _ppBuf:         ""
+    function _computePresetPreviews() {
+        if (!root.autoMode) return
+        root._presetQueue = root.genPresets.slice()
+        _nextPresetPreview()
+    }
+    function _nextPresetPreview() {
+        if (!root._presetQueue.length) return
+        var p = root._presetQueue.shift()
+        presetPreviewProc._key = p.key
+        presetPreviewProc.command = ["python3", root._previewCli,
+                                     "" + p.palette, "" + (p.backend ?? ""), "" + (p.colorspace ?? ""),
+                                     "" + (p.saturation ?? 0), "1"]
+        presetPreviewProc.running = false; presetPreviewProc.running = true
+    }
+    // Mini-preview colour for a preset's slot n; falls back to `fb` (the live palette) until computed.
+    function _ppcol(pkey, n, fb) {
+        var src = root.presetPreviews[pkey] || {}
+        var v = src["color" + n]
+        return (typeof v === "string" && v.charAt(0) === "#") ? v : fb
+    }
 
     readonly property var paletteOptions: [
         { key: "saliencedarkdistributed",  label: "Salience · Distributed (default)" },
@@ -71,8 +168,10 @@ Item {
         for (var i = 0; i < arr.length; i++) if (arr[i].key === key) return arr[i].label
         return key
     }
-    function setOpt(k, v) {
-        var o = Object.assign({}, wallustOpts); o[k] = v; wallustOpts = o
+    // Merge one or more wallust option keys and persist options.json in ONE write (so applying a
+    // preset, which sets four keys at once, doesn't thrash the non-atomic options.json file).
+    function setOpts(patch) {
+        var o = Object.assign({}, wallustOpts, patch); wallustOpts = o
         saveOptsProc.command = [
             "python3", "-c",
             "import json,os,sys; u=os.environ.get('VELUMERON_USER_DIR',os.path.expanduser('~/.config/velumeron')); d=os.path.join(u,'wallust','options.json'); os.makedirs(os.path.dirname(d),exist_ok=True); json.dump(json.loads(sys.argv[1]),open(d,'w'),indent=2)",
@@ -80,9 +179,10 @@ Item {
         ]
         saveOptsProc.running = false; saveOptsProc.running = true
     }
+    function setOpt(k, v) { var p = {}; p[k] = v; setOpts(p) }
 
     Component.onCompleted: reload()
-    onVisibleChanged:      if (visible) { reload(); if (!visible) page = "" }
+    onVisibleChanged:      if (visible) { reload(); presetPreviewDebounce.restart() }
 
     function displayName(f) { return ("" + f).replace(/\.json$/, "").replace(/-/g, " ") }
 
@@ -118,12 +218,22 @@ Item {
         loadOptsProc.running   = false; loadOptsProc.running   = true
         appThemeStatusProc.buf = ""
         appThemeStatusProc.running = false; appThemeStatusProc.running = true
+        iconThemes = []
+        iconListProc.running = false; iconListProc.running = true
+        loadUserPalettesProc.running = false; loadUserPalettesProc.running = true
+        // Kick the per-preset mini previews (gated on auto mode inside). Must live here, not only in
+        // onVisibleChanged / onAutoModeChanged: opening the section while ALREADY in auto mode changes
+        // neither, so those never fire — reload() is the one reliable "section shown" hook.
+        presetPreviewDebounce.restart()
     }
 
-    // ── App theming (GTK / Qt / global dark-light) ──
+    // ── App theming (GTK / Qt / global dark-light / icon theme) ──
     property bool   gtkTheming: false
     property bool   qtTheming:  false
     property string appMode:    "dark"
+    property string appIcon:    ""   // current global icon theme (gsettings)
+    property var    iconThemes: []   // installed icon themes (apply-app-theme.sh icon-list)
+    property var    iconPreview: []  // sample icon paths of the selected theme (preview strip)
     Process {
         id: appThemeStatusProc
         property string buf: ""
@@ -135,9 +245,37 @@ Item {
                 root.gtkTheming = d.gtk === true
                 root.qtTheming  = d.qt === true
                 root.appMode    = d.mode || "dark"
+                root.appIcon    = d.icon || ""
             } catch (e) {}
         }
     }
+    // Enumerate installed icon themes once per reload; SplitParser appends each name.
+    Process {
+        id: iconListProc
+        command: ["bash", "-c", "\"$VELUMERON_DIR/assets/scripts/apply-app-theme.sh\" icon-list"]
+        stdout: SplitParser { onRead: line => {
+            var t = ("" + line).trim()
+            if (t !== "") root.iconThemes = root.iconThemes.concat([t])
+        } }
+    }
+    // Preview strip: a few representative icons rendered FROM the selected theme
+    // (icon-theme-preview.sh resolves them within that theme, so it previews any
+    // theme without depending on the running app's active-theme cache).
+    Process {
+        id: iconPreviewProc
+        stdout: SplitParser { onRead: line => {
+            var p = ("" + line).trim()
+            if (p !== "") root.iconPreview = root.iconPreview.concat([p])
+        } }
+    }
+    function _iconPreview(theme) {
+        root.iconPreview = []
+        if (!theme || theme === "") return
+        iconPreviewProc.command = ["bash", "-c",
+            "\"$VELUMERON_DIR/assets/scripts/icon-theme-preview.sh\" " + JSON.stringify(theme)]
+        iconPreviewProc.running = false; iconPreviewProc.running = true
+    }
+    onAppIconChanged: root._iconPreview(root.appIcon)
     // buf must be cleared before every status re-run: += accumulates across runs, and two
     // concatenated JSON objects make the parse throw forever.
     Process { id: appThemeProc; onExited: { appThemeStatusProc.buf = ""
@@ -174,6 +312,19 @@ Item {
         save("ui_font", key)
     }
 
+    // Turn wallpaper-following on/off and PERSIST it. Off freezes the current colours (writes
+    // color-mode "off") instead of forcing a fixed scheme — so reopening the menu keeps it off.
+    // Picking a fixed scheme or applying a build-your-own palette overwrites "off" later.
+    function setAutoFollow(on) {
+        root.autoMode = on
+        if (on) { root.applyColours(); return }
+        colorStatus = "Wallpaper following off — colours frozen."
+        applyColourProc.command = ["bash", "-c",
+            "printf 'off\\n' > \"$VELUMERON_USER_DIR/wallust/color-mode\""]
+        applyColourProc.running = false; applyColourProc.running = true
+        colorClear.restart()
+    }
+
     function applyColours() {
         if (autoMode) {
             applyColourProc.command = ["bash", "-c", "\"$VELUMERON_DIR/assets/scripts/apply-theme.sh\" auto"]
@@ -202,7 +353,8 @@ Item {
                 if (t.startsWith("mode:")) {
                     var m = t.slice(5)
                     if (m.startsWith("fixed:")) { root.autoMode = false; root.selected = m.slice(6) }
-                    else                          root.autoMode = true
+                    // Only "auto" follows the wallpaper; "off" (frozen) / "custom" (build-your-own) are NOT.
+                    else                          root.autoMode = (m === "auto")
                 } else if (t.startsWith("scheme:")) {
                     var arr = root.schemes.slice(); arr.push(t.slice(7)); root.schemes = arr
                 }
@@ -216,6 +368,42 @@ Item {
     }
     Process { id: applyColourProc }
     Process { id: saveOptsProc }
+
+    // Candidate-palette preview: runs preview-palette.py (wallust on the current wallpaper with the
+    // chosen options, into a throwaway config — no live side effects) and parses its flat colours
+    // JSON into previewColors. Debounced so dragging the vividness stepper doesn't spawn a run per tick.
+    Process {
+        id: previewProc
+        stdout: SplitParser { onRead: line => { root._pvBuf += line } }
+        onRunningChanged: {
+            if (running) { root._pvBuf = ""; root.previewBusy = true; return }
+            root.previewBusy = false
+            try {
+                var d = JSON.parse(root._pvBuf.trim())
+                if (d && d.color0) root.previewColors = d
+            } catch (e) { /* keep the last good preview */ }
+        }
+    }
+    Timer { id: previewDebounce; interval: 250; repeat: false; onTriggered: root._computePreview() }
+
+    // Per-preset mini-preview worker: pops one preset off _presetQueue, runs preview-palette.py for it,
+    // stores the result under its key, then advances the queue (serial — one wallust run at a time).
+    Process {
+        id: presetPreviewProc
+        property string _key: ""
+        stdout: SplitParser { onRead: line => { root._ppBuf += line } }
+        onRunningChanged: {
+            if (running) { root._ppBuf = ""; return }
+            try {
+                var d = JSON.parse(root._ppBuf.trim())
+                if (d && d.color0) {
+                    var m = Object.assign({}, root.presetPreviews); m[presetPreviewProc._key] = d; root.presetPreviews = m
+                }
+            } catch (e) { /* skip this preset's preview */ }
+            root._nextPresetPreview()
+        }
+    }
+    Timer { id: presetPreviewDebounce; interval: 300; repeat: false; onTriggered: root._computePresetPreviews() }
 
     property string _colorsBuf: ""
     Process {
@@ -249,9 +437,44 @@ Item {
             if (running) { root._optsBuf = ""; return }
             try {
                 var o = JSON.parse(root._optsBuf.trim())
-                root.wallustOpts = Object.assign({}, root.wallustOpts, o)
+                var w = Object.assign({}, root.wallustOpts, o)
+                var healNeeded = (w.check_contrast !== true)   // contrast is always on now
+                w.check_contrast = true
+                root.wallustOpts = w
+                if (healNeeded) root.setOpts({ check_contrast: true })   // fix options.json so wallust gets -k
             } catch(e) {}
         }
+    }
+
+    // ── Saved custom palettes (the build-your-own editor writes flat colors.json files here) ──
+    property var    userPalettes: []
+    property string _upBuf: ""
+    Process {
+        id: loadUserPalettesProc
+        command: ["bash", "-c",
+            "python3 - <<'PY'\n" +
+            "import json,os\n" +
+            "u=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') or os.path.expanduser('~/.config'),'velumeron')\n" +
+            "d=os.path.join(u,'palettes'); out=[]\n" +
+            "if os.path.isdir(d):\n" +
+            "    for f in sorted(os.listdir(d)):\n" +
+            "        if f.endswith('.json'):\n" +
+            "            try: out.append({'name':f[:-5].replace('-',' '),'path':os.path.join(d,f),'colors':json.load(open(os.path.join(d,f)))})\n" +
+            "            except Exception: pass\n" +
+            "print(json.dumps(out))\n" +
+            "PY"]
+        stdout: SplitParser { onRead: line => { root._upBuf += line } }
+        onRunningChanged: {
+            if (running) { root._upBuf = ""; return }
+            try { root.userPalettes = JSON.parse(root._upBuf.trim()) } catch (e) {}
+        }
+    }
+    // Apply a saved custom palette (a flat colors.json) straight to the shell.
+    function applyCustom(path) {
+        applyColourProc.command = ["bash", "-c",
+            "\"$VELUMERON_DIR/assets/scripts/apply-theme.sh\" custom " + JSON.stringify(path)]
+        applyColourProc.running = false; applyColourProc.running = true
+        colorStatus = "Applying custom palette…"; colorClear.restart()
     }
 
     Timer { id: colorClear; interval: 4000
@@ -277,8 +500,87 @@ Item {
     // ════════════════════════════════════════════════════════════════════════════════
     // MAIN PAGE — templates · appearance · build-a-theme
     // ════════════════════════════════════════════════════════════════════════════════
+    // Pinned colour preview — a FIXED header on the main page: it stays put while the cards below
+    // scroll, so you always see the palette while tweaking the Colours options further down. Shows
+    // the CANDIDATE palette (what the current options would produce on your wallpaper); auto mode
+    // re-derives it via preview-palette.py, fixed mode shows the picked scheme (see _pcol).
+    Rectangle {
+        id: pinnedPreview
+        visible: root.page === ""
+        anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 4 }
+        height: 92; radius: Style.rCard
+        color: root._pcol(0, Colors.bgPrimary)
+        clip: true
+        Behavior on color { ColorAnimation { duration: 140 } }
+
+        Text {
+            id: pvCaption
+            anchors { top: parent.top; left: parent.left; topMargin: 8; leftMargin: 12 }
+            text: root.previewBusy ? "COLOUR PREVIEW · updating…" : "COLOUR PREVIEW"
+            color: root._pcol(8, Colors.fgMuted); font.pixelSize: 9; font.bold: true
+            font.letterSpacing: 1; font.family: Style.font; opacity: 0.85
+        }
+        Item {
+            anchors { left: parent.left; right: parent.right; top: pvCaption.bottom
+                      leftMargin: 12; rightMargin: 12; topMargin: 5 }
+            height: 34
+            Column {
+                anchors { left: parent.left; right: previewChip.left; rightMargin: 10
+                          verticalCenter: parent.verticalCenter }
+                spacing: 3
+                Text { width: parent.width; elide: Text.ElideRight
+                       text: "Main text"; color: root._pcol(15, Colors.fgBright)
+                       font.pixelSize: 14; font.bold: true; font.family: Style.font }
+                Text { width: parent.width; elide: Text.ElideRight
+                       text: "Muted secondary text"; color: root._pcol(8, Colors.fgMuted)
+                       font.pixelSize: 11; font.family: Style.font }
+            }
+            Rectangle {
+                id: previewChip
+                anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                width: 64; height: 26; radius: Style.rControl
+                color: root._pcol(3, Colors.bgActive)
+                Text { anchors.centerIn: parent; text: "Accent"; color: root._pcol(15, Colors.fgBright)
+                       font.pixelSize: 11; font.bold: true; font.family: Style.font }
+            }
+        }
+        Row {
+            id: previewSwatches
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+            height: 16
+            Repeater {
+                id: swRep
+                model: [root._pcol(0, Colors.color0), root._pcol(1, Colors.color1),
+                        root._pcol(2, Colors.color2), root._pcol(3, Colors.color3),
+                        root._pcol(4, Colors.color4), root._pcol(5, Colors.color5),
+                        root._pcol(6, Colors.color6), root._pcol(7, Colors.color7),
+                        root._pcol(8, Colors.fgMuted), root._pcol(15, Colors.fgBright)]
+                delegate: Rectangle {
+                    required property var modelData
+                    required property int index
+                    width: Math.ceil(previewSwatches.width / 10); height: previewSwatches.height
+                    color: modelData
+                    // Round the strip's outer bottom corners to the card radius so the preview reads as
+                    // one cleanly closed card (clip alone leaves square corners under a radius).
+                    bottomLeftRadius:  index === 0 ? Style.rCard : 0
+                    bottomRightRadius: index === swRep.count - 1 ? Style.rCard : 0
+                }
+            }
+        }
+
+        // Border drawn ON TOP of everything so it closes cleanly all the way around — the swatch strip
+        // reaches the bottom edge and would otherwise paint over the card's own bottom border.
+        Rectangle {
+            anchors.fill: parent
+            radius: Style.rCard
+            color: "transparent"
+            border.width: 1; border.color: root._pcol(5, Colors.boNormal)
+        }
+    }
+
     Flickable {
-        anchors.fill: parent
+        anchors { top: pinnedPreview.bottom; topMargin: Style.cardGap
+                  left: parent.left; right: parent.right; bottom: parent.bottom }
         visible: root.page === ""
         contentHeight: col.implicitHeight
         clip: true
@@ -294,7 +596,7 @@ Item {
             Card {
                 CardLabel { text: "STYLE" }
                 SubLabel { width: parent.width
-                           text: "Mirobo is the built-out style — click it to customise. The other styles are still in progress and will unlock over time. Editing anything forks a private copy, so the built-ins stay untouched." }
+                           text: "Mirobo is the built-out style — click it to apply, then tweak it in the builder. The other styles are still in progress and will unlock over time. Your changes save to your own config; the shipped styles are never overwritten." }
 
                 Flow {
                     id: tplGrid
@@ -349,6 +651,317 @@ Item {
                 }
             }
 
+            // ── Colours: wallust auto / fixed palette — always here, independent of any template ──
+            Card {
+                CardLabel { text: "COLOURS" }
+                SubLabel { width: parent.width
+                           text: "Where your colours come from. Leave it on “Follow the wallpaper” and the palette is pulled from whatever image is behind you; turn it off to pick a fixed scheme instead. Colours are separate from the style — switching a style or applying a preset never touches them." }
+
+                Toggle {
+                    label: "Follow the wallpaper"
+                    sub:   "Re-pick the palette from each new wallpaper automatically"
+                    on:    root.autoMode
+                    onToggled: root.setAutoFollow(!root.autoMode)
+                }
+
+                // Auto (wallust): the human dials up front, the engine internals folded into “Advanced”.
+                Column {
+                    width: parent.width; spacing: Style.rowGap
+                    visible: root.autoMode
+
+                    FieldLabel { text: "Look" }
+                    Column {
+                        width: parent.width; spacing: 6
+                        Repeater {
+                            model: root.genPresets
+                            delegate: Item {
+                                id: prow
+                                required property var modelData
+                                readonly property bool sel: root._presetActive(modelData)
+                                width: parent ? parent.width : 0
+                                height: 52
+
+                                StyledRect {
+                                    anchors.fill: parent
+                                    radius:      Style.rControl
+                                    color:       prow.sel ? Style.selFill : (ph.containsMouse ? Style.controlHover : Style.controlFill)
+                                    borderWidth: prow.sel ? Style.selBorderW : Style.controlBorderW
+                                    borderColor: prow.sel ? Style.selBorderColor : Style.controlBorderColor
+                                    Behavior on color { ColorAnimation { duration: 90 } }
+                                }
+                                Column {
+                                    anchors { left: parent.left; leftMargin: 12; right: pswatch.left
+                                              rightMargin: 8; verticalCenter: parent.verticalCenter }
+                                    spacing: 1
+                                    Text { text: prow.modelData.name
+                                           color: prow.sel ? Style.selText : Colors.fgPrimary
+                                           font.pixelSize: Style.fsLabel; font.bold: true; font.family: Style.font }
+                                    Text { width: parent.width; elide: Text.ElideRight
+                                           text: prow.modelData.desc; color: Colors.fgMuted
+                                           font.pixelSize: 10; font.family: Style.font }
+                                }
+                                Row {
+                                    id: pswatch
+                                    anchors { right: pcheck.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                                    spacing: 3
+                                    Repeater {
+                                        model: [0, 2, 3, 4, 5, 6, 15]
+                                        delegate: Rectangle {
+                                            required property var modelData
+                                            width: 13; height: 13; radius: 3
+                                            color: root._ppcol(prow.modelData.key, modelData, Colors["color" + modelData])
+                                            border.width: 1; border.color: Qt.rgba(0, 0, 0, 0.25)
+                                        }
+                                    }
+                                }
+                                Text {
+                                    id: pcheck
+                                    visible: prow.sel
+                                    anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                                    text: "✓"; color: Style.selText; font.pixelSize: 12; font.family: Style.font
+                                }
+                                MouseArea { id: ph; anchors.fill: parent; hoverEnabled: true
+                                            onClicked: root._applyPreset(prow.modelData) }
+                            }
+                        }
+                    }
+                    SubLabel { width: parent.width
+                               text: "Pick a starting look — each is a ready-made recipe, previewed on your wallpaper. Fine-tune it below." }
+
+                    // Contrast (check_contrast) is ALWAYS on now — no toggle — so text never turns
+                    // unreadable. Vividness lives inside Advanced below.
+
+                    // ── Advanced — the wallust engine dials, collapsed; most people never touch these. ──
+                    Rectangle {
+                        id: advHead
+                        property bool open: false
+                        width: parent.width; height: 34; radius: Style.rControl
+                        color: advHov.containsMouse ? Style.controlHover : Style.controlFill
+                        border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+                        Behavior on color { ColorAnimation { duration: 100 } }
+                        Text {
+                            anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                            text: "Advanced — raw wallust dials"; color: Colors.fgPrimary
+                            font.pixelSize: Style.fsLabel; font.family: Style.font
+                        }
+                        Text {
+                            anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                            text: advHead.open ? "▴" : "▾"; color: Colors.fgMuted
+                            font.pixelSize: 12; font.family: Style.font
+                        }
+                        MouseArea { id: advHov; anchors.fill: parent; hoverEnabled: true
+                                    onClicked: advHead.open = !advHead.open }
+                    }
+                    Column {
+                        width: parent.width; spacing: Style.rowGap
+                        visible: advHead.open
+
+                        Stepper {
+                            label: "Vividness"
+                            value: root.wallustOpts.saturation ?? 20
+                            min:   0; max: 100; step: 5
+                            onChanged: root.setOpt("saturation", v)
+                        }
+                        SubLabel { width: parent.width
+                                   text: "How punchy the colours are — higher is more saturated, lower is muted." }
+
+                        FieldLabel { text: "Palette" }
+                        Dropdown {
+                            summary: root.optLabel(root.paletteOptions, root.wallustOpts.palette ?? "saliencedarkdistributed")
+                            options: root.paletteOptions.map(function(o) {
+                                return { key: o.key, label: o.label,
+                                         on: (root.wallustOpts.palette ?? "saliencedarkdistributed") === o.key }
+                            })
+                            onPicked: root.setOpt("palette", key)
+                        }
+
+                        FieldLabel { text: "Backend" }
+                        Dropdown {
+                            summary: root.optLabel(root.backendOptions, root.wallustOpts.backend ?? "wal")
+                            options: root.backendOptions.map(function(o) {
+                                return { key: o.key, label: o.label,
+                                         on: (root.wallustOpts.backend ?? "wal") === o.key }
+                            })
+                            onPicked: root.setOpt("backend", key)
+                        }
+
+                        FieldLabel { text: "Colorspace" }
+                        Dropdown {
+                            summary: root.optLabel(root.colorspaceOptions, root.wallustOpts.colorspace ?? "lab")
+                            options: root.colorspaceOptions.map(function(o) {
+                                return { key: o.key, label: o.label,
+                                         on: (root.wallustOpts.colorspace ?? "lab") === o.key }
+                            })
+                            onPicked: root.setOpt("colorspace", key)
+                        }
+                        SubLabel { width: parent.width
+                                   text: "How wallust pulls the palette out of the image and spreads it across the slots. The defaults suit most wallpapers." }
+                    }
+
+                    SubLabel {
+                        width: parent.width
+                        text: "The pinned preview at the top updates as you tweak these. Hit “Apply” to push the new colours to the whole desktop now (otherwise they land on the next wallpaper change)."
+                    }
+                }
+
+                CardLabel {
+                    visible: !root.autoMode
+                    text: root.schemes.length ? "FIXED SCHEME" : "No schemes in fixed_colors/"
+                }
+                SubLabel {
+                    visible: !root.autoMode && root.schemes.length > 0
+                    width: parent.width
+                    text: "A hand-picked palette that ignores the wallpaper. Click one to apply it — the pinned preview at the top updates to match."
+                }
+                Column {
+                    width: parent.width; spacing: 4
+                    visible: !root.autoMode
+                    Repeater {
+                        model: root.schemes
+                        delegate: Item {
+                            required property string modelData
+                            readonly property bool   sel:    root.selected === modelData
+                            readonly property var    cmap:   root.schemeColors[modelData] ?? {}
+                            width: parent ? parent.width : 0
+                            height: 50
+
+                            StyledRect {
+                                anchors.fill: parent
+                                radius:       Style.rControl
+                                color:        sel ? Style.selFill : (hov.containsMouse ? Style.controlHover : Style.controlFill)
+                                borderWidth:  sel ? Style.selBorderW : Style.controlBorderW
+                                borderColor:  sel ? Style.selBorderColor : Style.controlBorderColor
+                                Behavior on color { ColorAnimation { duration: 90 } }
+                            }
+                            Text {
+                                anchors { left: parent.left; leftMargin: 12
+                                          verticalCenter: parent.verticalCenter }
+                                text:  root.displayName(modelData)
+                                color: sel ? Style.selText : Colors.fgPrimary
+                                font.pixelSize: Style.fsLabel; font.family: Style.font
+                                font.capitalization: Font.Capitalize
+                            }
+                            Row {
+                                anchors { right: checkMark.left; rightMargin: 8
+                                          verticalCenter: parent.verticalCenter }
+                                spacing: 3
+                                Repeater {
+                                    model: root.swatchKeys
+                                    delegate: Rectangle {
+                                        required property string modelData
+                                        width: 14; height: 14; radius: 3
+                                        color: cmap[modelData] ?? "transparent"
+                                        border.width: 1
+                                        border.color: Qt.rgba(0,0,0,0.25)
+                                    }
+                                }
+                            }
+                            Text {
+                                id: checkMark
+                                visible: sel
+                                anchors { right: parent.right; rightMargin: 10
+                                          verticalCenter: parent.verticalCenter }
+                                text: "✓"; color: Style.selText
+                                font.pixelSize: 12; font.family: Style.font
+                            }
+                            MouseArea { id: hov; anchors.fill: parent; hoverEnabled: true
+                                        onClicked: { root.selected = modelData; root.applyColours() } }
+                        }
+                    }
+                }
+
+                // ── Build your own + saved custom palettes ─────────────────────────
+                Column {
+                    width: parent.width; spacing: 6
+                    visible: !root.autoMode
+
+                    CardLabel { visible: root.userPalettes.length > 0; text: "YOUR PALETTES" }
+                    Repeater {
+                        model: root.userPalettes
+                        delegate: Item {
+                            id: urow
+                            required property var modelData
+                            readonly property var pcolors: modelData.colors ?? ({})
+                            width: parent ? parent.width : 0; height: 50
+                            StyledRect {
+                                anchors.fill: parent; radius: Style.rControl
+                                color: uh.containsMouse ? Style.controlHover : Style.controlFill
+                                borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
+                                Behavior on color { ColorAnimation { duration: 90 } }
+                            }
+                            // Whole-row click applies the palette (declared first = under the edit button).
+                            MouseArea { id: uh; anchors.fill: parent; hoverEnabled: true
+                                        onClicked: root.applyCustom(urow.modelData.path) }
+                            Text {
+                                anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                                text: urow.modelData.name + "  · yours"; color: Colors.fgPrimary
+                                font.pixelSize: Style.fsLabel; font.family: Style.font; font.capitalization: Font.Capitalize
+                            }
+                            Row {
+                                anchors { right: editBtn.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                                spacing: 3
+                                Repeater {
+                                    model: root.swatchKeys
+                                    delegate: Rectangle {
+                                        required property string modelData
+                                        width: 14; height: 14; radius: 3
+                                        color: urow.pcolors[modelData] ?? "transparent"
+                                        border.width: 1; border.color: Qt.rgba(0, 0, 0, 0.25)
+                                    }
+                                }
+                            }
+                            // Edit: reopen the build-your-own editor loaded with this palette.
+                            Rectangle {
+                                id: editBtn
+                                anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                                width: 30; height: 30; radius: Style.rControl
+                                color: ebHov.containsMouse ? Style.controlHover : "transparent"
+                                Text { anchors.centerIn: parent; text: "󰏫"; color: Colors.fgMuted
+                                       font.pixelSize: 14; font.family: Style.font }
+                                MouseArea {
+                                    id: ebHov; anchors.fill: parent; hoverEnabled: true
+                                    onClicked: {
+                                        UiState.paletteEditorSeed = { colors: urow.modelData.colors, name: urow.modelData.name }
+                                        UiState.paletteEditorMon = UiState.menuMon
+                                        UiState.openDropdown = ""
+                                        UiState.paletteEditorOpen = true
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width; height: 44; radius: Style.rControl
+                        color: byoHov.containsMouse ? Style.accent : Style.tint(Style.accent, 0.22)
+                        border.width: 1; border.color: Style.accent
+                        Behavior on color { ColorAnimation { duration: 100 } }
+                        Text { anchors.centerIn: parent; text: "󰏘   Build your own"
+                               color: byoHov.containsMouse ? Style.onAccent : Colors.fgPrimary
+                               font.pixelSize: 14; font.bold: true; font.family: Style.font }
+                        MouseArea { id: byoHov; anchors.fill: parent; hoverEnabled: true
+                                    onClicked: {
+                                        UiState.paletteEditorSeed = null   // fresh, from the live palette
+                                        UiState.paletteEditorMon = UiState.menuMon
+                                        UiState.openDropdown = ""
+                                        UiState.paletteEditorOpen = true
+                                    } }
+                    }
+                    SubLabel { width: parent.width
+                               text: "Set your own colours in a live editor — the rest derives with readable contrast." }
+                }
+
+                Row {
+                    width: parent.width
+                    Text {
+                        width: parent.width - 72; anchors.verticalCenter: parent.verticalCenter
+                        text: root.colorStatus; color: Colors.fgMuted; font.pixelSize: 11
+                        elide: Text.ElideRight; font.family: Style.font
+                    }
+                    TextButton { primary: true; label: "Apply"; onClicked: root.applyColours() }
+                }
+            }
+
             // ── Appearance: desktop-wide dark/light + app theming ─────────────
             Card {
                 CardLabel { text: "APPEARANCE" }
@@ -374,13 +987,48 @@ Item {
                     on:    root.qtTheming
                     onToggled: root.appTheme("qt " + (root.qtTheming ? "off" : "on"))
                 }
+                FieldLabel { text: "App icon theme" }
+                Dropdown {
+                    summary: root.appIcon === "" ? "(system default)" : root.appIcon
+                    options: root.iconThemes.map(function (t) {
+                        return { label: t, key: t, on: t === root.appIcon }
+                    })
+                    // JSON.stringify quotes the name so themes with spaces (e.g. "Papirus Dark")
+                    // reach the script as one argument.
+                    onPicked: key => { root.appIcon = key; root.appTheme("icon " + JSON.stringify(key)) }
+                }
+                // Live preview of the picked theme — sits right under the selection so a switch is
+                // visible immediately (the shell's own icons only re-theme on the next restart).
+                Row {
+                    spacing: 8
+                    visible: root.iconPreview.length > 0
+                    Repeater {
+                        model: root.iconPreview
+                        delegate: Rectangle {
+                            required property var modelData
+                            width: 34; height: 34; radius: Style.rControl
+                            color: Colors.bgElement
+                            border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+                            Image {
+                                anchors.centerIn: parent
+                                width: 24; height: 24; sourceSize.width: 48; sourceSize.height: 48
+                                fillMode: Image.PreserveAspectFit; smooth: true; asynchronous: true; cache: false
+                                source: "file://" + modelData
+                            }
+                        }
+                    }
+                }
+                SubLabel {
+                    width: parent.width
+                    text: "Applies the icon theme to GTK/Qt apps live (gsettings + gtk-3/4 settings.ini). The shell's own icons re-theme on the next restart."
+                }
             }
 
             // ── Build a theme ─────────────────────────────────────────────────
             Card {
                 CardLabel { text: "BUILD A THEME" }
                 SubLabel { width: parent.width
-                           text: "Assemble your own experience step by step — style, bar, menus, launcher, font, colours. Everything applies live." }
+                           text: "Fine-tune the live look step by step — bar, menus, launcher, font — and optionally save it as a named preset. Everything applies live." }
                 Rectangle {
                     width: parent.width; height: 44; radius: Style.rControl
                     color: buildHov.containsMouse ? Style.accent : Style.tint(Style.accent, 0.22)
@@ -391,6 +1039,46 @@ Item {
                            font.pixelSize: 14; font.bold: true; font.family: Style.font }
                     MouseArea { id: buildHov; anchors.fill: parent; hoverEnabled: true
                                 onClicked: { root.page = "build"; buildName.text = "" } }
+                }
+            }
+
+            // ── Motion (elastic "soft-mass" emergence) ────────────────────────
+            Card {
+                CardLabel { text: "MOTION" }
+                SubLabel { width: parent.width
+                           text: "How panels, menus and OSDs spring open. The free edges bow out by the spring's overshoot and wobble flat. Changes show the next time a surface opens." }
+
+                Slider { label: "Spring";   from: 0.5;  to: 12;   decimals: 1
+                         value: VtlConfig.elasticSpring
+                         onMoved: v => root.save("elastic_spring", v) }
+                Slider { label: "Wobble";   from: 0.05; to: 0.6;  decimals: 2; labelWidth: 96
+                         // stored as damping (inverse of wobble): drag right = MORE wobble = less damping
+                         value: (0.65 - VtlConfig.elasticDamping)
+                         onMoved: v => root.save("elastic_damping", Math.max(0.05, 0.65 - v)) }
+                Slider { label: "Edge bow";  from: 0; to: 260; decimals: 0; step: 2
+                         value: VtlConfig.elasticTopBulge
+                         onMoved: v => root.save("elastic_top_bulge", v) }
+                Slider { label: "Side bow";  from: 0; to: 300; decimals: 0; step: 2
+                         value: VtlConfig.elasticSideBulge
+                         onMoved: v => root.save("elastic_side_bulge", v) }
+                Slider { label: "Size over"; from: 0; to: 0.4; decimals: 2
+                         value: VtlConfig.elasticSizeOver
+                         onMoved: v => root.save("elastic_size_over", v) }
+
+                TextButton {
+                    label: "Reset motion"
+                    onClicked: {
+                        root.save("elastic_spring", 5.0);   root.save("elastic_damping", 0.36)
+                        root.save("elastic_top_bulge", 86); root.save("elastic_side_bulge", 144)
+                        root.save("elastic_size_over", 0.10)
+                    }
+                }
+
+                Toggle {
+                    label: "Low memory mode"
+                    sub:   "Shares one render thread across all windows (~290 MB less RAM) at the cost of animation smoothness. Restart the shell to apply."
+                    on:    VtlConfig.lowMemoryMode
+                    onToggled: root.save("low_memory_mode", !VtlConfig.lowMemoryMode)
                 }
             }
         }
@@ -419,7 +1107,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 Text { text: "Build a theme"; color: Colors.fgBright
                        font.pixelSize: 15; font.bold: true; font.family: Style.font }
-                Text { text: "Editing: " + (Templates.activeName || "—"); color: Colors.fgMuted
+                Text { text: "Base: " + (Templates.activeName || "—"); color: Colors.fgMuted
                        font.pixelSize: 10; font.family: Style.font }
             }
         }
@@ -434,11 +1122,11 @@ Item {
                 width: parent.width
                 spacing: Style.cardGap
 
-                // 1 · Name — snapshot the current settings as a fresh user template and edit that.
+                // 1 · Save the current look as a named preset (snapshots settings.json as it is right now).
                 Card {
-                    CardLabel { text: "1 · NAME" }
+                    CardLabel { text: "1 · SAVE AS PRESET" }
                     SubLabel { width: parent.width
-                               text: "Start from what you see now: a new template snapshots the current settings and every step below edits it live. Skip this to keep editing the active one." }
+                               text: "Snapshots the current look into a named preset you can re-apply later. Adjust the sections below first, then save — your live settings and the shipped styles are untouched either way. Optional." }
                     Rectangle {
                         width: parent.width; height: 40; radius: Style.rControl
                         color: Style.controlFill
@@ -452,13 +1140,13 @@ Item {
                                 anchors.verticalCenter: parent.verticalCenter
                                 color: Colors.fgBright; font.pixelSize: Style.fsLabel; font.family: Style.font
                                 clip: true; selectByMouse: true
-                                onAccepted: if (text.trim() !== "") { Templates.createAndBuild(text.trim()) }
+                                onAccepted: if (text.trim() !== "") { Templates.createAndBuild(text.trim()); buildName.text = "" }
                                 Text { anchors.fill: parent; verticalAlignment: Text.AlignVCenter
-                                       visible: buildName.text === ""; text: "My theme…"
+                                       visible: buildName.text === ""; text: "Preset name…"
                                        color: Colors.fgMuted; font: buildName.font }
                             }
-                            TextButton { primary: true; label: "Create"; anchors.verticalCenter: parent.verticalCenter
-                                         onClicked: if (buildName.text.trim() !== "") Templates.createAndBuild(buildName.text.trim()) }
+                            TextButton { primary: true; label: "Save preset"; anchors.verticalCenter: parent.verticalCenter
+                                         onClicked: if (buildName.text.trim() !== "") { Templates.createAndBuild(buildName.text.trim()); buildName.text = "" } }
                         }
                     }
                 }
@@ -606,142 +1294,6 @@ Item {
                             return { key: o.key, label: o.label, on: VtlConfig.uiFont === o.key }
                         })
                         onPicked: root.pickFont(key)
-                    }
-                }
-
-                // 7 · Colours (wallust)
-                Card {
-                    CardLabel { text: "6 · COLOURS" }
-                    Toggle {
-                        label: "Automatic colours"
-                        sub:   "Derive from the wallpaper on each change"
-                        on:    root.autoMode
-                        onToggled: { root.autoMode = !root.autoMode; root.applyColours() }
-                    }
-
-                    Column {
-                        width: parent.width; spacing: Style.rowGap
-                        visible: root.autoMode
-
-                        FieldLabel { text: "Palette" }
-                        Dropdown {
-                            summary: root.optLabel(root.paletteOptions, root.wallustOpts.palette ?? "saliencedarkdistributed")
-                            options: root.paletteOptions.map(function(o) {
-                                return { key: o.key, label: o.label,
-                                         on: (root.wallustOpts.palette ?? "saliencedarkdistributed") === o.key }
-                            })
-                            onPicked: root.setOpt("palette", key)
-                        }
-
-                        FieldLabel { text: "Backend" }
-                        Dropdown {
-                            summary: root.optLabel(root.backendOptions, root.wallustOpts.backend ?? "wal")
-                            options: root.backendOptions.map(function(o) {
-                                return { key: o.key, label: o.label,
-                                         on: (root.wallustOpts.backend ?? "wal") === o.key }
-                            })
-                            onPicked: root.setOpt("backend", key)
-                        }
-
-                        FieldLabel { text: "Colorspace" }
-                        Dropdown {
-                            summary: root.optLabel(root.colorspaceOptions, root.wallustOpts.colorspace ?? "lab")
-                            options: root.colorspaceOptions.map(function(o) {
-                                return { key: o.key, label: o.label,
-                                         on: (root.wallustOpts.colorspace ?? "lab") === o.key }
-                            })
-                            onPicked: root.setOpt("colorspace", key)
-                        }
-
-                        Stepper {
-                            label: "Saturation boost"
-                            value: root.wallustOpts.saturation ?? 20
-                            min:   0; max: 100; step: 5
-                            onChanged: root.setOpt("saturation", v)
-                        }
-
-                        Toggle {
-                            label: "Check contrast"
-                            sub:   "Ensure readable contrast vs background"
-                            on:    !!(root.wallustOpts.check_contrast)
-                            onToggled: root.setOpt("check_contrast", !(root.wallustOpts.check_contrast))
-                        }
-
-                        SubLabel {
-                            width: parent.width
-                            text: "Options apply on the next wallpaper change. Use “Apply” to re-derive now."
-                        }
-                    }
-
-                    CardLabel {
-                        visible: !root.autoMode
-                        text: root.schemes.length ? "FIXED SCHEME" : "No schemes in fixed_colors/"
-                    }
-                    Column {
-                        width: parent.width; spacing: 4
-                        visible: !root.autoMode
-                        Repeater {
-                            model: root.schemes
-                            delegate: Item {
-                                required property string modelData
-                                readonly property bool   sel:    root.selected === modelData
-                                readonly property var    cmap:   root.schemeColors[modelData] ?? {}
-                                width: parent ? parent.width : 0
-                                height: 50
-
-                                StyledRect {
-                                    anchors.fill: parent
-                                    radius:       Style.rControl
-                                    color:        sel ? Style.selFill : (hov.containsMouse ? Style.controlHover : Style.controlFill)
-                                    borderWidth:  sel ? Style.selBorderW : Style.controlBorderW
-                                    borderColor:  sel ? Style.selBorderColor : Style.controlBorderColor
-                                    Behavior on color { ColorAnimation { duration: 90 } }
-                                }
-                                Text {
-                                    anchors { left: parent.left; leftMargin: 12
-                                              verticalCenter: parent.verticalCenter }
-                                    text:  root.displayName(modelData)
-                                    color: sel ? Style.selText : Colors.fgPrimary
-                                    font.pixelSize: Style.fsLabel; font.family: Style.font
-                                    font.capitalization: Font.Capitalize
-                                }
-                                Row {
-                                    anchors { right: checkMark.left; rightMargin: 8
-                                              verticalCenter: parent.verticalCenter }
-                                    spacing: 3
-                                    Repeater {
-                                        model: root.swatchKeys
-                                        delegate: Rectangle {
-                                            required property string modelData
-                                            width: 14; height: 14; radius: 3
-                                            color: cmap[modelData] ?? "transparent"
-                                            border.width: 1
-                                            border.color: Qt.rgba(0,0,0,0.25)
-                                        }
-                                    }
-                                }
-                                Text {
-                                    id: checkMark
-                                    visible: sel
-                                    anchors { right: parent.right; rightMargin: 10
-                                              verticalCenter: parent.verticalCenter }
-                                    text: "✓"; color: Style.selText
-                                    font.pixelSize: 12; font.family: Style.font
-                                }
-                                MouseArea { id: hov; anchors.fill: parent; hoverEnabled: true
-                                            onClicked: { root.selected = modelData; root.applyColours() } }
-                            }
-                        }
-                    }
-
-                    Row {
-                        width: parent.width
-                        Text {
-                            width: parent.width - 72; anchors.verticalCenter: parent.verticalCenter
-                            text: root.colorStatus; color: Colors.fgMuted; font.pixelSize: 11
-                            elide: Text.ElideRight; font.family: Style.font
-                        }
-                        TextButton { primary: true; label: "Apply"; onClicked: root.applyColours() }
                     }
                 }
             }

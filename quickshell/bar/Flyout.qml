@@ -73,12 +73,13 @@ PanelWindow {
     readonly property int edgeR:  Style.panelR(VtlConfig.barInnerRadiusFor(root.mon))
     readonly property int flareR: VtlConfig.barInnerRadiusFor(root.mon)
     readonly property int seam:   2
-    readonly property int pad:    flareR + seam + 2
+    readonly property int pad:    flareR + seam + 2 + Math.ceil(Math.max(Style.elTopBulge, Style.elSideBulge))
     readonly property color cardColor: Style.panelColor(VtlConfig.menuColorful)
 
     // Outline in (a, d) space — a runs along the bar, d is the depth away from it — mapped onto the
     // actual edge. Returns [borderOpen, fillClosed]; the fill closes back through the merged edges.
-    function _paths(W, H) {
+    // bT / bS = live elastic bulge (px) for the far edge / free side edges; 0 at rest → straight.
+    function _paths(W, H, bT, bS) {
         var horizA = (mEdge === "top" || mEdge === "bottom")
         var A = horizA ? W : H        // extent along the bar
         var D = horizA ? H : W        // depth away from the bar
@@ -96,44 +97,52 @@ PanelWindow {
             else                         { x = a;     y = d     }   // top
             return (x + pad) + "," + (y + pad)
         }
-        function M(a, d)     { return "M" + XY(a, d) }
-        function L(a, d)     { return " L" + XY(a, d) }
-        function A_(r,a,d,w) { return Style.pathCorner(r, w, flip, XY(a, d)) }
+        var cur = [0, 0]
+        function M(a, d)     { cur = [a, d]; return "M" + XY(a, d) }
+        function L(a, d)     { cur = [a, d]; return " L" + XY(a, d) }
+        function A_(r,a,d,w) { cur = [a, d]; return Style.pathCorner(r, w, flip, XY(a, d)) }
+        // Bulged line: quadratic from cur → (a,d), control = midpoint + (na,nd)·b (outward normal).
+        function LB(a, d, na, nd, b) {
+            var ma = (cur[0] + a) / 2 + na * b
+            var md = (cur[1] + d) / 2 + nd * b
+            cur = [a, d]
+            return " Q" + XY(ma, md) + " " + XY(a, d)
+        }
 
         var bd, close
         if (root.detached) {                      // floating bar → free-floating panel, all corners convex
             bd = M(A - e, 0) + A_(e, A, e, 1)
-               + L(A, D - e) + A_(e, A - e, D, 1)
-               + L(e, D)     + A_(e, 0, D - e, 1)
-               + L(0, e)     + A_(e, e, 0, 1)
+               + LB(A, D - e,  1, 0, bS) + A_(e, A - e, D, 1)
+               + LB(e, D,      0, 1, bT) + A_(e, 0, D - e, 1)
+               + LB(0, e,     -1, 0, bS) + A_(e, e, 0, 1)
                + " Z"
             return [bd, bd]
         }
         if (mergeStart && !mergeEnd) {            // sidebar at the near end (classic L)
             bd = M(ca1 + f, 0) + A_(f, ca1, f, 0)
-               + L(ca1, D - e) + A_(e, ca1 - e, D, 1)
-               + L(ca0 + f, D) + A_(f, ca0, D + f, 0)
+               + LB(ca1, D - e,  1, 0, bS) + A_(e, ca1 - e, D, 1)
+               + LB(ca0 + f, D,  0, 1, bT) + A_(f, ca0, D + f, 0)
             close = L(0, D + f) + L(0, -s) + L(ca1 + f, -s) + " Z"
         } else if (mergeEnd && !mergeStart) {     // sidebar at the far end
             bd = M(ca1, D + f) + A_(f, ca1 - f, D, 0)
-               + L(e, D)       + A_(e, 0, D - e, 1)
-               + L(0, f)       + A_(f, -f, 0, 0)
+               + LB(e, D,  0, 1, bT) + A_(e, 0, D - e, 1)
+               + LB(0, f, -1, 0, bS) + A_(f, -f, 0, 0)
             close = L(-f, -s) + L(A, -s) + L(A, D + f) + " Z"
         } else if (mergeStart && mergeEnd) {      // sidebars at both ends (U-bar)
             bd = M(ca1, D + f) + A_(f, ca1 - f, D, 0)
-               + L(ca0 + f, D) + A_(f, ca0, D + f, 0)
+               + LB(ca0 + f, D, 0, 1, bT) + A_(f, ca0, D + f, 0)
             close = L(0, D + f) + L(0, -s) + L(A, -s) + L(A, D + f) + " Z"
         } else {                                  // free tab — concave fillets on both bar corners
             bd = M(A + f, 0) + A_(f, A, f, 0)
-               + L(A, D - e) + A_(e, A - e, D, 1)
-               + L(e, D)     + A_(e, 0, D - e, 1)
-               + L(0, f)     + A_(f, -f, 0, 0)
+               + LB(A, D - e,  1, 0, bS) + A_(e, A - e, D, 1)
+               + LB(e, D,      0, 1, bT) + A_(e, 0, D - e, 1)
+               + LB(0, f,     -1, 0, bS) + A_(f, -f, 0, 0)
             close = L(-f, -s) + L(A + f, -s) + " Z"
         }
         return [bd, bd + close]
     }
-    function borderPath(W, H) { return _paths(W, H)[0] }
-    function fillPath(W, H)   { return _paths(W, H)[1] }
+    function borderPath(W, H, bT, bS) { return _paths(W, H, bT, bS)[0] }
+    function fillPath(W, H, bT, bS)   { return _paths(W, H, bT, bS)[1] }
 
     color: "transparent"
     anchors { top: true; left: true; right: true; bottom: true }
@@ -163,7 +172,7 @@ PanelWindow {
     Item {
         id: panel
         property real reveal: root.isOpen ? 1 : 0
-        Behavior on reveal { NumberAnimation { duration: 230; easing.type: Easing.OutCubic } }
+        Behavior on reveal { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.003 } }
 
         readonly property int  collapsed: root.barT
         // Inner content fades in only once there's room for it.
@@ -173,9 +182,16 @@ PanelWindow {
                                             Math.min(root.vert ? root.sh - 16 : root.sh - root.barT - 16,
                                                      body.implicitHeight + 2 * root.inPad))
 
+        // Elastic emergence — spring error drives the edge bulge + a touch of size overshoot.
+        readonly property real target: root.isOpen ? 1.0 : 0.0
+        readonly property real elDim:  Math.min(width, height)
+        readonly property real bulgeT: Style.elBulge(reveal, target, Style.elTopBulge,  elDim)
+        readonly property real bulgeS: Style.elBulge(reveal, target, Style.elSideBulge, elDim)
+        readonly property real sizeF:  Style.elSizeF(reveal, target)
+
         // Morph from a barT nub to full size (grow-from-corner), same as the settings menu.
-        width:   collapsed + (root.panelW - collapsed) * reveal
-        height:  collapsed + (targetH     - collapsed) * reveal
+        width:   collapsed + (root.panelW - collapsed) * sizeF
+        height:  collapsed + (targetH     - collapsed) * sizeF
         opacity: Math.min(1.0, reveal * 4.0)
 
         // Docked edge pinned at the bar inner face; along the bar an icon in start/end snaps the
@@ -204,7 +220,7 @@ PanelWindow {
             ShapePath {
                 fillColor: root.cardColor; strokeWidth: -1
                 fillRule:  ShapePath.WindingFill
-                PathSvg { path: root.fillPath(panel.width, panel.height) }
+                PathSvg { path: root.fillPath(panel.width, panel.height, panel.bulgeT, panel.bulgeS) }
             }
         }
         // Content-side border only (the merged edges stay borderless).
@@ -214,7 +230,7 @@ PanelWindow {
             preferredRendererType: Shape.CurveRenderer
             ShapePath {
                 fillColor: "transparent"; strokeColor: Style.chromeBorder; strokeWidth: Style.chromeBorderWidth
-                PathSvg { path: root.borderPath(panel.width, panel.height) }
+                PathSvg { path: root.borderPath(panel.width, panel.height, panel.bulgeT, panel.bulgeS) }
             }
         }
 

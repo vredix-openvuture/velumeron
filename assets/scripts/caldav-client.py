@@ -14,6 +14,8 @@ Commands:
   add-todo <calId> <summary> [dueYMD]
   toggle-todo <calId> <href> <0|1>
   add-event <calId> <summary> <YYYY-MM-DD> [HH:MM] [durationMin]
+  add-event-full <calId> <jsonEvent>        {summary,ymd,hm,durMin,location,notes,categories,attendees,icon}
+  update-event <calId> <href> <jsonPatch>   any subset of the same fields
   delete-item <calId> <href>
 
 calId = "<account name>|<calendar href>". Accounts live in
@@ -32,6 +34,7 @@ import urllib.parse
 import urllib.request
 import uuid
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 
 try:
@@ -152,7 +155,14 @@ def http(method, url, account, body=None, headers=None, depth=None):
 
 
 def full_url(base, href):
-    return urllib.parse.urljoin(base, href)
+    # Resolve href against base, then percent-encode the path. Servers may hand
+    # back hrefs with raw characters that urllib.request rejects — Nextcloud, for
+    # one, returns principal/calendar paths with a LITERAL SPACE when the user id
+    # has one (e.g. .../users/Adrian Fredl/). `%` is in `safe` so already-encoded
+    # hrefs (%20) are not double-encoded.
+    parts = urllib.parse.urlsplit(urllib.parse.urljoin(base, href))
+    path = urllib.parse.quote(parts.path, safe="/%:@&=+$,;~()!*'")
+    return urllib.parse.urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment))
 
 
 # ── CalDAV discovery ──────────────────────────────────────────────────────────
@@ -492,6 +502,35 @@ def _text(comp, name):
     return _unescape(v) if v else ""
 
 
+def _categories(comp):
+    out = []
+    for _p, v in comp.get("CATEGORIES", []):
+        out += [c.strip() for c in _unescape(v or "").split(",") if c.strip()]
+    return out
+
+
+def _attendees(comp):
+    """ATTENDEE lines → [{name, email, phone}]. Value is a CAL-ADDRESS
+    (mailto:/tel:); CN param holds the name, X-PHONE a phone when there's no tel:."""
+    out = []
+    for params, v in comp.get("ATTENDEE", []):
+        val = (v or "").strip()
+        email, phone = "", params.get("X-PHONE", "")
+        if val.lower().startswith("mailto:"):
+            email = val[7:]
+        elif val.lower().startswith("tel:"):
+            phone = phone or val[4:]
+        out.append({"name": params.get("CN", ""), "email": email, "phone": phone})
+    return out
+
+
+def _event_extra(src):
+    """The rich fields shared by every shaped event."""
+    return {"notes": _text(src, "DESCRIPTION"), "location": _text(src, "LOCATION"),
+            "categories": _categories(src), "attendees": _attendees(src),
+            "icon": _text(src, "X-VELORGANIZE-ICON"), "image": _text(src, "X-VELORGANIZE-IMAGE")}
+
+
 def shape_events(cal, items, win_start, win_end):
     events = []
     for href, etag, ics in items:
@@ -550,11 +589,11 @@ def shape_events(cal, items, win_start, win_end):
                     "etag":     etag,
                     "uid":      _text(src, "UID"),
                     "summary":  _text(src, "SUMMARY") or "(untitled)",
-                    "location": _text(src, "LOCATION"),
                     "allDay":   all_day2,
                     "startMs":  int(s.timestamp() * 1000),
                     "endMs":    int(e.timestamp() * 1000),
                     "recurring": bool(vr),
+                    **_event_extra(src),
                 })
         # Overrides moved outside the expansion window still count if in range.
         for c in overrides.values():
@@ -568,10 +607,10 @@ def shape_events(cal, items, win_start, win_end):
             e = parse_dt(ep, ev)[0] if ev else s
             events.append({
                 "cal": cal["id"], "href": href, "etag": etag, "uid": _text(c, "UID"),
-                "summary": _text(c, "SUMMARY") or "(untitled)",
-                "location": _text(c, "LOCATION"), "allDay": ad,
+                "summary": _text(c, "SUMMARY") or "(untitled)", "allDay": ad,
                 "startMs": int(s.timestamp() * 1000), "endMs": int(e.timestamp() * 1000),
                 "recurring": True,
+                **_event_extra(c),
             })
     return events
 
@@ -627,25 +666,42 @@ def sync():
 
     cache = {"syncedAt": int(now.timestamp() * 1000),
              "accounts": [], "calendars": [], "events": [], "todos": []}
+
+    # Discovery (PROPFIND, one per account) is cheap. The REPORT queries that
+    # follow — one or two per calendar — are what actually add up: 34
+    # calendars fetched sequentially took ~9s. They're independent reads, so
+    # fan them out instead (this used to run after EVERY mutation too, via
+    # the emit(sync()) call in main() below, making every add/toggle/delete
+    # pay the full ~9s).
+    jobs = []       # (entry, cal) — one per calendar, across all accounts
     for account in load_accounts():
         entry = {"name": account["name"], "url": account["url"],
                  "username": account["username"], "ok": True, "error": ""}
         try:
             for cal in discover_calendars(account):
                 cache["calendars"].append(cal)
-                try:
-                    if cal["vevent"]:
-                        cache["events"] += shape_events(
-                            cal, _report(cal, account, "VEVENT", tr), win_start, win_end)
-                    if cal["vtodo"]:
-                        cache["todos"] += shape_todos(cal, _report(cal, account, "VTODO"))
-                except Exception as e:
-                    entry["ok"] = False
-                    entry["error"] = f"{cal['name']}: {e}"
+                jobs.append((account, entry, cal))
         except Exception as e:
             entry["ok"] = False
             entry["error"] = str(e)
         cache["accounts"].append(entry)
+
+    def fetch_one(account, entry, cal):
+        try:
+            events = (shape_events(cal, _report(cal, account, "VEVENT", tr), win_start, win_end)
+                      if cal["vevent"] else [])
+            todos = shape_todos(cal, _report(cal, account, "VTODO")) if cal["vtodo"] else []
+            return events, todos
+        except Exception as e:
+            entry["ok"] = False
+            entry["error"] = f"{cal['name']}: {e}"
+            return [], []
+
+    if jobs:
+        with ThreadPoolExecutor(max_workers=12) as pool:
+            for events, todos in pool.map(lambda j: fetch_one(*j), jobs):
+                cache["events"] += events
+                cache["todos"] += todos
 
     cache["events"].sort(key=lambda e: e["startMs"])
     cache["todos"].sort(key=lambda t: (t["completed"],
@@ -729,6 +785,60 @@ def add_event(cache, cal_id, summary, ymd, hm=None, duration_min=60):
     put_new(cal, account, lines)
 
 
+def _dt_lines(ymd, hm, dur_min):
+    """DTSTART/DTEND lines for a date + optional free start time & minute duration."""
+    d = datetime.strptime(ymd, "%Y-%m-%d")
+    if hm:
+        h, m = hm.split(":")
+        start = d.replace(hour=int(h), minute=int(m), tzinfo=LOCAL_TZ)
+        end = start + timedelta(minutes=int(dur_min or 60))
+        fmt = "%Y%m%dT%H%M%SZ"
+        return ["DTSTART:" + start.astimezone(timezone.utc).strftime(fmt),
+                "DTEND:" + end.astimezone(timezone.utc).strftime(fmt)]
+    return ["DTSTART;VALUE=DATE:" + d.strftime("%Y%m%d"),
+            "DTEND;VALUE=DATE:" + (d + timedelta(days=1)).strftime("%Y%m%d")]
+
+
+def _prop_lines(ev):
+    """Settable VEVENT lines (summary/location/description/categories/attendees/
+    icon) — no BEGIN/END/UID/DTSTAMP/DTSTART/DTEND/RRULE."""
+    ls = []
+    if ev.get("summary") is not None:
+        ls.append("SUMMARY:" + _ics_escape(ev["summary"]))
+    if ev.get("location"):
+        ls.append("LOCATION:" + _ics_escape(ev["location"]))
+    if ev.get("notes"):
+        ls.append("DESCRIPTION:" + _ics_escape(ev["notes"]))
+    if ev.get("categories"):
+        ls.append("CATEGORIES:" + ",".join(_ics_escape(c) for c in ev["categories"]))
+    for a in ev.get("attendees", []):
+        email = (a.get("email") or "").strip()
+        cn = (a.get("name") or "").strip().replace('"', "")
+        phone = (a.get("phone") or "").strip().replace('"', "")
+        if not (email or phone):
+            continue
+        params = (f';CN="{cn}"' if cn else "") + (f';X-PHONE="{phone}"' if (phone and email) else "")
+        ls.append(f"ATTENDEE{params}:" + (f"mailto:{email}" if email else f"tel:{phone}"))
+    if ev.get("icon"):
+        ls.append("X-VELORGANIZE-ICON:" + _ics_escape(ev["icon"]))
+    if ev.get("image"):
+        ls.append("X-VELORGANIZE-IMAGE:" + _ics_escape(ev["image"]))
+    return ls
+
+
+def add_event_full(cache, cal_id, ev):
+    """Create a VEVENT from a full event dict (summary, ymd, hm, durMin, location,
+    notes, categories, attendees, icon)."""
+    cal = find_cal(cache, cal_id)
+    account = find_account(cal["account"])
+
+    def lines(uid):
+        return (["BEGIN:VEVENT", f"UID:{uid}", f"DTSTAMP:{_stamp()}"]
+                + _dt_lines(ev["ymd"], ev.get("hm"), ev.get("durMin"))
+                + _prop_lines(ev) + ["END:VEVENT"])
+    put_new(cal, account, lines)
+
+
 def toggle_todo(cache, cal_id, href, done):
     """GET-modify-PUT on the raw ICS: swap the STATUS/COMPLETED/PERCENT-COMPLETE
     lines inside the VTODO, leave everything else byte-identical."""
@@ -777,6 +887,79 @@ def delete_item(cache, cal_id, href):
         raise RuntimeError(f"DELETE → HTTP {status}")
 
 
+def update_event(cache, cal_id, href, patch):
+    """GET-modify-PUT on a VEVENT. Any field present in `patch` (summary, location,
+    notes, categories, attendees, icon, and ymd/hm/durMin for the time) is replaced
+    — the property's old lines are dropped at depth 0 and the new ones re-inserted
+    before END:VEVENT — while RRULE / EXDATE / VALARM / everything else stays
+    byte-intact, so a recurring series keeps recurring."""
+    cal = find_cal(cache, cal_id)
+    account = find_account(cal["account"])
+    url = full_url(cal["url"], href)
+    status, headers, body = http("GET", url, account)
+    if status != 200:
+        raise RuntimeError(f"GET event → HTTP {status}")
+    etag = headers.get("ETag", "")
+
+    # Build the replacement lines per property (empty list = clear the property).
+    repl = {}
+    if "summary" in patch:
+        repl["SUMMARY"] = ["SUMMARY:" + _ics_escape(patch.get("summary") or "")]
+    if "location" in patch:
+        v = patch.get("location") or ""
+        repl["LOCATION"] = ["LOCATION:" + _ics_escape(v)] if v else []
+    if "notes" in patch:
+        v = patch.get("notes") or ""
+        repl["DESCRIPTION"] = ["DESCRIPTION:" + _ics_escape(v)] if v else []
+    if "categories" in patch:
+        cats = patch.get("categories") or []
+        repl["CATEGORIES"] = ["CATEGORIES:" + ",".join(_ics_escape(c) for c in cats)] if cats else []
+    if "attendees" in patch:
+        repl["ATTENDEE"] = _prop_lines({"attendees": patch.get("attendees") or []})
+    if "icon" in patch:
+        v = patch.get("icon") or ""
+        repl["X-VELORGANIZE-ICON"] = ["X-VELORGANIZE-ICON:" + _ics_escape(v)] if v else []
+    if "image" in patch:
+        v = patch.get("image") or ""
+        repl["X-VELORGANIZE-IMAGE"] = ["X-VELORGANIZE-IMAGE:" + _ics_escape(v)] if v else []
+    dt_lines = _dt_lines(patch["ymd"], patch.get("hm"), patch.get("durMin")) if patch.get("ymd") else None
+
+    drop = set(repl.keys()) | {"LAST-MODIFIED"}
+    if dt_lines is not None:
+        drop |= {"DTSTART", "DTEND"}
+
+    text = _unfold(body.decode())
+    out, in_ev, depth = [], False, 0
+    for line in text.split("\n"):
+        u = line.upper()
+        if u.startswith("BEGIN:VEVENT"):
+            in_ev = True
+        elif in_ev and u.startswith("BEGIN:"):
+            depth += 1
+        elif in_ev and depth > 0 and u.startswith("END:"):
+            depth -= 1
+        elif u.startswith("END:VEVENT"):
+            for lines_ in repl.values():
+                out += lines_
+            if dt_lines is not None:
+                out += dt_lines
+            out.append("LAST-MODIFIED:" + _stamp())
+            in_ev = False
+            out.append(line)
+            continue
+        elif in_ev and depth == 0:
+            prop = u.split(":", 1)[0].split(";", 1)[0]
+            if prop in drop:
+                continue
+        out.append(line)
+    ics = "\r\n".join(l for l in out if l.strip() != "") + "\r\n"
+
+    hdrs = {"If-Match": etag} if etag else {}
+    status, _, body = http("PUT", url, account, ics, headers=hdrs)
+    if status not in (200, 201, 204):
+        raise RuntimeError(f"PUT event → HTTP {status}: {body[:200].decode(errors='replace')}")
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
@@ -810,6 +993,17 @@ def main():
         emit(sync())
         return
 
+    if cmd == "rename-account":
+        old, new = args[0], (args[1] or "").strip()
+        if new:
+            accs = load_accounts()
+            for a in accs:
+                if a["name"] == old:
+                    a["name"] = new
+            save_accounts(accs)
+        emit(sync())
+        return
+
     cache = load_cache()
     try:
         if cmd == "add-todo":
@@ -820,8 +1014,12 @@ def main():
             add_event(cache, args[0], args[1], args[2],
                       args[3] if len(args) > 3 and args[3] else None,
                       int(args[4]) if len(args) > 4 else 60)
+        elif cmd == "add-event-full":
+            add_event_full(cache, args[0], json.loads(args[1]))
         elif cmd == "delete-item":
             delete_item(cache, args[0], args[1])
+        elif cmd == "update-event":
+            update_event(cache, args[0], args[1], json.loads(args[2]))
         else:
             raise RuntimeError("unknown command " + cmd)
         emit(sync())

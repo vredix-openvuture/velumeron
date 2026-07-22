@@ -1,6 +1,7 @@
 import ".."
 import QtQuick
 import Quickshell
+import Quickshell.Widgets
 
 // Reusable notification history list (used by the centre and the settings page). When `grouped`
 // is on, notifications from the same app collapse into one card showing the latest + a count.
@@ -11,21 +12,49 @@ Item {
     // Recompute display rows from the tracked history whenever it changes.
     readonly property var src: NotifService.model.values
     readonly property var rows: {
-        var vs = root.src
-        if (!root.grouped)
-            return vs.map(function (n) { return { app: n.appName || "", latest: n, count: 1, items: [n] } })
-        var byApp = {}, order = []
-        for (var i = 0; i < vs.length; i++) {
-            var a = vs[i].appName || ""
-            if (!byApp[a]) { byApp[a] = { app: a, latest: vs[i], count: 0, items: [] }; order.push(a) }
-            byApp[a].items.push(vs[i])
-            byApp[a].count++
-            byApp[a].latest = vs[i]   // last seen wins as the representative
+        var vs = root.src, out
+        if (!root.grouped) {
+            out = vs.map(function (n) { return { app: n.appName || "", latest: n, count: 1, items: [n] } })
+        } else {
+            var byApp = {}, order = []
+            for (var i = 0; i < vs.length; i++) {
+                var a = vs[i].appName || ""
+                if (!byApp[a]) { byApp[a] = { app: a, latest: vs[i], count: 0, items: [] }; order.push(a) }
+                byApp[a].items.push(vs[i])
+                byApp[a].count++
+                byApp[a].latest = vs[i]   // last seen wins as the representative
+            }
+            out = order.map(function (a) { return byApp[a] })
         }
-        return order.map(function (a) { return byApp[a] })
+        // Pinned rows float to the top (stable order within each partition). Touch
+        // NotifService.pinned so this rebinds the moment a pin is toggled.
+        var _pins = NotifService.pinned
+        out.forEach(function (r) { r.pinned = NotifService.isPinned(r.latest) })
+        return out.filter(function (r) { return r.pinned })
+             .concat(out.filter(function (r) { return !r.pinned }))
+    }
+    // Count of leading pinned rows → the index where the pinned/others divider is drawn.
+    readonly property int pinnedCount: {
+        var c = 0
+        for (var i = 0; i < root.rows.length; i++) if (root.rows[i].pinned) c++
+        return c
     }
 
     function dismissRow(row) { for (var i = 0; i < row.items.length; i++) row.items[i].dismiss() }
+
+    // Invoke a notification's default action (freedesktop "default" identifier) — i.e. "open".
+    // No-op when the notification carries no default action. Dismisses it afterwards so the opened
+    // item leaves the history, matching how clicking a real toast behaves.
+    function openNotif(n) {
+        if (!n || !n.actions) return
+        for (var i = 0; i < n.actions.length; i++) {
+            if (n.actions[i].identifier === "default") {
+                n.actions[i].invoke()
+                if (n.dismiss) n.dismiss()
+                return
+            }
+        }
+    }
 
     // Which app groups are expanded (clicking a stacked card toggles it). Keyed by app name so
     // the state survives the rows recompute; reassigned as a copy to retrigger bindings.
@@ -50,33 +79,78 @@ Item {
         spacing: 8
         model:   root.rows
 
-        delegate: StyledRect {
-            id: item
+        delegate: Column {
+            id: rowWrap
             required property var modelData
+            required property int index
+            width: ListView.view.width
+            spacing: 8
+
+            // Divider between the pinned block and the rest — drawn above the first
+            // un-pinned row, only when there actually are pinned rows above it.
+            Item {
+                width: parent.width
+                visible: rowWrap.index === root.pinnedCount && root.pinnedCount > 0
+                height: visible ? 15 : 0
+                Rectangle {
+                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
+                    height: 1; color: Style.tint(Colors.boNormal, 0.6)
+                }
+            }
+
+            StyledRect {
+            id: item
+            readonly property var modelData: rowWrap.modelData
             readonly property var n: modelData.latest
             readonly property bool stacked:  modelData.count > 1
             readonly property bool expanded: stacked && root.expandedApps[modelData.app] === true
-            width:  ListView.view.width
-            radius: Style.rControl
-            color:  cardMa.containsMouse && item.stacked ? Style.tint(Colors.bgElement, 0.06) : Colors.bgElement
+            width:  parent.width
+            radius:      Style.rControl
+            // Match the settings menu's cards — the accent-tinted card fill — but always carry a soft,
+            // subtle hairline border (the flat style's cardBorderW is 0), so each message reads as a
+            // gently outlined card.
+            color:       cardMa.containsMouse && item.stacked ? Style.controlHover : Style.cardFill
+            borderWidth: 1
+            borderColor: Style.tint(Colors.boNormal, 0.5)
             implicitHeight: item.expanded ? igroup.y + igroup.implicitHeight + 14
                                           : Math.max(54, ibody.y + ibody.implicitHeight + 14)
 
-            // A stacked card expands/collapses on click (✕ sits on top and keeps priority).
+            // Whole-card click: a stacked card expands/collapses; a single card opens its default
+            // action (✕ sits on top and keeps priority for dismiss).
             MouseArea {
                 id: cardMa
                 anchors.fill: parent
-                enabled: item.stacked
                 hoverEnabled: true
-                onClicked: root.toggleExpand(item.modelData.app)
+                cursorShape: (item.stacked || (item.n && item.n.actions && item.n.actions.length))
+                             ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: item.stacked ? root.toggleExpand(item.modelData.app)
+                                        : root.openNotif(item.n)
+            }
+
+            // App icon — the notification's own image/icon hint, else the sending app's desktop-entry
+            // icon (NotifService.iconFor); a generic bell glyph when nothing resolves. Mirrors the toast.
+            Item {
+                id: iico
+                anchors { left: parent.left; top: parent.top; leftMargin: 14; topMargin: 13 }
+                width: 24; height: 24
+                IconImage {
+                    id: iicoImg
+                    anchors.fill: parent
+                    visible: source != ""
+                    source: NotifService.iconFor(item.n)
+                }
+                Text {
+                    anchors.centerIn: parent; visible: !iicoImg.visible
+                    text: "󰂚"; color: Colors.fgMuted; font.pixelSize: 18; font.family: Style.iconFont
+                }
             }
 
             // Source header — accent-coloured upper-cased label + a soft rule, so the service the
             // notification came from reads as a distinct heading above the message (matches the popup).
             Text {
                 id: iapp
-                anchors { left: parent.left; right: badge.left; top: parent.top
-                          leftMargin: 16; rightMargin: 8; topMargin: 14 }
+                anchors { left: iico.right; right: badge.left; top: parent.top
+                          leftMargin: 10; rightMargin: 8; topMargin: 14 }
                 text: item.n ? item.n.appName : ""; color: Colors.bgActive
                 font.pixelSize: 10; font.family: Style.font; elide: Text.ElideRight
                 font.bold: true; font.capitalization: Font.AllUppercase; font.letterSpacing: 0.6
@@ -139,12 +213,26 @@ Item {
             Rectangle {
                 id: badge
                 visible: item.stacked
-                anchors { right: idel.left; rightMargin: 6; verticalCenter: iapp.verticalCenter }
+                anchors { right: ipin.left; rightMargin: 6; verticalCenter: iapp.verticalCenter }
                 width: cnt.implicitWidth + 12; height: 16; radius: 8
                 color: Colors.bgActive
                 Text { id: cnt; anchors.centerIn: parent
                        text: item.modelData.count + (item.expanded ? " ▴" : " ▾")
                        color: Colors.fgBright; font.pixelSize: 9; font.bold: true; font.family: Style.font }
+            }
+            // Pin toggle — pinned rows float to the top and survive "clear all".
+            Rectangle {
+                id: ipin
+                readonly property bool on: item.n ? NotifService.isPinned(item.n) : false
+                anchors { right: idel.left; top: parent.top; rightMargin: 4; topMargin: 8 }
+                width: 20; height: 20; radius: 10
+                color: pHov.containsMouse ? Style.tint(Colors.bgActive, 0.25)
+                     : (ipin.on ? Style.tint(Colors.bgActive, 0.18) : "transparent")
+                Text { anchors.centerIn: parent; text: "󰐃"
+                       color: ipin.on ? Colors.bgActive : Colors.fgMuted
+                       font.pixelSize: 11; font.family: Style.iconFont }
+                MouseArea { id: pHov; anchors.fill: parent; hoverEnabled: true
+                            onClicked: NotifService.togglePin(item.n) }
             }
             Rectangle {
                 id: idel
@@ -154,6 +242,7 @@ Item {
                 Text { anchors.centerIn: parent; text: "✕"; color: Colors.fgMuted; font.pixelSize: 10 }
                 MouseArea { id: dHov; anchors.fill: parent; hoverEnabled: true
                             onClicked: root.dismissRow(item.modelData) }
+            }
             }
         }
     }

@@ -36,14 +36,25 @@ fi
 export QML_IMPORT_PATH="$QS_PKG_DIR/plugins${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}"
 export QSG_RHI_BACKEND=opengl
 
-# Memory: the shell keeps ~40 layer-shell windows alive (menus/flyouts/OSD per screen). The
-# default threaded render loop gives EACH window its own render thread + GL context — measured
-# ~660 MB RSS. The basic loop shares one render thread/context across all windows (~370 MB RSS,
-# private dirty halved to ~190 MB). Trade-off: animations render serially on one thread — if
-# that ever ranks as jank, remove QSG_RENDER_LOOP. MALLOC_ARENA_MAX curbs per-thread glibc
-# arena bloat on top.
-export QSG_RENDER_LOOP=basic
-export MALLOC_ARENA_MAX=2
+# Render loop — smoothness vs memory, gated by `low_memory_mode` (Settings → Style → Motion):
+#   • threaded (default): EACH of the ~40 layer-shell windows gets its own render thread + GL
+#     context and a vsync-locked animation driver → animations are pipelined off the GUI thread and
+#     stay smooth under load. Costs ~660 MB RSS.
+#   • basic (low-memory mode): one shared render thread/context for all windows (~370 MB RSS,
+#     private dirty ~190 MB) + MALLOC_ARENA_MAX to curb per-thread glibc arena bloat. Trade-off:
+#     rendering is serial on one thread with no vsync animation driver → animations can jank.
+_lowmem=false
+_gs="$VELUMERON_USER_DIR/gui/settings.json"
+if [[ -f "$_gs" ]] && command -v jq >/dev/null 2>&1; then
+    [[ "$(jq -r '.low_memory_mode // false' "$_gs" 2>/dev/null)" == "true" ]] && _lowmem=true
+fi
+if [[ "$_lowmem" == true ]]; then
+    export QSG_RENDER_LOOP=basic
+    export MALLOC_ARENA_MAX=2
+else
+    export QSG_RENDER_LOOP=threaded
+    unset MALLOC_ARENA_MAX          # let glibc use per-thread arenas → no alloc lock contention
+fi
 
 pkill -x quickshell 2>/dev/null || true
 sleep 0.15

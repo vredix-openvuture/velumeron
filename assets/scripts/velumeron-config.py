@@ -3,14 +3,14 @@
 
 A *template* is a complete snapshot of settings.json plus metadata. The live settings.json stays
 the effective config (VtlConfig / Colors / every surface read it unchanged); a template just records
-a snapshot of it. One `sync` call — driven by a watcher on settings.json — makes the whole thing
-copy-on-write: whenever settings.json diverges from the active template, the change is persisted into
-that template; if the active template is a shipped built-in, it is first forked into a private user
-copy so the built-in is never mutated.
+a snapshot of it. Templates are APPLYABLE presets, not a live mirror: changing a setting only writes
+settings.json (it never forks a template), and `activate` full-replaces settings.json from a
+template's snapshot. Nothing auto-syncs edits back — the user saves a preset explicitly (`new`), so
+the shipped built-ins (mirobo …) always stay pristine.
 
-A template MAY carry a top-level "wallpaper" (path, relative to $VELUMERON_DIR or absolute): on
-activate it is applied via wallpaper-set.sh, so wallust re-derives the colours from it — colours
-stay wallpaper-driven, never pinned. Missing file / absent field = the current wallpaper stays.
+A template MAY carry a top-level "wallpaper" (path, relative to $VELUMERON_DIR or absolute). It is
+NOT applied on activate — it only feeds the template card's preview. Colours (wallust auto / fixed
+palette) are chosen independently in Settings → Style → Colours and survive template switches.
 
 Layout:
   $VELUMERON_DIR/assets/templates/<id>/template.json      built-in, READ-ONLY (shipped in the repo)
@@ -19,7 +19,8 @@ Layout:
   $VELUMERON_USER_DIR/active-template.json                 { "id": ..., "source": "builtin"|"user" }
 
 Verbs:
-  sync                       reconcile settings.json -> active template (fork-if-builtin). Idempotent.
+  sync                       (legacy, no longer auto-driven) reconcile settings.json -> active
+                             template. Kept for manual/CLI use; the shell never calls it now.
   activate <source> <id>     point active at a template and apply its settings to settings.json.
   list                       print JSON { active, builtin[], user[] } for the UI.
   duplicate <source> <id> [name]   copy a template into a new user template (does not activate).
@@ -323,9 +324,10 @@ def verb_activate(source, tid):
     for k in DEVICE_KEYS:                         # … except device-bound state: the CURRENT value
         if k in cur:                              # always wins (templates snapshot these keys too,
             new[k] = cur[k]                       # so "only when absent" would never fire)
-    set_active(tid, source)                       # active first, so a following sync is a no-op
-    write_settings(new)                           # (sync compares device-stripped — no fork)
-    apply_wallpaper(tmpl)                         # optional per-template wallpaper (colours follow)
+    set_active(tid, source)                       # point active at the template …
+    write_settings(new)                           # … then full-replace settings.json from its snapshot
+    # NB: the template's own wallpaper is deliberately NOT applied here — colours (wallust / fixed
+    # palette) are chosen independently in Settings → Style → Colours and must survive a preset switch.
     print("activate:%s:%s" % (source, tid))
 
 

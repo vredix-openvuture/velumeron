@@ -1,9 +1,9 @@
-// Live view of the active template + the template list, and the copy-on-write watcher that keeps the
-// shipped presets pristine. settings.json stays the effective config (VtlConfig/Colors read it as
-// before); this singleton just reconciles it with the active template via assets/scripts/
-// velumeron-config.py. A FileView on settings.json fires a debounced `sync` after ANY write (whichever
-// settings page did it), so "the user changed something -> it becomes their own template" is guaranteed
-// without touching a single existing writer. All file I/O + fork logic lives in the Python CLI.
+// Live view of the active template + the template list. settings.json stays the effective config
+// (VtlConfig/Colors read it as before); templates are just named, *applyable* snapshots of it — the
+// shipped defaults (mirobo …) plus any preset the user explicitly saves. There is deliberately NO
+// auto-sync: changing a setting only writes settings.json (in ~/.config, so it survives updates) and
+// never forks a new template. Applying a template full-replaces settings.json from its snapshot
+// (device-bound keys preserved). All file I/O lives in assets/scripts/velumeron-config.py.
 pragma Singleton
 import QtQuick
 import Quickshell
@@ -13,15 +13,7 @@ QtObject {
     id: root
 
     readonly property string _dir: Quickshell.env("VELUMERON_DIR") || ""
-    readonly property string _userDir: {
-        var u = Quickshell.env("VELUMERON_USER_DIR")
-        if (u) return u
-        var xdg = Quickshell.env("XDG_CONFIG_HOME")
-        if (xdg) return xdg + "/velumeron"
-        return Quickshell.env("HOME") + "/.config/velumeron"
-    }
     readonly property string _cli:          _dir + "/assets/scripts/velumeron-config.py"
-    readonly property string _settingsPath: _userDir + "/gui/settings.json"
 
     // ── Reactive state (parsed from the CLI's `list`) ────────────────────────────────────────────
     property var    templates:       []     // [{ id, name, author, builtin, source, active }]
@@ -35,9 +27,9 @@ QtObject {
     function duplicate(source, id, name) { _mut((name && name.length) ? ["duplicate", source, id, name]
                                                                       : ["duplicate", source, id]) }
     function create(name)                { _mut(["new", name || ""]) }
-    // Theme-builder flow: snapshot the current settings as a new user template AND activate it,
-    // so every builder step edits the fresh template live (copy-on-write persists into it).
-    function createAndBuild(name)        { _mut(["new", name || "", "activate"]) }
+    // "Save as preset" flow: snapshot the current settings.json into a new named user template. It does
+    // NOT become active — settings.json stays the live config; the preset is just there to apply later.
+    function createAndBuild(name)        { _mut(["new", name || ""]) }
     function rename(id, name)            { if (name && name.length) _mut(["rename", id, name]) }
     function remove(id)                  { _mut(["delete", id]) }
     function refresh() {
@@ -53,10 +45,6 @@ QtObject {
     // ── Processes ────────────────────────────────────────────────────────────────────────────────
     // Mutations (activate/duplicate/rename/delete/new/init) — refresh the list when they finish.
     readonly property Process _mutProc: Process {
-        onRunningChanged: if (!running) root.refresh()
-    }
-    // The debounced copy-on-write sync — refresh afterwards so a fork's new active shows up.
-    readonly property Process _syncProc: Process {
         onRunningChanged: if (!running) root.refresh()
     }
     // `list` output is a single JSON line; accumulate then parse on stop.
@@ -89,20 +77,6 @@ QtObject {
         for (var j = 0; j < out.length; j++) if (out[j].active) { an = out[j].name; ab = !!out[j].builtin }
         root.activeName      = an
         root.activeIsBuiltin = ab
-    }
-
-    // ── Copy-on-write watcher: any settings.json write → debounced `sync` ─────────────────────────
-    readonly property FileView _settingsWatch: FileView {
-        path:         root._settingsPath
-        watchChanges: true
-        onFileChanged: { reload(); root._debounce.restart() }
-    }
-    readonly property Timer _debounce: Timer {
-        interval: 600; repeat: false
-        onTriggered: {
-            root._syncProc.command = ["python3", root._cli, "sync"]
-            root._syncProc.running = false; root._syncProc.running = true
-        }
     }
 
     // ── Startup: one-time migration (adopt current settings / point at Mirobo), then load the list ──

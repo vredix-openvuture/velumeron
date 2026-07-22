@@ -1,4 +1,5 @@
 # Shared singletons
+singleton Compositor 1.0 Compositor.qml
 singleton Colors    1.0 Colors.qml
 singleton VtlConfig 1.0 VtlConfig.qml
 singleton SettingsStore 1.0 SettingsStore.qml
@@ -11,6 +12,8 @@ singleton Wording   1.0 Wording.qml
 singleton Templates 1.0 Templates.qml
 singleton Hyprwindows 1.0 Hyprwindows.qml
 singleton ThumbQueue 1.0 ThumbQueue.qml
+singleton LockState 1.0 lock/LockState.qml
+singleton LockPresets 1.0 LockPresets.qml
 
 # Shared UI component library (token-driven; used by every settings page)
 StyledRect  1.0 common/StyledRect.qml
@@ -21,6 +24,7 @@ SubLabel    1.0 common/SubLabel.qml
 Toggle      1.0 common/Toggle.qml
 Dropdown    1.0 common/Dropdown.qml
 Stepper     1.0 common/Stepper.qml
+Slider      1.0 common/Slider.qml
 Segmented   1.0 common/Segmented.qml
 Chip        1.0 common/Chip.qml
 SelectRow   1.0 common/SelectRow.qml
@@ -31,6 +35,7 @@ WallThumb   1.0 common/WallThumb.qml
 InputField  1.0 common/InputField.qml
 AppField    1.0 common/AppField.qml
 IconGlyphPicker 1.0 common/IconGlyphPicker.qml
+ColorPicker      1.0 common/ColorPicker.qml
 
 # Native wallpaper engine (per-monitor background surface)
 WallpaperWindow   1.0 WallpaperWindow.qml
@@ -39,6 +44,10 @@ HotCorners        1.0 corners/HotCorners.qml
 WindowSwitcher    1.0 windowswitcher/WindowSwitcher.qml
 ClipboardMenu     1.0 clipboard/ClipboardMenu.qml
 SessionOverlay    1.0 session/SessionOverlay.qml
+
+# Native lockscreen (replaces hyprlock) — WlSessionLock + PAM
+Lock              1.0 lock/Lock.qml
+LockContent       1.0 lock/LockContent.qml
 
 # Bar (dynamic, multi-edge)
 Bar               1.0 bar/Bar.qml
@@ -122,6 +131,7 @@ LayoutMenu      1.0 bar/modules/LayoutMenu.qml
 
 # Settings menu (the corner dropdown) + its pages
 Settings             1.0 settings/Settings.qml
+PaletteEditor        1.0 settings/palette/PaletteEditor.qml
 HomeHub              1.0 settings/home/HomeHub.qml
 NetworkManager       1.0 settings/home/NetworkManager.qml
 BluetoothManager     1.0 settings/home/BluetoothManager.qml
@@ -136,7 +146,7 @@ TaskbarSection       1.0 settings/taskbar/TaskbarSection.qml
 WindowTagsSection    1.0 settings/windowtags/WindowTagsSection.qml
 WallpaperSection     1.0 settings/theme/WallpaperSection.qml
 LockscreenSection    1.0 settings/lockscreen/LockscreenSection.qml
-LockPreviewTile      1.0 settings/lockscreen/LockPreviewTile.qml
+LockEditor           1.0 settings/lockscreen/LockEditor.qml
 AutostartSection     1.0 settings/autostart/AutostartSection.qml
 IntegrationsSection  1.0 settings/integrations/IntegrationsSection.qml
 WorkspacesSection    1.0 settings/workspaces/WorkspacesSection.qml

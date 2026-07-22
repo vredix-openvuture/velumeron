@@ -138,6 +138,7 @@ PanelWindow {
     readonly property int    seam:     root.barThk  + 24
     readonly property int    perpSeam: root.perpThk + 24
     readonly property int    pad:      root.flareR + Math.max(root.seam, root.perpSeam)
+                                       + Math.ceil(Math.max(Style.elTopBulge, Style.elSideBulge))
     // Shared panel fill (accent-tintable, frosted under cupertino — see Style.panelColor).
     readonly property color  cardColor: Style.panelColor(VtlConfig.osdColorful)
 
@@ -154,7 +155,8 @@ PanelWindow {
     // edge, exactly like osd/Osd.qml. `f` (fillet radius) is `e` for the tapered/fillet style and 0
     // for "straight" (square corners); either way the fill closes through the bar (borderless merge),
     // and at a corner it also merges into the perpendicular bar. Returns [borderOpen, fillClosed].
-    function _paths(W, H) {
+    // bT / bS = live elastic bulge (px) for the content edge / free side edges; 0 at rest → straight.
+    function _paths(W, H, bT, bS) {
         var horizA = (root.dockEdge === "top" || root.dockEdge === "bottom")
         var A = horizA ? W : H
         var D = horizA ? H : W
@@ -172,25 +174,30 @@ PanelWindow {
             else                                 { x = a;     y = d     }   // top
             return (x + P) + "," + (y + P)
         }
-        function M(a, d)      { return "M" + XY(a, d) }
-        function L(a, d)      { return " L" + XY(a, d) }
-        function A_(r,a,d,w)  { return Style.pathCorner(r, w, flip, XY(a, d)) }
+        var cur = [0, 0]
+        function M(a, d)      { cur = [a, d]; return "M" + XY(a, d) }
+        function L(a, d)      { cur = [a, d]; return " L" + XY(a, d) }
+        function A_(r,a,d,w)  { cur = [a, d]; return Style.pathCorner(r, w, flip, XY(a, d)) }
+        function LB(a, d, na, nd, b) {   // bulged line: control = midpoint + outward normal·b
+            var ma = (cur[0] + a) / 2 + na * b, md = (cur[1] + d) / 2 + nd * b
+            cur = [a, d]; return " Q" + XY(ma, md) + " " + XY(a, d)
+        }
         var bd, close
         if (root.perpStart) {            // corner: perpendicular bar at the a=0 (near) end
             bd = M(A + f, 0) + A_(f, A, f, 0)
-               + L(A, D - e)  + A_(e, A - e, D, 1)
-               + L(f, D)      + A_(f, 0, D + f, 0)
+               + LB(A, D - e,  1, 0, bS) + A_(e, A - e, D, 1)
+               + LB(f, D,      0, 1, bT) + A_(f, 0, D + f, 0)
             close = L(-sP, D + f) + L(-sP, -sA) + L(A + f, -sA) + " Z"
         } else if (root.perpEnd) {       // corner: perpendicular bar at the a=A (far) end
             bd = M(A, D + f) + A_(f, A - f, D, 0)
-               + L(e, D)      + A_(e, 0, D - e, 1)
-               + L(0, f)      + A_(f, -f, 0, 0)
+               + LB(e, D,  0, 1, bT) + A_(e, 0, D - e, 1)
+               + LB(0, f, -1, 0, bS) + A_(f, -f, 0, 0)
             close = L(-f, -sA) + L(A + sP, -sA) + L(A + sP, D + f) + " Z"
         } else {                         // centre row — free tab, fillets on both anchored corners
             bd = M(A + f, 0) + A_(f, A, f, 0)
-               + L(A, D - e)  + A_(e, A - e, D, 1)
-               + L(e, D)      + A_(e, 0, D - e, 1)
-               + L(0, f)      + A_(f, -f, 0, 0)
+               + LB(A, D - e,  1, 0, bS) + A_(e, A - e, D, 1)
+               + LB(e, D,      0, 1, bT) + A_(e, 0, D - e, 1)
+               + LB(0, f,     -1, 0, bS) + A_(f, -f, 0, 0)
             close = L(-f, -sA) + L(A + f, -sA) + " Z"
         }
         return [bd, bd + close]
@@ -202,8 +209,16 @@ PanelWindow {
     readonly property bool revealed: root.enabled && (!root.hoverMode || root.hovered)
     property real reveal: 0
     onRevealedChanged: reveal = revealed ? 1 : 0
-    Behavior on reveal { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+    Behavior on reveal { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.003 } }
     visible: root.enabled
+
+    // Elastic emergence: spring overshoot shows as edge bulge; the slide below uses the clamped
+    // reveal so the card doesn't overshoot its docked position.
+    readonly property real target: root.revealed ? 1.0 : 0.0
+    readonly property real grow01: Style.elG01(reveal)
+    readonly property real elDim:  Math.min(root.cardW, root.cardH)
+    readonly property real bulgeT: Style.elBulge(reveal, target, Style.elTopBulge,  elDim)
+    readonly property real bulgeS: Style.elBulge(reveal, target, Style.elSideBulge, elDim)
 
     color: "transparent"
     anchors { top: true; left: true; right: true; bottom: true }
@@ -287,12 +302,12 @@ PanelWindow {
             x: root.openX - root.haRect[0]
             y: root.openY - root.haRect[1]
             width: root.cardW; height: root.cardH
-            opacity: root.reveal
+            opacity: root.grow01
             transform: Translate {
-                x: root.dockEdge === "left"  ? -(1 - root.reveal) * (root.cardW + 8)
-                 : root.dockEdge === "right" ?  (1 - root.reveal) * (root.cardW + 8) : 0
-                y: root.dockEdge === "top"    ? -(1 - root.reveal) * (root.cardH + 8)
-                 : root.dockEdge === "bottom" ?  (1 - root.reveal) * (root.cardH + 8) : 0
+                x: root.dockEdge === "left"  ? -(1 - root.grow01) * (root.cardW + 8)
+                 : root.dockEdge === "right" ?  (1 - root.grow01) * (root.cardW + 8) : 0
+                y: root.dockEdge === "top"    ? -(1 - root.grow01) * (root.cardH + 8)
+                 : root.dockEdge === "bottom" ?  (1 - root.grow01) * (root.cardH + 8) : 0
             }
 
             // Float (not docked): a plain rounded card inset from the edge — all corners rounded, no
@@ -314,7 +329,7 @@ PanelWindow {
                 ShapePath {
                     fillColor: root.cardColor; strokeWidth: -1
                     fillRule: ShapePath.WindingFill
-                    PathSvg { path: root._paths(root.cardW, root.cardH)[1] }
+                    PathSvg { path: root._paths(root.cardW, root.cardH, root.bulgeT, root.bulgeS)[1] }
                 }
             }
             // Dock border — stroke only the open content-side outline (the merged edge stays borderless).
@@ -324,7 +339,7 @@ PanelWindow {
                 preferredRendererType: Shape.CurveRenderer
                 ShapePath {
                     fillColor: "transparent"; strokeColor: Style.chromeBorder; strokeWidth: Style.chromeBorderWidth
-                    PathSvg { path: root._paths(root.cardW, root.cardH)[0] }
+                    PathSvg { path: root._paths(root.cardW, root.cardH, root.bulgeT, root.bulgeS)[0] }
                 }
             }
 

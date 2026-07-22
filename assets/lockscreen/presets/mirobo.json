@@ -1,0 +1,18 @@
+{
+  "id": "mirobo",
+  "name": "Mirobo",
+  "author": "velumeron",
+  "builtin": true,
+  "version": 1,
+  "settings": {
+    "lock_reveal": "bubble",
+    "lock_blur": 0.85,
+    "lock_dim": 0.1,
+    "lock_card_wallpaper": true,
+    "lock_widget_zones": { "media": "bottom-left", "weather": "bottom-center", "battery": "bottom-right" },
+    "lock_weather_city": "",
+    "lock_weather_unit": "c",
+    "lock_clock_format": "hh:mm",
+    "lock_date_format": "dddd, dd. MMMM"
+  }
+}

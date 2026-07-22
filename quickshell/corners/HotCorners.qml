@@ -180,7 +180,7 @@ PanelWindow {
         }
         case "notifications": UiState.notifMon = root.mon; UiState.notifCenterOpen = true; break
         case "cheatsheet":    UiState.keybindContext = (v || "all"); break
-        case "lock":          root.run("\"$VELUMERON_DIR/assets/scripts/launch-hyprlock.sh\""); break
+        case "lock":          root.run("loginctl lock-session"); break   // → hypridle → native quickshell lock
         case "dispatch":      if (v) root.run("hyprctl dispatch " + v); break
         case "command":       if (v) root.run(v); break
         case "app":           if (v) root.launchApp(v); break

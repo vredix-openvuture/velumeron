@@ -14,6 +14,7 @@ Item {
     property bool   dirty:    false
     property string status:   ""
     property string previewPath: ""   // rendered PNG of the selected cursor (cursor-preview.sh)
+    readonly property string dynTheme: "velumeron-dynamic"   // wallust-following cursor (cursor-build.py)
 
     readonly property var fnKeys: [
         { key: "brightness_up",   label: "Brightness up" },
@@ -99,6 +100,23 @@ Item {
     // happened until the menu closes. Warping the cursor to its OWN position (no visible jump) forces
     // Hyprland to re-resolve the cursor image right away. hl.dsp.cursor.move is the hypr.lua form —
     // the raw `dispatch movecursor` keyword is dead in this config.
+    // Picking the wallust-following theme (re)builds it from the current palette
+    // first (it may not exist yet, or predate the latest wallpaper), then applies.
+    Process {
+        id: buildDynProc
+        onExited: exitCode => {
+            root.status = exitCode === 0 ? "" : "cursor build failed"
+            root._preview(root.dynTheme)
+            root._liveCursor(root.dynTheme, root.curSize)
+        }
+    }
+    function _buildDynamic() {
+        root.status = "Building cursor…"
+        buildDynProc.command = ["bash", "-c",
+            "python3 \"$VELUMERON_DIR/assets/scripts/cursor-build.py\""]
+        buildDynProc.running = false; buildDynProc.running = true
+    }
+
     Process { id: setCursorProc }
     function _liveCursor(theme, size) {
         if (!theme || theme === "") return
@@ -123,11 +141,22 @@ Item {
                 CardLabel { text: "CURSOR" }
                 FieldLabel { text: "Theme" }
                 Dropdown {
-                    summary: root.curTheme === "" ? "(default)" : root.curTheme
-                    options: root.themes.map(function (t) {
-                        return { label: t, key: t, on: t === root.curTheme }
-                    })
-                    onPicked: key => { root.curTheme = key; root.dirty = true; root._liveCursor(key, root.curSize) }
+                    function _label(t) {
+                        return t === root.dynTheme ? t + "   ·   follows wallpaper" : t
+                    }
+                    summary: root.curTheme === "" ? "(default)" : _label(root.curTheme)
+                    // Pin the wallust-following theme to the top, always offered even
+                    // before its first build (picking it builds it on demand).
+                    options: {
+                        var list = root.themes.filter(t => t !== root.dynTheme)
+                        list.unshift(root.dynTheme)
+                        return list.map(t => ({ label: _label(t), key: t, on: t === root.curTheme }))
+                    }
+                    onPicked: key => {
+                        root.curTheme = key; root.dirty = true
+                        if (key === root.dynTheme) root._buildDynamic()
+                        else root._liveCursor(key, root.curSize)
+                    }
                 }
 
                 // ── Preview: a rendered thumbnail of the chosen pointer ─────────
@@ -157,7 +186,9 @@ Item {
                                color: Colors.fgBright; font.pixelSize: Style.fsLabel; font.bold: true
                                font.family: Style.font; elide: Text.ElideRight; width: parent.width }
                         SubLabel { width: parent.width
-                                   text: "Live preview — the real cursor changes as you pick. Apply to keep it." }
+                                   text: root.curTheme === root.dynTheme
+                                         ? "Recolours itself from the wallpaper palette on every theme change."
+                                         : "Live preview — the real cursor changes as you pick. Apply to keep it." }
                     }
                 }
 

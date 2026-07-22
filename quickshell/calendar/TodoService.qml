@@ -4,11 +4,11 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Unified todo state shared by the calendar flyout and (by contract) velorganize.
+// Unified todo state shared by the calendar flyout and (by contract) velora.
 // Two backends feed ONE model: vikunja-client.py delivers the project TREE +
 // task→subtask relations over Vikunja's REST API; every other CalDAV account
 // contributes its flat VTODO lists through CalDavService. The merge spec below
-// is duplicated in velorganize's src/velorganize/todomodel.py — keep them in
+// is duplicated in velora's src/velora/todomodel.py — keep them in
 // lockstep (both read the same two cache files, so they agree by construction
 // after any sync).
 //

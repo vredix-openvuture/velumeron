@@ -50,6 +50,20 @@ Item {
         onFileChanged: reload()
     }
 
+    // ── Component register (à-la-carte) ───────────────────────────────────────
+    // Master on/off per shell component, read from settings.json's `component_enabled`
+    // map. An ABSENT key (or an absent map) ⇒ TRUE: the "Full" profile is the default,
+    // so a normal install instantiates everything and a newcomer never sees a switch.
+    // Only an explicit `false` removes a component's surfaces (its Variants is fed an
+    // empty model) — that's how a BYO user runs just the pieces they want next to their
+    // own bar/config. shell.qml gates each feature's Variants on this.
+    function componentEnabled(key) {
+        var m = _data.component_enabled
+        if (!m || typeof m !== "object") return true
+        var v = m[key]
+        return (v === undefined || v === null) ? true : !!v
+    }
+
     // ── Public properties (with sane defaults) ────────────────────────────────
     readonly property bool   opacityEnabled:  _data.opacity_enabled   ?? false
     readonly property real   opacityValue:    _data.opacity_value     ?? 0.88
@@ -62,6 +76,16 @@ Item {
     // Fuzzy search across every searchbar (launcher, clipboard, icon picker …). ON = fzf-style
     // subsequence match; OFF = plain substring. Read by the shared Fuzzy singleton.
     readonly property bool   fuzzySearch:     _data.fuzzy_search      ?? true
+
+    // ── Elastic emergence ("soft mass") motion — shell-wide, tuned in Settings → Style → Motion ──
+    // Every panel/OSD that grows open springs with these; the free edges bow by the spring's
+    // overshoot. Prototype + meaning of each knob: _lab/ElasticShapeTest.qml. Exposed to the rest
+    // of the shell via Style.el* (+ Style.elBulge/elSizeF helpers), so components read one source.
+    readonly property real   elasticSpring:    _data.elastic_spring     ?? 5.0    // spring stiffness (higher = snappier)
+    readonly property real   elasticDamping:   _data.elastic_damping    ?? 0.36   // 0..1, lower = more wobble
+    readonly property real   elasticTopBulge:  _data.elastic_top_bulge  ?? 86     // px the content edge bows / overshoot
+    readonly property real   elasticSideBulge: _data.elastic_side_bulge ?? 144    // px the free side edges bow / overshoot
+    readonly property real   elasticSizeOver:  _data.elastic_size_over  ?? 0.10   // extra size overshoot fed from the spring error
 
     // ── Bar layout (mode / position / edges) ──────────────────────────────────
     // mode: "dock"  — flush to one edge, reserves space.
@@ -336,6 +360,30 @@ Item {
     readonly property int    notifyCenterWidth:  _data.notify_center_width  ?? 370   // px
     readonly property int    notifyCenterHeight: _data.notify_center_height ?? 0     // px, 0 = auto-fill
 
+    // ── Lockscreen (Settings → Lockscreen) ────────────────────────────────────
+    // The native quickshell lock (lock/Lock.qml) reads these live. Defaults = the shipped "mirobo"
+    // preset; a preset is a named snapshot of exactly these keys (see LockPresets.qml), applied by
+    // writing them back through SettingsStore, so switching a preset recolours the lock instantly.
+    readonly property string lockPreset:        _data.lock_preset         ?? "mirobo"
+    readonly property string lockReveal:        _data.lock_reveal         ?? "bubble"   // bubble | fade | none
+    readonly property real   lockBlur:          _data.lock_blur           ?? 0.85       // 0..1 backdrop blur strength
+    readonly property real   lockDim:           _data.lock_dim            ?? 0.1        // 0..1 backdrop darken (kept light — the point is blur, not darkness)
+    readonly property bool   lockCardWallpaper: _data.lock_card_wallpaper ?? true       // sharp wallpaper crop inside the card
+    // Widget → zone map. Zones: top-left|top-center|top-right|bottom-left|bottom-center|bottom-right,
+    // or "off" (hidden). Default mirrors mirobo: media left, weather centre, battery right.
+    readonly property var    lockWidgetZones:   _data.lock_widget_zones   ?? ({ media: "bottom-left", weather: "bottom-center", battery: "bottom-right" })
+    readonly property string lockWeatherCity:   _data.lock_weather_city   ?? ""
+    readonly property string lockWeatherUnit:   _data.lock_weather_unit   ?? "c"        // c | f
+    readonly property string lockClockFormat:   _data.lock_clock_format   ?? "hh:mm"
+    readonly property string lockDateFormat:    _data.lock_date_format    ?? "dddd, dd. MMMM"
+    function lockWidgetZone(name)    { var z = lockWidgetZones; return (z && z[name]) ? z[name] : "off" }
+    function lockWidgetEnabled(name) { return lockWidgetZone(name) !== "off" }
+    // The ordered set of lock keys a preset snapshots / an editor writes — one source of truth.
+    readonly property var lockKeys: [
+        "lock_reveal", "lock_blur", "lock_dim", "lock_card_wallpaper", "lock_widget_zones",
+        "lock_weather_city", "lock_weather_unit", "lock_clock_format", "lock_date_format"
+    ]
+
     // ── Clipboard history (Super+V; Settings → OSD) ───────────────────────────
     readonly property int  clipboardWidth: _data.clipboard_width ?? 640
     readonly property int  clipboardRows:  _data.clipboard_rows  ?? 8
@@ -369,9 +417,19 @@ Item {
     // "standalone" = a centred floating window. fullscreen overrides position with a full-page app grid.
     readonly property string launcherPosition:   _data.launcher_position   ?? "top-center"
     readonly property bool   launcherFullscreen: _data.launcher_fullscreen ?? false
-    readonly property int    launcherCols:       _data.launcher_cols       ?? 1     // 1 = list; >1 = grid
-    readonly property int    launcherRows:       _data.launcher_rows       ?? 7     // visible rows
-    readonly property int    launcherWidth:      _data.launcher_width      ?? 560   // panel width px (docked / standalone)
+    // Explicit view picker (Settings → Launcher → View). Falls back to the old cols-based
+    // inference (cols was 1 = list, >1 = grid) so configs saved before this setting existed
+    // keep their look.
+    readonly property string launcherView:       _data.launcher_view      ?? ((_data.launcher_cols ?? 1) > 1 ? "grid" : "list")
+    readonly property int    launcherCols:       _data.launcher_cols       ?? 1     // grid column count (View: Grid)
+    // Width / visible rows are per-view (Grid and List each remember their own size), falling back
+    // to the old shared keys so configs saved before the split keep their current look.
+    readonly property int    launcherGridRows:   _data.launcher_grid_rows  ?? _data.launcher_rows  ?? 7
+    readonly property int    launcherGridWidth:  _data.launcher_grid_width ?? _data.launcher_width ?? 560
+    readonly property int    launcherListRows:   _data.launcher_list_rows  ?? _data.launcher_rows  ?? 7
+    readonly property int    launcherListWidth:  _data.launcher_list_width ?? _data.launcher_width ?? 560
+    readonly property int    launcherRows:       launcherView === "grid" ? launcherGridRows  : launcherListRows
+    readonly property int    launcherWidth:      launcherView === "grid" ? launcherGridWidth : launcherListWidth
     readonly property int    launcherFsCols:     _data.launcher_fs_cols    ?? 6     // columns in fullscreen grid
     readonly property bool   launcherBlur:       _data.launcher_blur       ?? true  // blur the backdrop (Hyprland)
     readonly property bool   launcherDock:       _data.launcher_dock       ?? false // snap flush against the bar/edge

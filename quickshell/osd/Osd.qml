@@ -162,13 +162,15 @@ PanelWindow {
     readonly property int seam:     root.barThk  + 24
     readonly property int perpSeam: root.perpThk + 24
     readonly property int pad:      root.flareR + Math.max(root.seam, root.perpSeam)
+                                    + Math.ceil(Math.max(Style.elTopBulge, Style.elSideBulge))
     // Build the outline in (a, d) space — a runs along the anchored edge, d is the depth away from
     // it (edge at d = 0) — then map onto the actual edge. Returns [borderOpen, fillClosed]. A centre
     // row is a free tab (concave fillets on both anchored-edge corners); a corner also merges into
     // the perpendicular edge at its near (`perpStart`) or far (`perpEnd`) end — the same L-transition
     // the settings menu draws. With a bar each seam runs through it; with none the seam is a 24px
     // off-screen overshoot, so the fillets curve straight into the bare monitor edge(s).
-    function _paths(W, H) {
+    // bT / bS = live elastic bulge (px) for the content edge / free side edges; 0 at rest → straight.
+    function _paths(W, H, bT, bS) {
         var horiz = (root.dockEdge === "top" || root.dockEdge === "bottom")
         var A = horiz ? W : H
         var D = horiz ? H : W
@@ -187,25 +189,30 @@ PanelWindow {
             else                                 { x = a;     y = d     }   // top
             return (x + P) + "," + (y + P)
         }
-        function M(a, d)      { return "M" + XY(a, d) }
-        function L(a, d)      { return " L" + XY(a, d) }
-        function A_(r,a,d,w)  { return Style.pathCorner(r, w, flip, XY(a, d)) }
+        var cur = [0, 0]
+        function M(a, d)      { cur = [a, d]; return "M" + XY(a, d) }
+        function L(a, d)      { cur = [a, d]; return " L" + XY(a, d) }
+        function A_(r,a,d,w)  { cur = [a, d]; return Style.pathCorner(r, w, flip, XY(a, d)) }
+        function LB(a, d, na, nd, b) {   // bulged line: control = midpoint + outward normal·b
+            var ma = (cur[0] + a) / 2 + na * b, md = (cur[1] + d) / 2 + nd * b
+            cur = [a, d]; return " Q" + XY(ma, md) + " " + XY(a, d)
+        }
         var bd, close
         if (root.perpStart) {            // corner: anchored edge + perpendicular at the a=0 (near) end
-            bd = M(A + f, 0) + A_(f, A, f, 0)        // concave fillet into the anchored bar (far end)
-               + L(A, D - e)  + A_(e, A - e, D, 1)   // free far edge → convex round
-               + L(f, D)      + A_(f, 0, D + f, 0)   // free edge → concave into the perpendicular bar
+            bd = M(A + f, 0) + A_(f, A, f, 0)                    // concave fillet into the anchored bar (far end)
+               + LB(A, D - e,  1, 0, bS) + A_(e, A - e, D, 1)   // free far side → convex round
+               + LB(f, D,      0, 1, bT) + A_(f, 0, D + f, 0)   // free content edge → concave into the perpendicular bar
             close = L(-sP, D + f) + L(-sP, -sA) + L(A + f, -sA) + " Z"
         } else if (root.perpEnd) {       // corner: perpendicular at the a=A (far) end
-            bd = M(A, D + f) + A_(f, A - f, D, 0)    // concave fillet into the perpendicular bar (far)
-               + L(e, D)      + A_(e, 0, D - e, 1)   // free far edge → convex round
-               + L(0, f)      + A_(f, -f, 0, 0)      // free edge → concave into the anchored bar (near)
+            bd = M(A, D + f) + A_(f, A - f, D, 0)               // concave fillet into the perpendicular bar (far)
+               + LB(e, D,  0, 1, bT) + A_(e, 0, D - e, 1)       // free content edge → convex round
+               + LB(0, f, -1, 0, bS) + A_(f, -f, 0, 0)          // free near side → concave into the anchored bar
             close = L(-f, -sA) + L(A + sP, -sA) + L(A + sP, D + f) + " Z"
         } else {                         // centre row — free tab, fillets on both anchored corners
-            bd = M(A + f, 0) + A_(f, A, f, 0)        // concave fillet into the edge (far corner)
-               + L(A, D - e)  + A_(e, A - e, D, 1)   // free far edge → convex round
-               + L(e, D)      + A_(e, 0, D - e, 1)   // convex round
-               + L(0, f)      + A_(f, -f, 0, 0)      // concave fillet into the edge (near corner)
+            bd = M(A + f, 0) + A_(f, A, f, 0)                    // concave fillet into the edge (far corner)
+               + LB(A, D - e,  1, 0, bS) + A_(e, A - e, D, 1)   // far side bows
+               + LB(e, D,      0, 1, bT) + A_(e, 0, D - e, 1)   // content edge bows
+               + LB(0, f,     -1, 0, bS) + A_(f, -f, 0, 0)      // near side bows → fillet into the edge
             close = L(-f, -sA) + L(A + f, -sA) + " Z" // close through the edge, seam off-screen
         }
         return [bd, bd + close]
@@ -239,7 +246,15 @@ PanelWindow {
             height: VtlConfig.osdHeight + (root.deviceLine ? 16 : 0)
 
             property real reveal: root.open ? 1 : 0
-            Behavior on reveal { NumberAnimation { duration: 210; easing.type: Easing.OutCubic } }
+            Behavior on reveal { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.003 } }
+
+            // Elastic emergence: the spring overshoot shows purely as edge bulge (the scale below is
+            // clamped to 0→1 so text isn't scaled past 100%).
+            readonly property real target: root.open ? 1.0 : 0.0
+            readonly property real grow01: Style.elG01(reveal)
+            readonly property real elDim:  Math.min(width, height)
+            readonly property real bulgeT: Style.elBulge(reveal, target, Style.elTopBulge,  elDim)
+            readonly property real bulgeS: Style.elBulge(reveal, target, Style.elSideBulge, elDim)
 
             // Open position in screen space (docked edge pinned at the bar's inner face), expressed
             // relative to the drawer's origin. Content-driven size changes apply instantly — only
@@ -256,14 +271,15 @@ PanelWindow {
             // Docked (bar or bare edge): a pure perpendicular slide — the drawer clips the part past
             // the edge, so no fade is needed (opacity stays 1) and the card glides into / out of the
             // edge. Float: the gentle slide + fade.
-            opacity: root.dock ? 1.0 : reveal
-            transform: Translate {
-                x: root.dock ? (root.dockEdge === "left"  ? -(1 - card.reveal) * card.width
-                              : root.dockEdge === "right" ?  (1 - card.reveal) * card.width : 0)
-                             : (1 - card.reveal) * (root.vside === "center" ? (root.hside === "left" ? -32 : root.hside === "right" ? 32 : 0) : 0)
-                y: root.dock ? (root.dockEdge === "top"    ? -(1 - card.reveal) * card.height
-                              : root.dockEdge === "bottom" ?  (1 - card.reveal) * card.height : 0)
-                             : (1 - card.reveal) * (root.vside === "top" ? -32 : root.vside === "bottom" ? 32 : 0)
+            // Grow out of the corner (like the settings menu): scale up from the docked corner as
+            // `reveal` runs 0→1, with the transform origin pinned to that corner so the corner stays
+            // put and the panel unfolds away from it. Centre positions grow from the mid-edge.
+            opacity: Math.min(1.0, card.reveal * 4.0)
+            transform: Scale {
+                origin.x: root.hside === "left" ? 0 : root.hside === "right" ? card.width  : card.width  / 2
+                origin.y: root.vside === "top"  ? 0 : root.vside === "bottom" ? card.height : card.height / 2
+                xScale: card.grow01
+                yScale: card.grow01
             }
 
             // Float background — token-styled card inset from the edge.
@@ -287,7 +303,7 @@ PanelWindow {
                 ShapePath {
                     fillColor: root.cardColor; strokeWidth: -1
                     fillRule: ShapePath.WindingFill
-                    PathSvg { path: root._paths(card.width, card.height)[1] }
+                    PathSvg { path: root._paths(card.width, card.height, card.bulgeT, card.bulgeS)[1] }
                 }
             }
 
@@ -303,7 +319,7 @@ PanelWindow {
                     fillColor: "transparent"
                     strokeColor: Style.chromeBorder
                     strokeWidth: Style.chromeBorderWidth
-                    PathSvg { path: root._paths(card.width, card.height)[0] }
+                    PathSvg { path: root._paths(card.width, card.height, card.bulgeT, card.bulgeS)[0] }
                 }
             }
 

@@ -58,9 +58,96 @@ QtObject {
         return " A" + r + "," + r + " 0 0 " + (flip ? (1 - ww) : ww) + " " + xy
     }
 
+    // ── Elastic emergence ("soft mass") — shell-wide motion, tunable (Settings → Style → Motion) ──
+    // Panels spring open PAST their target and ring back; the free edges bow by the live spring
+    // error `over = reveal − target`, scaled by how grown we are so a sliver doesn't fold in on
+    // itself. Every emerging surface reads these + the two helpers, so one slider retunes them all.
+    readonly property real elSpring:    VtlConfig.elasticSpring
+    readonly property real elDamping:   VtlConfig.elasticDamping
+    readonly property real elTopBulge:  VtlConfig.elasticTopBulge
+    readonly property real elSideBulge: VtlConfig.elasticSideBulge
+    readonly property real elSizeOver:  VtlConfig.elasticSizeOver
+    function elG01(reveal)                { return Math.max(0, Math.min(1, reveal)) }
+    // Cap the bulge at a fraction of the element's short side, so a small surface (OSD, pill,
+    // notification toast) bows by the SAME PROPORTION as a big panel instead of ballooning — 144 px
+    // on a 48 px OSD was grotesque, and 0.35 still read as a fat lobe on a ~100 px toast corner.
+    // Calibrated so a normal-sized menu (short side ≳ 420) is never clipped (0.18·420 ≈ 76 < 144).
+    readonly property real elMaxFrac: 0.18
+    // px an edge bows: 0 at rest (→ straight edge). Sign is flipped from the raw spring error so the
+    // panel bows OUTWARD (convex) as it emerges and INWARD (concave) as it retracts — the mass pushes
+    // out on the way in, sucks in on the way out. coeff = elTopBulge (content edge) or elSideBulge;
+    // dim = the element's short side (min of its width/height), used for the proportional cap.
+    function elBulge(reveal, target, coeff, dim) {
+        var b = Math.min(coeff, dim * elMaxFrac)
+        return -b * (reveal - target) * elG01(reveal)
+    }
+    // size multiplier for the container morph: reveal plus a touch of the spring error.
+    function elSizeF(reveal, target)      { return Math.max(0, reveal + elSizeOver * (reveal - target)) }
+
+    // Rounded-rectangle outline whose FREE edges bow outward by the elastic bulge — for surfaces NOT
+    // built in the panels' (a,d) dock space (launcher, free notification toasts). Returns
+    // [borderOpen, fillClosed]. bT bows the content edge (opposite the dock), bS the side edges.
+    // `dockEdge` ("top|bottom|left|right") reproduces the SAME dock transition the menus use: the two
+    // dock corners are concave fillets (radius `f`) that flare into the bar, the fill runs a `seam`
+    // into it (borderless merge), the far corners are convex rounds (radius `r`) and the three free
+    // edges bow. "" = free-floating: all corners round, all four edges bow. Coords are element-local +
+    // `pad`; at rest (bT=bS=0) every quad degenerates to a straight line → an ordinary rounded rect.
+    function elRectPaths(W, H, r, f, bT, bS, dockEdge, seam, pad) {
+        // ── Free-floating: plain rounded rect, all four edges bow (bT top/bottom, bS sides). ──
+        if (dockEdge === "") {
+            function xyf(x, y) { return (x + pad) + "," + (y + pad) }
+            var e0 = Math.max(0, Math.min(r, W / 3, H / 3))
+            var p = "M" + xyf(e0, 0)
+                + " Q" + xyf(W / 2, -bT)     + " " + xyf(W - e0, 0) + pathCorner(e0, 1, false, xyf(W, e0))
+                + " Q" + xyf(W + bS, H / 2)  + " " + xyf(W, H - e0) + pathCorner(e0, 1, false, xyf(W - e0, H))
+                + " Q" + xyf(W / 2, H + bT)  + " " + xyf(e0, H)     + pathCorner(e0, 1, false, xyf(0, H - e0))
+                + " Q" + xyf(-bS, H / 2)     + " " + xyf(0, e0)     + pathCorner(e0, 1, false, xyf(e0, 0))
+                + " Z"
+            return [p, p]
+        }
+        // ── Docked: free-tab with concave fillets flaring into the bar (mirrors bar/Flyout.qml). ──
+        var horiz = (dockEdge === "top" || dockEdge === "bottom")
+        var A = horiz ? W : H        // extent along the dock edge
+        var D = horiz ? H : W        // depth away from it (dock edge at d = 0)
+        var e  = Math.max(0, Math.min(r, A / 3, D / 3))
+        var ff = Math.max(0, Math.min(f, A / 3, D / 3))
+        var s  = seam
+        var flip = (dockEdge === "bottom" || dockEdge === "left")
+        function XY(a, d) {
+            var x, y
+            if      (dockEdge === "bottom") { x = a;     y = H - d }
+            else if (dockEdge === "left")   { x = d;     y = a     }
+            else if (dockEdge === "right")  { x = W - d; y = a     }
+            else                            { x = a;     y = d     }   // top
+            return (x + pad) + "," + (y + pad)
+        }
+        var cur = [0, 0]
+        function L(a, d)     { cur = [a, d]; return " L" + XY(a, d) }
+        function A_(rr, a, d, w) { cur = [a, d]; return pathCorner(rr, w, flip, XY(a, d)) }
+        function LB(a, d, na, nd, b) {
+            var ma = (cur[0] + a) / 2 + na * b, md = (cur[1] + d) / 2 + nd * b
+            cur = [a, d]; return " Q" + XY(ma, md) + " " + XY(a, d)
+        }
+        var bd = "M" + XY(A + ff, 0) + A_(ff, A, ff, 0)          // concave fillet into the bar (far corner)
+               + LB(A, D - e,  1, 0, bS) + A_(e, A - e, D, 1)    // free side → convex round
+               + LB(e, D,      0, 1, bT) + A_(e, 0, D - e, 1)    // content edge → convex round
+               + LB(0, ff,    -1, 0, bS) + A_(ff, -ff, 0, 0)     // free side → concave fillet into the bar
+        var close = L(-ff, -s) + L(A + ff, -s) + " Z"           // seam back through the bar
+        return [bd, bd + close]
+    }
+
     // Single accent from the live palette. tint() is the one helper for translucent surfaces.
     readonly property color accent: Colors.bgActive
     function tint(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
+
+    // WCAG relative luminance of a color (sRGB → linear → weighted). Used to pick readable text.
+    function _lin(c) { return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4) }
+    function luminance(col) { return 0.2126 * _lin(col.r) + 0.7152 * _lin(col.g) + 0.0722 * _lin(col.b) }
+    // Readable text/glyph colour to sit ON the accent (or any fill): black once the fill is light
+    // enough that black beats white on contrast (the crossover is L ≈ 0.179), else near-white. Fixes
+    // near-white-on-mid-accent (e.g. Solarized blue gave 2.2:1) everywhere the accent carries text.
+    function onColor(fill) { return luminance(fill) > 0.179 ? "#0c0c0c" : "#ffffff" }
+    readonly property color onAccent: root.onColor(root.accent)
 
     // ── Typography ──────────────────────────────────────────────────────────────
     // The main display font — per-template (ui_font) with a manual override, blank = the default.
@@ -163,7 +250,7 @@ QtObject {
     readonly property color selFill:        isOutlined   ? "transparent"
                                            : isFuturistic ? root.tint(root.accent, 0.28)
                                                           : root.accent
-    readonly property color selText:        isOutlined ? root.accent    : Colors.fgBright
+    readonly property color selText:        isOutlined ? root.accent    : root.onAccent
     readonly property int   selBorderW:     isNostalgic ? 2 : isFlat ? 0 : 1
     readonly property color selBorderColor: (isOutlined || isFuturistic) ? root.accent : Colors.boActive
 

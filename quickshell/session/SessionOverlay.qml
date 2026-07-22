@@ -21,7 +21,7 @@ PanelWindow {
 
     property real reveal: 0
     onActiveChanged: { reveal = active ? 1 : 0; if (active) { root.sel = 0; focusScope.forceActiveFocus() } }
-    Behavior on reveal { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+    Behavior on reveal { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.003 } }
     visible: active || root.reveal > 0.01
 
     color: "transparent"
@@ -64,8 +64,8 @@ PanelWindow {
             radius: Style.rCard
             color:  Colors.bgPrimary
             borderWidth: 1; borderColor: Style.chromeBorder
-            opacity: root.reveal
-            scale:   0.96 + 0.04 * root.reveal
+            opacity: Style.elG01(root.reveal)
+            scale:   0.96 + 0.04 * Style.elG01(root.reveal)
             MouseArea { anchors.fill: parent }   // swallow clicks so the backdrop doesn't close
 
             Row {

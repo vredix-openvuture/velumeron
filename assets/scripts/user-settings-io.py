@@ -32,9 +32,9 @@ import sys
 SECTIONS = ("monitors", "workspaces", "autostart", "quickaccess",
             "peripherals", "windowrules", "roleapps")
 
-# Utility workspaces owned by the system (lockscreen uses 111/112, see
-# assets/scripts/launch-hyprlock.sh) — never exposed to the GUI, always
-# preserved on write.
+# Utility workspaces owned by the system — never exposed to the GUI, always
+# preserved on write. (111/112 were the old hyprlock lock workspaces; kept
+# reserved for compatibility though the native lockscreen no longer uses them.)
 RESERVED_WS = ("10", "90", "99", "111", "112", "1111")
 
 ROLEAPP_KEYS = (
@@ -410,8 +410,8 @@ def emit_monitors(data):
     mons = data.get("monitors", [])
     out = []
     for i, m in enumerate(mons):
-        # Format is load-bearing: launch-hyprlock.sh greps ^mon1 = "…",
-        # apply-hyprlock-theme.sh substitutes {{mon1}}/{{mon2}}.
+        # Format is load-bearing: hypr.lua modules (workspaces.lua, devices.lua) read
+        # ^mon1 = "…" / ^mon2 = "…" for the primary/secondary monitor order.
         out.append('mon%d = %s' % (i + 1, lua_quote(m["output"])))
     for i, m in enumerate(mons):
         out += [

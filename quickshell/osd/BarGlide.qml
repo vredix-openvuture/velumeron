@@ -60,7 +60,9 @@ PanelWindow {
     readonly property int flareR: VtlConfig.barInnerRadiusFor(root.mon)
     readonly property int seam:   root.barT + 24
     readonly property int pad:    root.flareR + root.seam
-    function _paths(W, H) {
+                                  + Math.ceil(Math.max(Style.elTopBulge, Style.elSideBulge))
+    // bT / bS = live elastic bulge (px) for the content edge / free side edges; 0 at rest → straight.
+    function _paths(W, H, bT, bS) {
         var hz = (root.edge === "top" || root.edge === "bottom")
         var A = hz ? W : H, D = hz ? H : W
         var e = Math.max(0, Math.min(root.flareR, A / 3, D / 3))
@@ -74,13 +76,18 @@ PanelWindow {
             else                             { x = a;     y = d     }
             return (x + P) + "," + (y + P)
         }
-        function M(a, d)     { return "M" + XY(a, d) }
-        function L(a, d)     { return " L" + XY(a, d) }
-        function A_(r,a,d,w) { return Style.pathCorner(r, w, flip, XY(a, d)) }
+        var cur = [0, 0]
+        function M(a, d)     { cur = [a, d]; return "M" + XY(a, d) }
+        function L(a, d)     { cur = [a, d]; return " L" + XY(a, d) }
+        function A_(r,a,d,w) { cur = [a, d]; return Style.pathCorner(r, w, flip, XY(a, d)) }
+        function LB(a, d, na, nd, b) {   // bulged line: control = midpoint + outward normal·b
+            var ma = (cur[0] + a) / 2 + na * b, md = (cur[1] + d) / 2 + nd * b
+            cur = [a, d]; return " Q" + XY(ma, md) + " " + XY(a, d)
+        }
         var bd = M(A + f, 0) + A_(f, A, f, 0)
-               + L(A, D - e)  + A_(e, A - e, D, 1)
-               + L(e, D)      + A_(e, 0, D - e, 1)
-               + L(0, f)      + A_(f, -f, 0, 0)
+               + LB(A, D - e,  1, 0, bS) + A_(e, A - e, D, 1)
+               + LB(e, D,      0, 1, bT) + A_(e, 0, D - e, 1)
+               + LB(0, f,     -1, 0, bS) + A_(f, -f, 0, 0)
         var close = L(-f, -s) + L(A + f, -s) + " Z"
         return [bd, bd + close]
     }
@@ -111,7 +118,15 @@ PanelWindow {
             height: bodyWrap.childrenRect.height + root.padY
 
             property real reveal: (root.mine && root.open) ? 1 : 0
-            Behavior on reveal { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+            Behavior on reveal { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.003 } }
+
+            // Elastic emergence: spring overshoot shows as edge bulge; the slide uses the clamped
+            // reveal so the pill doesn't overshoot its docked position.
+            readonly property real target: (root.mine && root.open) ? 1.0 : 0.0
+            readonly property real grow01: Style.elG01(reveal)
+            readonly property real elDim:  Math.min(width, height)
+            readonly property real bulgeT: Style.elBulge(reveal, target, Style.elTopBulge,  elDim)
+            readonly property real bulgeS: Style.elBulge(reveal, target, Style.elSideBulge, elDim)
 
             readonly property real openX: root.edge === "left"  ? root.barT
                                         : root.edge === "right" ? (root.scrW - width - root.barT)
@@ -122,16 +137,16 @@ PanelWindow {
             x: openX - drawer.x
             y: openY - drawer.y
 
-            opacity: root.barOnEdge ? 1.0 : reveal
+            opacity: root.barOnEdge ? 1.0 : grow01
             transform: Translate {
-                x: root.barOnEdge ? (root.edge === "left"  ? -(1 - pill.reveal) * pill.width
-                                   : root.edge === "right" ?  (1 - pill.reveal) * pill.width : 0)
-                                  : (root.edge === "left"  ? -(1 - pill.reveal) * 20
-                                   : root.edge === "right" ?  (1 - pill.reveal) * 20 : 0)
-                y: root.barOnEdge ? (root.edge === "top"    ? -(1 - pill.reveal) * pill.height
-                                   : root.edge === "bottom" ?  (1 - pill.reveal) * pill.height : 0)
-                                  : (root.edge === "top"    ? -(1 - pill.reveal) * 20
-                                   : root.edge === "bottom" ?  (1 - pill.reveal) * 20 : 0)
+                x: root.barOnEdge ? (root.edge === "left"  ? -(1 - pill.grow01) * pill.width
+                                   : root.edge === "right" ?  (1 - pill.grow01) * pill.width : 0)
+                                  : (root.edge === "left"  ? -(1 - pill.grow01) * 20
+                                   : root.edge === "right" ?  (1 - pill.grow01) * 20 : 0)
+                y: root.barOnEdge ? (root.edge === "top"    ? -(1 - pill.grow01) * pill.height
+                                   : root.edge === "bottom" ?  (1 - pill.grow01) * pill.height : 0)
+                                  : (root.edge === "top"    ? -(1 - pill.grow01) * 20
+                                   : root.edge === "bottom" ?  (1 - pill.grow01) * 20 : 0)
             }
 
             // Dock background — concave fillets (or straight) flowing into the bar.
@@ -140,14 +155,14 @@ PanelWindow {
                 anchors.fill: parent; anchors.margins: -root.pad
                 preferredRendererType: Shape.GeometryRenderer
                 ShapePath { fillColor: root.cardColor; strokeWidth: -1; fillRule: ShapePath.WindingFill
-                            PathSvg { path: root._paths(pill.width, pill.height)[1] } }
+                            PathSvg { path: root._paths(pill.width, pill.height, pill.bulgeT, pill.bulgeS)[1] } }
             }
             Shape {
                 visible: root.barOnEdge
                 anchors.fill: parent; anchors.margins: -root.pad
                 preferredRendererType: Shape.CurveRenderer
                 ShapePath { fillColor: "transparent"; strokeColor: Style.chromeBorder; strokeWidth: Style.chromeBorderWidth
-                            PathSvg { path: root._paths(pill.width, pill.height)[0] } }
+                            PathSvg { path: root._paths(pill.width, pill.height, pill.bulgeT, pill.bulgeS)[0] } }
             }
             // Plain rounded pill when there's no bar on this edge.
             Rectangle {

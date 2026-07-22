@@ -22,7 +22,7 @@ PanelWindow {
 
     property real reveal: 0
     onActiveChanged: { reveal = active ? 1 : 0; if (active) { root.load(); kbd.forceActiveFocus() } }
-    Behavior on reveal { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+    Behavior on reveal { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.003 } }
     visible: active || root.reveal > 0.01
 
     // Fallback: if the grab doesn't suppress the Super+Tab bind, the bind re-fires `window open`, which
@@ -132,8 +132,8 @@ PanelWindow {
             height: 150
             radius: Style.rCard; color: Colors.bgPrimary
             borderWidth: 1; borderColor: Style.chromeBorder
-            opacity: root.reveal
-            scale:   0.97 + 0.03 * root.reveal
+            opacity: Style.elG01(root.reveal)
+            scale:   0.97 + 0.03 * Style.elG01(root.reveal)
 
             ListView {
                 id: strip

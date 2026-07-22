@@ -8,7 +8,7 @@ ShellRoot {
     // Touch the Templates singleton on startup so its copy-on-write watcher + one-time migration run
     // even before any settings UI is opened (a singleton only instantiates once referenced).
     // OnboardingState decides whether to open the first-run wizard / post-update changelog.
-    Component.onCompleted: { Templates.boot(); void Hyprwindows.windows; OnboardingState.boot() }
+    Component.onCompleted: { Templates.boot(); LockPresets.boot(); void Hyprwindows.windows; OnboardingState.boot() }
 
     // Cold-start resync: Quickshell.Hyprland builds its workspace→monitor /
     // monitor→activeWorkspace graph from the event socket and can latch a bogus
@@ -166,6 +166,15 @@ ShellRoot {
         function close():  void { UiState.sessionOpen = false }
     }
 
+    // IPC: engage the native lockscreen (Lock.qml). Wired from hypridle's lock_cmd via
+    // assets/scripts/lock.sh, so `loginctl lock-session` → logind Lock → hypridle → here. Only
+    // `lock` is exposed — UNLOCK happens exclusively through PAM inside Lock.qml, so the user-local
+    // IPC socket can never bypass the password.
+    IpcHandler {
+        target: "lock"
+        function lock(): void { LockState.engageRequested() }
+    }
+
     // IPC: FancyZones overlay — poked by hypr.lua/modules/fancyzones.lua while a floating
     // window is Super-dragged (show) and on release (hide).
     IpcHandler {
@@ -231,16 +240,42 @@ ShellRoot {
         }
     }
 
+    // Lockscreen weather — fetch wttr.in for the configured city (Settings → Lockscreen). Runs only
+    // when the weather widget is enabled AND a city is set; refreshes every 30 min, once at startup,
+    // and immediately when the city/unit changes. weather-fetch.sh writes weather.json (watched by
+    // lock/LockContent.qml). No fetch happens with no city → nothing leaves the machine.
+    Process { id: weatherProc }
+    function _fetchWeather() {
+        if (!(VtlConfig.lockWidgetEnabled("weather") && VtlConfig.lockWeatherCity !== "")) return
+        weatherProc.command = ["bash",
+            Quickshell.env("VELUMERON_DIR") + "/assets/scripts/weather-fetch.sh",
+            VtlConfig.lockWeatherCity, VtlConfig.lockWeatherUnit]
+        weatherProc.running = false
+        weatherProc.running = true
+    }
+    Timer {
+        interval: 30 * 60000
+        repeat:   true
+        triggeredOnStart: true
+        running:  VtlConfig.lockWidgetEnabled("weather") && VtlConfig.lockWeatherCity !== ""
+        onTriggered: _fetchWeather()
+    }
+    Connections {
+        target: VtlConfig
+        function onLockWeatherCityChanged() { _fetchWeather() }
+        function onLockWeatherUnitChanged() { _fetchWeather() }
+    }
+
     // Native wallpaper engine: one background-layer surface per monitor (static images + live video
     // with GPU crossfades), driven by the watched wallpapers.json. Sits below everything.
     Variants {
-        model: Quickshell.screens
+        model: VtlConfig.componentEnabled("wallpaper") ? Quickshell.screens : []
         delegate: WallpaperWindow { required property var modelData; screen: modelData }
     }
 
     // Bar visual: full-screen transparent surface, no exclusive zone (dynamic, multi-edge)
     Variants {
-        model: Quickshell.screens
+        model: VtlConfig.componentEnabled("bar") ? Quickshell.screens : []
         delegate: Bar {
             required property var modelData
             screen: modelData
@@ -250,19 +285,19 @@ ShellRoot {
     // Exclusive zones: one invisible reserving surface per screen × edge. Each only
     // reserves space when the bar actually occupies that edge (driven by VtlConfig).
     Variants {
-        model: Quickshell.screens
+        model: VtlConfig.componentEnabled("bar") ? Quickshell.screens : []
         delegate: EdgeExclusiveZone { required property var modelData; screen: modelData; edge: "top" }
     }
     Variants {
-        model: Quickshell.screens
+        model: VtlConfig.componentEnabled("bar") ? Quickshell.screens : []
         delegate: EdgeExclusiveZone { required property var modelData; screen: modelData; edge: "bottom" }
     }
     Variants {
-        model: Quickshell.screens
+        model: VtlConfig.componentEnabled("bar") ? Quickshell.screens : []
         delegate: EdgeExclusiveZone { required property var modelData; screen: modelData; edge: "left" }
     }
     Variants {
-        model: Quickshell.screens
+        model: VtlConfig.componentEnabled("bar") ? Quickshell.screens : []
         delegate: EdgeExclusiveZone { required property var modelData; screen: modelData; edge: "right" }
     }
 
@@ -275,41 +310,61 @@ ShellRoot {
         }
     }
 
+    // Build-your-own palette editor: centred overlay, one per screen (Settings → Style → Colours).
+    Variants {
+        model: Quickshell.screens
+        delegate: PaletteEditor { required property var modelData; screen: modelData }
+    }
+
+    // Build-your-own lockscreen editor: full-screen overlay with a live LockContent preview, one per
+    // screen (Settings → Lockscreen → Build your own).
+    Variants {
+        model: Quickshell.screens
+        delegate: LockEditor { required property var modelData; screen: modelData }
+    }
+
     // Onboarding: first-run wizard / post-update changelog, one per screen (renders on the
     // monitor focused when it opened).
     Variants {
-        model: Quickshell.screens
+        model: VtlConfig.componentEnabled("onboarding") ? Quickshell.screens : []
         delegate: OnboardingWindow { required property var modelData; screen: modelData }
     }
 
     // Application launcher: one per screen, shows on the focused monitor (Super+Space).
     Variants {
-        model: Quickshell.screens
+        model: VtlConfig.componentEnabled("launcher") ? Quickshell.screens : []
         delegate: Launcher { required property var modelData; screen: modelData }
     }
 
     // Hot corners / screen edges: one transparent trigger overlay per screen (Settings → Corners).
     Variants {
-        model: Quickshell.screens
+        model: VtlConfig.componentEnabled("hotcorners") ? Quickshell.screens : []
         delegate: HotCorners { required property var modelData; screen: modelData }
     }
 
     // rofi successors: window switcher, clipboard history, session menu — one per screen.
-    Variants { model: Quickshell.screens; delegate: WindowSwitcher { required property var modelData; screen: modelData } }
-    Variants { model: Quickshell.screens; delegate: ClipboardMenu  { required property var modelData; screen: modelData } }
-    Variants { model: Quickshell.screens; delegate: SessionOverlay { required property var modelData; screen: modelData } }
+    Variants { model: VtlConfig.componentEnabled("windowswitcher") ? Quickshell.screens : []; delegate: WindowSwitcher { required property var modelData; screen: modelData } }
+    Variants { model: VtlConfig.componentEnabled("clipboard") ? Quickshell.screens : []; delegate: ClipboardMenu  { required property var modelData; screen: modelData } }
+    Variants { model: VtlConfig.componentEnabled("session") ? Quickshell.screens : []; delegate: SessionOverlay { required property var modelData; screen: modelData } }
+
+    // Native lockscreen: a single WlSessionLock that manages one surface per monitor itself (not a
+    // per-screen Variants). Engaged via the `lock` IPC / LockState.locked.
+    Loader {
+        active: VtlConfig.componentEnabled("lock")
+        sourceComponent: Component { Lock { } }
+    }
 
     // Taskbar OSD: a strip of open windows (Settings → Taskbar), one per screen. TaskbarReserve is the
     // invisible space-reserving surface for the "like bar" layer.
-    Variants { model: Quickshell.screens; delegate: Taskbar        { required property var modelData; screen: modelData } }
-    Variants { model: Quickshell.screens; delegate: TaskbarReserve { required property var modelData; screen: modelData } }
+    Variants { model: VtlConfig.componentEnabled("taskbar") ? Quickshell.screens : []; delegate: Taskbar        { required property var modelData; screen: modelData } }
+    Variants { model: VtlConfig.componentEnabled("taskbar") ? Quickshell.screens : []; delegate: TaskbarReserve { required property var modelData; screen: modelData } }
 
     // Window tags: a name chip on the edge of every window, fading out on cursor approach.
-    Variants { model: Quickshell.screens; delegate: WindowTags     { required property var modelData; screen: modelData } }
+    Variants { model: VtlConfig.componentEnabled("windowtags") ? Quickshell.screens : []; delegate: WindowTags     { required property var modelData; screen: modelData } }
 
     // OSD: one per screen, shows on the focused monitor (volume / brightness)
     Variants {
-        model: Quickshell.screens
+        model: VtlConfig.componentEnabled("osd") ? Quickshell.screens : []
         delegate: Osd {
             required property var modelData
             screen: modelData
@@ -375,7 +430,7 @@ ShellRoot {
         delegate: WallpaperQuick { required property var modelData; screen: modelData }
     }
     Variants {
-        model: Quickshell.screens
+        model: VtlConfig.componentEnabled("calendar") ? Quickshell.screens : []
         delegate: CalendarMenu { required property var modelData; screen: modelData }
     }
 
@@ -386,23 +441,23 @@ ShellRoot {
 
     // FancyZones: input-transparent zone fields per screen, shown while a float is dragged.
     Variants {
-        model: Quickshell.screens
+        model: VtlConfig.componentEnabled("zones") ? Quickshell.screens : []
         delegate: ZoneOverlay { required property var modelData; screen: modelData }
     }
 
     // Keybind cheatsheet: one per screen, shown via UiState.keybindContext
     Variants {
-        model: Quickshell.screens
+        model: VtlConfig.componentEnabled("keybind") ? Quickshell.screens : []
         delegate: KeybindHelp { required property var modelData; screen: modelData }
     }
 
     // Notifications: toast popups + the history centre, one per screen (focused monitor shows them)
     Variants {
-        model: Quickshell.screens
+        model: VtlConfig.componentEnabled("notifications") ? Quickshell.screens : []
         delegate: NotifPopups { required property var modelData; screen: modelData }
     }
     Variants {
-        model: Quickshell.screens
+        model: VtlConfig.componentEnabled("notifications") ? Quickshell.screens : []
         delegate: NotifCenter { required property var modelData; screen: modelData }
     }
 

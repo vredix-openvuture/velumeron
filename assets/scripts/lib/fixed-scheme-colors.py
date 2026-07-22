@@ -92,11 +92,12 @@ def main():
         'background': bg,
         'foreground': fg_primary,
         'color0':  bg,                        # bgPrimary   — the base surface
-        'color1':  surf(0.075),               # bgElement   — lifted surface (cards/rows)
-        'color2':  surf(0.125),               # bgSecondary — nested surface
+        'color1':  surf(0.13),                # bgElement   — lifted surface (cards / bar modules):
+                                              #               must clearly read apart from the base
+        'color2':  surf(0.20),                # bgSecondary — nested surface, another clear step up
         'color3':  accent,                    # bgActive    — the one accent
-        'color4':  mix(surf(0.125), accent, 0.32),  # bgHover — accent-tinted surface
-        'color5':  surf(0.22),                # boNormal    — clearly visible border
+        'color4':  mix(surf(0.20), accent, 0.32),   # bgHover — accent-tinted surface
+        'color5':  surf(0.30),                # boNormal    — clearly visible border
         'color6':  accent,                    # boActive    — accent border
         'color7':  fg_primary,                # fgPrimary
         'color8':  fg_muted,                  # fgMuted

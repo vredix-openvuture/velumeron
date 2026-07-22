@@ -94,9 +94,20 @@ PanelWindow {
     readonly property color cFill: Style.panelColor(VtlConfig.menuColorful)
     // Overlap the anchored bar edge by a hair so LBar's own inner border line is hidden.
     readonly property int seam:   2
-    // Grow the fill/border Shapes by `pad` on every side so the fillet wedges + seam (which spill
-    // outside the menu rect) still render; path coords are emitted in menu-local space + pad.
-    readonly property int pad:    flareR + seam + 2
+
+    // ── Elastic emergence ("soft mass") ──────────────────────────────────────────
+    // The menu grows out of the bar like a rubber sheet: the anchored (bar) edge is pinned,
+    // the free edges bow outward driven by the spring's overshoot (menu.over), then wobble
+    // flat as it settles. Coefficients = px of edge bulge / size overshoot per unit of
+    // overshoot; tuned live in _lab/ElasticShapeTest.qml (spring/damping live in UiState).
+    readonly property real elTopBulge:  Style.elTopBulge    // far (content) edge bow
+    readonly property real elSideBulge: Style.elSideBulge   // free side edges bow
+    readonly property real elSizeOver:  Style.elSizeOver    // extra size overshoot fed from the spring error
+
+    // Grow the fill/border Shapes by `pad` on every side so the fillet wedges + seam + the
+    // elastic bulge (which all spill outside the menu rect) still render; path coords are
+    // emitted in menu-local space + pad.
+    readonly property int pad:    flareR + seam + 2 + Math.ceil(Math.max(elTopBulge, elSideBulge))
 
     // Icon rail width — continue the left bar exactly when the menu sits against it.
     readonly property bool _leftBar: VtlConfig.edgeActiveFor("left", root.mon)
@@ -108,7 +119,9 @@ PanelWindow {
     // (a, d) space — a runs along the bar, d is the depth away from it (anchored edge at d = 0) —
     // then mapped onto the actual edge. The border is the open content-side outline; the fill
     // closes it back through the merged bar edges, seam-extended into the bar.
-    function _paths(W, H) {
+    // bT / bS = live elastic bulge (px) for the far edge / the free side edges. At rest they
+    // are 0 and every LB() degenerates to a straight L (identical to the settled geometry).
+    function _paths(W, H, bT, bS) {
         var horizA = (mEdge === "top" || mEdge === "bottom")
         var A = horizA ? W : H        // extent along the bar
         var D = horizA ? H : W        // depth away from the bar
@@ -127,44 +140,54 @@ PanelWindow {
             else                         { x = a;     y = d     }   // top
             return (x + pad) + "," + (y + pad)
         }
-        function M(a, d)     { return "M" + XY(a, d) }
-        function L(a, d)     { return " L" + XY(a, d) }
-        function A_(r,a,d,w) { return Style.pathCorner(r, w, flip, XY(a, d)) }
+        // Track the current pen position in (a, d) so a bulged edge can place its control point
+        // at the segment's midpoint, pushed out along the edge's outward normal.
+        var cur = [0, 0]
+        function M(a, d)     { cur = [a, d]; return "M" + XY(a, d) }
+        function L(a, d)     { cur = [a, d]; return " L" + XY(a, d) }
+        function A_(r,a,d,w) { cur = [a, d]; return Style.pathCorner(r, w, flip, XY(a, d)) }
+        // Bulged line: quadratic from cur → (a,d), control = midpoint + (na,nd)·b (outward normal).
+        function LB(a, d, na, nd, b) {
+            var ma = (cur[0] + a) / 2 + na * b
+            var md = (cur[1] + d) / 2 + nd * b
+            cur = [a, d]
+            return " Q" + XY(ma, md) + " " + XY(a, d)
+        }
 
         var bd, close
         if (root.detached) {                      // floating bar → free-floating panel, all corners convex
             bd = M(A - e, 0) + A_(e, A, e, 1)
-               + L(A, D - e) + A_(e, A - e, D, 1)
-               + L(e, D)     + A_(e, 0, D - e, 1)
-               + L(0, e)     + A_(e, e, 0, 1)
+               + LB(A, D - e,  1, 0, bS) + A_(e, A - e, D, 1)    // right edge bows out
+               + LB(e, D,      0, 1, bT) + A_(e, 0, D - e, 1)    // far edge bows out
+               + LB(0, e,     -1, 0, bS) + A_(e, e, 0, 1)        // left edge bows out
                + " Z"
             return [bd, bd]
         }
         if (mergeStart && !mergeEnd) {            // sidebar at the near end (classic L)
-            bd = M(ca1 + f, 0) + A_(f, ca1, f, 0)         // concave fillet into the bar
-               + L(ca1, D - e) + A_(e, ca1 - e, D, 1)     // free far edge → convex round
-               + L(ca0 + f, D) + A_(f, ca0, D + f, 0)     // free edge → concave into the sidebar
+            bd = M(ca1 + f, 0) + A_(f, ca1, f, 0)               // concave fillet into the bar
+               + LB(ca1, D - e,  1, 0, bS) + A_(e, ca1 - e, D, 1)   // free far side → convex round
+               + LB(ca0 + f, D,  0, 1, bT) + A_(f, ca0, D + f, 0)   // free far edge → concave into sidebar
             close = L(0, D + f) + L(0, -s) + L(ca1 + f, -s) + " Z"
         } else if (mergeEnd && !mergeStart) {     // sidebar at the far end
             bd = M(ca1, D + f) + A_(f, ca1 - f, D, 0)
-               + L(e, D)       + A_(e, 0, D - e, 1)
-               + L(0, f)       + A_(f, -f, 0, 0)
+               + LB(e, D,  0, 1, bT) + A_(e, 0, D - e, 1)       // far edge bows out
+               + LB(0, f, -1, 0, bS) + A_(f, -f, 0, 0)          // free near side bows out
             close = L(-f, -s) + L(A, -s) + L(A, D + f) + " Z"
         } else if (mergeStart && mergeEnd) {      // sidebars at both ends (U-bar)
             bd = M(ca1, D + f) + A_(f, ca1 - f, D, 0)
-               + L(ca0 + f, D) + A_(f, ca0, D + f, 0)
+               + LB(ca0 + f, D, 0, 1, bT) + A_(f, ca0, D + f, 0)    // only the far edge is free
             close = L(0, D + f) + L(0, -s) + L(A, -s) + L(A, D + f) + " Z"
         } else {                                  // free tab — concave fillets on both bar corners
             bd = M(A + f, 0) + A_(f, A, f, 0)
-               + L(A, D - e) + A_(e, A - e, D, 1)
-               + L(e, D)     + A_(e, 0, D - e, 1)
-               + L(0, f)     + A_(f, -f, 0, 0)
+               + LB(A, D - e,  1, 0, bS) + A_(e, A - e, D, 1)   // right edge bows out
+               + LB(e, D,      0, 1, bT) + A_(e, 0, D - e, 1)   // far edge bows out
+               + LB(0, f,     -1, 0, bS) + A_(f, -f, 0, 0)      // left edge bows out
             close = L(-f, -s) + L(A + f, -s) + " Z"
         }
         return [bd, bd + close]
     }
-    function borderPath(W, H) { return _paths(W, H)[0] }
-    function fillPath(W, H)   { return _paths(W, H)[1] }
+    function borderPath(W, H, bT, bS) { return _paths(W, H, bT, bS)[0] }
+    function fillPath(W, H, bT, bS)   { return _paths(W, H, bT, bS)[1] }
 
     // Which section's content is shown.
     property string activeSection: "home"
@@ -279,8 +302,21 @@ PanelWindow {
         // Inner content (rail + text) fades in only once there's room for it.
         readonly property real contentReveal: Math.max(0.0, Math.min(1.0, (reveal - 0.5) / 0.45))
 
-        width:   collapsed + (root.menuW - collapsed) * reveal
-        height:  collapsed + (root.menuH - collapsed) * reveal
+        // ── Elastic emergence ────────────────────────────────────────────────────
+        // `reveal` springs PAST its target and rings back (UiState). `over` is that live
+        // spring error: >0 while overshooting (edges bow OUT / size overshoots), <0 while it
+        // lags on close (edges bow IN), 0 once settled. Bulge is scaled by how grown we are
+        // (g01) so a tiny sliver at the start doesn't fold in on itself.
+        readonly property real target: root.onActiveMonitor ? (root.isOpen ? 1.0 : 0.0) : 0.0
+        readonly property real over:   reveal - target
+        readonly property real elDim:  Math.min(width, height)
+        readonly property real bulgeT: Style.elBulge(reveal, target, root.elTopBulge,  elDim)
+        readonly property real bulgeS: Style.elBulge(reveal, target, root.elSideBulge, elDim)
+        // Size itself overshoots a touch, fed from the spring error (elSizeOver).
+        readonly property real sizeF:  Math.max(0.0, reveal + root.elSizeOver * over)
+
+        width:   collapsed + (root.menuW - collapsed) * sizeF
+        height:  collapsed + (root.menuH - collapsed) * sizeF
         opacity: Math.min(1.0, reveal * 4.0)   // fade the panel in fast at the very start
 
         // Sit on the content side of the icon's edge; centre the morph nub on the icon and
@@ -315,7 +351,7 @@ PanelWindow {
             ShapePath {
                 fillColor:   root.cFill
                 strokeWidth: -1
-                PathSvg { path: root.fillPath(menu.width, menu.height) }
+                PathSvg { path: root.fillPath(menu.width, menu.height, menu.bulgeT, menu.bulgeS) }
             }
         }
 
@@ -328,7 +364,7 @@ PanelWindow {
                 fillColor:   "transparent"
                 strokeColor: Style.chromeBorder
                 strokeWidth: Style.chromeBorderWidth
-                PathSvg { path: root.borderPath(menu.width, menu.height) }
+                PathSvg { path: root.borderPath(menu.width, menu.height, menu.bulgeT, menu.bulgeS) }
             }
         }
 

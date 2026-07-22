@@ -162,9 +162,9 @@ sync_templates() {
     mkdir -p "$VELUMERON_USER_DIR/assets" "$VELUMERON_USER_DIR/gui"
 
     # Read-only assets (wallpaper, icons, scripts) live in the package and are
-    # referenced by ~/.config/velumeron/assets/... from hypridle.conf,
-    # hyprlock-themes, bt-notify.sh etc. Expose them via symlinks so those
-    # absolute paths resolve. wallust outputs land alongside as real files.
+    # referenced by ~/.config/velumeron/assets/... from hypridle.conf, bt-notify.sh
+    # etc. Expose them via symlinks so those absolute paths resolve. wallust outputs
+    # land alongside as real files.
     for _sub in wallpaper icons scripts; do
         local _link="$VELUMERON_USER_DIR/assets/$_sub"
         local _real="$VELUMERON_DIR/assets/$_sub"
@@ -189,23 +189,25 @@ sync_templates() {
         fi
     done
 
-    # hypridle and hyprlock ignore the --config flag on some versions — they
-    # only read $XDG_CONFIG_HOME/hypr/{hypridle,hyprlock}.conf. Symlink ours
-    # into the standard path so the daemons can always find the config.
+    # hypridle ignores the --config flag on some versions — it only reads
+    # $XDG_CONFIG_HOME/hypr/hypridle.conf. Symlink ours into the standard path so
+    # the daemon can always find the config.
     mkdir -p "$HOME/.config/hypr"
-    for _f in hypridle.conf hyprlock.conf; do
+    for _f in hypridle.conf; do
         local _link="$HOME/.config/hypr/$_f"
         local _target="$VELUMERON_USER_DIR/hypr.lua/$_f"
         [[ -f "$_target" ]] || continue
         # Re-point unless it's already our symlink. This also replaces a plain
         # regular file left behind by an older install or a manual `cp` — otherwise
-        # hyprlock keeps reading that stale copy and never sees what the GUI writes.
+        # the daemon keeps reading that stale copy and never sees what the GUI writes.
         if [[ -L "$_link" && "$(readlink "$_link")" == "$_target" ]]; then
             continue
         fi
         rm -f "$_link"
         ln -sf "$_target" "$_link"
     done
+    # hyprlock is gone (native quickshell lockscreen) — drop any stale hyprlock.conf symlink.
+    [[ -L "$HOME/.config/hypr/hyprlock.conf" ]] && rm -f "$HOME/.config/hypr/hyprlock.conf"
 
     # Migrate pre-v0.1.0 hypridle configs: launching hyprlock from before_sleep_cmd
     # blocked the inhibitor and let the machine suspend mid-lock-init — hyprlock
@@ -228,6 +230,17 @@ if 'inhibit_sleep' not in c:
 open(p, 'w').write(c)
 PY
         ok "Migrated hypridle.conf suspend sequencing (lock-before-sleep)"
+        if pgrep -x hypridle >/dev/null 2>&1; then
+            pkill -x hypridle 2>/dev/null || true
+            sleep 0.3
+            setsid -f hypridle >/dev/null 2>&1 || true
+        fi
+    fi
+    # Migrate lock_cmd to the native quickshell lockscreen: hyprlock is gone, so any lock_cmd
+    # still pointing at hyprlock / launch-hyprlock.sh must poke the shell's `lock` IPC instead.
+    if [[ -f "$_hc" ]] && grep -Eq '^\s*lock_cmd\s*=.*(hyprlock|launch-hyprlock)' "$_hc"; then
+        sed -i -E 's|^(\s*lock_cmd\s*=\s*).*$|\1~/.config/velumeron/assets/scripts/lock.sh lock|' "$_hc"
+        ok "Migrated hypridle.conf lock_cmd to the native lockscreen"
         if pgrep -x hypridle >/dev/null 2>&1; then
             pkill -x hypridle 2>/dev/null || true
             sleep 0.3
@@ -414,7 +427,7 @@ hr; echo ""
 say "Package installation"
 
 REQUIRED_PKGS=(
-    hypridle hyprlock hyprpolkitagent
+    hypridle hyprpolkitagent
     quickshell kitty
     wallust hypremoji
     mpv qt6-multimedia qt6-declarative cmake ninja   # native wallpaper engine (libmpv→QtQuick plugin)
@@ -490,7 +503,7 @@ if [[ ! -e "$HOME/.config/wallust" ]]; then
     ln -sf "$VELUMERON_DIR/wallust" "$HOME/.config/wallust"
     ok "Linked ~/.config/wallust → velumeron/wallust"
 fi
-# hypridle / hyprlock symlinks under ~/.config/hypr/ are created by sync_templates
+# hypridle symlink under ~/.config/hypr/ is created by sync_templates
 
 # Copy templates from the package into the user dir
 sync_templates

@@ -494,10 +494,11 @@ Item {
             anchors.centerIn: parent; spacing: 4
             width: tt.width - 12
             Text { anchors.horizontalCenter: parent.horizontalCenter; text: tt.icon
-                   color: Colors.fgBright; font.pixelSize: 20; font.family: Style.font }
+                   color: tt.active ? Style.onAccent : Colors.fgBright
+                   font.pixelSize: 20; font.family: Style.font }
             Text { width: parent.width; elide: Text.ElideRight
                    horizontalAlignment: Text.AlignHCenter; text: tt.label
-                   color: tt.active ? Colors.fgBright : Colors.fgPrimary
+                   color: tt.active ? Style.onAccent : Colors.fgPrimary
                    font.pixelSize: 11; font.family: Style.font }
         }
         MouseArea { id: ttHov; anchors.fill: parent; hoverEnabled: true; onClicked: tt.trig() }

@@ -58,10 +58,11 @@ Item {
                 SubLabel { width: parent.width
                            text: "Auto: dock to the notifications module, else the Velumeron icon, else top-left." }
                 FieldLabel { text: "Size" }
-                Stepper { label: "Width"; unit: "px"; step: 5; min: 220; max: 900
+                Stepper { label: "Width"; unit: VtlConfig.notifyCenterWidth > 0 ? "px" : "auto"; step: 5; min: 0; max: 900
                           value: VtlConfig.notifyCenterWidth; onChanged: root.save("notify_center_width", v) }
                 Stepper { label: "Height"; unit: VtlConfig.notifyCenterHeight > 0 ? "px" : "auto"; step: 5; min: 0; max: 2000
                           value: VtlConfig.notifyCenterHeight; onChanged: root.save("notify_center_height", v) }
+                SubLabel { width: parent.width; text: "0 = match the settings menu size." }
             }
 
             // ── Behaviour ─────────────────────────────────────────────────────

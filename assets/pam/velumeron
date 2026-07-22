@@ -1,0 +1,9 @@
+# PAM stack for the Velumeron native lockscreen (quickshell lock/Lock.qml).
+#
+# Read by PamContext via a confdir (configDirectory = <VELUMERON_DIR>/assets/pam), NOT installed
+# into /etc/pam.d — so it needs no root step and travels with the package. Because a confdir
+# resolves @include targets inside the confdir itself, this stack must be self-contained: it uses
+# pam_unix directly instead of `@include system-auth`. The setuid unix_chkpwd helper lets the
+# non-root shell verify /etc/shadow (the same mechanism swaylock/hyprlock rely on).
+auth      required   pam_unix.so
+account   required   pam_unix.so

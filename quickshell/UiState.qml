@@ -8,8 +8,9 @@ QtObject {
     // User-module glide and the settings home hub, so their icons/commands/order never diverge.
     readonly property var sessionActions: [
         { icon: "󰌾", label: "Lock",     cmd: "loginctl lock-session" },
-        // Locking is handled by hypridle (before_sleep_cmd + inhibit_sleep=3) —
-        // launching hyprlock here as well raced the suspend and crashed on resume.
+        // Lock via logind: loginctl lock-session → hypridle lock_cmd → the native quickshell lock.
+        // (Locking through logind, not a direct launch, also keeps the before_sleep_cmd +
+        // inhibit_sleep=3 suspend sequencing consistent.)
         { icon: "󰤄", label: "Suspend",  cmd: "systemctl suspend" },
         { icon: "󰗽", label: "Logout",   cmd: "hyprctl dispatch exit" },
         { icon: "󰜉", label: "Reboot",   cmd: "systemctl reboot" },
@@ -37,6 +38,19 @@ QtObject {
     property int    windowSwitcherNext:    0
     property bool   sessionOpen:        false  // power / session menu (Super+Ctrl+Q / `session` IPC)
     property string sessionMon:         ""
+    property bool   paletteEditorOpen:  false  // build-your-own palette editor (Settings → Style → Colours)
+    property string paletteEditorMon:   ""
+    // When set, the editor opens loaded with THIS saved palette for editing ({ colors, name });
+    // null = start fresh from the live palette. Cleared by the editor once it has read it.
+    property var    paletteEditorSeed:  null
+
+    // ── Lockscreen build-your-own editor (Settings → Lockscreen → Build your own) ──────────────
+    // Full-screen overlay that renders a live LockContent preview (no WlSessionLock/PAM) beside the
+    // controls. seed = { id, source, name, settings } to edit an existing preset; null = fresh from
+    // the live VtlConfig.lock* values. Cleared by the editor once read.
+    property bool   lockEditorOpen: false
+    property string lockEditorMon:  ""
+    property var    lockEditorSeed: null
 
     // Keybind cheatsheet overlay context: "" = closed, "all" = full reference,
     // "window" | "apps" | "system" = that submap's binds. Driven by the `keybind` IPC.
@@ -72,9 +86,12 @@ QtObject {
     // 0 = fully closed, 1 = fully open. Animated centrally so the menu panel (CornerMenu)
     // and the L-bar inner border opening (LBar) grow out of the corner in lockstep.
     readonly property bool cornerMenuOpen: openDropdown === "vuture-icon"
+    // Elastic "soft-mass" reveal: springs PAST 1 on open and rings back, so the panel
+    // overshoots its size and its free edges bow out (Settings.qml drives the bulge off
+    // `reveal − target`). Tuned in the _lab/ElasticShapeTest.qml prototype.
     property real menuReveal: cornerMenuOpen ? 1.0 : 0.0
     Behavior on menuReveal {
-        NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+        SpringAnimation { spring: VtlConfig.elasticSpring; damping: VtlConfig.elasticDamping; epsilon: 0.003 }
     }
 
     // ── Notification-centre anchor + morph ──────────────────────────────────────
@@ -86,7 +103,7 @@ QtObject {
     property real   notifStart:  0       // along-edge coordinate of the bell centre
     property real notifReveal: notifCenterOpen ? 1.0 : 0.0
     Behavior on notifReveal {
-        NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+        SpringAnimation { spring: VtlConfig.elasticSpring; damping: VtlConfig.elasticDamping; epsilon: 0.003 }
     }
 
     // ── OSD trigger ─────────────────────────────────────────────────────────────
