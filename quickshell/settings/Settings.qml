@@ -112,7 +112,7 @@ PanelWindow {
     // Icon rail width — continue the left bar exactly when the menu sits against it.
     readonly property bool _leftBar: VtlConfig.edgeActiveFor("left", root.mon)
                                      && (mEdge === "left" || (!vert && mGroup === "start"))
-    readonly property int  railW:    _leftBar ? VtlConfig.edgeThicknessFor("left", root.mon) : 64
+    readonly property int  railW:    _leftBar ? VtlConfig.edgeThicknessFor("left", root.mon) : 52
 
     // ── Outline builder ──────────────────────────────────────────────────────────
     // Returns [borderD, fillD] in Shape-local coords (menu-local + pad). Geometry is built once in
@@ -447,8 +447,8 @@ PanelWindow {
                 }
             }
 
-            // Active section: icons centered in the rail; the section name runs vertically
-            // (bottom→top) down the left edge, clear of the icons.
+            // Active section: just its icons, centered in the rail. Which section you're on
+            // is shown by the dots at the bottom (mouse wheel / click a dot to move between them).
             Column {
                 id: iconCol
                 anchors.horizontalCenter:     parent.horizontalCenter
@@ -462,21 +462,6 @@ PanelWindow {
                         icon:    modelData.icon
                         section: modelData.key
                     }
-                }
-            }
-            Item {
-                id: labelBox
-                width: 14
-                anchors { left: parent.left; leftMargin: 5; top: iconCol.top; bottom: iconCol.bottom }
-                Text {
-                    anchors.centerIn: parent
-                    rotation: -90
-                    text:  rail.activeSectionDef.name
-                    color: Colors.fgMuted
-                    font.pixelSize:      11
-                    font.family:         Style.font
-                    font.letterSpacing:  3.5
-                    font.capitalization: Font.AllUppercase
                 }
             }
 
@@ -628,7 +613,7 @@ PanelWindow {
         readonly property bool active: root.activeSection === ri.section
 
         // Shrink to fit when the rail follows a thin sidebar, so icons never overflow it.
-        readonly property int sz: Math.max(34, Math.min(42, root.railW - 20))   // leaves room for the section label strip
+        readonly property int sz: Math.max(30, Math.min(42, root.railW - 6))
         width:  ri.sz
         height: ri.sz
 
