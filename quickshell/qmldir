@@ -144,7 +144,6 @@ LauncherSection      1.0 settings/launcher/LauncherSection.qml
 CornerActionsSection 1.0 settings/corners/CornerActionsSection.qml
 TaskbarSection       1.0 settings/taskbar/TaskbarSection.qml
 WindowTagsSection    1.0 settings/windowtags/WindowTagsSection.qml
-ComponentsSection    1.0 settings/components/ComponentsSection.qml
 WallpaperSection     1.0 settings/theme/WallpaperSection.qml
 LockscreenSection    1.0 settings/lockscreen/LockscreenSection.qml
 LockEditor           1.0 settings/lockscreen/LockEditor.qml

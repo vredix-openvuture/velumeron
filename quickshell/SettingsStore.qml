@@ -29,6 +29,16 @@ Singleton {
         root._queue.push([key, JSON.stringify(value)])
         _pump()
     }
+
+    // Flip one entry of the component_enabled map (the à-la-carte on/off shown atop each
+    // feature's settings page). Clones the map so every other feature's explicit state survives.
+    function setComponentEnabled(key, on) {
+        var m = {}
+        var cur = VtlConfig.componentEnabledMap
+        for (var k in cur) m[k] = cur[k]
+        m[key] = on
+        set("component_enabled", m)
+    }
     function _pump() {
         if (proc.running || root._queue.length === 0) return
         var next = root._queue.shift()

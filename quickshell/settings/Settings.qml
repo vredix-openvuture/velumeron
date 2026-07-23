@@ -208,7 +208,6 @@ PanelWindow {
         { key: "quickaccess",   icon: "󱊫", title: "Quick access",  comp: quickAccessComp },
         { key: "integrations",  icon: "󰐱", title: "Integrations",  comp: integrationsComp },
         // ── Shell chrome & look ──
-        { key: "features",      icon: "󰔡", title: "Features",      comp: featuresComp },
         { key: "bar",           icon: "󰕮", title: "Bar",           comp: barComp },
         { key: "taskbar",       icon: "󱂩", title: "Taskbar",       comp: taskbarComp },
         { key: "style",         icon: "󰏘", title: "Style",         comp: styleComp },
@@ -384,12 +383,12 @@ PanelWindow {
             // you can switch on/off (the Features page + the toggleable surfaces). The two key
             // lists define the order; any rail section not listed is appended, so nothing that
             // gets added later silently vanishes from the rail.
-            readonly property var  coreKeys:    ["home", "monitors", "workspaces", "peripherals", "keybinds",
-                                                 "autostart", "quickaccess", "integrations", "style",
+            readonly property var  coreKeys:    ["home", "style", "monitors", "workspaces", "peripherals",
+                                                 "keybinds", "autostart", "quickaccess", "integrations",
                                                  "windowrules", "layouts", "backup"]
-            readonly property var  serviceKeys: ["features", "bar", "osd", "notifications", "launcher",
-                                                 "taskbar", "windowtags", "wallpaper", "lockscreen",
-                                                 "calendar", "corners", "zones"]
+            readonly property var  serviceKeys: ["bar", "osd", "notifications", "launcher", "taskbar",
+                                                 "windowtags", "wallpaper", "lockscreen", "calendar",
+                                                 "corners", "zones"]
             readonly property var  railItems: {
                 var order = rail.coreKeys.concat(rail.serviceKeys)
                 var out = []
@@ -518,9 +517,34 @@ PanelWindow {
 
             // The active section's page, straight from the registry.
             readonly property var activeMeta: root.sectionMeta(root.activeSection)
+            // section key → component-register key, for the à-la-carte on/off pinned atop a feature's page.
+            readonly property var featureOf: ({
+                "bar": "bar", "osd": "osd", "notifications": "notifications", "launcher": "launcher",
+                "taskbar": "taskbar", "windowtags": "windowtags", "wallpaper": "wallpaper",
+                "lockscreen": "lock", "calendar": "calendar", "corners": "hotcorners", "zones": "zones"
+            })
+            readonly property string featureKey: content.featureOf[root.activeSection] ?? ""
+
+            // À-la-carte on/off for the active feature — off removes its surfaces entirely
+            // (component register); the settings below still configure how it looks when on.
+            Card {
+                id: featureHeader
+                visible: content.featureKey !== ""
+                anchors { top: parent.top; left: parent.left; right: parent.right
+                          topMargin: 18; leftMargin: 18; rightMargin: 18 }
+                Toggle {
+                    label: root.sectionTitle(root.activeSection)
+                    sub:   VtlConfig.componentEnabled(content.featureKey)
+                           ? "On — showing on your desktop"
+                           : "Off — its surfaces aren't loaded (turn on to use it)"
+                    on:    VtlConfig.componentEnabled(content.featureKey)
+                    onToggled: SettingsStore.setComponentEnabled(content.featureKey,
+                                                                 !VtlConfig.componentEnabled(content.featureKey))
+                }
+            }
             Loader {
                 anchors.fill:         parent
-                anchors.topMargin:    18
+                anchors.topMargin:    featureHeader.visible ? (featureHeader.height + 30) : 18
                 anchors.leftMargin:   18
                 anchors.rightMargin:  18
                 anchors.bottomMargin: 12
@@ -531,7 +555,6 @@ PanelWindow {
             Component { id: homeComp;      HomeHub          { onNavigate: s => root.activeSection = s } }
             Component { id: networkComp;   NetworkManager   { onBack: root.activeSection = "home" } }
             Component { id: bluetoothComp; BluetoothManager { onBack: root.activeSection = "home" } }
-            Component { id: featuresComp;  ComponentsSection {} }
             Component { id: barComp;       BarSection       {} }
             Component { id: launcherComp;  LauncherSection  {} }
             Component { id: wallpaperComp; WallpaperSection {} }
