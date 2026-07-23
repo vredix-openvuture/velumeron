@@ -208,6 +208,7 @@ PanelWindow {
         { key: "quickaccess",   icon: "󱊫", title: "Quick access",  comp: quickAccessComp },
         { key: "integrations",  icon: "󰐱", title: "Integrations",  comp: integrationsComp },
         // ── Shell chrome & look ──
+        { key: "features",      icon: "󰔡", title: "Features",      comp: featuresComp },
         { key: "bar",           icon: "󰕮", title: "Bar",           comp: barComp },
         { key: "taskbar",       icon: "󱂩", title: "Taskbar",       comp: taskbarComp },
         { key: "style",         icon: "󰏘", title: "Style",         comp: styleComp },
@@ -499,6 +500,7 @@ PanelWindow {
             Component { id: homeComp;      HomeHub          { onNavigate: s => root.activeSection = s } }
             Component { id: networkComp;   NetworkManager   { onBack: root.activeSection = "home" } }
             Component { id: bluetoothComp; BluetoothManager { onBack: root.activeSection = "home" } }
+            Component { id: featuresComp;  ComponentsSection {} }
             Component { id: barComp;       BarSection       {} }
             Component { id: launcherComp;  LauncherSection  {} }
             Component { id: wallpaperComp; WallpaperSection {} }

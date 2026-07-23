@@ -1,4 +1,5 @@
 pragma Singleton
+import ".."
 import QtQuick
 import Quickshell
 import Quickshell.Services.Notifications
@@ -22,7 +23,7 @@ Singleton {
     property var  _seen:           ({})            // notification.id → true (has entered)
     property var  pinned: ({})                     // notification.id → true; pinned entries sort to the
                                                    // top of the centre and survive "clear all"
-    readonly property var model: server.trackedNotifications   // ObjectModel — history
+    readonly property var model: serverLoader.item ? serverLoader.item.trackedNotifications : null   // history (null while the notifications component is off)
 
     function isPinned(n) { return !!(n && root.pinned[n.id]) }
     function togglePin(n) {
@@ -47,25 +48,35 @@ Singleton {
         return (e && e.icon) ? Quickshell.iconPath(e.icon, "application-x-executable") : ""
     }
 
-    NotificationServer {
-        id: server
-        keepOnReload:        false
-        imageSupported:      true
-        actionsSupported:    true
-        bodySupported:       true
-        bodyMarkupSupported: true
-        persistenceSupported: true
+    // The D-Bus server is gated on the `notifications` component: with it OFF, velumeron never
+    // registers org.freedesktop.Notifications, so mako/dunst/swaync can own it instead. The Loader
+    // destroys the server (releasing the name) the instant the feature is switched off, and
+    // re-creates it when switched back on.
+    Loader {
+        id: serverLoader
+        active: VtlConfig.componentEnabled("notifications")
+        sourceComponent: Component {
+            NotificationServer {
+                id: server
+                keepOnReload:        false
+                imageSupported:      true
+                actionsSupported:    true
+                bodySupported:       true
+                bodyMarkupSupported: true
+                persistenceSupported: true
 
-        onNotification: function (n) {
-            n.tracked = true
-            root.unread++
-            if (!root.dnd) {
-                var critical = (n.urgency === NotificationUrgency.Critical)
-                var to = (n.expireTimeout > 0 ? n.expireTimeout : 5000)
-                root._deadlines[n.id] = critical ? 0 : (Date.now() + to)
-                var a = root.popups.filter(function (x) { return x !== n })
-                a.unshift(n)
-                root.popups = a
+                onNotification: function (n) {
+                    n.tracked = true
+                    root.unread++
+                    if (!root.dnd) {
+                        var critical = (n.urgency === NotificationUrgency.Critical)
+                        var to = (n.expireTimeout > 0 ? n.expireTimeout : 5000)
+                        root._deadlines[n.id] = critical ? 0 : (Date.now() + to)
+                        var a = root.popups.filter(function (x) { return x !== n })
+                        a.unshift(n)
+                        root.popups = a
+                    }
+                }
             }
         }
     }
@@ -138,7 +149,7 @@ Singleton {
     function clearAll() {
         // Pinned entries are kept — "clear all" only sweeps the un-pinned history + toasts. Visible
         // toasts retract (dismissed on purge); the rest are dismissed straight away.
-        var vs = server.trackedNotifications.values
+        var vs = serverLoader.item ? serverLoader.item.trackedNotifications.values : []
         for (var i = vs.length - 1; i >= 0; i--) {
             var n = vs[i]
             if (root.isPinned(n)) continue

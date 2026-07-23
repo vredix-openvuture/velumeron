@@ -10,7 +10,7 @@ Item {
     property bool grouped: VtlConfig.notifyGroup
 
     // Recompute display rows from the tracked history whenever it changes.
-    readonly property var src: NotifService.model.values
+    readonly property var src: NotifService.model ? NotifService.model.values : []
     readonly property var rows: {
         var vs = root.src, out
         if (!root.grouped) {

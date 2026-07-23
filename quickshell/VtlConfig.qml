@@ -64,6 +64,9 @@ Item {
         return (v === undefined || v === null) ? true : !!v
     }
 
+    // The raw enable map, for UIs that clone-and-write it (Settings → Features).
+    readonly property var componentEnabledMap: (_data.component_enabled && typeof _data.component_enabled === "object") ? _data.component_enabled : ({})
+
     // ── Public properties (with sane defaults) ────────────────────────────────
     readonly property bool   opacityEnabled:  _data.opacity_enabled   ?? false
     readonly property real   opacityValue:    _data.opacity_value     ?? 0.88
