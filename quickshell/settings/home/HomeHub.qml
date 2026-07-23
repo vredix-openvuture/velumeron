@@ -439,7 +439,7 @@ Item {
             id: sessionGlide
             height: 48; clip: true
             anchors { left: gearBtn.right; leftMargin: 12; verticalCenter: parent.verticalCenter }
-            property bool expanded: sgHov.containsMouse
+            property bool expanded: sgHover.hovered
             // Collapsed = just the first session tile; hover reveals the rest sliding out.
             width: expanded ? sgRow.width : 48
             Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
@@ -452,7 +452,9 @@ Item {
                     delegate: PowerTile { required property var modelData; icon: modelData.icon; cmd: modelData.cmd }
                 }
             }
-            MouseArea { id: sgHov; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+            // Passive hover detection — a HoverHandler doesn't grab events, so the tiles below
+            // still receive their own hover (and colour change) while this keeps the row expanded.
+            HoverHandler { id: sgHover }
         }
     }
 
