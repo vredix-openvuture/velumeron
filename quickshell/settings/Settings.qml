@@ -112,7 +112,7 @@ PanelWindow {
     // Icon rail width — continue the left bar exactly when the menu sits against it.
     readonly property bool _leftBar: VtlConfig.edgeActiveFor("left", root.mon)
                                      && (mEdge === "left" || (!vert && mGroup === "start"))
-    readonly property int  railW:    _leftBar ? VtlConfig.edgeThicknessFor("left", root.mon) : 52
+    readonly property int  railW:    _leftBar ? VtlConfig.edgeThicknessFor("left", root.mon) : 64
 
     // ── Outline builder ──────────────────────────────────────────────────────────
     // Returns [borderD, fillD] in Shape-local coords (menu-local + pad). Geometry is built once in
@@ -447,35 +447,36 @@ PanelWindow {
                 }
             }
 
-            // Active section: vertical name label (bottom→top) + its icon column.
-            Row {
-                anchors { top: parent.top; topMargin: 26; horizontalCenter: parent.horizontalCenter }
-                spacing: 2
-                Item {
-                    width:  14
-                    height: iconCol.height
-                    Text {
-                        anchors.centerIn: parent
-                        rotation: -90
-                        text:  rail.activeSectionDef.name
-                        color: Colors.fgMuted
-                        font.pixelSize:    10
-                        font.family:       Style.font
-                        font.letterSpacing: 1.5
-                        font.capitalization: Font.AllUppercase
+            // Active section: icons centered in the rail; the section name runs vertically
+            // (bottom→top) down the left edge, clear of the icons.
+            Column {
+                id: iconCol
+                anchors.horizontalCenter:     parent.horizontalCenter
+                anchors.verticalCenter:       parent.verticalCenter
+                anchors.verticalCenterOffset: -18
+                spacing: 8
+                Repeater {
+                    model: rail.activeSectionDef.metas
+                    delegate: RailIcon {
+                        required property var modelData
+                        icon:    modelData.icon
+                        section: modelData.key
                     }
                 }
-                Column {
-                    id: iconCol
-                    spacing: 4
-                    Repeater {
-                        model: rail.activeSectionDef.metas
-                        delegate: RailIcon {
-                            required property var modelData
-                            icon:    modelData.icon
-                            section: modelData.key
-                        }
-                    }
+            }
+            Item {
+                id: labelBox
+                width: 14
+                anchors { left: parent.left; leftMargin: 5; top: iconCol.top; bottom: iconCol.bottom }
+                Text {
+                    anchors.centerIn: parent
+                    rotation: -90
+                    text:  rail.activeSectionDef.name
+                    color: Colors.fgMuted
+                    font.pixelSize:      11
+                    font.family:         Style.font
+                    font.letterSpacing:  3.5
+                    font.capitalization: Font.AllUppercase
                 }
             }
 
@@ -627,7 +628,7 @@ PanelWindow {
         readonly property bool active: root.activeSection === ri.section
 
         // Shrink to fit when the rail follows a thin sidebar, so icons never overflow it.
-        readonly property int sz: Math.max(26, Math.min(38, root.railW - 18))   // leaves room for the section label strip
+        readonly property int sz: Math.max(34, Math.min(42, root.railW - 20))   // leaves room for the section label strip
         width:  ri.sz
         height: ri.sz
 
