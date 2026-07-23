@@ -88,6 +88,8 @@ hl.bind(MOD .. " + SHIFT + L", hl.dsp.window.move({ workspace = "m+1" }))
 hl.bind(MOD .. " + SHIFT + J", hl.dsp.exec_cmd("hyprctl dispatch swapnext"))
 hl.bind(MOD .. " + SHIFT + K", hl.dsp.exec_cmd("hyprctl dispatch swapnext prev"))
 hl.bind(MOD .. " + SHIFT + M", hl.dsp.window.move({ monitor = "+1", follow = true }))
+-- Stash the focused window into the special ("magic") workspace — reveal it again with SUPER+RETURN.
+hl.bind(MOD .. " + SHIFT + RETURN", hl.dsp.window.move({ workspace = "special:magic" }))
 hl.bind(MOD .. " + SHIFT + S", hl.dsp.exec_cmd(screenshot_cmd))
 hl.bind(MOD .. " + SHIFT + slash", hl.dsp.exec_cmd(VTL_DIR .. "/bin/velumeron --keybind-help"))
 
