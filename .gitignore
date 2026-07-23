@@ -54,3 +54,7 @@ quickshell/plugins/Velumeron/
 .archive/
 
 __pycache__/
+
+# xcursorgen intermediate configs written to the repo root by cursor-build.py
+# (each points at /tmp/pv7/<shape>_NNN.png — regenerated on every cursor build).
+/*.conf

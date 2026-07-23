@@ -1,0 +1,748 @@
+{
+ "canvas": 256,
+ "cursors": [
+  {
+   "name": "bd_double_arrow",
+   "hotspot": [
+    128,
+    128
+   ],
+   "symlinks": [
+    "c7088f0f3e6c8088236ef8e1e3e70000",
+    "nwse-resize",
+    "size_fdiag"
+   ],
+   "svg": "bd_double_arrow.svg"
+  },
+  {
+   "name": "bottom_left_corner",
+   "hotspot": [
+    26,
+    232
+   ],
+   "symlinks": [
+    "sw-resize"
+   ],
+   "svg": "bottom_left_corner.svg"
+  },
+  {
+   "name": "bottom_right_corner",
+   "hotspot": [
+    229,
+    232
+   ],
+   "symlinks": [
+    "se-resize"
+   ],
+   "svg": "bottom_right_corner.svg"
+  },
+  {
+   "name": "bottom_side",
+   "hotspot": [
+    129,
+    234
+   ],
+   "symlinks": [
+    "s-resize"
+   ],
+   "svg": "bottom_side.svg"
+  },
+  {
+   "name": "bottom_tee",
+   "hotspot": [
+    128,
+    230
+   ],
+   "symlinks": [],
+   "svg": "bottom_tee.svg"
+  },
+  {
+   "name": "center_ptr",
+   "hotspot": [
+    127,
+    17
+   ],
+   "symlinks": [],
+   "svg": "center_ptr.svg"
+  },
+  {
+   "name": "circle",
+   "hotspot": [
+    55,
+    17
+   ],
+   "symlinks": [
+    "forbidden"
+   ],
+   "svg": "circle.svg"
+  },
+  {
+   "name": "context-menu",
+   "hotspot": [
+    57,
+    17
+   ],
+   "symlinks": [],
+   "svg": "context-menu.svg"
+  },
+  {
+   "name": "copy",
+   "hotspot": [
+    55,
+    17
+   ],
+   "symlinks": [
+    "1081e37283d90000800003c07f3ef6bf",
+    "6407b0e94181790501fd1e167b474872",
+    "b66166c04f8c3109214a4fbd64a50fc8"
+   ],
+   "svg": "copy.svg"
+  },
+  {
+   "name": "cross",
+   "hotspot": [
+    128,
+    128
+   ],
+   "symlinks": [
+    "cross_reverse",
+    "diamond_cross"
+   ],
+   "svg": "cross.svg"
+  },
+  {
+   "name": "crossed_circle",
+   "hotspot": [
+    128,
+    128
+   ],
+   "symlinks": [
+    "03b6e0fcb3499374a867c041f52298f0",
+    "not-allowed"
+   ],
+   "svg": "crossed_circle.svg"
+  },
+  {
+   "name": "crosshair",
+   "hotspot": [
+    128,
+    128
+   ],
+   "symlinks": [],
+   "svg": "crosshair.svg"
+  },
+  {
+   "name": "dnd_no_drop",
+   "hotspot": [
+    100,
+    65
+   ],
+   "symlinks": [
+    "no-drop"
+   ],
+   "svg": "dnd_no_drop.svg"
+  },
+  {
+   "name": "dnd-ask",
+   "hotspot": [
+    100,
+    65
+   ],
+   "symlinks": [],
+   "svg": "dnd-ask.svg"
+  },
+  {
+   "name": "dnd-copy",
+   "hotspot": [
+    100,
+    65
+   ],
+   "symlinks": [],
+   "svg": "dnd-copy.svg"
+  },
+  {
+   "name": "dnd-link",
+   "hotspot": [
+    100,
+    65
+   ],
+   "symlinks": [
+    "alias"
+   ],
+   "svg": "dnd-link.svg"
+  },
+  {
+   "name": "dotbox",
+   "hotspot": [
+    128,
+    128
+   ],
+   "symlinks": [
+    "dot_box_mask",
+    "draped_box",
+    "icon",
+    "target"
+   ],
+   "svg": "dotbox.svg"
+  },
+  {
+   "name": "fd_double_arrow",
+   "hotspot": [
+    128,
+    128
+   ],
+   "symlinks": [
+    "fcf1c3c7cd4491d801f1e1c78f100000",
+    "nesw-resize",
+    "size_bdiag"
+   ],
+   "svg": "fd_double_arrow.svg"
+  },
+  {
+   "name": "grabbing",
+   "hotspot": [
+    128,
+    66
+   ],
+   "symlinks": [
+    "closedhand",
+    "dnd-move",
+    "dnd-none",
+    "fcf21c00b30f7e3f83fe0dfd12e71cff"
+   ],
+   "svg": "grabbing.svg"
+  },
+  {
+   "name": "hand1",
+   "hotspot": [
+    144,
+    79
+   ],
+   "symlinks": [
+    "grab",
+    "openhand"
+   ],
+   "svg": "hand1.svg"
+  },
+  {
+   "name": "hand2",
+   "hotspot": [
+    114,
+    18
+   ],
+   "symlinks": [
+    "9d800788f1b08800ae810202380a0822",
+    "e29285e634086352946a0e7090d73106",
+    "pointer",
+    "pointing_hand"
+   ],
+   "svg": "hand2.svg"
+  },
+  {
+   "name": "left_ptr",
+   "hotspot": [
+    55,
+    17
+   ],
+   "symlinks": [
+    "arrow",
+    "default",
+    "top_left_arrow"
+   ],
+   "svg": "left_ptr.svg"
+  },
+  {
+   "name": "left_ptr_watch",
+   "hotspot": [
+    55,
+    17
+   ],
+   "symlinks": [
+    "00000000000000020006000e7e9ffc3f",
+    "08e8e1c95fe2fc01f976f1e063a24ccd",
+    "3ecb610c1bf2410f44200f48c40d3599",
+    "progress"
+   ],
+   "frames": [
+    "frame-000.svg",
+    "frame-001.svg",
+    "frame-002.svg",
+    "frame-003.svg",
+    "frame-004.svg",
+    "frame-005.svg",
+    "frame-006.svg",
+    "frame-007.svg",
+    "frame-008.svg",
+    "frame-009.svg",
+    "frame-010.svg",
+    "frame-011.svg",
+    "frame-012.svg",
+    "frame-013.svg",
+    "frame-014.svg",
+    "frame-015.svg",
+    "frame-016.svg",
+    "frame-017.svg",
+    "frame-018.svg",
+    "frame-019.svg",
+    "frame-020.svg",
+    "frame-021.svg",
+    "frame-022.svg",
+    "frame-023.svg",
+    "frame-024.svg",
+    "frame-025.svg",
+    "frame-026.svg",
+    "frame-027.svg",
+    "frame-028.svg",
+    "frame-029.svg",
+    "frame-030.svg",
+    "frame-031.svg",
+    "frame-032.svg",
+    "frame-033.svg",
+    "frame-034.svg",
+    "frame-035.svg",
+    "frame-036.svg",
+    "frame-037.svg",
+    "frame-038.svg",
+    "frame-039.svg",
+    "frame-040.svg",
+    "frame-041.svg",
+    "frame-042.svg",
+    "frame-043.svg",
+    "frame-044.svg",
+    "frame-045.svg",
+    "frame-046.svg",
+    "frame-047.svg",
+    "frame-048.svg",
+    "frame-049.svg",
+    "frame-050.svg",
+    "frame-051.svg",
+    "frame-052.svg",
+    "frame-053.svg"
+   ],
+   "delay": 40
+  },
+  {
+   "name": "left_side",
+   "hotspot": [
+    21,
+    128
+   ],
+   "symlinks": [
+    "w-resize"
+   ],
+   "svg": "left_side.svg"
+  },
+  {
+   "name": "left_tee",
+   "hotspot": [
+    230,
+    128
+   ],
+   "symlinks": [],
+   "svg": "left_tee.svg"
+  },
+  {
+   "name": "link",
+   "hotspot": [
+    55,
+    17
+   ],
+   "symlinks": [
+    "3085a0e285430894940527032f8b26df",
+    "640fb0e74195791501fd1ed57b41487f",
+    "a2a266d0498c3104214a47bd64ab0fc8"
+   ],
+   "svg": "link.svg"
+  },
+  {
+   "name": "ll_angle",
+   "hotspot": [
+    30,
+    223
+   ],
+   "symlinks": [],
+   "svg": "ll_angle.svg"
+  },
+  {
+   "name": "lr_angle",
+   "hotspot": [
+    224,
+    230
+   ],
+   "symlinks": [],
+   "svg": "lr_angle.svg"
+  },
+  {
+   "name": "move",
+   "hotspot": [
+    128,
+    128
+   ],
+   "symlinks": [
+    "4498f0e0c1937ffe01fd06f973665830",
+    "9081237383d90e509aa00f00170e968f",
+    "all-scroll",
+    "fleur",
+    "size_all"
+   ],
+   "svg": "move.svg"
+  },
+  {
+   "name": "pencil",
+   "hotspot": [
+    46,
+    211
+   ],
+   "symlinks": [
+    "draft"
+   ],
+   "svg": "pencil.svg"
+  },
+  {
+   "name": "plus",
+   "hotspot": [
+    128,
+    128
+   ],
+   "symlinks": [
+    "cell"
+   ],
+   "svg": "plus.svg"
+  },
+  {
+   "name": "pointer-move",
+   "hotspot": [
+    55,
+    17
+   ],
+   "symlinks": [],
+   "svg": "pointer-move.svg"
+  },
+  {
+   "name": "question_arrow",
+   "hotspot": [
+    42,
+    86
+   ],
+   "symlinks": [
+    "5c6cd98b3f3ebcb1f9c7f1c204630408",
+    "d9ce0ab605698f320427677b458ad60b",
+    "help",
+    "left_ptr_help",
+    "whats_this"
+   ],
+   "svg": "question_arrow.svg"
+  },
+  {
+   "name": "right_ptr",
+   "hotspot": [
+    204,
+    17
+   ],
+   "symlinks": [
+    "draft_large",
+    "draft_small"
+   ],
+   "svg": "right_ptr.svg"
+  },
+  {
+   "name": "right_side",
+   "hotspot": [
+    233,
+    128
+   ],
+   "symlinks": [
+    "e-resize"
+   ],
+   "svg": "right_side.svg"
+  },
+  {
+   "name": "right_tee",
+   "hotspot": [
+    29,
+    128
+   ],
+   "symlinks": [],
+   "svg": "right_tee.svg"
+  },
+  {
+   "name": "sb_down_arrow",
+   "hotspot": [
+    128,
+    222
+   ],
+   "symlinks": [
+    "down-arrow"
+   ],
+   "svg": "sb_down_arrow.svg"
+  },
+  {
+   "name": "sb_h_double_arrow",
+   "hotspot": [
+    128,
+    128
+   ],
+   "symlinks": [
+    "028006030e0e7ebffc7f7070c0600140",
+    "14fef782d02440884392942c1120523",
+    "col-resize",
+    "ew-resize",
+    "h_double_arrow",
+    "size-hor",
+    "size_hor",
+    "split_h"
+   ],
+   "svg": "sb_h_double_arrow.svg"
+  },
+  {
+   "name": "sb_left_arrow",
+   "hotspot": [
+    33,
+    128
+   ],
+   "symlinks": [
+    "left-arrow"
+   ],
+   "svg": "sb_left_arrow.svg"
+  },
+  {
+   "name": "sb_right_arrow",
+   "hotspot": [
+    223,
+    128
+   ],
+   "symlinks": [
+    "right-arrow"
+   ],
+   "svg": "sb_right_arrow.svg"
+  },
+  {
+   "name": "sb_up_arrow",
+   "hotspot": [
+    128,
+    33
+   ],
+   "symlinks": [
+    "up-arrow"
+   ],
+   "svg": "sb_up_arrow.svg"
+  },
+  {
+   "name": "sb_v_double_arrow",
+   "hotspot": [
+    128,
+    128
+   ],
+   "symlinks": [
+    "00008160000006810000408080010102",
+    "2870a09082c103050810ffdffffe0204",
+    "double_arrow",
+    "ns-resize",
+    "row-resize",
+    "size-ver",
+    "size_ver",
+    "split_v",
+    "v_double_arrow"
+   ],
+   "svg": "sb_v_double_arrow.svg"
+  },
+  {
+   "name": "tcross",
+   "hotspot": [
+    128,
+    128
+   ],
+   "symlinks": [
+    "color-picker"
+   ],
+   "svg": "tcross.svg"
+  },
+  {
+   "name": "top_left_corner",
+   "hotspot": [
+    29,
+    24
+   ],
+   "symlinks": [
+    "nw-resize"
+   ],
+   "svg": "top_left_corner.svg"
+  },
+  {
+   "name": "top_right_corner",
+   "hotspot": [
+    229,
+    24
+   ],
+   "symlinks": [
+    "ne-resize"
+   ],
+   "svg": "top_right_corner.svg"
+  },
+  {
+   "name": "top_side",
+   "hotspot": [
+    128,
+    23
+   ],
+   "symlinks": [
+    "n-resize"
+   ],
+   "svg": "top_side.svg"
+  },
+  {
+   "name": "top_tee",
+   "hotspot": [
+    128,
+    27
+   ],
+   "symlinks": [],
+   "svg": "top_tee.svg"
+  },
+  {
+   "name": "ul_angle",
+   "hotspot": [
+    33,
+    33
+   ],
+   "symlinks": [],
+   "svg": "ul_angle.svg"
+  },
+  {
+   "name": "ur_angle",
+   "hotspot": [
+    225,
+    33
+   ],
+   "symlinks": [],
+   "svg": "ur_angle.svg"
+  },
+  {
+   "name": "vertical-text",
+   "hotspot": [
+    128,
+    128
+   ],
+   "symlinks": [],
+   "svg": "vertical-text.svg"
+  },
+  {
+   "name": "wait",
+   "hotspot": [
+    128,
+    128
+   ],
+   "symlinks": [
+    "watch"
+   ],
+   "frames": [
+    "frame-000.svg",
+    "frame-001.svg",
+    "frame-002.svg",
+    "frame-003.svg",
+    "frame-004.svg",
+    "frame-005.svg",
+    "frame-006.svg",
+    "frame-007.svg",
+    "frame-008.svg",
+    "frame-009.svg",
+    "frame-010.svg",
+    "frame-011.svg",
+    "frame-012.svg",
+    "frame-013.svg",
+    "frame-014.svg",
+    "frame-015.svg",
+    "frame-016.svg",
+    "frame-017.svg",
+    "frame-018.svg",
+    "frame-019.svg",
+    "frame-020.svg",
+    "frame-021.svg",
+    "frame-022.svg",
+    "frame-023.svg",
+    "frame-024.svg",
+    "frame-025.svg",
+    "frame-026.svg",
+    "frame-027.svg",
+    "frame-028.svg",
+    "frame-029.svg",
+    "frame-030.svg",
+    "frame-031.svg",
+    "frame-032.svg",
+    "frame-033.svg",
+    "frame-034.svg",
+    "frame-035.svg",
+    "frame-036.svg",
+    "frame-037.svg",
+    "frame-038.svg",
+    "frame-039.svg",
+    "frame-040.svg",
+    "frame-041.svg",
+    "frame-042.svg",
+    "frame-043.svg",
+    "frame-044.svg",
+    "frame-045.svg",
+    "frame-046.svg",
+    "frame-047.svg",
+    "frame-048.svg",
+    "frame-049.svg",
+    "frame-050.svg",
+    "frame-051.svg",
+    "frame-052.svg",
+    "frame-053.svg"
+   ],
+   "delay": 40
+  },
+  {
+   "name": "wayland-cursor",
+   "hotspot": [
+    128,
+    128
+   ],
+   "symlinks": [],
+   "svg": "wayland-cursor.svg"
+  },
+  {
+   "name": "X_cursor",
+   "hotspot": [
+    128,
+    128
+   ],
+   "symlinks": [
+    "pirate",
+    "x-cursor"
+   ],
+   "svg": "X_cursor.svg"
+  },
+  {
+   "name": "xterm",
+   "hotspot": [
+    128,
+    128
+   ],
+   "symlinks": [
+    "ibeam",
+    "text"
+   ],
+   "svg": "xterm.svg"
+  },
+  {
+   "name": "zoom-in",
+   "hotspot": [
+    116,
+    116
+   ],
+   "symlinks": [],
+   "svg": "zoom-in.svg"
+  },
+  {
+   "name": "zoom-out",
+   "hotspot": [
+    116,
+    116
+   ],
+   "symlinks": [],
+   "svg": "zoom-out.svg"
+  }
+ ]
+}
