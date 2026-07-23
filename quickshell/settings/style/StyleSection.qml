@@ -592,6 +592,19 @@ Item {
             topPadding: 4
             spacing: Style.cardGap
 
+            // ── Settings-menu navigation mode (experimental) ──────────────────
+            Card {
+                CardLabel { text: "MENU NAVIGATION" }
+                SubLabel { width: parent.width
+                           text: "How this settings menu is navigated — the classic icon sidebar, or full-page navigation (a gear on Home opens a scrollable list of every page)." }
+                Segmented {
+                    equal: true
+                    current: VtlConfig.settingsNavMode
+                    segments: [{ label: "Sidebar", key: "sidebar" }, { label: "Pages", key: "page" }]
+                    onPicked: SettingsStore.set("settings_nav_mode", key)
+                }
+            }
+
             // ── Template cards ────────────────────────────────────────────────
             Card {
                 CardLabel { text: "STYLE" }

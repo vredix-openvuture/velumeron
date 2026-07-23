@@ -239,6 +239,41 @@ PanelWindow {
     // sections array) keeps the array non-reactive — a style switch must not reload the open page.
     function sectionHint(s)  { return s === "info" ? Wording.s("hint.info") : (root.sectionMeta(s)?.hint ?? "") }
 
+    // ── Section grouping — shared by the sidebar rail AND the page-mode nav list ──
+    readonly property var navGroups: [
+        { name: "System",   keys: ["home", "monitors", "workspaces", "peripherals", "keybinds"] },
+        { name: "Look",     keys: ["autostart", "quickaccess", "integrations", "style", "wallpaper"] },
+        { name: "Services", keys: ["bar", "osd", "notifications", "launcher", "taskbar",
+                                   "windowtags", "lockscreen", "calendar", "corners"] },
+        { name: "Windows",  keys: ["windowrules", "layouts", "zones", "backup"] }
+    ]
+    // Resolve each group's keys → section metas; any rail-eligible section not placed lands in a
+    // trailing "More" group so nothing ever vanishes from navigation.
+    readonly property var navSections: {
+        var placed = ({})
+        var out = []
+        for (var s = 0; s < root.navGroups.length; s++) {
+            var metas = []
+            var keys = root.navGroups[s].keys
+            for (var i = 0; i < keys.length; i++) {
+                var m = root.sectionMeta(keys[i])
+                if (m && m.rail !== false && m.key !== "info") { metas.push(m); placed[keys[i]] = true }
+            }
+            if (metas.length > 0) out.push({ name: root.navGroups[s].name, metas: metas })
+        }
+        var extra = []
+        var all = root.sections.filter(function (x) { return x.rail !== false && x.key !== "info" })
+        for (var k = 0; k < all.length; k++)
+            if (!placed[all[k].key]) extra.push(all[k])
+        if (extra.length > 0) out.push({ name: "More", metas: extra })
+        return out
+    }
+
+    // Navigation MODE: "sidebar" (icon rail) or "page" (full-page nav list). Toggle in Settings →
+    // Style. `navPage` is the page-mode state: true = the nav list is showing.
+    readonly property string navMode: VtlConfig.settingsNavMode
+    property bool navPage: false
+
     // The menu is opened globally (one instance per screen) but shows on a single monitor. It LATCHES
     // to the monitor focused at open time (UiState.menuMon) and stays there — it does NOT follow the
     // focus afterwards. Each instance gates on whether it owns that latched monitor.
@@ -372,52 +407,25 @@ PanelWindow {
         Item {
             id: rail
             width:   root.railW
+            visible: root.navMode === "sidebar"
             opacity: menu.contentReveal
             z:       5    // above the content pane, so the hover tooltips aren't painted under it
             anchors { top: parent.top; bottom: parent.bottom; left: parent.left }
 
-            // The rail is SECTIONED: one named group of icons shows at a time; the mouse wheel
-            // (or the dots at the bottom) moves between sections, and the section name runs
-            // vertically (bottom→top) to the left of its icons. Grouping is by these key lists;
-            // any rail-eligible section not placed lands in a trailing "More" group so nothing vanishes.
-            readonly property var sectionDefs: [
-                { name: "System",   keys: ["home", "monitors", "workspaces", "peripherals", "keybinds"] },
-                { name: "Look",     keys: ["autostart", "quickaccess", "integrations", "style", "wallpaper"] },
-                { name: "Services", keys: ["bar", "osd", "notifications", "launcher", "taskbar",
-                                           "windowtags", "lockscreen", "calendar", "corners"] },
-                { name: "Windows",  keys: ["windowrules", "layouts", "zones", "backup"] }
-            ]
-            readonly property var sections2: {
-                var placed = ({})
-                var out = []
-                for (var s = 0; s < rail.sectionDefs.length; s++) {
-                    var metas = []
-                    var keys = rail.sectionDefs[s].keys
-                    for (var i = 0; i < keys.length; i++) {
-                        var m = root.sectionMeta(keys[i])
-                        if (m && m.rail !== false && m.key !== "info") { metas.push(m); placed[keys[i]] = true }
-                    }
-                    if (metas.length > 0) out.push({ name: rail.sectionDefs[s].name, metas: metas })
-                }
-                var extra = []
-                var all = root.sections.filter(function (x) { return x.rail !== false && x.key !== "info" })
-                for (var k = 0; k < all.length; k++)
-                    if (!placed[all[k].key]) extra.push(all[k])
-                if (extra.length > 0) out.push({ name: "More", metas: extra })
-                return out
-            }
+            // The rail is SECTIONED: one named group of icons shows at a time; the mouse wheel or
+            // the dots at the bottom move between sections. The grouping is shared with the
+            // page-mode nav list (root.navGroups / root.navSections).
             property int sectionIdx: 0
-            onSections2Changed: if (rail.sectionIdx >= rail.sections2.length) rail.sectionIdx = 0
-            readonly property var activeSectionDef: rail.sections2[rail.sectionIdx] ?? ({ name: "", metas: [] })
+            readonly property var activeSectionDef: root.navSections[rail.sectionIdx] ?? ({ name: "", metas: [] })
             readonly property var infoMeta: root.sectionMeta("info")
 
             function flip(dir) {
-                var n = rail.sections2.length
+                var n = root.navSections.length
                 if (n > 0) rail.sectionIdx = ((rail.sectionIdx + dir) % n + n) % n
             }
             function ensureVisible(key) {
-                for (var s = 0; s < rail.sections2.length; s++) {
-                    var metas = rail.sections2[s].metas
+                for (var s = 0; s < root.navSections.length; s++) {
+                    var metas = root.navSections[s].metas
                     for (var i = 0; i < metas.length; i++)
                         if (metas[i].key === key) { rail.sectionIdx = s; return }
                 }
@@ -470,7 +478,7 @@ PanelWindow {
                 anchors { bottom: infoCol.top; bottomMargin: 12; horizontalCenter: parent.horizontalCenter }
                 spacing: 4
                 Repeater {
-                    model: rail.sections2.length
+                    model: root.navSections.length
                     delegate: Rectangle {
                         required property int index
                         width: 5; height: 5; radius: 2.5
@@ -499,6 +507,7 @@ PanelWindow {
         Rectangle {
             x:       root.railW
             width:   1
+            visible: root.navMode === "sidebar"
             opacity: menu.contentReveal
             anchors { top: parent.top; bottom: parent.bottom
                       topMargin: 12; bottomMargin: 12 }
@@ -510,8 +519,9 @@ PanelWindow {
             id: content
             opacity: menu.contentReveal
             anchors { top: parent.top; bottom: parent.bottom; right: parent.right; left: parent.left
-                      leftMargin: root.railW + 1 }
+                      leftMargin: root.navMode === "sidebar" ? root.railW + 1 : 0 }
 
+            readonly property bool pageMode: root.navMode === "page"
             // The active section's page, straight from the registry.
             readonly property var activeMeta: root.sectionMeta(root.activeSection)
             // section key → component-register key, for the à-la-carte on/off pinned atop a feature's page.
@@ -522,13 +532,39 @@ PanelWindow {
             })
             readonly property string featureKey: content.featureOf[root.activeSection] ?? ""
 
+            // Page-mode back bar — return to the nav list (shown above a non-home section page).
+            Item {
+                id: backBar
+                height: 44
+                visible: content.pageMode && !root.navPage && root.activeSection !== "home"
+                anchors { top: parent.top; left: parent.left; right: parent.right
+                          topMargin: 10; leftMargin: 14; rightMargin: 14 }
+                Row {
+                    spacing: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    StyledRect {
+                        width: 34; height: 34; radius: Style.rTile
+                        color: backHov.containsMouse ? Style.tint(Style.accent, 0.18) : "transparent"
+                        Text { anchors.centerIn: parent; text: "󰅁"; color: Colors.fgBright
+                               font.pixelSize: 18; font.family: Style.font }
+                        MouseArea { id: backHov; anchors.fill: parent; hoverEnabled: true
+                                    onClicked: root.navPage = true }
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text:  root.sectionTitle(root.activeSection)
+                        color: Colors.fgBright; font.pixelSize: 18; font.family: Style.font; font.weight: Font.DemiBold
+                    }
+                }
+            }
+
             // À-la-carte on/off for the active feature — off removes its surfaces entirely
             // (component register); the settings below still configure how it looks when on.
             Card {
                 id: featureHeader
-                visible: content.featureKey !== ""
-                anchors { top: parent.top; left: parent.left; right: parent.right
-                          topMargin: 18; leftMargin: 18; rightMargin: 18 }
+                visible: content.featureKey !== "" && !root.navPage
+                anchors { top: backBar.visible ? backBar.bottom : parent.top; left: parent.left; right: parent.right
+                          topMargin: backBar.visible ? 8 : 18; leftMargin: 18; rightMargin: 18 }
                 Toggle {
                     label: root.sectionTitle(root.activeSection)
                     sub:   VtlConfig.componentEnabled(content.featureKey)
@@ -540,14 +576,86 @@ PanelWindow {
                 }
             }
             Loader {
-                anchors.fill:         parent
-                anchors.topMargin:    featureHeader.visible ? (featureHeader.height + 30) : 18
+                anchors.left:   parent.left
+                anchors.right:  parent.right
+                anchors.bottom: parent.bottom
+                anchors.top:    featureHeader.visible ? featureHeader.bottom
+                                : (backBar.visible ? backBar.bottom : parent.top)
+                anchors.topMargin:    (featureHeader.visible || backBar.visible) ? 12 : 18
                 anchors.leftMargin:   18
                 anchors.rightMargin:  18
                 anchors.bottomMargin: 12
-                active:  (content.activeMeta?.comp ?? null) !== null
+                active:  (content.activeMeta?.comp ?? null) !== null && !(content.pageMode && root.navPage)
                 visible: active
                 sourceComponent: content.activeMeta?.comp ?? null
+            }
+
+            // ── Page-mode nav list: heading + a scrollable, sectioned list of every menu (icon + title) ──
+            Flickable {
+                visible: content.pageMode && root.navPage
+                anchors.fill: parent
+                anchors { topMargin: 18; leftMargin: 18; rightMargin: 18; bottomMargin: 12 }
+                contentHeight: navCol.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                Column {
+                    id: navCol
+                    width: parent.width
+                    spacing: 6
+                    Text {
+                        text: "Settings"; color: Colors.fgBright
+                        font.pixelSize: 22; font.family: Style.font; font.weight: Font.DemiBold
+                        bottomPadding: 6
+                    }
+                    Repeater {
+                        model: root.navSections
+                        delegate: Column {
+                            required property var modelData
+                            width: navCol.width
+                            spacing: 4
+                            Text {
+                                text: modelData.name; color: Colors.fgMuted
+                                font.pixelSize: Style.fsSub; font.family: Style.font
+                                font.capitalization: Font.AllUppercase; font.letterSpacing: 1
+                                topPadding: 10; bottomPadding: 2
+                            }
+                            Repeater {
+                                model: modelData.metas
+                                delegate: StyledRect {
+                                    required property var modelData
+                                    width: navCol.width; height: 46
+                                    radius: Style.rCard
+                                    color: entryHov.containsMouse ? Style.tint(Style.accent, 0.14) : Style.cardFill
+                                    Row {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        anchors.left: parent.left; anchors.leftMargin: 14
+                                        spacing: 14
+                                        Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.icon
+                                               color: Colors.fgBright; font.pixelSize: 18; font.family: Style.font }
+                                        Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.title
+                                               color: Colors.fgBright; font.pixelSize: 14; font.family: Style.font }
+                                    }
+                                    MouseArea {
+                                        id: entryHov
+                                        anchors.fill: parent; hoverEnabled: true
+                                        onClicked: { root.activeSection = modelData.key; root.navPage = false }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Page-mode gear on the Home page — opens the nav list.
+            StyledRect {
+                visible: content.pageMode && !root.navPage && root.activeSection === "home"
+                width: 46; height: 46; radius: Style.rTile
+                anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter; bottomMargin: 16 }
+                color: gearHov.containsMouse ? Style.tint(Style.accent, 0.2) : Style.cardFill
+                Text { anchors.centerIn: parent; text: "󰒓"; color: Colors.fgBright
+                       font.pixelSize: 22; font.family: Style.font }
+                MouseArea { id: gearHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.navPage = true }
             }
             Component { id: homeComp;      HomeHub          { onNavigate: s => root.activeSection = s } }
             Component { id: networkComp;   NetworkManager   { onBack: root.activeSection = "home" } }

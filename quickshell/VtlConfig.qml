@@ -77,6 +77,9 @@ Item {
     readonly property int  windowBlurPasses: _data.window_blur_passes ?? 4
     readonly property real windowBlurNoise:  _data.window_blur_noise  ?? 0.025
 
+    // Settings menu navigation: "sidebar" (icon rail) or "page" (full-page nav list).
+    readonly property string settingsNavMode: _data.settings_nav_mode ?? "sidebar"
+
     // ── Public properties (with sane defaults) ────────────────────────────────
     readonly property bool   opacityEnabled:  _data.opacity_enabled   ?? false
     readonly property real   opacityValue:    _data.opacity_value     ?? 0.88
