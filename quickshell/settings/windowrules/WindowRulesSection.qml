@@ -29,7 +29,10 @@ Item {
                 "" + VtlConfig.windowOpacity,
                 VtlConfig.windowBlur ? "1" : "0",
                 "" + VtlConfig.windowVibrancy,
-                VtlConfig.windowXray ? "1" : "0"]
+                VtlConfig.windowXray ? "1" : "0",
+                "" + VtlConfig.windowBlurSize,
+                "" + VtlConfig.windowBlurPasses,
+                "" + VtlConfig.windowBlurNoise]
             decoProc.running = false
             decoProc.running = true
         }
@@ -168,14 +171,29 @@ Item {
                     on:    VtlConfig.windowBlur
                     onToggled: root.saveDecoration("window_blur", !VtlConfig.windowBlur)
                 }
+                Stepper {
+                    label: "Blur size"; unit: "px"; step: 1; min: 1; max: 20; labelWidth: 110
+                    visible: VtlConfig.windowBlur; value: VtlConfig.windowBlurSize
+                    onChanged: root.saveDecoration("window_blur_size", v)
+                }
+                Stepper {
+                    label: "Blur passes"; step: 1; min: 1; max: 6; labelWidth: 110
+                    visible: VtlConfig.windowBlur; value: VtlConfig.windowBlurPasses
+                    onChanged: root.saveDecoration("window_blur_passes", v)
+                }
                 Slider {
                     label: "Vibrancy"; from: 0; to: 1; decimals: 2; step: 0.01
-                    value: VtlConfig.windowVibrancy
+                    visible: VtlConfig.windowBlur; value: VtlConfig.windowVibrancy
                     onMoved: root.saveDecoration("window_vibrancy", v)
+                }
+                Slider {
+                    label: "Noise"; from: 0; to: 0.1; decimals: 3; step: 0.005
+                    visible: VtlConfig.windowBlur; value: VtlConfig.windowBlurNoise
+                    onMoved: root.saveDecoration("window_blur_noise", v)
                 }
                 Toggle {
                     label: "X-ray"; sub: "Blur sees through to the wallpaper, not the windows behind"
-                    on:    VtlConfig.windowXray
+                    visible: VtlConfig.windowBlur; on: VtlConfig.windowXray
                     onToggled: root.saveDecoration("window_xray", !VtlConfig.windowXray)
                 }
             }

@@ -34,10 +34,10 @@ hl.config({
 
         blur = {
             enabled           = (lnf_blur_enabled ~= false),   -- Settings → Window rules; default on
-            size              = 8,
-            passes            = 4,
+            size              = lnf_blur_size or 8,
+            passes            = lnf_blur_passes or 4,
             contrast          = 0.5,
-            noise             = 0.025,
+            noise             = lnf_blur_noise or 0.025,
             vibrancy          = lnf_vibrancy or 0.2,
             vibrancy_darkness = 0.4,
             xray              = (lnf_xray ~= false),            -- Settings → Window rules; default on

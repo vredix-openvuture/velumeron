@@ -73,6 +73,9 @@ Item {
     readonly property bool windowBlur:     _data.window_blur     ?? true
     readonly property real windowVibrancy: _data.window_vibrancy ?? 0.2
     readonly property bool windowXray:     _data.window_xray     ?? true
+    readonly property int  windowBlurSize:   _data.window_blur_size   ?? 8
+    readonly property int  windowBlurPasses: _data.window_blur_passes ?? 4
+    readonly property real windowBlurNoise:  _data.window_blur_noise  ?? 0.025
 
     // ── Public properties (with sane defaults) ────────────────────────────────
     readonly property bool   opacityEnabled:  _data.opacity_enabled   ?? false
