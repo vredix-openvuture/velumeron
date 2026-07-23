@@ -310,6 +310,7 @@ PanelWindow {
     onIsOpenChanged: {
         if (isOpen) {
             activeSection = UiState.settingsRequestSection !== "" ? UiState.settingsRequestSection : "home"
+            root.navPage = false   // always reopen on the Home ("Velumeron") page, never the nav list
             // One instance per screen and all of them read the request — clear it only after
             // every handler has run.
             Qt.callLater(function () { UiState.settingsRequestSection = "" })

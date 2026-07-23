@@ -440,22 +440,12 @@ Item {
             height: 48; clip: true
             anchors { left: gearBtn.right; leftMargin: 12; verticalCenter: parent.verticalCenter }
             property bool expanded: sgHov.containsMouse
-            width: expanded ? (48 + 12 + sgRow.width) : 48
+            // Collapsed = just the first session tile; hover reveals the rest sliding out.
+            width: expanded ? sgRow.width : 48
             Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-            StyledRect {
-                id: sgTrigger
-                width: 48; height: 48; radius: Style.rTile
-                anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                color: sgHov.containsMouse ? Style.accent : Style.controlFill
-                borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
-                Behavior on color { ColorAnimation { duration: 120 } }
-                Text { anchors.centerIn: parent; text: "󰐥"
-                       color: sgHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
-                       font.pixelSize: 18; font.family: Style.font }
-            }
             Row {
                 id: sgRow
-                anchors { left: sgTrigger.right; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                 spacing: 12
                 Repeater {
                     model: UiState.sessionActions
