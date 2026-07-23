@@ -651,7 +651,7 @@ PanelWindow {
             StyledRect {
                 visible: content.pageMode && !root.navPage && root.activeSection === "home"
                 width: 46; height: 46; radius: Style.rTile
-                anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter; bottomMargin: 16 }
+                anchors { bottom: parent.bottom; left: parent.left; bottomMargin: 16; leftMargin: 16 }
                 color: gearHov.containsMouse ? Style.tint(Style.accent, 0.2) : Style.cardFill
                 Text { anchors.centerIn: parent; text: "󰒓"; color: Colors.fgBright
                        font.pixelSize: 22; font.family: Style.font }
