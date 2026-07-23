@@ -376,46 +376,51 @@ PanelWindow {
             z:       5    // above the content pane, so the hover tooltips aren't painted under it
             anchors { top: parent.top; bottom: parent.bottom; left: parent.left }
 
-            // The section list has outgrown short menus — the rail PAGES instead of
-            // scrolling: every page shows as many icons as fit, Info stays pinned at
-            // the bottom next to the pager arrow, and the mouse wheel flips pages.
-            // Sidebar hierarchy: CORE (always-there config) first, then the à-la-carte SERVICES
-            // you can switch on/off (the Features page + the toggleable surfaces). The two key
-            // lists define the order; any rail section not listed is appended, so nothing that
-            // gets added later silently vanishes from the rail.
-            readonly property var  coreKeys:    ["home", "style", "monitors", "workspaces", "peripherals",
-                                                 "keybinds", "autostart", "quickaccess", "integrations",
-                                                 "windowrules", "layouts", "backup"]
-            readonly property var  serviceKeys: ["bar", "osd", "notifications", "launcher", "taskbar",
-                                                 "windowtags", "wallpaper", "lockscreen", "calendar",
-                                                 "corners", "zones"]
-            readonly property var  railItems: {
-                var order = rail.coreKeys.concat(rail.serviceKeys)
+            // The rail is SECTIONED: one named group of icons shows at a time; the mouse wheel
+            // (or the dots at the bottom) moves between sections, and the section name runs
+            // vertically (bottom→top) to the left of its icons. Grouping is by these key lists;
+            // any rail-eligible section not placed lands in a trailing "More" group so nothing vanishes.
+            readonly property var sectionDefs: [
+                { name: "System",   keys: ["home", "monitors", "workspaces", "peripherals", "keybinds"] },
+                { name: "Look",     keys: ["autostart", "quickaccess", "integrations", "style", "wallpaper"] },
+                { name: "Services", keys: ["bar", "osd", "notifications", "launcher", "taskbar",
+                                           "windowtags", "lockscreen", "calendar", "corners"] },
+                { name: "Windows",  keys: ["windowrules", "layouts", "zones", "backup"] }
+            ]
+            readonly property var sections2: {
+                var placed = ({})
                 var out = []
-                for (var i = 0; i < order.length; i++) {
-                    var m = root.sectionMeta(order[i])
-                    if (m && m.rail !== false && m.key !== "info") out.push(m)
+                for (var s = 0; s < rail.sectionDefs.length; s++) {
+                    var metas = []
+                    var keys = rail.sectionDefs[s].keys
+                    for (var i = 0; i < keys.length; i++) {
+                        var m = root.sectionMeta(keys[i])
+                        if (m && m.rail !== false && m.key !== "info") { metas.push(m); placed[keys[i]] = true }
+                    }
+                    if (metas.length > 0) out.push({ name: rail.sectionDefs[s].name, metas: metas })
                 }
-                var all = root.sections.filter(function (s) { return s.rail !== false && s.key !== "info" })
+                var extra = []
+                var all = root.sections.filter(function (x) { return x.rail !== false && x.key !== "info" })
                 for (var k = 0; k < all.length; k++)
-                    if (order.indexOf(all[k].key) < 0) out.push(all[k])
+                    if (!placed[all[k].key]) extra.push(all[k])
+                if (extra.length > 0) out.push({ name: "More", metas: extra })
                 return out
             }
-            readonly property var  infoMeta: root.sectionMeta("info")
-            readonly property int  iconSz:   Math.max(30, Math.min(42, root.railW - 6))
-            readonly property int  slotH:    iconSz + 4
-            // Space reserved at the bottom: pinned Info icon + pager arrow + gaps.
-            readonly property int  bottomH:  iconSz + 22 + 12
-            readonly property int  perPage:  Math.max(1, Math.floor((height - 26 - bottomH - 8) / slotH))
-            readonly property int  pages:    Math.max(1, Math.ceil(railItems.length / perPage))
-            property int page: 0
-            onPagesChanged: page = Math.min(page, pages - 1)
-            readonly property var pageItems: railItems.slice(page * perPage, (page + 1) * perPage)
+            property int sectionIdx: 0
+            onSections2Changed: if (rail.sectionIdx >= rail.sections2.length) rail.sectionIdx = 0
+            readonly property var activeSectionDef: rail.sections2[rail.sectionIdx] ?? ({ name: "", metas: [] })
+            readonly property var infoMeta: root.sectionMeta("info")
 
-            function flip(dir) { rail.page = ((rail.page + dir) % rail.pages + rail.pages) % rail.pages }
+            function flip(dir) {
+                var n = rail.sections2.length
+                if (n > 0) rail.sectionIdx = ((rail.sectionIdx + dir) % n + n) % n
+            }
             function ensureVisible(key) {
-                for (var i = 0; i < railItems.length; i++)
-                    if (railItems[i].key === key) { rail.page = Math.floor(i / rail.perPage); return }
+                for (var s = 0; s < rail.sections2.length; s++) {
+                    var metas = rail.sections2[s].metas
+                    for (var i = 0; i < metas.length; i++)
+                        if (metas[i].key === key) { rail.sectionIdx = s; return }
+                }
             }
             Connections {
                 target: root
@@ -442,58 +447,64 @@ PanelWindow {
                 }
             }
 
-            Column {
+            // Active section: vertical name label (bottom→top) + its icon column.
+            Row {
                 anchors { top: parent.top; topMargin: 26; horizontalCenter: parent.horizontalCenter }
-                spacing: 4
-
-                Repeater {
-                    model: rail.pageItems
-                    delegate: Column {
-                        id: railSlot
-                        required property var modelData
-                        required property int index
-                        spacing: 4
-                        // Thin divider marking the core → services boundary (when both land on this page).
-                        Rectangle {
-                            visible: railSlot.index > 0 && railSlot.modelData.key === rail.serviceKeys[0]
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            width: Math.round(rail.iconSz * 0.5); height: 2; radius: 1
-                            color: Colors.fgMuted; opacity: 0.35
-                        }
-                        RailIcon {
-                            icon:    railSlot.modelData.icon
-                            section: railSlot.modelData.key
+                spacing: 2
+                Item {
+                    width:  14
+                    height: iconCol.height
+                    Text {
+                        anchors.centerIn: parent
+                        rotation: -90
+                        text:  rail.activeSectionDef.name
+                        color: Colors.fgMuted
+                        font.pixelSize:    10
+                        font.family:       Style.font
+                        font.letterSpacing: 1.5
+                        font.capitalization: Font.AllUppercase
+                    }
+                }
+                Column {
+                    id: iconCol
+                    spacing: 4
+                    Repeater {
+                        model: rail.activeSectionDef.metas
+                        delegate: RailIcon {
+                            required property var modelData
+                            icon:    modelData.icon
+                            section: modelData.key
                         }
                     }
                 }
             }
 
-            // Pinned bottom: Info + pager arrow.
+            // Section dots (which section of N) — click a dot to jump straight to it.
             Column {
-                anchors { bottom: parent.bottom; bottomMargin: 10; horizontalCenter: parent.horizontalCenter }
+                anchors { bottom: infoCol.top; bottomMargin: 12; horizontalCenter: parent.horizontalCenter }
                 spacing: 4
+                Repeater {
+                    model: rail.sections2.length
+                    delegate: Rectangle {
+                        required property int index
+                        width: 5; height: 5; radius: 2.5
+                        color:   index === rail.sectionIdx ? Style.accent : Colors.fgMuted
+                        opacity: index === rail.sectionIdx ? 1 : 0.4
+                        MouseArea {
+                            anchors.fill: parent; anchors.margins: -3
+                            onClicked: rail.sectionIdx = parent.index
+                        }
+                    }
+                }
+            }
 
+            // Pinned bottom: Info.
+            Column {
+                id: infoCol
+                anchors { bottom: parent.bottom; bottomMargin: 10; horizontalCenter: parent.horizontalCenter }
                 RailIcon {
                     icon:    rail.infoMeta?.icon ?? "󰋽"
                     section: "info"
-                }
-                Rectangle {
-                    visible: rail.pages > 1
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: rail.iconSz; height: 18
-                    radius: 6
-                    color: pagerHov.containsMouse ? Style.tint(Style.accent, 0.18) : "transparent"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "󰅀"
-                        color: pagerHov.containsMouse ? Colors.fgBright : Colors.fgMuted
-                        font.pixelSize: 13; font.family: Style.font
-                    }
-                    MouseArea {
-                        id: pagerHov
-                        anchors.fill: parent; hoverEnabled: true
-                        onClicked: rail.flip(1)
-                    }
                 }
             }
         }
@@ -616,7 +627,7 @@ PanelWindow {
         readonly property bool active: root.activeSection === ri.section
 
         // Shrink to fit when the rail follows a thin sidebar, so icons never overflow it.
-        readonly property int sz: Math.max(30, Math.min(42, root.railW - 6))
+        readonly property int sz: Math.max(26, Math.min(38, root.railW - 18))   // leaves room for the section label strip
         width:  ri.sz
         height: ri.sz
 
