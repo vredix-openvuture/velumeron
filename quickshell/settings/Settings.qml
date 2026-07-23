@@ -380,9 +380,28 @@ PanelWindow {
             // The section list has outgrown short menus — the rail PAGES instead of
             // scrolling: every page shows as many icons as fit, Info stays pinned at
             // the bottom next to the pager arrow, and the mouse wheel flips pages.
-            readonly property var  railItems: root.sections.filter(function (s) {
-                return s.rail !== false && s.key !== "info"
-            })
+            // Sidebar hierarchy: CORE (always-there config) first, then the à-la-carte SERVICES
+            // you can switch on/off (the Features page + the toggleable surfaces). The two key
+            // lists define the order; any rail section not listed is appended, so nothing that
+            // gets added later silently vanishes from the rail.
+            readonly property var  coreKeys:    ["home", "monitors", "workspaces", "peripherals", "keybinds",
+                                                 "autostart", "quickaccess", "integrations", "style",
+                                                 "windowrules", "layouts", "backup"]
+            readonly property var  serviceKeys: ["features", "bar", "osd", "notifications", "launcher",
+                                                 "taskbar", "windowtags", "wallpaper", "lockscreen",
+                                                 "calendar", "corners", "zones"]
+            readonly property var  railItems: {
+                var order = rail.coreKeys.concat(rail.serviceKeys)
+                var out = []
+                for (var i = 0; i < order.length; i++) {
+                    var m = root.sectionMeta(order[i])
+                    if (m && m.rail !== false && m.key !== "info") out.push(m)
+                }
+                var all = root.sections.filter(function (s) { return s.rail !== false && s.key !== "info" })
+                for (var k = 0; k < all.length; k++)
+                    if (order.indexOf(all[k].key) < 0) out.push(all[k])
+                return out
+            }
             readonly property var  infoMeta: root.sectionMeta("info")
             readonly property int  iconSz:   Math.max(30, Math.min(42, root.railW - 6))
             readonly property int  slotH:    iconSz + 4
@@ -430,10 +449,22 @@ PanelWindow {
 
                 Repeater {
                     model: rail.pageItems
-                    delegate: RailIcon {
+                    delegate: Column {
+                        id: railSlot
                         required property var modelData
-                        icon:    modelData.icon
-                        section: modelData.key
+                        required property int index
+                        spacing: 4
+                        // Thin divider marking the core → services boundary (when both land on this page).
+                        Rectangle {
+                            visible: railSlot.index > 0 && railSlot.modelData.key === rail.serviceKeys[0]
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: Math.round(rail.iconSz * 0.5); height: 2; radius: 1
+                            color: Colors.fgMuted; opacity: 0.35
+                        }
+                        RailIcon {
+                            icon:    railSlot.modelData.icon
+                            section: railSlot.modelData.key
+                        }
                     }
                 }
             }
