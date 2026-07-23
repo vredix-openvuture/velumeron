@@ -67,6 +67,13 @@ Item {
     // The raw enable map, for UIs that clone-and-write it (Settings → Features).
     readonly property var componentEnabledMap: (_data.component_enabled && typeof _data.component_enabled === "object") ? _data.component_enabled : ({})
 
+    // ── Global window decoration (Settings → Window rules → Global look) ──
+    // Applied to the running compositor + persisted to hypr.lua by apply-decoration.sh.
+    readonly property real windowOpacity:  _data.window_opacity  ?? 0.92
+    readonly property bool windowBlur:     _data.window_blur     ?? true
+    readonly property real windowVibrancy: _data.window_vibrancy ?? 0.2
+    readonly property bool windowXray:     _data.window_xray     ?? true
+
     // ── Public properties (with sane defaults) ────────────────────────────────
     readonly property bool   opacityEnabled:  _data.opacity_enabled   ?? false
     readonly property real   opacityValue:    _data.opacity_value     ?? 0.88

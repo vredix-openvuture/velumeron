@@ -33,14 +33,14 @@ hl.config({
         border_part_of_window = false,
 
         blur = {
-            enabled           = true,
+            enabled           = (lnf_blur_enabled ~= false),   -- Settings → Window rules; default on
             size              = 8,
             passes            = 4,
             contrast          = 0.5,
             noise             = 0.025,
-            vibrancy          = 0.2,
+            vibrancy          = lnf_vibrancy or 0.2,
             vibrancy_darkness = 0.4,
-            xray              = true,
+            xray              = (lnf_xray ~= false),            -- Settings → Window rules; default on
             popups            = false,
         },
 

@@ -44,7 +44,7 @@ hl.window_rule({
     name      = "all",
     match     = { class = "(.*)" },
     animation = "popin 80%",
-    opacity   = 0.92,
+    opacity   = lnf_window_opacity or 0.92,   -- global window transparency (Settings → Window rules)
 })
 
 -- Terminals: xray makes the background see-through to the desktop

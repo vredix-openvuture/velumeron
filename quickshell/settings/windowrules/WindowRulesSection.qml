@@ -1,7 +1,9 @@
 import "../.."
 import QtQuick
+import Quickshell
+import Quickshell.Io
 
-// Window rules: which apps open floating / transparent. The user works with app chips —
+// Window rules: which apps open floating, and which stay fully opaque. The user works with app chips —
 // type a name or pick one of the currently open windows (matching runs on the window
 // class); the `(.*[Kk]itty.*|…)` regex behind it is composed and parsed here and never
 // shown. Fragments the parser doesn't recognize survive as raw chips, so hand-written
@@ -12,6 +14,30 @@ Item {
     // Token: { label, raw } — label "" means an unrecognized raw fragment (shown as-is).
     property var    floatingTokens: []
     property var    opacityTokens:  []
+
+    // ── Global window decoration (the top card) ──────────────────────────────
+    // Persist to gui/settings.json (VtlConfig reads it) AND run apply-decoration.sh, which
+    // writes the hypr.lua include + pushes the change to the running compositor live. The
+    // apply is debounced so dragging a slider doesn't spam hyprctl / the lua write.
+    Process { id: decoProc }
+    Timer {
+        id: decoDebounce
+        interval: 120
+        onTriggered: {
+            decoProc.command = ["bash",
+                Quickshell.env("VELUMERON_DIR") + "/assets/scripts/apply-decoration.sh",
+                "" + VtlConfig.windowOpacity,
+                VtlConfig.windowBlur ? "1" : "0",
+                "" + VtlConfig.windowVibrancy,
+                VtlConfig.windowXray ? "1" : "0"]
+            decoProc.running = false
+            decoProc.running = true
+        }
+    }
+    function saveDecoration(key, value) {
+        SettingsStore.set(key, value)   // updates VtlConfig immediately; the debounce reads it back
+        decoDebounce.restart()
+    }
     property bool   dirty:  false
     property string status: ""
 
@@ -125,6 +151,35 @@ Item {
             topPadding: 4
             spacing: Style.cardGap
 
+            // Global window decoration — applies to every window at once, live + persisted.
+            Card {
+                CardLabel { text: "GLOBAL WINDOW LOOK" }
+                SubLabel {
+                    width: parent.width
+                    text: "Transparency and blur for every window at once. Blur, vibrancy and X-ray are Hyprland decoration features."
+                }
+                Slider {
+                    label: "Opacity"; from: 0.5; to: 1.0; decimals: 2; step: 0.01
+                    value: VtlConfig.windowOpacity
+                    onMoved: root.saveDecoration("window_opacity", v)
+                }
+                Toggle {
+                    label: "Blur"; sub: "Blur what shows through translucent windows"
+                    on:    VtlConfig.windowBlur
+                    onToggled: root.saveDecoration("window_blur", !VtlConfig.windowBlur)
+                }
+                Slider {
+                    label: "Vibrancy"; from: 0; to: 1; decimals: 2; step: 0.01
+                    value: VtlConfig.windowVibrancy
+                    onMoved: root.saveDecoration("window_vibrancy", v)
+                }
+                Toggle {
+                    label: "X-ray"; sub: "Blur sees through to the wallpaper, not the windows behind"
+                    on:    VtlConfig.windowXray
+                    onToggled: root.saveDecoration("window_xray", !VtlConfig.windowXray)
+                }
+            }
+
             Card {
                 CardLabel { text: "FLOATING APPS" }
                 SubLabel {
@@ -135,10 +190,10 @@ Item {
             }
 
             Card {
-                CardLabel { text: "TRANSPARENT APPS" }
+                CardLabel { text: "OPAQUE APPS" }
                 SubLabel {
                     width: parent.width
-                    text: "These apps get the see-through look."
+                    text: "These apps stay fully opaque — excluded from the global window transparency (handy for video players, image viewers, anything where you never want see-through)."
                 }
                 RuleGroup { group: "opacity"; tokens: root.opacityTokens }
             }
