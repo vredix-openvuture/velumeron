@@ -647,17 +647,7 @@ PanelWindow {
                 }
             }
 
-            // Page-mode gear on the Home page — opens the nav list.
-            StyledRect {
-                visible: content.pageMode && !root.navPage && root.activeSection === "home"
-                width: 46; height: 46; radius: Style.rTile
-                anchors { bottom: parent.bottom; left: parent.left; bottomMargin: 16; leftMargin: 16 }
-                color: gearHov.containsMouse ? Style.tint(Style.accent, 0.2) : Style.cardFill
-                Text { anchors.centerIn: parent; text: "󰒓"; color: Colors.fgBright
-                       font.pixelSize: 22; font.family: Style.font }
-                MouseArea { id: gearHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.navPage = true }
-            }
-            Component { id: homeComp;      HomeHub          { onNavigate: s => root.activeSection = s } }
+            Component { id: homeComp;      HomeHub          { pageMode: content.pageMode; onNavigate: s => root.activeSection = s; onOpenNav: root.navPage = true } }
             Component { id: networkComp;   NetworkManager   { onBack: root.activeSection = "home" } }
             Component { id: bluetoothComp; BluetoothManager { onBack: root.activeSection = "home" } }
             Component { id: barComp;       BarSection       {} }

@@ -14,6 +14,9 @@ import Quickshell.Services.Mpris
 Item {
     id: root
     signal navigate(string section)
+    // Page-navigation mode (Settings → Style): collapse the session bar and add the nav gear.
+    property bool pageMode: false
+    signal openNav()
 
     readonly property string _user: Quickshell.env("USER") ?? "user"
     readonly property string _home: Quickshell.env("HOME") ?? ""
@@ -392,6 +395,7 @@ Item {
     // ── Session actions — always pinned to the bottom of the hub ────────────────
     Column {
         id: powerBar
+        visible: !root.pageMode
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
         spacing: 12
         Rectangle { width: parent.width; height: 1
@@ -406,6 +410,59 @@ Item {
                     icon: modelData.icon; cmd: modelData.cmd
                 }
             }
+        }
+    }
+
+    // ── Page-navigation cluster (bottom-left, page mode only): a gear that opens the settings
+    //    nav list, and the session actions collapsed into one tile that glides its options out on hover.
+    Item {
+        id: pageNav
+        visible: root.pageMode
+        height: 48
+        anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: 4 }
+
+        StyledRect {
+            id: gearBtn
+            width: 48; height: 48; radius: Style.rTile
+            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+            color: gearHov.containsMouse ? Style.accent : Style.controlFill
+            borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
+            Behavior on color { ColorAnimation { duration: 120 } }
+            Text { anchors.centerIn: parent; text: "󰒓"
+                   color: gearHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
+                   font.pixelSize: 18; font.family: Style.font }
+            MouseArea { id: gearHov; anchors.fill: parent; hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor; onClicked: root.openNav() }
+        }
+
+        Item {
+            id: sessionGlide
+            height: 48; clip: true
+            anchors { left: gearBtn.right; leftMargin: 12; verticalCenter: parent.verticalCenter }
+            property bool expanded: sgHov.containsMouse
+            width: expanded ? (48 + 12 + sgRow.width) : 48
+            Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+            StyledRect {
+                id: sgTrigger
+                width: 48; height: 48; radius: Style.rTile
+                anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                color: sgHov.containsMouse ? Style.accent : Style.controlFill
+                borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
+                Behavior on color { ColorAnimation { duration: 120 } }
+                Text { anchors.centerIn: parent; text: "󰐥"
+                       color: sgHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
+                       font.pixelSize: 18; font.family: Style.font }
+            }
+            Row {
+                id: sgRow
+                anchors { left: sgTrigger.right; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                spacing: 12
+                Repeater {
+                    model: UiState.sessionActions
+                    delegate: PowerTile { required property var modelData; icon: modelData.icon; cmd: modelData.cmd }
+                }
+            }
+            MouseArea { id: sgHov; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
         }
     }
 
