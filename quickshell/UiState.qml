@@ -144,12 +144,6 @@ QtObject {
     property string userEdge:      "top"
     property string userMon:       ""
 
-    property bool   trayHover:   false     // notiftray: system-tray icons glide (hover)
-    property real   trayAnchorX: 0
-    property real   trayAnchorY: 0
-    property string trayEdge:    "top"
-    property string trayMon:     ""
-
     property bool   netHover:   false      // network: down/up throughput glide (hover)
     property real   netAnchorX: 0
     property real   netAnchorY: 0
@@ -163,6 +157,27 @@ QtObject {
     property string btEdge:     "top"
     property string btMon:      ""
     property string btStatus:   ""         // connected device names for the hover glide
+
+    property bool   wsHover:    false      // workspaces: windows-on-this-workspace preview glide (hover)
+    property real   wsAnchorX:  0
+    property real   wsAnchorY:  0
+    property string wsEdge:     "top"
+    property string wsMon:      ""
+    property int    wsPreviewId: 0         // Hyprland id of the workspace being hovered
+
+    property bool   npkHover:   false      // notiftray: recent-notifications peek glide (hover)
+    property real   npkAnchorX: 0
+    property real   npkAnchorY: 0
+    property string npkEdge:    "top"
+    property string npkMon:     ""
+
+    property bool   updHover:   false      // updates: available-package list glide (hover)
+    property real   updAnchorX: 0
+    property real   updAnchorY: 0
+    property string updEdge:    "top"
+    property string updMon:     ""
+    property var    updList:    []         // ["pkg 1.0 -> 1.1", …] published by the module (capped)
+    property int    updTotal:   0          // true total (list may be capped) → drives "+N weitere"
 
     // ── Module flyouts (click-grown panels that dock into the bar: Volume routing, Mpris player) ──
     // A bar module publishes its id + screen anchor (screen-local coords) + edge on click; the
@@ -181,6 +196,22 @@ QtObject {
         flyout = id; flyoutAnchorX = ax; flyoutAnchorY = ay
         flyoutEdge = edge; flyoutGroup = group; flyoutMon = mon
     }
+
+    // ── Tray context menu (custom, shell-styled — replaces the native QMenu) ────────────────────
+    // A tray icon publishes the QsMenuHandle to display + its screen anchor + bar edge on right-click;
+    // the per-screen TrayMenu overlay renders it with the shell's own tokens. trayMenuMon gates the
+    // screen; only one is ever open.
+    property var    trayMenuHandle:  null      // QsMenuHandle to show (null = none)
+    property bool   trayMenuOpen:    false
+    property real   trayMenuAnchorX: 0         // icon centre, screen coords (along-edge placement)
+    property real   trayMenuAnchorY: 0
+    property string trayMenuEdge:    "top"
+    property string trayMenuMon:     ""
+    function openTrayMenu(handle, ax, ay, edge, mon) {
+        trayMenuHandle = handle; trayMenuAnchorX = ax; trayMenuAnchorY = ay
+        trayMenuEdge = edge; trayMenuMon = mon; trayMenuOpen = true
+    }
+    function closeTrayMenu() { trayMenuOpen = false }
 
     // Map a wallpaper-quickselect position ("top-center", "center-left", "bottom-right", …) on a
     // monitor (mw × mh) to a flyout anchor { edge, group, ax, ay } the grow-from-bar Flyout uses.

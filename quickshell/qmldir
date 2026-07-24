@@ -11,6 +11,7 @@ singleton Fuzzy     1.0 Fuzzy.qml
 singleton Wording   1.0 Wording.qml
 singleton Templates 1.0 Templates.qml
 singleton Hyprwindows 1.0 Hyprwindows.qml
+singleton VpnService 1.0 VpnService.qml
 singleton ThumbQueue 1.0 ThumbQueue.qml
 singleton LockState 1.0 lock/LockState.qml
 singleton LockPresets 1.0 LockPresets.qml
@@ -54,6 +55,7 @@ Bar               1.0 bar/Bar.qml
 EdgeExclusiveZone 1.0 bar/EdgeExclusiveZone.qml
 Flyout            1.0 bar/Flyout.qml
 GroupMenu         1.0 bar/GroupMenu.qml
+TrayMenu          1.0 bar/TrayMenu.qml
 
 # OSD (volume / brightness)
 Osd               1.0 osd/Osd.qml
@@ -61,9 +63,11 @@ VolumeGlide       1.0 osd/VolumeGlide.qml
 BarGlide          1.0 osd/BarGlide.qml
 PerformanceGlide  1.0 osd/PerformanceGlide.qml
 UserGlide         1.0 osd/UserGlide.qml
-TrayGlide         1.0 osd/TrayGlide.qml
 NetworkGlide      1.0 osd/NetworkGlide.qml
 BtGlide           1.0 osd/BtGlide.qml
+WorkspaceGlide    1.0 osd/WorkspaceGlide.qml
+NotifPeekGlide    1.0 osd/NotifPeekGlide.qml
+UpdatesGlide      1.0 osd/UpdatesGlide.qml
 WallpaperQuick    1.0 osd/WallpaperQuick.qml
 Taskbar           1.0 osd/Taskbar.qml
 TaskbarReserve    1.0 osd/TaskbarReserve.qml

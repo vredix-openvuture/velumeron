@@ -9,7 +9,7 @@ import Quickshell.Io
 Column {
     id: root
     property bool active: false
-    spacing: 10
+    spacing: 8
 
     property bool   wifiOn:    true
     property string ethStatus: ""
@@ -114,7 +114,7 @@ Column {
     // ── Wi-Fi networks ──────────────────────────────────────────────────────
     Column {
         visible: root.wifiOn
-        width: parent.width; spacing: 6
+        width: parent.width; spacing: 3
         Repeater {
             model: root.nets
             delegate: Column {
@@ -122,26 +122,43 @@ Column {
                 required property var modelData
                 width: root.width; spacing: 4
                 StyledRect {
-                    width: parent.width; height: 44; radius: Style.rControl
-                    color: nd.modelData.active ? Style.menuRowActive
-                         : (rHov.containsMouse ? Style.menuRowHover : Style.menuRowFill)
+                    width: parent.width; height: 40; radius: Style.rControl
+                    // Airy list row: transparent at rest, only hover / active get a light tint — no
+                    // solid fill, no border, so the list breathes instead of stacking blocks.
+                    color: nd.modelData.active ? Style.tint(Style.accent, 0.16)
+                         : (rHov.containsMouse ? Style.tint(Colors.bgActive, 0.14) : "transparent")
                     Behavior on color { ColorAnimation { duration: 100 } }
-                    Text { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                           text: root.sigIcon(nd.modelData.signal) + (nd.modelData.sec ? "  󰌾" : "   ")
-                           color: Colors.fgMuted; font.pixelSize: 14; font.family: Style.font }
-                    Text { anchors { left: parent.left; leftMargin: 58; right: actRow.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                           text: nd.modelData.ssid; elide: Text.ElideRight
-                           color: nd.modelData.active ? Colors.fgBright : Colors.fgPrimary
-                           font.pixelSize: 13; font.family: Style.font }
+                    // Signal glyph — lit in an accent disc only while active, bare otherwise.
+                    Rectangle {
+                        id: wTile
+                        anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+                        width: 28; height: 28; radius: 14
+                        color: nd.modelData.active ? Style.accent : "transparent"
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                        Text { anchors.centerIn: parent; text: root.sigIcon(nd.modelData.signal)
+                               color: nd.modelData.active ? Colors.fgBright : Colors.fgMuted
+                               font.pixelSize: 15; font.family: Style.font }
+                    }
+                    Column {
+                        anchors { left: wTile.right; leftMargin: 8; right: actRow.left; rightMargin: 8
+                                  verticalCenter: parent.verticalCenter }
+                        spacing: 0
+                        Text { width: parent.width; elide: Text.ElideRight; text: nd.modelData.ssid
+                               color: nd.modelData.active ? Colors.fgBright : Colors.fgPrimary
+                               font.pixelSize: 13; font.family: Style.font }
+                        Text { width: parent.width; elide: Text.ElideRight
+                               text: nd.modelData.active ? "verbunden" : (nd.modelData.sec ? "gesichert" : "offen")
+                               color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font }
+                    }
                     Row {
                         id: actRow
-                        anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                        anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
                         spacing: 6
-                        Text { visible: nd.modelData.active; anchors.verticalCenter: parent.verticalCenter
-                               text: "connected"; color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font }
+                        Text { visible: nd.modelData.sec; anchors.verticalCenter: parent.verticalCenter
+                               text: "󰌾"; color: Colors.fgMuted; font.pixelSize: 12; font.family: Style.font }
                         IconBtn { visible: root.saved[nd.modelData.ssid] === true; icon: "󰩹"; onTrig: root.forget(nd.modelData.ssid) }
                     }
-                    MouseArea { id: rHov; anchors.fill: parent; hoverEnabled: true
+                    MouseArea { id: rHov; anchors.fill: parent; anchors.rightMargin: actRow.width + 14; hoverEnabled: true
                                 onClicked: nd.modelData.active ? root.disconnect(nd.modelData.ssid) : root.connect(nd.modelData) }
                 }
                 // Inline password field for secured, unknown networks.
@@ -176,7 +193,7 @@ Column {
     // ── VPN ─────────────────────────────────────────────────────────────────
     Column {
         visible: root.vpns.length > 0
-        width: parent.width; spacing: 6
+        width: parent.width; spacing: 3
         Item {
             width: parent.width; height: 16
             Rectangle { anchors { left: parent.left; verticalCenter: parent.verticalCenter }
@@ -191,19 +208,32 @@ Column {
             delegate: StyledRect {
                 required property var modelData
                 width: parent.width; height: 40; radius: Style.rControl
-                color: modelData.active ? Style.tint(Colors.boActive, 0.22)
-                     : (vHov.containsMouse ? Style.menuRowHover : Style.menuRowFill)
+                color: modelData.active ? Style.tint(Style.accent, 0.16)
+                     : (vHov.containsMouse ? Style.tint(Colors.bgActive, 0.14) : "transparent")
                 Behavior on color { ColorAnimation { duration: 100 } }
-                Text { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                       text: "󰌾"; color: modelData.active ? Colors.boActive : Colors.fgMuted
-                       font.pixelSize: 15; font.family: Style.font }
-                Text { anchors { left: parent.left; leftMargin: 40; right: vState.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                       text: modelData.name; elide: Text.ElideRight
-                       color: modelData.active ? Colors.fgBright : Colors.fgPrimary
-                       font.pixelSize: 13; font.family: Style.font }
+                Rectangle {
+                    id: vTile
+                    anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+                    width: 28; height: 28; radius: 14
+                    color: modelData.active ? Style.accent : "transparent"
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Text { anchors.centerIn: parent; text: "󰌾"
+                           color: modelData.active ? Colors.fgBright : Colors.fgMuted
+                           font.pixelSize: 14; font.family: Style.font }
+                }
+                Column {
+                    anchors { left: vTile.right; leftMargin: 8; right: vState.left; rightMargin: 8
+                              verticalCenter: parent.verticalCenter }
+                    spacing: 0
+                    Text { width: parent.width; elide: Text.ElideRight; text: modelData.name
+                           color: modelData.active ? Colors.fgBright : Colors.fgPrimary
+                           font.pixelSize: 13; font.family: Style.font }
+                    Text { text: modelData.active ? "verbunden" : "getrennt"
+                           color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font }
+                }
                 Text { id: vState; anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
                        text: modelData.active ? "on" : "off"
-                       color: modelData.active ? Colors.boActive : Colors.fgMuted
+                       color: modelData.active ? Style.accent : Colors.fgMuted
                        font.pixelSize: 10; font.bold: true; font.family: Style.font }
                 MouseArea { id: vHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.vpnToggle(modelData) }
             }

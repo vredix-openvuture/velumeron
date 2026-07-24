@@ -1,3 +1,4 @@
+//@ pragma UseQApplication
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
@@ -383,10 +384,6 @@ ShellRoot {
     }
     Variants {
         model: Quickshell.screens
-        delegate: TrayGlide { required property var modelData; screen: modelData }
-    }
-    Variants {
-        model: Quickshell.screens
         delegate: UserGlide { required property var modelData; screen: modelData }
     }
     Variants {
@@ -396,6 +393,18 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         delegate: BtGlide { required property var modelData; screen: modelData }
+    }
+    Variants {
+        model: Quickshell.screens
+        delegate: WorkspaceGlide { required property var modelData; screen: modelData }
+    }
+    Variants {
+        model: Quickshell.screens
+        delegate: NotifPeekGlide { required property var modelData; screen: modelData }
+    }
+    Variants {
+        model: Quickshell.screens
+        delegate: UpdatesGlide { required property var modelData; screen: modelData }
     }
 
     // Module flyouts (hover/IPC-grown panels): one of each per screen.
@@ -424,6 +433,11 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         delegate: GroupMenu { required property var modelData; screen: modelData }
+    }
+    // Shell-styled tray context menu (one overlay per screen; renders whichever item's menu opened).
+    Variants {
+        model: Quickshell.screens
+        delegate: TrayMenu { required property var modelData; screen: modelData }
     }
     Variants {
         model: Quickshell.screens

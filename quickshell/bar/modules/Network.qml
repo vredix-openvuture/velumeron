@@ -86,6 +86,16 @@ Item {
             font.family:    root._font
             font.pixelSize: VtlConfig.moduleFontSizeFor("network", root.barMon)
         }
+        // VPN lock — shown right next to the active connection whenever a tunnel is up (state from
+        // the shared VpnService, same source the standalone VPN module uses).
+        Text {
+            visible:        VpnService.connected
+            anchors.verticalCenter: parent.verticalCenter
+            text:           "󰌾"
+            color:          Colors[VtlConfig.moduleColorName("vpn")] ?? Colors.boActive
+            font.family:    root._font
+            font.pixelSize: VtlConfig.moduleIconSizeFor("network", root.barMon)
+        }
     }
 
     MouseArea { id: hov; anchors.fill: parent; hoverEnabled: true

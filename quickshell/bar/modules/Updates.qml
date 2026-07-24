@@ -17,8 +17,20 @@ Item {
     property int  repo:  0
     property int  aur:   0
     property int  fp:    0
+    property var  list:  []          // package lines for the hover glide (capped by update-check.sh)
     readonly property int total: repo + aur + fp
     property bool checking: false
+
+    // Publish the available-update list + anchor so the per-screen UpdatesGlide can slide it out on
+    // hover. Re-published whenever the list refreshes while the pill is up.
+    function _publishGlide() {
+        var c = root.mapToItem(null, root.width / 2, root.height / 2)
+        UiState.updAnchorX = c.x; UiState.updAnchorY = c.y
+        UiState.updEdge = root.barEdge; UiState.updMon = root.barMon
+        UiState.updList = root.list; UiState.updTotal = root.total
+        UiState.updHover = true
+    }
+    onListChanged: if (UiState.updMon === root.barMon && UiState.updHover) { UiState.updList = root.list; UiState.updTotal = root.total }
 
     // Per-module customization (Settings → Bar → Module → gear).
     readonly property string _font:     VtlConfig.moduleFontFor("updates")
@@ -82,6 +94,7 @@ Item {
                     root.repo = d.repo ?? 0
                     root.aur  = d.aur ?? 0
                     root.fp   = d.flatpak ?? 0
+                    root.list = d.list ?? []
                 } catch (e) { /* keep previous counts */ }
             }
         }
@@ -109,6 +122,8 @@ Item {
         hoverEnabled: true
         cursorShape:  Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onEntered: if (root.total > 0) root._publishGlide()
+        onExited:  if (UiState.updMon === root.barMon) UiState.updHover = false
         onClicked: mouse => {
             if (mouse.button === Qt.RightButton || root._cmd.trim() === "") root.check()
             else root.runUpdate()

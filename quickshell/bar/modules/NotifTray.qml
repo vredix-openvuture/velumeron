@@ -35,6 +35,16 @@ Item {
     }
     function togglePanel() { publishCenterAnchor(); UiState.notifCenterOpen = !UiState.notifCenterOpen }
 
+    // Publish the bell anchor so the per-screen NotifPeekGlide can slide out a preview of the most
+    // recent notifications on hover (suppressed while the full centre is open — it supersedes it).
+    function publishPeek() {
+        if (UiState.notifCenterOpen) return
+        var c = bell.mapToItem(null, bell.width / 2, bell.height / 2)
+        UiState.npkAnchorX = c.x; UiState.npkAnchorY = c.y
+        UiState.npkEdge = root.barEdge; UiState.npkMon = root.barMon
+        UiState.npkHover = true
+    }
+
     // Keep the centre anchor current however it's opened (bell click OR the notify IPC / keybind).
     Connections {
         target: UiState
@@ -62,6 +72,8 @@ Item {
             id: bellHover
             anchors.fill: parent
             hoverEnabled: true
+            onEntered: root.publishPeek()
+            onExited:  if (UiState.npkMon === root.barMon) UiState.npkHover = false
             onClicked: root.togglePanel()
         }
     }

@@ -21,6 +21,17 @@ Row {
     // right edge (+90°) needs LeftToRight.
     layoutDirection: vertical ? (onRight ? Qt.LeftToRight : Qt.RightToLeft) : Qt.LeftToRight
 
+    // Publish the hovered workspace (id + screen anchor + edge) so the per-screen WorkspaceGlide can
+    // slide out a preview of the windows living on it.
+    function _publishWsGlide(id, item) {
+        var c = item.mapToItem(null, item.width / 2, item.height / 2)
+        UiState.wsAnchorX = c.x; UiState.wsAnchorY = c.y
+        UiState.wsEdge = root.barEdge !== "" ? root.barEdge : "top"
+        UiState.wsMon = root.monitor?.name ?? ""
+        UiState.wsPreviewId = id
+        UiState.wsHover = true
+    }
+
     // Per-module customization (Settings → Bar → Module → gear). Colour override = the active pill.
     readonly property int    _is:        VtlConfig.moduleIconSizeFor("workspaces", monitor?.name ?? "")
     readonly property int    _fs:        VtlConfig.moduleFontSizeFor("workspaces", monitor?.name ?? "")
@@ -117,6 +128,8 @@ Row {
                 anchors.fill: parent
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton
+                onEntered: root._publishWsGlide(wsDot.wsId, wsDot)
+                onExited:  if (UiState.wsMon === (root.monitor?.name ?? "")) UiState.wsHover = false
                 onClicked: {
                     // hypr.lua wraps dispatch as: return hl.dispatch(<expr>)
                     // so we must pass valid Lua — hl.dsp.focus({workspace=N})

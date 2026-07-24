@@ -9,7 +9,7 @@ import Quickshell.Io
 Column {
     id: root
     property bool active: false
-    spacing: 10
+    spacing: 8
 
     property bool   powered: true
     property var    devices: []          // [{ mac, name, icon, connected, paired }]
@@ -131,13 +131,13 @@ Column {
     // ── Known devices (bucketed by group, each bucket fronted by a named divider) ──────────
     Column {
         visible: root.mode === "known"
-        width: parent.width; spacing: 6
+        width: parent.width; spacing: 3
         Repeater {
             model: root._grouped
             delegate: Column {
                 id: gsec
                 required property var modelData
-                width: root.width; spacing: 6
+                width: root.width; spacing: 3
                 // Group divider — shown for named groups, or for "Ungrouped" when groups coexist.
                 Item {
                     visible: gsec.modelData.group !== "" || root._grouped.length > 1
@@ -167,12 +167,12 @@ Column {
 
         // Add-new button — accent-outlined action, distinct from the solid device rows.
         Rectangle {
-            width: parent.width; height: 38; radius: 10
+            width: addTxt.implicitWidth + 24; height: 28; radius: 8
             color: addH.containsMouse ? Style.tint(Colors.boActive, 0.22) : "transparent"
             border.width: 1; border.color: Colors.boActive
             Behavior on color { ColorAnimation { duration: 100 } }
-            Text { anchors.centerIn: parent; text: "  Add new device"; color: Colors.boActive
-                   font.pixelSize: 12; font.bold: true; font.family: Style.font }
+            Text { id: addTxt; anchors.centerIn: parent; text: "  Add new device"; color: Colors.boActive
+                   font.pixelSize: 11; font.bold: true; font.family: Style.font }
             MouseArea { id: addH; anchors.fill: parent; hoverEnabled: true
                         onClicked: { root.mode = "add"; root.scan() } }
         }
@@ -300,7 +300,7 @@ Column {
     }
 
     // ── Reusable bits ──────────────────────────────────────────────────────────────
-    component BtRow: Rectangle {
+    component BtRow: StyledRect {
         id: br
         property var  dev
         property bool gearVisible: true
@@ -308,10 +308,12 @@ Column {
         signal trig()
         signal gear()
         width:  parent ? parent.width : 0
-        height: 44; radius: 10
+        height: 40; radius: Style.rControl
         clip: true
-        color: dev && dev.connected ? Style.menuRowActive
-             : (brH.containsMouse ? Style.menuRowHover : Style.menuRowFill)
+        // Airy list row: transparent at rest, only hover / connected get a light tint — no solid
+        // fill, no border, so the device list breathes instead of stacking blocks.
+        color: dev && dev.connected ? Style.tint(Style.accent, 0.16)
+             : (brH.containsMouse ? Style.tint(Colors.bgActive, 0.14) : "transparent")
         Behavior on color { ColorAnimation { duration: 100 } }
         // Connecting wave — an accent glow sweeps left→right across the card while an action runs.
         Rectangle {
@@ -326,19 +328,35 @@ Column {
             }
             NumberAnimation on x { running: br.busy; from: -70; to: br.width; duration: 1100; loops: Animation.Infinite }
         }
-        Text { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-               text: dev ? root.devIcon(dev.icon) : ""; color: Colors.fgMuted; font.pixelSize: 16; font.family: Style.font }
-        Text { anchors { left: parent.left; leftMargin: 44; right: gB.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
-               text: dev ? root.dispName(dev) : ""; elide: Text.ElideRight
-               color: dev && dev.connected ? Colors.fgBright : Colors.fgPrimary; font.pixelSize: 13; font.family: Style.font }
+        // Device glyph — lit in an accent disc only while connected, bare otherwise.
+        Rectangle {
+            id: bTile
+            anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+            width: 28; height: 28; radius: 14
+            color: br.dev && br.dev.connected ? Style.accent : "transparent"
+            Behavior on color { ColorAnimation { duration: 120 } }
+            Text { anchors.centerIn: parent; text: br.dev ? root.devIcon(br.dev.icon) : ""
+                   color: br.dev && br.dev.connected ? Colors.fgBright : Colors.fgMuted
+                   font.pixelSize: 16; font.family: Style.font }
+        }
+        Column {
+            anchors { left: bTile.right; leftMargin: 8; right: gB.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
+            spacing: 0
+            Text { width: parent.width; elide: Text.ElideRight; text: br.dev ? root.dispName(br.dev) : ""
+                   color: br.dev && br.dev.connected ? Colors.fgBright : Colors.fgPrimary
+                   font.pixelSize: 13; font.family: Style.font }
+            Text { width: parent.width; elide: Text.ElideRight
+                   text: br.dev && br.dev.connected ? "verbunden" : (br.dev && br.dev.paired ? "gekoppelt" : "verfügbar")
+                   color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font }
+        }
         Rectangle { id: gB
             visible: br.gearVisible
-            anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
-            width: 26; height: 26; radius: 6; color: gH.containsMouse ? Colors.bgActive : "transparent"
+            anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
+            width: 28; height: 28; radius: 14; color: gH.containsMouse ? Colors.bgActive : "transparent"
             Text { anchors.centerIn: parent; text: "󰒓"; color: Colors.fgMuted; font.pixelSize: 13; font.family: Style.font }
             MouseArea { id: gH; anchors.fill: parent; hoverEnabled: true; onClicked: br.gear() }
         }
-        MouseArea { id: brH; anchors.fill: parent; anchors.rightMargin: br.gearVisible ? 38 : 0; hoverEnabled: true; onClicked: br.trig() }
+        MouseArea { id: brH; anchors.fill: parent; anchors.rightMargin: br.gearVisible ? 40 : 0; hoverEnabled: true; onClicked: br.trig() }
     }
     component FieldLabel: Text {
         color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
