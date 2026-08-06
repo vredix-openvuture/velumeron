@@ -11,7 +11,11 @@ QtObject {
         // Lock via logind: loginctl lock-session → hypridle lock_cmd → the native quickshell lock.
         // (Locking through logind, not a direct launch, also keeps the before_sleep_cmd +
         // inhibit_sleep=3 suspend sequencing consistent.)
-        { icon: "󰤄", label: "Suspend",  cmd: "systemctl suspend" },
+        // Suspend goes through suspend.sh: it locks and WAITS until the lockscreen has actually
+        // drawn before pulling the plug (inhibit_sleep=3 only waits for the lock surfaces to
+        // exist, not to paint — the machine used to go down mid-reveal). Falls back to a bare
+        // suspend if the script is missing, so this can never become a no-op.
+        { icon: "󰤄", label: "Suspend",  cmd: "\"$VELUMERON_DIR/assets/scripts/suspend.sh\" || systemctl suspend" },
         { icon: "󰗽", label: "Logout",   cmd: "hyprctl dispatch exit" },
         { icon: "󰜉", label: "Reboot",   cmd: "systemctl reboot" },
         { icon: "󰐥", label: "Shutdown", cmd: "systemctl poweroff" }
@@ -21,6 +25,10 @@ QtObject {
     // A surface can request the settings menu to open on a specific section (e.g. the calendar
     // flyout's gear → "calendar"): set this, then openDropdown = "vuture-icon". Settings clears it.
     property string settingsRequestSection: ""
+    // Double right-click on a bar module jumps straight to ITS customization page: set this
+    // together with settingsRequestSection = "bar", then open the menu. BarSection consumes
+    // and clears it, so it can never re-open the page on a later, unrelated visit.
+    property string barCustomizeRequest: ""
     // Bumped after the tiling layout changed (LayoutMenu / LayoutsSection) — every LayoutSwitcher
     // module re-polls general:layout on change.
     property int layoutPollSerial: 0
@@ -36,6 +44,10 @@ QtObject {
     // The overlay grabs the keyboard and handles input itself; this counter is only a fallback for the
     // case where the grab doesn't suppress the Super+Tab bind (it re-fires `window open` → advance).
     property int    windowSwitcherNext:    0
+    property bool   layoutSwitcherOpen: false  // layout quick-switcher (Super+Alt+Tab / `layoutswitch` IPC)
+    property string layoutSwitcherMon:  ""
+    // Same fallback-advance counter as the window switcher's (the bind re-fires `layoutswitch open`).
+    property int    layoutSwitcherNext:    0
     property bool   sessionOpen:        false  // power / session menu (Super+Ctrl+Q / `session` IPC)
     property string sessionMon:         ""
     property bool   paletteEditorOpen:  false  // build-your-own palette editor (Settings → Style → Colours)
@@ -72,6 +84,32 @@ QtObject {
     // Same idea for the notification centre — latched to the bell's monitor at open (NotifTray), so
     // the centre stays where it was opened instead of following the focused monitor.
     property string notifMon:       ""
+
+    // ── Dashboard editor (the settings home page, rearranged) ─────────────────
+    // A standalone floating window over everything: arranging a 500 px panel from inside that same
+    // panel left no room for the module list. Opening it HIDES the settings menu (the editor joins
+    // the draft-holding class in _closeMenusExcept — it closes others, nothing auto-closes it) and
+    // Done brings the menu back exactly where it was.
+    property bool   dashEditOpen: false
+    property string dashEditMon:  ""
+    property string _dashEditReturn: ""
+    // Measured viewport of the live dashboard, published by HomeHub — the editor previews at the
+    // real size instead of re-deriving it from menu %, rail, paddings and the session bar.
+    // Pixels only — the editor derives the row count from these with the hub's own formula, so
+    // changing the row height in the editor can't leave a stale page size behind.
+    property real   dashWidth:    0
+    property real   dashHeight:   0
+    function openDashEdit(mon) {
+        ui._dashEditReturn = ui.openDropdown
+        ui.dashEditMon  = mon
+        ui.dashEditOpen = true
+    }
+    function closeDashEdit() {
+        var back = ui._dashEditReturn
+        ui._dashEditReturn = ""
+        ui.dashEditOpen = false
+        if (back !== "") { ui.menuMon = ui.dashEditMon; ui.openDropdown = back }
+    }
 
     // Anchor of the placed wallpaper-switcher module on the focused monitor — so the keybind opens the
     // wallpaper quick-menu from the module's position (like a click), falling back to the configured
@@ -225,4 +263,45 @@ QtObject {
         var e = (h === "right") ? "right" : "left"
         return { edge: e, group: "center", ax: (e === "left" ? 0 : mw), ay: mh / 2 }
     }
+
+    // ── One menu at a time ──────────────────────────────────────────────────────────────────────
+    // Every click-opened surface below is mutually exclusive: opening one closes whatever else was
+    // open. They are separate windows with separate input regions, and the bar stays clickable
+    // while a menu is up, so they stacked far too easily — open the main menu, click the bell, and
+    // both sat there, the older one only dismissable through its own dim area.
+    //
+    // Centralised here instead of at the ~40 call sites that flip these flags: a new surface only
+    // has to be listed in _closeMenusExcept(). The handlers only ever CLOSE, and each close is
+    // guarded by "is it actually open", so one assignment can never loop back through another.
+    //
+    // Deliberately NOT members: the hover glides and notification popups (transient, they belong to
+    // whatever is underneath), and the palette / lockscreen editors — those hold unsaved drafts, so
+    // they close everything else when they open but are never auto-closed themselves.
+    // `keep` is the key of the surface that just opened; "" closes the whole set.
+    function _closeMenusExcept(keep) {
+        if (keep !== "dropdown"  && ui.openDropdown       !== "") ui.openDropdown       = ""
+        if (keep !== "flyout"    && ui.flyout             !== "") ui.flyout             = ""
+        if (keep !== "notif"     && ui.notifCenterOpen)           ui.notifCenterOpen    = false
+        if (keep !== "launcher"  && ui.launcherOpen)              ui.launcherOpen       = false
+        if (keep !== "clipboard" && ui.clipboardOpen)             ui.clipboardOpen      = false
+        if (keep !== "window"    && ui.windowSwitcherOpen)        ui.windowSwitcherOpen = false
+        if (keep !== "layout"    && ui.layoutSwitcherOpen)        ui.layoutSwitcherOpen = false
+        if (keep !== "session"   && ui.sessionOpen)               ui.sessionOpen        = false
+        if (keep !== "keybind"   && ui.keybindContext     !== "") ui.keybindContext     = ""
+        if (keep !== "tray"      && ui.trayMenuOpen)              ui.trayMenuOpen       = false
+    }
+    onOpenDropdownChanged:       if (ui.openDropdown   !== "") ui._closeMenusExcept("dropdown")
+    onFlyoutChanged:             if (ui.flyout         !== "") ui._closeMenusExcept("flyout")
+    onNotifCenterOpenChanged:    if (ui.notifCenterOpen)       ui._closeMenusExcept("notif")
+    onLauncherOpenChanged:       if (ui.launcherOpen)          ui._closeMenusExcept("launcher")
+    onClipboardOpenChanged:      if (ui.clipboardOpen)         ui._closeMenusExcept("clipboard")
+    onWindowSwitcherOpenChanged: if (ui.windowSwitcherOpen)     ui._closeMenusExcept("window")
+    onLayoutSwitcherOpenChanged: if (ui.layoutSwitcherOpen)     ui._closeMenusExcept("layout")
+    onSessionOpenChanged:        if (ui.sessionOpen)           ui._closeMenusExcept("session")
+    onDashEditOpenChanged:       if (ui.dashEditOpen)          ui._closeMenusExcept("dashedit")
+    onKeybindContextChanged:     if (ui.keybindContext !== "") ui._closeMenusExcept("keybind")
+    onTrayMenuOpenChanged:       if (ui.trayMenuOpen)          ui._closeMenusExcept("tray")
+    // The editors take over the whole screen — clear the set, but stay out of it themselves.
+    onPaletteEditorOpenChanged:  if (ui.paletteEditorOpen)     ui._closeMenusExcept("")
+    onLockEditorOpenChanged:     if (ui.lockEditorOpen)        ui._closeMenusExcept("")
 }

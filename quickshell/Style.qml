@@ -140,6 +140,27 @@ QtObject {
     readonly property color accent: Colors.bgActive
     function tint(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
 
+    // ── Surface contrast ──────────────────────────────────────────────────────────
+    // How far a card / row lifts off the panel behind it (Settings → Style → Build a theme →
+    // Menus). The alphas written into the fills below are the "normal" values; this scales them
+    // all at once so the whole hierarchy — panel < card < control < hover — keeps its order.
+    // Deliberately NOT a palette job: the step is a fraction of the accent, so whether it reads
+    // depends on which colour the wallpaper happens to yield (measured across wallpapers, no
+    // wallust dial moves it reliably) — the alpha is the knob that always works.
+    readonly property real surfaceLift: VtlConfig.surfaceContrast === "subtle" ? 0.60
+                                      : VtlConfig.surfaceContrast === "strong" ? 1.75 : 1.0
+    function lift(a) { return Math.min(1.0, a * root.surfaceLift) }
+    // Same knob for the variants whose surfaces are SOLID palette colours (cards, nostalgic, and
+    // the menu list rows): there is no alpha to scale, so nudge the fill toward the palette's
+    // bright end instead — or back down into the panel when the setting is "subtle".
+    function liftSolid(c) {
+        var k = (root.surfaceLift - 1.0) * 0.075
+        if (Math.abs(k) < 0.002) return c
+        var t = k > 0 ? Colors.fgBright : Colors.bgPrimary
+        var a = Math.min(0.14, Math.abs(k))
+        return Qt.rgba(c.r * (1 - a) + t.r * a, c.g * (1 - a) + t.g * a, c.b * (1 - a) + t.b * a, c.a)
+    }
+
     // WCAG relative luminance of a color (sRGB → linear → weighted). Used to pick readable text.
     function _lin(c) { return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4) }
     function luminance(col) { return 0.2126 * _lin(col.r) + 0.7152 * _lin(col.g) + 0.0722 * _lin(col.b) }
@@ -198,16 +219,19 @@ QtObject {
     readonly property int rowGap:  (isFlat || isGrimoire || isWobbly || isSketch || isCupertino) ? 10 : 8 // between rows in a group
 
     // ── Card / group surface ──────────────────────────────────────────────────────
-    readonly property color cardFill: isCards      ? Colors.bgElement
+    // The accent tints (and the two solid fills) run through the surface-contrast knob; the
+    // futuristic/cupertino alphas do NOT — there the value is translucency for the blur behind
+    // the surface, not a lift off the panel, so scaling it would just fog the material.
+    readonly property color cardFill: isCards      ? root.liftSolid(Colors.bgElement)
                                      : isOutlined   ? "transparent"
                                      : isFuturistic ? root.tint(Colors.bgPrimary, 0.45)
-                                     : isGrimoire   ? root.tint(root.accent, 0.07)
-                                     : isNostalgic  ? Colors.bgElement
-                                     : isStraight   ? root.tint(root.accent, 0.04)
-                                     : isWobbly     ? root.tint(root.accent, 0.09)
-                                     : isSketch     ? root.tint(root.accent, 0.05)
+                                     : isGrimoire   ? root.tint(root.accent, root.lift(0.07))
+                                     : isNostalgic  ? root.liftSolid(Colors.bgElement)
+                                     : isStraight   ? root.tint(root.accent, root.lift(0.04))
+                                     : isWobbly     ? root.tint(root.accent, root.lift(0.09))
+                                     : isSketch     ? root.tint(root.accent, root.lift(0.05))
                                      : isCupertino  ? root.tint(Colors.bgElement, 0.55)
-                                                    : root.tint(root.accent, 0.06)
+                                                    : root.tint(root.accent, root.lift(0.06))
     readonly property int   cardBorderW:     isNostalgic ? 2 : isFlat ? 0 : 1
     readonly property color cardBorderColor: isOutlined   ? Colors.boNormal
                                             : isFuturistic ? root.tint(root.accent, 0.50)
@@ -222,19 +246,20 @@ QtObject {
     // ── Control surface (toggle rows, dropdown header, plain rows, tiles) ──────────
     readonly property color controlFill:  isCards      ? Colors.bgPrimary
                                          : isOutlined   ? "transparent"
-                                         : isFuturistic ? root.tint(root.accent, 0.05)
-                                         : isGrimoire   ? root.tint(root.accent, 0.10)
+                                         : isFuturistic ? root.tint(root.accent, root.lift(0.05))
+                                         : isGrimoire   ? root.tint(root.accent, root.lift(0.10))
                                          : isNostalgic  ? Colors.bgElement
-                                         : isStraight   ? root.tint(root.accent, 0.07)
-                                         : isWobbly     ? root.tint(root.accent, 0.12)
-                                         : isSketch     ? root.tint(root.accent, 0.07)
+                                         : isStraight   ? root.tint(root.accent, root.lift(0.07))
+                                         : isWobbly     ? root.tint(root.accent, root.lift(0.12))
+                                         : isSketch     ? root.tint(root.accent, root.lift(0.07))
                                          : isCupertino  ? root.tint(Colors.bgPrimary, 0.55)
-                                                        : root.tint(root.accent, 0.12)
-    readonly property color controlHover: isOutlined   ? root.tint(root.accent, 0.12)
-                                         : isCards      ? root.tint(root.accent, 0.18)
-                                         : isFuturistic ? root.tint(root.accent, 0.16)
+                                                        : root.tint(root.accent, root.lift(0.12))
+    // Hover follows the same knob, or a raised control fill would swallow its own hover state.
+    readonly property color controlHover: isOutlined   ? root.tint(root.accent, root.lift(0.12))
+                                         : isCards      ? root.tint(root.accent, root.lift(0.18))
+                                         : isFuturistic ? root.tint(root.accent, root.lift(0.16))
                                          : isCupertino  ? root.tint(root.accent, 0.16)
-                                                        : root.tint(root.accent, 0.22)
+                                                        : root.tint(root.accent, root.lift(0.22))
     readonly property int   controlBorderW:     isNostalgic ? 2 : isFlat ? 0 : 1
     readonly property color controlBorderColor: isOutlined   ? Colors.boNormal
                                                : isFuturistic ? root.tint(root.accent, 0.45)
@@ -274,14 +299,32 @@ QtObject {
         // material — a panel lighter than the bar looks like a foreign surface.
         return isCupertino ? Qt.rgba(c.r, c.g, c.b, 0.55) : c
     }
+    // ── Menu size, derived from the dashboard raster ─────────────────────────────
+    // The settings menu is exactly as big as its dashboard page needs, so no row is ever
+    // half-visible and nothing is left over under the last one. It lives here rather than
+    // in VtlConfig because the gap between cells is a STYLE value (cardGap), and VtlConfig
+    // cannot import Style without a cycle.
+    readonly property int dashGridW: VtlConfig.dashboardCols * VtlConfig.dashboardCellW
+                                   + (VtlConfig.dashboardCols - 1) * root.cardGap
+    readonly property int dashGridH: VtlConfig.dashboardRows * VtlConfig.dashboardCellH
+                                   + (VtlConfig.dashboardRows - 1) * root.cardGap
+    // What the hub puts BELOW the grid — the page dots, their margins and the bottom
+    // cluster (session tiles, or the gear/lock pair in page mode) — plus the content
+    // area's own top+bottom margins. Mirrors settings/home/HomeHub.qml and Settings.qml's
+    // content anchors; change the layout there and this has to follow.
+    readonly property int dashChromeH: (VtlConfig.settingsNavMode === "page" ? 66 : 79) + 30
+    // Content width = grid + the content area's left/right margins (18 each).
+    readonly property int menuContentW: root.dashGridW + 36
+
     // Free-corner radius for those panels: cupertino rounds generously regardless of the bar's
     // inner radius; everyone else follows chromeR (squared for the strict variants).
     function panelR(r) { return isCupertino ? Math.max(r, 16) : chromeR(r) }
     // Menu-body row surfaces (device lists, network rows, …) — neutral frosted rows under
     // cupertino instead of the theme's element colour, so lists read like macOS panes.
-    readonly property color menuRowFill:   isCupertino ? Qt.rgba(1, 1, 1, 0.07) : Colors.bgElement
-    readonly property color menuRowHover:  isCupertino ? Qt.rgba(1, 1, 1, 0.13) : root.tint(Colors.bgActive, 0.16)
-    readonly property color menuRowActive: isCupertino ? root.tint(root.accent, 0.40) : root.tint(Colors.bgActive, 0.28)
+    // Rows sit on a panel exactly like cards do, so they follow the surface-contrast knob too.
+    readonly property color menuRowFill:   isCupertino ? Qt.rgba(1, 1, 1, 0.07) : root.liftSolid(Colors.bgElement)
+    readonly property color menuRowHover:  isCupertino ? Qt.rgba(1, 1, 1, 0.13) : root.tint(Colors.bgActive, root.lift(0.16))
+    readonly property color menuRowActive: isCupertino ? root.tint(root.accent, 0.40) : root.tint(Colors.bgActive, root.lift(0.28))
 
     // ── Chrome outline (bar / flyout / OSD / notification Shape strokes) ──────────
     // Colour, width and free-corner shape all follow the variant, so the bar and every panel

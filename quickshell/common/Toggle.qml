@@ -1,7 +1,11 @@
 import ".."
 import QtQuick
 
-// Label (+ optional sub-caption) with a sliding switch. `indent` nudges it right for sub-options.
+// Label with a sliding switch. `indent` nudges it right for sub-options.
+//
+// `sub` is the row's explanation. It used to sit under the label as a permanent second line, which
+// made every settings page twice as tall and mostly fine print; now it lives in a hover bubble
+// (HintTip) and the label carries a thin underline to show there is something to read.
 StyledRect {
     id: tg
     property string label:  ""
@@ -12,7 +16,7 @@ StyledRect {
 
     width:        parent ? parent.width - (indent ? 12 : 0) : 0
     x:            indent ? 12 : 0
-    height:       tg.sub !== "" ? 46 : 38
+    height:       38
     radius:       Style.rControl
     color:        Style.controlFill
     borderWidth:  Style.controlBorderW
@@ -21,25 +25,29 @@ StyledRect {
     Column {
         anchors { left: parent.left; leftMargin: 12; right: knob.left; rightMargin: 10
                   verticalCenter: parent.verticalCenter }
-        spacing: 1
-        Text { text: tg.label; color: Colors.fgPrimary; font.pixelSize: Style.fsLabel
+        spacing: 2
+        Text { id: labelText
+               text: tg.label; color: Colors.fgPrimary; font.pixelSize: Style.fsLabel
                font.family: Style.font; elide: Text.ElideRight; width: parent.width }
-        Text { visible: tg.sub !== ""; text: tg.sub; color: Colors.fgMuted; font.pixelSize: Style.fsSub
-               font.family: Style.font; elide: Text.ElideRight; width: parent.width }
+        // "There is more to read here" — font-independent, so it holds under any display font.
+        Rectangle {
+            visible: tg.sub !== ""
+            width:  Math.min(labelText.contentWidth, labelText.width)
+            height: 1
+            color:  Qt.rgba(Colors.fgMuted.r, Colors.fgMuted.g, Colors.fgMuted.b,
+                            rowHover.containsMouse ? 0.75 : 0.35)
+            Behavior on color { ColorAnimation { duration: 100 } }
+        }
     }
 
-    Rectangle {
+    Switch {
         id: knob
         anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-        width: 42; height: 22; radius: 11
-        color: tg.on ? Style.trackOn : Style.trackOff
-        Behavior on color { ColorAnimation { duration: 120 } }
-        Rectangle {
-            width: 16; height: 16; radius: 8; color: Style.knob
-            anchors.verticalCenter: parent.verticalCenter
-            x: tg.on ? parent.width - width - 3 : 3
-            Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-        }
-        MouseArea { anchors.fill: parent; onClicked: tg.toggled() }
+        on: tg.on
+        onToggled: tg.toggled()
     }
+
+    // Hover for the whole row (NoButton, so the knob above keeps its clicks).
+    MouseArea { id: rowHover; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+    HintTip { target: tg; text: tg.sub; hovered: rowHover.containsMouse }
 }

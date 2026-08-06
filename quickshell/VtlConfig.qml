@@ -57,12 +57,47 @@ Item {
     // Only an explicit `false` removes a component's surfaces (its Variants is fed an
     // empty model) — that's how a BYO user runs just the pieces they want next to their
     // own bar/config. shell.qml gates each feature's Variants on this.
+    //
+    // This is the ONE switch per feature: Settings pins it atop the feature's page and
+    // every other "enable X" in the UI is gone. Four features predate the register and
+    // shipped their own key; those keys survive ONLY as the fallback below, so a style
+    // template (or a settings.json written before the merge) still decides until the
+    // user flips the switch — which writes component_enabled and takes over for good.
+    readonly property var _legacyFeatureKeys: ({
+        "taskbar":    "taskbar_enabled",
+        "windowtags": "window_tags_enabled",
+        "hotcorners": "corner_actions_enabled",
+        "zones":      "fancy_zones_enabled"
+    })
     function componentEnabled(key) {
         var m = _data.component_enabled
-        if (!m || typeof m !== "object") return true
-        var v = m[key]
+        var v = (m && typeof m === "object") ? m[key] : undefined
+        if (v !== undefined && v !== null) return !!v
+        var lk = _legacyFeatureKeys[key]
+        if (lk !== undefined) {
+            var l = _data[lk]
+            if (l !== undefined && l !== null) return !!l
+        }
+        return true
+    }
+
+    // ── Boot chain (Settings → Integrations → Boot chain) ─────────────────────
+    // Which of the three pre-shell surfaces this machine actually uses. A systemd-boot
+    // user has no GRUB, a gdm user no SDDM; switching those off here removes them from
+    // Settings → Boot & Login instead of leaving cards that only ever say "not
+    // installed". Absent ⇒ ON, so an untouched install still sees all three and the
+    // page's own à-la-carte reporting explains what is missing.
+    readonly property var bootComponents: (_data.boot_components && typeof _data.boot_components === "object")
+                                          ? _data.boot_components : ({})
+    function bootComponentEnabled(key) {
+        var v = bootComponents[key]
         return (v === undefined || v === null) ? true : !!v
     }
+    // With none of them on there is nothing for the Boot & Login page to manage, so the
+    // whole section leaves the rail.
+    readonly property bool anyBootComponent: bootComponentEnabled("plymouth")
+                                          || bootComponentEnabled("grub")
+                                          || bootComponentEnabled("sddm")
 
     // The raw enable map, for UIs that clone-and-write it (Settings → Features).
     readonly property var componentEnabledMap: (_data.component_enabled && typeof _data.component_enabled === "object") ? _data.component_enabled : ({})
@@ -87,6 +122,9 @@ Item {
     readonly property string logoVariant:     _data.logo_variant      ?? "full"
     readonly property string uiStyle:         _data.ui_style          ?? "flat"   // flat|cards|outlined|futuristic|grimoire|straight|wobbly|nostalgic|sketch|cupertino
     readonly property string uiFont:          _data.ui_font           ?? ""        // main display font family; "" = default (Style.iconFont)
+    // How far cards/rows lift off the panel behind them — subtle|normal|strong. Scales the surface
+    // fills in Style (see Style.surfaceLift); the palette can't do this job reliably on its own.
+    readonly property string surfaceContrast: _data.surface_contrast  ?? "normal"
 
     readonly property bool   lowMemoryMode:   _data.low_memory_mode   ?? false
     // Fuzzy search across every searchbar (launcher, clipboard, icon picker …). ON = fzf-style
@@ -155,6 +193,10 @@ Item {
     function barFloatGapFor(mon)      { return _bv("bar_float_gap", mon)     ?? 8 }
     function barInnerRadiusFor(mon)   { return _bv("bar_inner_radius", mon)  ?? 16 }
     function barFloatingFor(mon)      { return barModeFor(mon) === "float" }
+    // A REAL fullscreen window covers the bar (it lives on the Bottom layer). With peek on, the bar
+    // lifts above the fullscreen window but only arms a thin strip at its screen edge: touch the
+    // edge and it fades in, leave and it's gone again. Off = fullscreen hides the bar outright.
+    function barFullscreenPeekFor(mon){ return _bv("bar_fullscreen_peek", mon) ?? true }
     function barModuleMarginFor(mon)  { return _bv("bar_module_margin", mon) ?? 12 }
     function barModuleSpacingFor(mon) { return _bv("bar_module_spacing", mon)?? 10 }
     function barModuleBgFor(mon)      { return _bv("bar_module_bg", mon)     ?? "none" }
@@ -163,8 +205,37 @@ Item {
     function barIconSizeFor(mon)      { return _bv("bar_icon_size", mon)     ?? 18 }
     function barFontSizeFor(mon)      { return _bv("bar_font_size", mon)     ?? 13 }
     // Corner-menu size as a % of the monitor (so vertical monitors can go wider).
-    function menuWidthPctFor(mon)     { return _bv("menu_width_pct", mon)    ?? 20 }
-    function menuHeightPctFor(mon)    { return _bv("menu_height_pct", mon)   ?? 50 }
+    // menu_width_pct / menu_height_pct are GONE. The settings menu is sized by the
+    // dashboard raster instead (Style.dashGridW/H + Style.dashChromeH): a menu size the
+    // user set independently of the cell raster could never divide evenly, and the
+    // leftover showed up as dead space under the last row. Rows and columns now decide.
+
+    // ── Dashboard (the settings menu's home page) ─────────────────────────────
+    // A cell raster, not a fixed stack: every module carries its size in GRID CELLS (w columns ×
+    // h rows) and the list order is the placement order. dashboard/DashModules.qml holds the
+    // catalogue, DashGrid does the placement. `opts` is per instance — the same module type can
+    // appear several times with different content (three toggles, three buttons).
+    readonly property int dashboardCols:  _data.dashboard_cols   ?? 3    // 2..6
+    readonly property int dashboardRows:  _data.dashboard_rows   ?? 7    // rows per page
+    readonly property int dashboardCellW: _data.dashboard_cell_w ?? 100  // px per column
+    readonly property int dashboardCellH: _data.dashboard_cell_h ?? 60   // px per row
+    readonly property var dashboardModules: _data.dashboard_modules ?? dashboardDefault
+    // The default layout reproduces the hub's old fixed order, so an untouched install looks
+    // exactly as it did before the grid existed. Never written to settings.json — it only
+    // materialises there once the user edits the dashboard.
+    readonly property var dashboardDefault: [
+        { id: "d1",  key: "greeting", w: 3, h: 2 },
+        { id: "d2",  key: "slider",   w: 3, h: 1, opts: { what: "volume" } },
+        { id: "d3",  key: "slider",   w: 3, h: 1, opts: { what: "brightness" } },
+        { id: "d4",  key: "profile",  w: 3, h: 1 },
+        { id: "d5",  key: "toggle",   w: 1, h: 1, opts: { what: "dnd" } },
+        { id: "d6",  key: "toggle",   w: 1, h: 1, opts: { what: "night" } },
+        { id: "d7",  key: "toggle",   w: 1, h: 1, opts: { what: "caffeine" } },
+        { id: "d8",  key: "action",   w: 1, h: 1, opts: { action: { type: "section", value: "network" } } },
+        { id: "d9",  key: "action",   w: 1, h: 1, opts: { action: { type: "section", value: "bluetooth" } } },
+        { id: "d10", key: "action",   w: 1, h: 1, opts: { action: { type: "wallpaper", value: "" } } },
+        { id: "d11", key: "mpris",    w: 3, h: 2 }
+    ]
 
     // ── Per-module customization (Settings → Bar → Module → gear) ─────────────────
     // Each bar module type ("clock", "performance" …) can override its font / colour role /
@@ -385,20 +456,55 @@ Item {
     readonly property real   lockBlur:          _data.lock_blur           ?? 0.85       // 0..1 backdrop blur strength
     readonly property real   lockDim:           _data.lock_dim            ?? 0.1        // 0..1 backdrop darken (kept light — the point is blur, not darkness)
     readonly property bool   lockCardWallpaper: _data.lock_card_wallpaper ?? true       // sharp wallpaper crop inside the card
+    readonly property bool   lockCardAvatar:    _data.lock_card_avatar    ?? true       // avatar embedded in the centre card (off = use the "user" widget instead)
+    // Every monitor shows the MAIN monitor's wallpaper on the lock instead of its own — one image
+    // across the whole desk. Falls back to the monitor's own wallpaper if main has none.
+    readonly property bool   lockUniformWall:   _data.lock_uniform_wallpaper ?? false
     // Widget → zone map. Zones: top-left|top-center|top-right|bottom-left|bottom-center|bottom-right,
-    // or "off" (hidden). Default mirrors mirobo: media left, weather centre, battery right.
-    readonly property var    lockWidgetZones:   _data.lock_widget_zones   ?? ({ media: "bottom-left", weather: "bottom-center", battery: "bottom-right" })
+    // or "off" (hidden). Default mirrors mirobo: media left, weather centre, battery right; the
+    // user card (avatar + name) is off by default because the centre card already carries the avatar.
+    // `session` defaults to off: it powers the machine down from a locked screen, so it
+    // has to be something you place deliberately, not something that appears on upgrade.
+    readonly property var    lockWidgetZones:   _data.lock_widget_zones   ?? ({ media: "bottom-left", weather: "bottom-center", battery: "bottom-right", user: "off", session: "off" })
+    // ── Password card (the centre card): where it sits and how big it is, as a percentage of the
+    // monitor so one preset fits every screen. Widgets get out of its way — see LockContent's
+    // zone collision rule. The range is clamped where it's used, not here (a preset may carry
+    // anything).
+    readonly property string lockCardPos:       _data.lock_card_pos       ?? "center"   // left | center | right
+    readonly property int    lockCardWidthPct:  _data.lock_card_width_pct  ?? 40         // % of monitor width
+    readonly property int    lockCardHeightPct: _data.lock_card_height_pct ?? 40         // % of monitor height
     readonly property string lockWeatherCity:   _data.lock_weather_city   ?? ""
     readonly property string lockWeatherUnit:   _data.lock_weather_unit   ?? "c"        // c | f
+    // Multi-day outlook under the current conditions. wttr.in returns at most 3 days, so the count
+    // is clamped to 1..3 wherever it's used.
+    readonly property bool   lockWeatherForecast:     _data.lock_weather_forecast      ?? false
+    readonly property int    lockWeatherForecastDays: _data.lock_weather_forecast_days ?? 3
     readonly property string lockClockFormat:   _data.lock_clock_format   ?? "hh:mm"
     readonly property string lockDateFormat:    _data.lock_date_format    ?? "dddd, dd. MMMM"
+    // Clock size is a PERCENTAGE of the size the card would pick on its own, so it keeps scaling
+    // with the card instead of freezing at a pixel value. Style = weight / letter-spacing of the
+    // display font (no extra font families, so it holds on any machine).
+    readonly property int    lockClockScale:    _data.lock_clock_scale    ?? 100        // 50..200 %
+    readonly property string lockClockStyle:    _data.lock_clock_style    ?? "light"    // light | regular | bold | spaced
+    // Which surface the blur + dim apply to: the wallpaper behind everything, or the card itself
+    // (frosted card over a sharp desktop).
+    readonly property string lockBlurTarget:    _data.lock_blur_target    ?? "background"  // background | card
     function lockWidgetZone(name)    { var z = lockWidgetZones; return (z && z[name]) ? z[name] : "off" }
     function lockWidgetEnabled(name) { return lockWidgetZone(name) !== "off" }
     // The ordered set of lock keys a preset snapshots / an editor writes — one source of truth.
     readonly property var lockKeys: [
-        "lock_reveal", "lock_blur", "lock_dim", "lock_card_wallpaper", "lock_widget_zones",
-        "lock_weather_city", "lock_weather_unit", "lock_clock_format", "lock_date_format"
+        "lock_reveal", "lock_blur", "lock_dim", "lock_card_wallpaper", "lock_card_avatar",
+        "lock_uniform_wallpaper", "lock_widget_zones",
+        "lock_card_pos", "lock_card_width_pct", "lock_card_height_pct",
+        "lock_weather_city", "lock_weather_unit", "lock_weather_forecast",
+        "lock_weather_forecast_days", "lock_clock_format", "lock_date_format",
+        "lock_clock_scale", "lock_clock_style", "lock_blur_target"
     ]
+
+    // ── Startup splash (Settings → Velumeron → Shell) ─────────────────────────
+    // Curtain over the shell's own start-up, once per session. See splash/SplashState.qml.
+    readonly property bool splashEnabled: _data.splash_enabled ?? true
+    readonly property real splashSeconds: _data.splash_seconds ?? 2.4
 
     // ── Clipboard history (Super+V; Settings → OSD) ───────────────────────────
     readonly property int  clipboardWidth: _data.clipboard_width ?? 640
@@ -453,7 +559,7 @@ Item {
     // ── Hot corners / screen edges (Settings → Corners) ───────────────────────
     // Push the mouse into a corner or edge-centre and hold for the dwell time → fire an action.
     // Zones (ids): top-left | top | top-right | right | bottom-right | bottom | bottom-left | left.
-    readonly property bool cornerActionsEnabled: _data.corner_actions_enabled ?? false
+    readonly property bool cornerActionsEnabled: componentEnabled("hotcorners")  // the one switch
     readonly property bool cornerPerMonitor:     _data.corner_per_monitor     ?? false  // zones per monitor
     readonly property int  cornerDefaultDwell:   _data.corner_default_dwell   ?? 300   // ms held in zone
     readonly property int  cornerSize:           _data.corner_size            ?? 6     // corner zone px
@@ -477,7 +583,7 @@ Item {
 
     // ── Taskbar OSD (Settings → Taskbar) ──────────────────────────────────────
     // A Windows-style taskbar of open windows; click focuses. Placement mirrors the OSD.
-    readonly property bool   taskbarEnabled:    _data.taskbar_enabled    ?? false
+    readonly property bool   taskbarEnabled:    componentEnabled("taskbar")   // the one switch
     readonly property string taskbarPosition:   _data.taskbar_position   ?? "bottom-center"  // 9-grid
     readonly property string taskbarStyle:      _data.taskbar_style      ?? "dock"    // dock | float
     readonly property string taskbarVisibility: _data.taskbar_visibility ?? "always"  // always | hover
@@ -491,7 +597,7 @@ Item {
     readonly property var    taskbarPinned:     _data.taskbar_pinned     ?? []
     // ── Window tags (Settings → Window tags) ─────────────────────────────────────
     // A small name chip on the edge/corner of every window that fades out when the cursor comes near.
-    readonly property bool   windowTagsEnabled:  _data.window_tags_enabled   ?? false
+    readonly property bool   windowTagsEnabled:  componentEnabled("windowtags")  // the one switch
     // Per-monitor on/off override (window_tags_monitors.<name> → bool); missing = follow master.
     readonly property var    windowTagsMonitors: _data.window_tags_monitors  ?? ({})
     function windowTagsEnabledFor(mon) {
@@ -533,13 +639,16 @@ Item {
     readonly property string caldavDefaultEventCal: _data.caldav_default_event_cal ?? ""
     readonly property string caldavDefaultTodoCal:  _data.caldav_default_todo_cal  ?? ""
     function caldavCalHidden(id) { var h = _data.caldav_hidden; return !!(h && h[id]) }
+    // Per-account role: "both" (default) | "tasks" | "calendar" — what a CalDAV account contributes.
+    readonly property var caldavRoles: _data.caldav_roles ?? ({})
+    function caldavRole(account) { var r = _data.caldav_roles; return (r && r[account]) ? r[account] : "both" }
     // Flyout size: width is fixed, height auto-fits the content up to the max.
     readonly property int    calendarMenuWidth:     _data.calendar_menu_width      ?? 380
     readonly property int    calendarMenuMaxH:      _data.calendar_menu_max_height ?? 700
     // Percent-of-screen sizing supersedes the px keys above (users had those pinned
     // in settings.json, so changed defaults alone would never enlarge the menu).
     readonly property int    calendarMenuWidthPct:  _data.calendar_menu_width_pct  ?? 50
-    readonly property int    calendarMenuHeightPct: _data.calendar_menu_height_pct ?? 40
+    readonly property int    calendarMenuHeightPct: _data.calendar_menu_height_pct ?? 52
     readonly property string todoDefaultProject:    _data.todo_default_project     ?? ""
 
     // ── Tiling layouts (Settings → Layouts + the bar's Layout module) ─────────
@@ -548,6 +657,11 @@ Item {
     // tiling_layout persists the active choice so reloads restore it.
     readonly property var    customLayouts: _data.custom_layouts ?? []
     readonly property string tilingLayout:  _data.tiling_layout  ?? "dwindle"
+    // Per-monitor / per-workspace layout overrides (layout_manager.lua applies them live via
+    // VTL_layouts_apply()). Values are mode strings like tiling_layout, plus "monocle" / "float" /
+    // "endless" (endless is monitor-only). Precedence: workspace > monitor > global.
+    readonly property var layoutMonitors:   _data.layout_monitors   ?? ({})
+    readonly property var layoutWorkspaces: _data.layout_workspaces ?? ({})
     function customLayoutFor(l) {
         var s = "" + l
         if (s.indexOf("lua:") !== 0) return null
@@ -561,7 +675,7 @@ Item {
     // Zone layout for Super-dragged floating windows. fancy_zones_resolved holds the
     // active layout as "x,y,w,h;…" fractions of the usable area — shared verbatim with
     // modules/fancyzones.lua (the compositor-side snap), so overlay and snap never diverge.
-    readonly property bool   fancyZonesEnabled:  _data.fancy_zones_enabled  ?? false
+    readonly property bool   fancyZonesEnabled:  componentEnabled("zones")   // the one switch
     readonly property string fancyZonesLayout:   _data.fancy_zones_layout   ?? "halves"
     readonly property string fancyZonesResolved: _data.fancy_zones_resolved ?? "0,0,0.5,1;0.5,0,0.5,1"
     readonly property int    fancyZonesGap:      _data.fancy_zones_gap      ?? 12

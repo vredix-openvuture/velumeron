@@ -594,9 +594,8 @@ Item {
 
             // ── Settings-menu navigation mode (experimental) ──────────────────
             Card {
-                CardLabel { text: "MENU NAVIGATION" }
-                SubLabel { width: parent.width
-                           text: "How this settings menu is navigated — the classic icon sidebar, or full-page navigation (a gear on Home opens a scrollable list of every page)." }
+                CardLabel { text: "MENU NAVIGATION"
+                            hint: "How this settings menu is navigated — the classic icon sidebar, or full-page navigation (a gear on Home opens a scrollable list of every page)." }
                 Segmented {
                     equal: true
                     current: VtlConfig.settingsNavMode
@@ -607,9 +606,8 @@ Item {
 
             // ── Template cards ────────────────────────────────────────────────
             Card {
-                CardLabel { text: "STYLE" }
-                SubLabel { width: parent.width
-                           text: "Mirobo is the built-out style — click it to apply, then tweak it in the builder. The other styles are still in progress and will unlock over time. Your changes save to your own config; the shipped styles are never overwritten." }
+                CardLabel { text: "STYLE"
+                            hint: "Mirobo is the built-out style — click it to apply, then tweak it in the builder. The other styles are still in progress and will unlock over time. Your changes save to your own config; the shipped styles are never overwritten." }
 
                 Flow {
                     id: tplGrid
@@ -666,9 +664,8 @@ Item {
 
             // ── Colours: wallust auto / fixed palette — always here, independent of any template ──
             Card {
-                CardLabel { text: "COLOURS" }
-                SubLabel { width: parent.width
-                           text: "Where your colours come from. Leave it on “Follow the wallpaper” and the palette is pulled from whatever image is behind you; turn it off to pick a fixed scheme instead. Colours are separate from the style — switching a style or applying a preset never touches them." }
+                CardLabel { text: "COLOURS"
+                            hint: "Where your colours come from. Leave it on “Follow the wallpaper” and the palette is pulled from whatever image is behind you; turn it off to pick a fixed scheme instead. Colours are separate from the style — switching a style or applying a preset never touches them." }
 
                 Toggle {
                     label: "Follow the wallpaper"
@@ -682,7 +679,9 @@ Item {
                     width: parent.width; spacing: Style.rowGap
                     visible: root.autoMode
 
-                    FieldLabel { text: "Look" }
+                    FieldLabel { text: "Look"
+                                 hint: "Pick a starting look — each is a ready-made recipe, previewed on your wallpaper. Fine-tune it below."
+                                       + "\n\n" + "How punchy the colours are — higher is more saturated, lower is muted." }
                     Column {
                         width: parent.width; spacing: 6
                         Repeater {
@@ -738,8 +737,35 @@ Item {
                             }
                         }
                     }
-                    SubLabel { width: parent.width
-                               text: "Pick a starting look — each is a ready-made recipe, previewed on your wallpaper. Fine-tune it below." }
+
+                }
+
+                // ── Surface contrast — how far cards and rows lift off the panel behind them ──
+                // Sits right under the Look presets because that is where you go looking for it,
+                // but it is NOT a wallust dial: it writes settings.json (a style value, snapshotted
+                // into templates), not options.json — hence its own block outside the auto-mode
+                // column, so it stays available for a fixed scheme too. It is deliberately not a
+                // preset: the step is a fraction of the accent, so how visible it lands would ride
+                // on whichever colour the wallpaper happens to yield (measured across wallpapers —
+                // no palette/backend/colorspace combination moves it reliably). See Style.lift().
+                FieldLabel { text: "Surface contrast"
+                             hint: "How far cards and list rows lift off the panel behind them — the step between a "
+                                   + "menu's background and the cards sitting on it."
+                                   + "\n\n" + "This is not a palette setting on purpose: the step is a fraction of the "
+                                   + "accent colour, so leaving it to the palette would make it depend on whichever "
+                                   + "colour your wallpaper yields. Set here, it looks the same under every palette." }
+                Segmented {
+                    equal: true
+                    current: VtlConfig.surfaceContrast
+                    segments: [{ label: "Subtle", key: "subtle" },
+                               { label: "Normal", key: "normal" },
+                               { label: "Strong", key: "strong" }]
+                    onPicked: root.save("surface_contrast", key)
+                }
+
+                Column {
+                    width: parent.width; spacing: Style.rowGap
+                    visible: root.autoMode
 
                     // Contrast (check_contrast) is ALWAYS on now — no toggle — so text never turns
                     // unreadable. Vividness lives inside Advanced below.
@@ -775,8 +801,6 @@ Item {
                             min:   0; max: 100; step: 5
                             onChanged: root.setOpt("saturation", v)
                         }
-                        SubLabel { width: parent.width
-                                   text: "How punchy the colours are — higher is more saturated, lower is muted." }
 
                         FieldLabel { text: "Palette" }
                         Dropdown {
@@ -798,7 +822,9 @@ Item {
                             onPicked: root.setOpt("backend", key)
                         }
 
-                        FieldLabel { text: "Colorspace" }
+                        FieldLabel { text: "Colorspace"
+                                     hint: "How wallust pulls the palette out of the image and spreads it across the slots. The defaults suit most wallpapers."
+                                           + "\n\n" + "The pinned preview at the top updates as you tweak these. Hit “Apply” to push the new colours to the whole desktop now (otherwise they land on the next wallpaper change)." }
                         Dropdown {
                             summary: root.optLabel(root.colorspaceOptions, root.wallustOpts.colorspace ?? "lab")
                             options: root.colorspaceOptions.map(function(o) {
@@ -807,25 +833,14 @@ Item {
                             })
                             onPicked: root.setOpt("colorspace", key)
                         }
-                        SubLabel { width: parent.width
-                                   text: "How wallust pulls the palette out of the image and spreads it across the slots. The defaults suit most wallpapers." }
                     }
 
-                    SubLabel {
-                        width: parent.width
-                        text: "The pinned preview at the top updates as you tweak these. Hit “Apply” to push the new colours to the whole desktop now (otherwise they land on the next wallpaper change)."
-                    }
                 }
 
                 CardLabel {
                     visible: !root.autoMode
                     text: root.schemes.length ? "FIXED SCHEME" : "No schemes in fixed_colors/"
-                }
-                SubLabel {
-                    visible: !root.autoMode && root.schemes.length > 0
-                    width: parent.width
-                    text: "A hand-picked palette that ignores the wallpaper. Click one to apply it — the pinned preview at the top updates to match."
-                }
+                            hint: "A hand-picked palette that ignores the wallpaper. Click one to apply it — the pinned preview at the top updates to match." }
                 Column {
                     width: parent.width; spacing: 4
                     visible: !root.autoMode
@@ -888,7 +903,8 @@ Item {
                     width: parent.width; spacing: 6
                     visible: !root.autoMode
 
-                    CardLabel { visible: root.userPalettes.length > 0; text: "YOUR PALETTES" }
+                    CardLabel { visible: root.userPalettes.length > 0; text: "YOUR PALETTES"
+                                hint: "Set your own colours in a live editor — the rest derives with readable contrast." }
                     Repeater {
                         model: root.userPalettes
                         delegate: Item {
@@ -960,8 +976,6 @@ Item {
                                         UiState.paletteEditorOpen = true
                                     } }
                     }
-                    SubLabel { width: parent.width
-                               text: "Set your own colours in a live editor — the rest derives with readable contrast." }
                 }
 
                 Row {
@@ -977,16 +991,13 @@ Item {
 
             // ── Appearance: desktop-wide dark/light + app theming ─────────────
             Card {
-                CardLabel { text: "APPEARANCE" }
+                CardLabel { text: "APPEARANCE"
+                            hint: "Desktop-wide dark/light preference (xdg color-scheme + GTK variant) for portal-aware apps and websites. Shell and terminal colours stay untouched." }
                 Segmented {
                     equal: true
                     segments: [{ label: "󰖔  Dark", key: "dark" }, { label: "󰖨  Light", key: "light" }]
                     current: root.appMode
                     onPicked: key => root.appTheme("mode " + key)
-                }
-                SubLabel {
-                    width: parent.width
-                    text: "Desktop-wide dark/light preference (xdg color-scheme + GTK variant) for portal-aware apps and websites. Shell and terminal colours stay untouched."
                 }
                 Toggle {
                     label: "Theme GTK apps"
@@ -1000,7 +1011,8 @@ Item {
                     on:    root.qtTheming
                     onToggled: root.appTheme("qt " + (root.qtTheming ? "off" : "on"))
                 }
-                FieldLabel { text: "App icon theme" }
+                FieldLabel { text: "App icon theme"
+                             hint: "Applies the icon theme to GTK/Qt apps live (gsettings + gtk-3/4 settings.ini). The shell's own icons re-theme on the next restart." }
                 Dropdown {
                     summary: root.appIcon === "" ? "(system default)" : root.appIcon
                     options: root.iconThemes.map(function (t) {
@@ -1031,17 +1043,12 @@ Item {
                         }
                     }
                 }
-                SubLabel {
-                    width: parent.width
-                    text: "Applies the icon theme to GTK/Qt apps live (gsettings + gtk-3/4 settings.ini). The shell's own icons re-theme on the next restart."
-                }
             }
 
             // ── Build a theme ─────────────────────────────────────────────────
             Card {
-                CardLabel { text: "BUILD A THEME" }
-                SubLabel { width: parent.width
-                           text: "Fine-tune the live look step by step — bar, menus, launcher, font — and optionally save it as a named preset. Everything applies live." }
+                CardLabel { text: "BUILD A THEME"
+                            hint: "Fine-tune the live look step by step — bar, menus, launcher, font — and optionally save it as a named preset. Everything applies live." }
                 Rectangle {
                     width: parent.width; height: 44; radius: Style.rControl
                     color: buildHov.containsMouse ? Style.accent : Style.tint(Style.accent, 0.22)
@@ -1057,9 +1064,8 @@ Item {
 
             // ── Motion (elastic "soft-mass" emergence) ────────────────────────
             Card {
-                CardLabel { text: "MOTION" }
-                SubLabel { width: parent.width
-                           text: "How panels, menus and OSDs spring open. The free edges bow out by the spring's overshoot and wobble flat. Changes show the next time a surface opens." }
+                CardLabel { text: "MOTION"
+                            hint: "How panels, menus and OSDs spring open. The free edges bow out by the spring's overshoot and wobble flat. Changes show the next time a surface opens." }
 
                 Slider { label: "Spring";   from: 0.5;  to: 12;   decimals: 1
                          value: VtlConfig.elasticSpring
@@ -1137,9 +1143,8 @@ Item {
 
                 // 1 · Save the current look as a named preset (snapshots settings.json as it is right now).
                 Card {
-                    CardLabel { text: "1 · SAVE AS PRESET" }
-                    SubLabel { width: parent.width
-                               text: "Snapshots the current look into a named preset you can re-apply later. Adjust the sections below first, then save — your live settings and the shipped styles are untouched either way. Optional." }
+                    CardLabel { text: "1 · SAVE AS PRESET"
+                                hint: "Snapshots the current look into a named preset you can re-apply later. Adjust the sections below first, then save — your live settings and the shipped styles are untouched either way. Optional." }
                     Rectangle {
                         width: parent.width; height: 40; radius: Style.rControl
                         color: Style.controlFill
@@ -1179,7 +1184,8 @@ Item {
                                    { label: "Frame", key: "frame" }, { label: "None", key: "none" }]
                         onPicked: root.save("bar_mode", key)
                     }
-                    FieldLabel { text: "Position" }
+                    FieldLabel { text: "Position"
+                                 hint: "Modules, per-edge arrangement and sizing: Settings → Bar." }
                     Segmented {
                         equal: true
                         current: VtlConfig.barPositionFor("")
@@ -1194,8 +1200,6 @@ Item {
                     Stepper { label: "Thickness"; unit: "px"; min: 16; max: 80; step: 2; labelWidth: 110
                               value: VtlConfig.barThicknessFor("")
                               onChanged: root.save("bar_thickness", v) }
-                    SubLabel { width: parent.width
-                               text: "Modules, per-edge arrangement and sizing: Settings → Bar." }
                 }
 
                 // 4 · Menus & transitions

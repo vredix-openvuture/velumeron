@@ -6,6 +6,7 @@ singleton SettingsStore 1.0 SettingsStore.qml
 singleton UserSettings 1.0 UserSettings.qml
 singleton OnboardingState 1.0 onboarding/OnboardingState.qml
 singleton UiState   1.0 UiState.qml
+singleton Actions   1.0 Actions.qml
 singleton Style     1.0 Style.qml
 singleton Fuzzy     1.0 Fuzzy.qml
 singleton Wording   1.0 Wording.qml
@@ -13,6 +14,7 @@ singleton Templates 1.0 Templates.qml
 singleton Hyprwindows 1.0 Hyprwindows.qml
 singleton VpnService 1.0 VpnService.qml
 singleton ThumbQueue 1.0 ThumbQueue.qml
+singleton CavaService 1.0 CavaService.qml
 singleton LockState 1.0 lock/LockState.qml
 singleton LockPresets 1.0 LockPresets.qml
 
@@ -22,7 +24,10 @@ Card        1.0 common/Card.qml
 CardLabel   1.0 common/CardLabel.qml
 FieldLabel  1.0 common/FieldLabel.qml
 SubLabel    1.0 common/SubLabel.qml
+MarqueeText 1.0 common/MarqueeText.qml
+HintTip     1.0 common/HintTip.qml
 Toggle      1.0 common/Toggle.qml
+Switch      1.0 common/Switch.qml
 Dropdown    1.0 common/Dropdown.qml
 Stepper     1.0 common/Stepper.qml
 Slider      1.0 common/Slider.qml
@@ -33,6 +38,7 @@ SelectTile  1.0 common/SelectTile.qml
 PosGrid     1.0 common/PosGrid.qml
 TextButton  1.0 common/TextButton.qml
 WallThumb   1.0 common/WallThumb.qml
+RoundedImage 1.0 common/RoundedImage.qml
 InputField  1.0 common/InputField.qml
 AppField    1.0 common/AppField.qml
 IconGlyphPicker 1.0 common/IconGlyphPicker.qml
@@ -43,6 +49,7 @@ WallpaperWindow   1.0 WallpaperWindow.qml
 Launcher          1.0 launcher/Launcher.qml
 HotCorners        1.0 corners/HotCorners.qml
 WindowSwitcher    1.0 windowswitcher/WindowSwitcher.qml
+LayoutQuickSwitcher 1.0 layoutswitcher/LayoutQuickSwitcher.qml
 ClipboardMenu     1.0 clipboard/ClipboardMenu.qml
 SessionOverlay    1.0 session/SessionOverlay.qml
 
@@ -73,6 +80,10 @@ Taskbar           1.0 osd/Taskbar.qml
 TaskbarReserve    1.0 osd/TaskbarReserve.qml
 WindowTags        1.0 windowtags/WindowTags.qml
 
+# Startup splash (curtain over the shell's own start)
+singleton SplashState 1.0 splash/SplashState.qml
+Splash            1.0 splash/Splash.qml
+
 # Keybind cheatsheet overlay
 KeybindHelp       1.0 keybind/KeybindHelp.qml
 
@@ -81,6 +92,10 @@ singleton CalDavService 1.0 calendar/CalDavService.qml
 singleton TodoService   1.0 calendar/TodoService.qml
 ProjectRail             1.0 calendar/ProjectRail.qml
 TaskBoard               1.0 calendar/TaskBoard.qml
+TimeGrid                1.0 calendar/TimeGrid.qml
+EventAdd                1.0 calendar/EventAdd.qml
+TaskEdit                1.0 calendar/TaskEdit.qml
+DatePicker              1.0 calendar/DatePicker.qml
 CalendarMenu            1.0 calendar/CalendarMenu.qml
 CalendarSection         1.0 settings/calendar/CalendarSection.qml
 LayoutsSection          1.0 settings/layouts/LayoutsSection.qml
@@ -90,6 +105,22 @@ KeybindsSection         1.0 settings/keybinds/KeybindsSection.qml
 singleton ZonesState 1.0 zones/ZonesState.qml
 ZoneOverlay          1.0 zones/ZoneOverlay.qml
 ZonesSection         1.0 settings/zones/ZonesSection.qml
+
+# Dashboard (the settings menu's home page — a cell grid the user arranges themselves)
+singleton DashState   1.0 dashboard/DashState.qml
+singleton DashModules 1.0 dashboard/DashModules.qml
+DashGrid              1.0 dashboard/DashGrid.qml
+DashEditor            1.0 dashboard/DashEditor.qml
+DashTile              1.0 dashboard/DashTile.qml
+DashGreeting          1.0 dashboard/DashGreeting.qml
+DashSlider            1.0 dashboard/DashSlider.qml
+DashProfile           1.0 dashboard/DashProfile.qml
+DashToggle            1.0 dashboard/DashToggle.qml
+DashAction            1.0 dashboard/DashAction.qml
+DashGlance            1.0 dashboard/DashGlance.qml
+DashMpris             1.0 dashboard/DashMpris.qml
+DashSpacer            1.0 dashboard/DashSpacer.qml
+DashSpacer            1.0 dashboard/DashSpacer.qml
 
 # Notifications (server + popups + centre + shared list)
 singleton NotifService 1.0 notify/NotifService.qml
@@ -142,7 +173,7 @@ BluetoothManager     1.0 settings/home/BluetoothManager.qml
 BarSection           1.0 settings/bar/BarSection.qml
 ModuleCustomize      1.0 settings/bar/ModuleCustomize.qml
 StyleSection         1.0 settings/style/StyleSection.qml
-BackupSection        1.0 settings/backup/BackupSection.qml
+VelumeronSection     1.0 settings/velumeron/VelumeronSection.qml
 OsdSection           1.0 settings/osd/OsdSection.qml
 LauncherSection      1.0 settings/launcher/LauncherSection.qml
 CornerActionsSection 1.0 settings/corners/CornerActionsSection.qml
@@ -151,6 +182,7 @@ WindowTagsSection    1.0 settings/windowtags/WindowTagsSection.qml
 WallpaperSection     1.0 settings/theme/WallpaperSection.qml
 LockscreenSection    1.0 settings/lockscreen/LockscreenSection.qml
 LockEditor           1.0 settings/lockscreen/LockEditor.qml
+BootSection          1.0 settings/boot/BootSection.qml
 AutostartSection     1.0 settings/autostart/AutostartSection.qml
 IntegrationsSection  1.0 settings/integrations/IntegrationsSection.qml
 WorkspacesSection    1.0 settings/workspaces/WorkspacesSection.qml

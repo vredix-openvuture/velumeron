@@ -72,7 +72,8 @@ Item {
         anchors { left: cap.right; leftMargin: 10; right: valTxt.left; rightMargin: 14
                   verticalCenter: parent.verticalCenter }
         height: 8; radius: 4
-        color: Colors.bgElement
+        // A track is a surface sitting on a card, so it follows the surface-contrast knob too.
+        color: Style.liftSolid(Colors.bgElement)
         // Focus ring: a faint accent outline so a clicked slider reads as ready for arrow keys.
         border.width: sl.activeFocus ? 1 : 0
         border.color: Style.tint(Style.accent, 0.6)

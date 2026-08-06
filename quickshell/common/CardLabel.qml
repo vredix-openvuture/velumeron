@@ -3,10 +3,36 @@ import QtQuick
 
 // Small-caps group header, e.g. "SYSTEM OSD". Deliberately prominent — brighter than the
 // body text and letter-spaced — so each block reads as a distinct section, not fine print.
+//
+// `hint` is the section's explanation. It is NOT drawn: the heading gets a hairline underline and
+// hands the text over on hover (HintTip), which is what keeps the settings pages from turning into
+// walls of prose. Stays a Text, so every existing colour / font / width override keeps working and
+// the hint never costs a row of its own.
 Text {
+    id: cl
+    property string hint: ""
+
     color:              Colors.fgPrimary
     font.pixelSize:     Style.fsSection
     font.bold:          true
     font.letterSpacing: 1.2
     font.family:        Style.font
+
+    // Under the glyphs only (contentWidth), so it tracks the heading instead of the row width.
+    Rectangle {
+        visible: cl.hint !== ""
+        y:       cl.contentHeight + 1
+        width:   cl.contentWidth
+        height:  1
+        color:   Qt.rgba(cl.color.r, cl.color.g, cl.color.b, hintHover.containsMouse ? 0.8 : 0.35)
+        Behavior on color { ColorAnimation { duration: 100 } }
+    }
+    MouseArea {
+        id: hintHover
+        enabled: cl.hint !== ""
+        width: cl.contentWidth; height: cl.contentHeight
+        hoverEnabled: true
+        acceptedButtons: Qt.NoButton
+    }
+    HintTip { target: cl; text: cl.hint; hovered: hintHover.containsMouse }
 }
