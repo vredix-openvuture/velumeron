@@ -23,13 +23,18 @@ Singleton {
     readonly property var calendars: data.calendars ?? []
     readonly property bool hasAccounts: accounts.length > 0
 
-    // Visible = not hidden in Settings → Calendar (caldav_hidden.<calId> = true).
-    readonly property var events: (data.events ?? []).filter(e => !VtlConfig.caldavCalHidden(e.cal))
-    readonly property var todos:  (data.todos  ?? []).filter(t => !VtlConfig.caldavCalHidden(t.cal))
+    // Visible = not hidden (caldav_hidden.<calId>) AND the owning account's role allows this kind:
+    // a "tasks"-only account contributes no events; a "calendar"-only account contributes no todos.
+    readonly property var events: (data.events ?? []).filter(e => !VtlConfig.caldavCalHidden(e.cal)
+                                   && VtlConfig.caldavRole(root.accountOf(e.cal)) !== "tasks")
+    readonly property var todos:  (data.todos  ?? []).filter(t => !VtlConfig.caldavCalHidden(t.cal)
+                                   && VtlConfig.caldavRole(root.accountOf(t.cal)) !== "calendar")
 
     // Writable targets for the quick-add rows.
-    readonly property var eventCalendars: calendars.filter(c => c.vevent && c.writable)
-    readonly property var todoCalendars:  calendars.filter(c => c.vtodo  && c.writable)
+    readonly property var eventCalendars: calendars.filter(c => c.vevent && c.writable
+                                          && VtlConfig.caldavRole(c.account) !== "tasks")
+    readonly property var todoCalendars:  calendars.filter(c => c.vtodo  && c.writable
+                                          && VtlConfig.caldavRole(c.account) !== "calendar")
 
     // Open tasks that are overdue or due today — the clock module shows a dot when > 0.
     readonly property int dueCount: {
@@ -44,6 +49,8 @@ Singleton {
         for (var i = 0; i < calendars.length; i++) if (calendars[i].id === id) return calendars[i]
         return null
     }
+    // Owning account name of a calendar id (for per-account role filtering).
+    function accountOf(calId) { var c = calById(calId); return c ? (c.account ?? "") : "" }
     // Calendar colour: the server-provided one, else a stable palette pick by index.
     function colorFor(calId) {
         var c = calById(calId)
@@ -113,8 +120,12 @@ Singleton {
         _run(["delete-item", calId, href])
     }
 
-    function addEvent(calId, summary, ymd, hm, durationMin) {
-        _run(["add-event", calId, summary, ymd, hm ?? "", "" + (durationMin ?? 60)])
+    function addEvent(calId, summary, ymd, hm, durationMin, notes) {
+        _run(["add-event", calId, summary, ymd, hm ?? "", "" + (durationMin ?? 60), "", notes ?? ""])
+    }
+    // All-day event spanning startYmd..endYmd (inclusive); endYmd defaults to startYmd.
+    function addEventRange(calId, summary, startYmd, endYmd, notes) {
+        _run(["add-event", calId, summary, startYmd, "", "0", endYmd ?? startYmd, notes ?? ""])
     }
 
     // Account management (settings page). Credentials go via the environment, not argv.

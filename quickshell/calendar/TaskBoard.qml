@@ -11,6 +11,8 @@ Item {
     id: board
     property string filterProject: ""      // "" = all projects
     property int    boardH: 430            // height of the scrolling list area
+    signal newTask(string projectId)       // "+" → open the full task editor
+    signal editTask(var task)              // click a task body → open it in the editor
 
     implicitHeight: content.implicitHeight
 
@@ -39,9 +41,20 @@ Item {
     }
     readonly property var overdue:  TodoService.tasks.filter(t => board._mine(t) && !t.done && t.dueMs > 0 && t.dueMs <  board._day0)
     readonly property var today:    TodoService.tasks.filter(t => board._mine(t) && !t.done && t.dueMs >= board._day0 && t.dueMs < board._dayEnd)
-    readonly property var upcoming: TodoService.tasks.filter(t => board._mine(t) && !t.done && (t.dueMs === 0 || t.dueMs >= board._dayEnd))
+    // UPCOMING is due-dated only; undated tasks fall into their own NO DATE bucket.
+    readonly property var upcoming: TodoService.tasks.filter(t => board._mine(t) && !t.done && t.dueMs >= board._dayEnd)
+    readonly property var noDate:   TodoService.tasks.filter(t => board._mine(t) && !t.done && t.dueMs === 0)
     readonly property var done:     TodoService.tasks.filter(t => board._mine(t) && t.done).slice(0, 20)
-    readonly property int  openTotal: overdue.length + today.length + upcoming.length
+    readonly property int  openTotal: overdue.length + today.length + upcoming.length + noDate.length
+
+    // Human recurrence cadence from Vikunja's repeat_after (seconds): "󰑖 7d" / "󰑖 2w" / …
+    function _repeatLabel(s) {
+        if (!s || s <= 0)      return "󰑖"
+        if (s % 604800 === 0)  return "󰑖 " + (s / 604800) + "w"
+        if (s % 86400 === 0)   return "󰑖 " + (s / 86400) + "d"
+        if (s % 3600 === 0)    return "󰑖 " + (s / 3600) + "h"
+        return "󰑖 " + Math.round(s / 60) + "m"
+    }
 
     // Quick-add target: the selected project, else the remembered default, else
     // the first writable project.
@@ -62,10 +75,21 @@ Item {
         width: parent.width
         spacing: 10
 
-        BoardInput {
+        Row {
+            width: parent.width; spacing: 8
             visible: board.addTarget !== ""
-            placeholder: "new task in " + (TodoService.projectById(board.addTarget)?.title ?? "…")
-            onSubmit: text => TodoService.addTask(board.addTarget, text, "", "")
+            BoardInput {
+                width: parent.width - 40
+                placeholder: "new task in " + (TodoService.projectById(board.addTarget)?.title ?? "…")
+                onSubmit: text => TodoService.addTask(board.addTarget, text, "", "")
+            }
+            StyledRect {   // + → full task editor
+                width: 32; height: 32; radius: Style.rControl
+                color: fabHov.containsMouse ? Style.tint(Style.accent, 0.55) : Style.tint(Style.accent, 0.34)
+                Behavior on color { ColorAnimation { duration: 90 } }
+                Text { anchors.centerIn: parent; text: "󰐕"; color: Colors.fgBright; font.pixelSize: 15; font.family: Style.font }
+                MouseArea { id: fabHov; anchors.fill: parent; hoverEnabled: true; onClicked: board.newTask(board.addTarget) }
+            }
         }
 
         Flickable {
@@ -83,6 +107,7 @@ Item {
                 TGroup { title: "OVERDUE";  items: board.overdue;  urgent: true }
                 TGroup { title: "TODAY";    items: board.today }
                 TGroup { title: "UPCOMING"; items: board.upcoming }
+                TGroup { title: "NO DATE";  items: board.noDate }
 
                 Item { width: 1; height: 4; visible: board.done.length > 0 }
                 Row {
@@ -209,6 +234,12 @@ Item {
                 font.pixelSize: 12; font.family: Style.font
                 font.strikeout: task.t.done === true
             }
+            Text {   // recurrence cadence (Vikunja recurring tasks)
+                visible: task.t.recurring === true
+                anchors.verticalCenter: parent.verticalCenter
+                text:  board._repeatLabel(task.t.repeatAfter)
+                color: Style.accent; font.pixelSize: 10; font.family: Style.font
+            }
             Text {   // subtask count on folded parents
                 visible: task.row.kids > 0 && task.row.folded
                 anchors.verticalCenter: parent.verticalCenter
@@ -243,6 +274,12 @@ Item {
                             hoverEnabled: true
                             onClicked: TodoService.deleteTask(task.t) }
             }
+        }
+        // Click the task body (between the checkbox and the due chip) to open the full editor.
+        MouseArea {
+            anchors { left: check.right; right: dueChip.left; top: parent.top; bottom: parent.bottom }
+            acceptedButtons: Qt.LeftButton
+            onClicked: board.editTask(task.t)
         }
         MouseArea { id: taskHov; anchors.fill: parent; hoverEnabled: true
                     acceptedButtons: Qt.NoButton }

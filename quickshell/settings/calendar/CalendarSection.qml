@@ -21,6 +21,16 @@ Item {
         root.save("caldav_hidden", m)
     }
 
+    // Per-account role: "both" (default, not stored) | "tasks" | "calendar".
+    function setRole(account, role) {
+        var m = {}
+        var cur = VtlConfig.caldavRoles
+        for (var k in cur) m[k] = cur[k]
+        if (role === "both") delete m[account]
+        else                 m[account] = role
+        root.save("caldav_roles", m)
+    }
+
     Flickable {
         anchors.fill: parent
         contentHeight: col.implicitHeight
@@ -35,13 +45,10 @@ Item {
 
             // ── Accounts ─────────────────────────────────────────────────────────
             Card {
-                CardLabel { text: "CALDAV ACCOUNTS" }
-                SubLabel {
-                    width: parent.width
-                    text: "Connect Nextcloud (calendar + tasks) or Vikunja (tasks) via CalDAV. " +
-                          "Use an app password (Nextcloud: Settings → Security; Vikunja: CalDAV token) — " +
-                          "credentials are stored locally, readable only by your user."
-                }
+                CardLabel { text: "CALDAV ACCOUNTS"
+                            hint: "Connect Nextcloud (calendar + tasks) or Vikunja (tasks) via CalDAV. " +
+                                  "Use an app password (Nextcloud: Settings → Security; Vikunja: CalDAV token) — " +
+                                  "credentials are stored locally, readable only by your user." }
 
                 // Existing accounts.
                 Repeater {
@@ -49,41 +56,68 @@ Item {
                     delegate: Rectangle {
                         id: acct
                         required property var modelData
-                        width: parent.width; height: 46
+                        readonly property string role: VtlConfig.caldavRole(acct.modelData.name)
+                        width: parent.width; height: 84
                         radius: Style.rControl
                         color:  Style.controlFill
                         border.width: Style.controlBorderW
                         border.color: Style.controlBorderColor
 
-                        Text {
-                            anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                            text:  acct.modelData.ok ? "󰅠" : "󰀦"
-                            color: acct.modelData.ok ? Style.accent : Colors.bgHover
-                            font.pixelSize: 15; font.family: Style.font
-                        }
-                        Column {
-                            anchors { left: parent.left; leftMargin: 36; right: rmBtn.left; rightMargin: 8
-                                      verticalCenter: parent.verticalCenter }
-                            spacing: 1
+                        // Top: status icon · name/url · remove
+                        Item {
+                            anchors { left: parent.left; right: parent.right; top: parent.top }
+                            height: 46
                             Text {
-                                width: parent.width; elide: Text.ElideRight
-                                text:  acct.modelData.name
-                                color: Colors.fgPrimary; font.pixelSize: Style.fsLabel; font.family: Style.font
+                                anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                                text:  acct.modelData.ok ? "󰅠" : "󰀦"
+                                color: acct.modelData.ok ? Style.accent : Colors.bgHover
+                                font.pixelSize: 15; font.family: Style.font
                             }
+                            Column {
+                                anchors { left: parent.left; leftMargin: 36; right: rmBtn.left; rightMargin: 8
+                                          verticalCenter: parent.verticalCenter }
+                                spacing: 1
+                                Text {
+                                    width: parent.width; elide: Text.ElideRight
+                                    text:  acct.modelData.name
+                                    color: Colors.fgPrimary; font.pixelSize: Style.fsLabel; font.family: Style.font
+                                }
+                                Text {
+                                    width: parent.width; elide: Text.ElideRight
+                                    text:  acct.modelData.ok
+                                           ? acct.modelData.username + " · " + acct.modelData.url
+                                           : acct.modelData.error
+                                    color: acct.modelData.ok ? Colors.fgMuted : Colors.bgHover
+                                    font.pixelSize: Style.fsSub; font.family: Style.font
+                                }
+                            }
+                            TextButton {
+                                id: rmBtn
+                                anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                                label: "Remove"
+                                onClicked: CalDavService.removeAccount(acct.modelData.name)
+                            }
+                        }
+
+                        // Bottom: what this account is used for.
+                        Row {
+                            anchors { left: parent.left; leftMargin: 36; right: parent.right; rightMargin: 12
+                                      bottom: parent.bottom; bottomMargin: 9 }
+                            spacing: 10
                             Text {
-                                width: parent.width; elide: Text.ElideRight
-                                text:  acct.modelData.ok
-                                       ? acct.modelData.username + " · " + acct.modelData.url
-                                       : acct.modelData.error
-                                color: acct.modelData.ok ? Colors.fgMuted : Colors.bgHover
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "Used for"; color: Colors.fgMuted
                                 font.pixelSize: Style.fsSub; font.family: Style.font
                             }
-                        }
-                        TextButton {
-                            id: rmBtn
-                            anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                            label: "Remove"
-                            onClicked: CalDavService.removeAccount(acct.modelData.name)
+                            Segmented {
+                                width: 260
+                                equal: true
+                                segments: [{ label: "Both", key: "both" },
+                                           { label: "Calendar", key: "calendar" },
+                                           { label: "Tasks", key: "tasks" }]
+                                current: acct.role
+                                onPicked: key => root.setRole(acct.modelData.name, key)
+                            }
                         }
                     }
                 }
@@ -131,9 +165,8 @@ Item {
             // ── Calendars (visibility per calendar / task list) ──────────────────
             Card {
                 visible: CalDavService.calendars.length > 0
-                CardLabel { text: "CALENDARS & TASK LISTS" }
-                SubLabel { width: parent.width
-                           text: "Hidden calendars stay synced but disappear from the clock menu." }
+                CardLabel { text: "CALENDARS & TASK LISTS"
+                            hint: "Hidden calendars stay synced but disappear from the clock menu." }
                 Repeater {
                     model: CalDavService.calendars
                     delegate: Rectangle {
@@ -188,7 +221,8 @@ Item {
                     segments: [{ label: "Monday", key: "monday" }, { label: "Sunday", key: "sunday" }]
                     onPicked: key => root.save("calendar_first_day", key)
                 }
-                FieldLabel { text: "Menu size (screen %)" }
+                FieldLabel { text: "Menu size (screen %)"
+                             hint: "The quick view sizes itself as a share of the screen." }
                 Stepper {
                     label: "Width"; unit: "%"
                     value: VtlConfig.calendarMenuWidthPct; step: 4; min: 30; max: 95
@@ -199,8 +233,6 @@ Item {
                     value: VtlConfig.calendarMenuHeightPct; step: 4; min: 40; max: 95
                     onChanged: v => root.save("calendar_menu_height_pct", v)
                 }
-                SubLabel { width: parent.width
-                           text: "The quick view sizes itself as a share of the screen." }
                 Row {
                     spacing: 10
                     TextButton {

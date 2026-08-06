@@ -3,7 +3,7 @@
 
 Sibling of caldav-client.py with the same contract: every command prints the
 full JSON cache on stdout (single line) so the QML service (TodoService.qml)
-and the velora bridge (todomodel.py) share one parse path. Where plain
+and the Disponera bridge (todomodel.py) share one parse path. Where plain
 CalDAV only offers flat VTODO lists, Vikunja's REST API adds the project TREE
 (parent_project_id) and task→subtask relations — the whole reason this client
 exists (see the unified todo model spec referenced in both consumers).
@@ -11,7 +11,7 @@ exists (see the unified todo model spec referenced in both consumers).
 Commands:
   load                                       print the cache without touching the network
   sync                                       refresh projects + tasks + labels, write + print
-  add-task <projectId> <title> [dueYMD] [parentTaskId]
+  add-task <projectId> <title> [dueYMD] [parentTaskId] [extraJSON: {priority,notes,repeatAfter}]
   toggle-task <taskId> <0|1>
   delete-task <taskId>
   set-due <taskId> <dueYMD|"">               "" clears the due date
@@ -156,7 +156,12 @@ def http(method, url, token, body=None):
         with urllib.request.urlopen(req, timeout=TIMEOUT, context=ctx) as r:
             raw = r.read()
             parsed = json.loads(raw) if raw.strip() else None
-            return r.status, parsed, dict(r.headers)
+            # Lower-case header keys: callers read pagination headers as
+            # "x-pagination-total-pages", but the server sends them canonical
+            # ("X-Pagination-Total-Pages"). Without this the lookup misses,
+            # total-pages stays 1, and projects with >50 tasks (Vikunja caps
+            # per_page at 50 server-side) are silently truncated to one page.
+            return r.status, parsed, {k.lower(): v for k, v in r.headers.items()}
     except urllib.error.HTTPError as e:
         detail = ""
         try:
@@ -184,12 +189,19 @@ def ms(rfc3339):
 
 
 def due_rfc3339(ymd):
-    """YYYY-MM-DD → local NOON as RFC3339 (noon avoids day flips across TZs);
-    '' → Vikunja's zero date (clears the due)."""
+    """YYYY-MM-DD [HH:MM] → local RFC3339. With a time it's used verbatim; date-only defaults to
+    NOON (noon avoids day flips across TZs). '' → Vikunja's zero date (clears the due)."""
     if not ymd:
         return "0001-01-01T00:00:00Z"
-    d = datetime.strptime(ymd, "%Y-%m-%d").replace(hour=12).astimezone()
-    return d.isoformat()
+    s = str(ymd).strip().replace("T", " ")
+    parts = s.split(" ", 1)
+    d = datetime.strptime(parts[0], "%Y-%m-%d")
+    if len(parts) > 1 and ":" in parts[1]:
+        hm = parts[1].split(":")
+        d = d.replace(hour=int(hm[0]) % 24, minute=int(hm[1]) % 60)
+    else:
+        d = d.replace(hour=12)
+    return d.astimezone().isoformat()
 
 
 def shape_project(p):
@@ -227,12 +239,16 @@ def shape_task(t, parent_of):
             "done": bool(t.get("done")),
             "doneMs": ms(t.get("done_at")),
             "dueMs": ms(t.get("due_date")),
+            "startMs": ms(t.get("start_date")),
+            "endMs": ms(t.get("end_date")),
             "priority": int(t.get("priority") or 0),
             "percentDone": int(round(pct * 100)) if pct <= 1 else int(pct),
             "parentId": parent_of.get(t.get("id", 0), 0),
             "notes": t.get("description") or "",
             "labels": [shape_label(l) for l in (t.get("labels") or [])],
             "recurring": bool(t.get("repeat_after")),
+            "repeatAfter": int(t.get("repeat_after") or 0),
+            "repeatMode": int(t.get("repeat_mode") or 0),
             "updatedMs": ms(t.get("updated"))}
 
 
@@ -400,11 +416,18 @@ def need_source():
     return src
 
 
-def add_task(cache, project_id, title, due_ymd="", parent_id=0):
+def add_task(cache, project_id, title, due_ymd="", parent_id=0, priority=0, notes="", repeat_after=0):
     src = need_source()
     body = {"title": title}
     if due_ymd:
         body["due_date"] = due_rfc3339(due_ymd)
+    if priority:
+        body["priority"] = int(priority)
+    if notes:
+        body["description"] = notes
+    if repeat_after:
+        body["repeat_after"] = int(repeat_after)
+        body["repeat_mode"] = 0
     _, created, _ = api(src, "PUT", f"/projects/{project_id}/tasks", body)
     created = created or {}
     new_id = created.get("id")
@@ -501,7 +524,7 @@ def delete_project(cache, project_id):
 
 
 def update_task(cache, task_id, patch):
-    """patch keys (all optional): title, notes, priority, dueYmd."""
+    """patch keys (all optional): title, notes, priority, dueYmd, repeatAfter."""
     src = need_source()
     _, t, _ = api(src, "GET", f"/tasks/{task_id}")
     t = t or {}
@@ -513,6 +536,13 @@ def update_task(cache, task_id, patch):
         t["priority"] = int(patch["priority"] or 0)
     if "dueYmd" in patch:
         t["due_date"] = due_rfc3339(patch["dueYmd"])
+    if "startYmd" in patch:
+        t["start_date"] = due_rfc3339(patch["startYmd"])
+    if "endYmd" in patch:
+        t["end_date"] = due_rfc3339(patch["endYmd"])
+    if "repeatAfter" in patch:
+        t["repeat_after"] = int(patch["repeatAfter"] or 0)
+        t["repeat_mode"] = int(patch.get("repeatMode") or 0)
     _, updated, _ = api(src, "POST", f"/tasks/{task_id}", t)
     return _splice_task(cache, updated or t)
 
@@ -567,7 +597,11 @@ def main():
         elif cmd == "add-task":
             due = args[2] if len(args) > 2 else ""
             parent = int(args[3]) if len(args) > 3 and args[3] else 0
-            cache = add_task(cache, int(args[0]), args[1], due, parent)
+            # Optional 5th arg: JSON extras (priority, notes) from the full editor.
+            extra = json.loads(args[4]) if len(args) > 4 and args[4] else {}
+            cache = add_task(cache, int(args[0]), args[1], due, parent,
+                             int(extra.get("priority") or 0), extra.get("notes") or "",
+                             int(extra.get("repeatAfter") or 0))
             save_cache(cache)
         elif cmd == "toggle-task":
             cache = toggle_task(cache, int(args[0]), args[1] == "1")

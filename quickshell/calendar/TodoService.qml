@@ -4,11 +4,11 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Unified todo state shared by the calendar flyout and (by contract) velora.
+// Unified todo state shared by the calendar flyout and (by contract) Disponera.
 // Two backends feed ONE model: vikunja-client.py delivers the project TREE +
 // task→subtask relations over Vikunja's REST API; every other CalDAV account
 // contributes its flat VTODO lists through CalDavService. The merge spec below
-// is duplicated in velora's src/velora/todomodel.py — keep them in
+// is duplicated in Disponera's src/disponera/todomodel.py — keep them in
 // lockstep (both read the same two cache files, so they agree by construction
 // after any sync).
 //
@@ -50,6 +50,8 @@ Singleton {
     function _cdKept(calId) {
         var cal = CalDavService.calById(calId)
         if (!cal) return false
+        // A "calendar"-only account contributes no task lists / todos.
+        if (VtlConfig.caldavRole(cal.account) === "calendar") return false
         return !(root.vkOk && root._accountHost[cal.account] === root.vkHost)
     }
     readonly property var _cdCals: CalDavService.calendars.filter(c => c.vtodo && root._cdKept(c.id))
@@ -98,7 +100,8 @@ Singleton {
                            doneMs: vt[i].doneMs ?? 0, dueMs: vt[i].dueMs ?? 0,
                            priority: vt[i].priority ?? 0,
                            parentTaskId: vt[i].parentId ? "vk:" + vt[i].parentId : "",
-                           notes: vt[i].notes ?? "", cal: "", href: "" })
+                           notes: vt[i].notes ?? "", cal: "", href: "",
+                           recurring: vt[i].recurring === true, repeatAfter: vt[i].repeatAfter ?? 0 })
         }
         // CalDAV todos of kept calendars; RELATED-TO uid resolved within the same calendar.
         var todos = CalDavService.todos.filter(t => root._cdKept(t.cal))
@@ -112,7 +115,8 @@ Singleton {
                        doneMs: t.doneMs ?? 0, dueMs: t.dueMs ?? 0,
                        priority: root._icalPrio(t.priority),
                        parentTaskId: parent ? "cd:" + parent.cal + "|" + parent.href : "",
-                       notes: t.notes ?? "", cal: t.cal, href: t.href })
+                       notes: t.notes ?? "", cal: t.cal, href: t.href,
+                       recurring: t.recurring === true, repeatAfter: 0 })
         }
         return out
     }
@@ -187,11 +191,12 @@ Singleton {
     // ── Mutations — routed on the id prefix, vikunja side patched optimistically ──
     function _vkId(id) { return parseInt(("" + id).slice(3), 10) }
 
-    function addTask(projectId, title, dueYmd, parentTaskId) {
+    // extra (optional): { priority, notes, repeatAfter } — Vikunja only.
+    function addTask(projectId, title, dueYmd, parentTaskId, extra) {
         if (("" + projectId).indexOf("vk:") === 0) {
-            var args = ["add-task", "" + _vkId(projectId), title, dueYmd ?? ""]
-            if (parentTaskId && ("" + parentTaskId).indexOf("vk:") === 0)
-                args.push("" + _vkId(parentTaskId))
+            var parent = (parentTaskId && ("" + parentTaskId).indexOf("vk:") === 0) ? "" + _vkId(parentTaskId) : ""
+            var args = ["add-task", "" + _vkId(projectId), title, dueYmd ?? "", parent]
+            if (extra) args.push(JSON.stringify(extra))
             _run(args)
         } else if (("" + projectId).indexOf("cd:") === 0) {
             CalDavService.addTodo(("" + projectId).slice(3), title, dueYmd ?? "")
@@ -227,6 +232,18 @@ Singleton {
     function setDue(task, dueYmd) {   // vikunja only in M1 (caldav-client has no set-due yet)
         if (("" + task.id).indexOf("vk:") !== 0) return
         _run(["set-due", "" + _vkId(task.id), dueYmd ?? ""])
+    }
+
+    // Full edit — patch keys: { title, notes, priority, dueYmd, repeatAfter } (Vikunja only).
+    function updateTask(task, patch) {
+        if (("" + task.id).indexOf("vk:") !== 0) return
+        _run(["update-task", "" + _vkId(task.id), JSON.stringify(patch)])
+    }
+    // Move a task to another project (both Vikunja).
+    function moveTask(task, newProjectId) {
+        if (("" + task.id).indexOf("vk:") !== 0 || ("" + newProjectId).indexOf("vk:") !== 0) return
+        if (task.projectId === newProjectId) return
+        _run(["move-task", "" + _vkId(task.id), "" + _vkId(newProjectId)])
     }
 
     // ── Startup: instant cache, then a real sync; refresh on the caldav cadence ──

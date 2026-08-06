@@ -13,7 +13,8 @@ Commands:
   remove-account <name>
   add-todo <calId> <summary> [dueYMD]
   toggle-todo <calId> <href> <0|1>
-  add-event <calId> <summary> <YYYY-MM-DD> [HH:MM] [durationMin]
+  add-event <calId> <summary> <YYYY-MM-DD> [HH:MM] [durationMin] [endYMD]
+             (no HH:MM → all-day; endYMD makes it span start..end inclusive)
   add-event-full <calId> <jsonEvent>        {summary,ymd,hm,durMin,location,notes,categories,attendees,icon}
   update-event <calId> <href> <jsonPatch>   any subset of the same fields
   delete-item <calId> <href>
@@ -762,7 +763,7 @@ def add_todo(cache, cal_id, summary, due=None):
     put_new(cal, account, lines)
 
 
-def add_event(cache, cal_id, summary, ymd, hm=None, duration_min=60):
+def add_event(cache, cal_id, summary, ymd, hm=None, duration_min=60, end_ymd=None, notes=None):
     cal = find_cal(cache, cal_id)
     account = find_account(cal["account"])
     d = datetime.strptime(ymd, "%Y-%m-%d")
@@ -770,6 +771,8 @@ def add_event(cache, cal_id, summary, ymd, hm=None, duration_min=60):
     def lines(uid):
         ls = ["BEGIN:VEVENT", f"UID:{uid}", f"DTSTAMP:{_stamp()}",
               f"SUMMARY:{_ics_escape(summary)}"]
+        if notes:
+            ls.append("DESCRIPTION:" + _ics_escape(notes))
         if hm:
             h, m = hm.split(":")
             start = d.replace(hour=int(h), minute=int(m), tzinfo=LOCAL_TZ)
@@ -778,8 +781,13 @@ def add_event(cache, cal_id, summary, ymd, hm=None, duration_min=60):
             ls.append("DTSTART:" + start.astimezone(timezone.utc).strftime(fmt))
             ls.append("DTEND:" + end.astimezone(timezone.utc).strftime(fmt))
         else:
+            # All-day event; optional end_ymd makes it span multiple days. DTEND;VALUE=DATE is
+            # EXCLUSIVE, so a start==end single-day event ends the next day, a range ends end+1.
+            last = datetime.strptime(end_ymd, "%Y-%m-%d") if end_ymd else d
+            if last < d:
+                last = d
             ls.append("DTSTART;VALUE=DATE:" + d.strftime("%Y%m%d"))
-            ls.append("DTEND;VALUE=DATE:" + (d + timedelta(days=1)).strftime("%Y%m%d"))
+            ls.append("DTEND;VALUE=DATE:" + (last + timedelta(days=1)).strftime("%Y%m%d"))
         ls.append("END:VEVENT")
         return ls
     put_new(cal, account, lines)
@@ -1013,7 +1021,9 @@ def main():
         elif cmd == "add-event":
             add_event(cache, args[0], args[1], args[2],
                       args[3] if len(args) > 3 and args[3] else None,
-                      int(args[4]) if len(args) > 4 else 60)
+                      int(args[4]) if len(args) > 4 and args[4] else 60,
+                      args[5] if len(args) > 5 and args[5] else None,
+                      args[6] if len(args) > 6 and args[6] else None)
         elif cmd == "add-event-full":
             add_event_full(cache, args[0], json.loads(args[1]))
         elif cmd == "delete-item":

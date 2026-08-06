@@ -5,7 +5,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 
 // Calendar + tasks flyout — grows out of the bar from the Clock module (click) as the QUICK
-// VIEW next to the velora app (focused working; footer button launches it). Sized as a
+// VIEW next to the Disponera app (focused working; footer button launches it). Sized as a
 // percentage of the screen: a two-column calendar tab (month grid | day agenda + quick-add)
 // and a tasks tab with the unified project tree (ProjectRail: Vikunja projects/subprojects +
 // CalDAV lists via TodoService) beside the grouped TaskBoard (subtasks indent under their
@@ -31,17 +31,20 @@ Flyout {
     property int    viewMonth:  today.getMonth() // 0-based
     property var    selDay:     new Date()
     property string selProject: ""               // "" = all projects (TaskBoard filter)
+    property string calView:    "week"           // week | day | month  (calendar tab view mode)
+    property bool   sidebarOpen: false           // calendar sidebar — hidden by default, toggled
 
     onIsOpenChanged: if (isOpen) {
         root.today = new Date()
+        root.calView = "week"                    // always launch in the weekly view
         root.goToday()
         TodoService.sync()   // also triggers CalDavService.sync()
     }
 
-    // The velora app — the "focused working" counterpart of this quick view.
+    // The Disponera app — the "focused working" counterpart of this quick view.
     Process { id: launchProc }
     function launchApp() {
-        launchProc.command = ["bash", "-c", "setsid -f velora >/dev/null 2>&1"]
+        launchProc.command = ["bash", "-c", "setsid -f disponera >/dev/null 2>&1"]
         launchProc.running = false; launchProc.running = true
         UiState.flyout = ""
     }
@@ -55,11 +58,19 @@ Flyout {
         root.viewYear += Math.floor(m / 12)
         root.viewMonth = ((m % 12) + 12) % 12
     }
+    // Navigate by the active view's unit: day → ±1 day, week → ±7 days, month → ±1 month.
+    function shiftView(dir) {
+        if (root.calView === "month") { root.shiftMonth(dir); return }
+        var step = root.calView === "day" ? dir : dir * 7
+        root.selDay = new Date(root.selDay.getFullYear(), root.selDay.getMonth(), root.selDay.getDate() + step)
+        root.viewYear = root.selDay.getFullYear(); root.viewMonth = root.selDay.getMonth()
+    }
 
     // ── Layout: a left rail beside each tab's content ────────────────────────────
     readonly property int railW:     130        // calendar tab: visibility toggles
     readonly property int projRailW: 220        // tasks tab: project tree
-    readonly property var eventCals: CalDavService.calendars.filter(c => c.vevent)
+    readonly property var eventCals: CalDavService.calendars.filter(c => c.vevent
+                                     && VtlConfig.caldavRole(c.account) !== "tasks")
     readonly property int mainW: root.panelW - 2 * root.inPad - root.railW - 12
 
     // ── Date helpers ─────────────────────────────────────────────────────────────
@@ -82,6 +93,50 @@ Flyout {
         return out
     }
 
+    // The 7 dates of selDay's week (honouring the configured first day of week).
+    readonly property var weekDays: {
+        var d   = new Date(root.selDay)
+        var off = (d.getDay() - root.firstDow + 7) % 7
+        var out = []
+        for (var i = 0; i < 7; i++)
+            out.push(new Date(d.getFullYear(), d.getMonth(), d.getDate() - off + i))
+        return out
+    }
+    // Header title adapts to the active view.
+    readonly property string viewTitle: {
+        if (root.calView === "day")  return Qt.formatDate(root.selDay, "dddd, MMM d")
+        if (root.calView === "week") {
+            var w = root.weekDays, a = w[0], b = w[6]
+            return a.getMonth() === b.getMonth()
+                 ? Qt.formatDate(a, "MMM d") + " – " + Qt.formatDate(b, "d")
+                 : Qt.formatDate(a, "MMM d") + " – " + Qt.formatDate(b, "MMM d")
+        }
+        return Qt.formatDate(new Date(root.viewYear, root.viewMonth, 1), "MMMM yyyy")
+    }
+
+    // Tasks with a due date whose SOURCE account is enabled for BOTH tasks and calendar also surface
+    // as calendar items: date-only (stored at noon) → an all-day line at the top; timed → a marker at
+    // the time. Vikunja REST tasks belong to the "Vikunja" account; CalDAV todos to their own.
+    function _taskAccount(t) {
+        return ("" + t.id).indexOf("vk:") === 0 ? "Vikunja" : CalDavService.accountOf(t.cal)
+    }
+    readonly property var taskEvents: {
+        var out = []
+        var ts = TodoService.tasks
+        for (var i = 0; i < ts.length; i++) {
+            var t = ts[i]
+            if (t.done || !(t.dueMs > 0)) continue
+            if (VtlConfig.caldavRole(root._taskAccount(t)) !== "both") continue
+            var d = new Date(t.dueMs)
+            out.push({ isTask: true, task: t, summary: t.title,
+                       startMs: t.dueMs, endMs: t.dueMs,
+                       allDay: d.getHours() === 12 && d.getMinutes() === 0,   // noon = date-only
+                       cal: t.projectId, color: TodoService.colorFor(t.projectId),
+                       recurring: t.recurring === true })
+        }
+        return out
+    }
+
     // Events indexed by day (multi-day events land on every day they span; DTEND is exclusive).
     readonly property var eventsByDay: {
         var map = {}
@@ -97,6 +152,14 @@ Flyout {
                 map[k].push(e)
                 d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)
             }
+        }
+        // Merge in the task-as-event items (single-day; push-loop, never Array.concat on a QVariantList).
+        var tks = root.taskEvents
+        for (var j = 0; j < tks.length; j++) {
+            var tk = tks[j]
+            var kk = root.dayKey(new Date(tk.startMs))
+            if (!map[kk]) map[kk] = []
+            map[kk].push(tk)
         }
         return map
     }
@@ -180,297 +243,297 @@ Flyout {
             }
         }
 
-        // ══ CALENDAR TAB — rail | month grid | day agenda ═════════════════════════
-        Row {
+        // ══ CALENDAR TAB — week / day / month with an optional calendar sidebar ═════
+        Column {
             visible: root.tab === "calendar"
             width:   parent.width
             height:  root.contentH
-            spacing: 12
+            spacing: 8
 
-            readonly property int avail:   (root.eventCals.length > 0 ? root.mainW
-                                                                      : root.panelW - 2 * root.inPad)
-            readonly property int gridW:   Math.round((avail - 12) * 0.55)
-            readonly property int agendaW: avail - 12 - gridW
+            // ── Header: sidebar toggle · title (left) · view switcher · nav (right) ──
+            Item {
+                width: parent.width; height: 30
 
-            // Left rail: show/hide each calendar (event dots + agenda react immediately).
-            Column {
-                width: root.railW
-                spacing: 4
-                visible: root.eventCals.length > 0
-
-                RailCaption { text: "CALENDARS" }
-                Repeater {
-                    model: root.eventCals
-                    delegate: StyledRect {
-                        id: calRow
-                        required property var modelData
-                        readonly property bool hidden: VtlConfig.caldavCalHidden(modelData.id)
-                        width: root.railW; height: 26
-                        radius: Style.rTile
-                        color: calRowHov.containsMouse ? Style.controlHover : "transparent"
+                Row {
+                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    spacing: 10
+                    StyledRect {
+                        visible: root.eventCals.length > 0
+                        width: 32; height: 26; radius: Style.rTile
+                        color: (root.sidebarOpen || sbHov.containsMouse) ? Style.controlHover : Style.controlFill
                         Behavior on color { ColorAnimation { duration: 90 } }
+                        Text { anchors.centerIn: parent; text: "󰃭"
+                               color: root.sidebarOpen ? Style.accent : Colors.fgMuted
+                               font.pixelSize: 14; font.family: Style.font }
+                        MouseArea { id: sbHov; anchors.fill: parent; hoverEnabled: true
+                                    onClicked: root.sidebarOpen = !root.sidebarOpen }
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text:  root.viewTitle
+                        color: Colors.fgBright; font.pixelSize: 16; font.bold: true; font.family: Style.font
+                    }
+                }
 
-                        Rectangle {
-                            anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
-                            width: 7; height: 7; radius: 3.5
-                            color: CalDavService.colorFor(calRow.modelData.id)
-                            opacity: calRow.hidden ? 0.35 : 1.0
-                        }
-                        Text {
-                            anchors { left: parent.left; leftMargin: 19; right: sw.left; rightMargin: 4
-                                      verticalCenter: parent.verticalCenter }
-                            elide: Text.ElideRight
-                            text:  calRow.modelData.name
-                            color: calRow.hidden ? Colors.fgMuted : Colors.fgPrimary
-                            font.pixelSize: 10; font.family: Style.font
-                        }
-                        // Mini show/off switch.
-                        Rectangle {
-                            id: sw
-                            anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
-                            width: 24; height: 13; radius: 6.5
-                            color: calRow.hidden ? Style.trackOff : Style.trackOn
-                            Behavior on color { ColorAnimation { duration: 120 } }
-                            Rectangle {
-                                width: 9; height: 9; radius: 4.5; color: Style.knob
-                                anchors.verticalCenter: parent.verticalCenter
-                                x: calRow.hidden ? 2 : parent.width - width - 2
-                                Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                Row {
+                    anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                    spacing: 8
+
+                    StyledRect {   // + new event → opens the full-page editor
+                        visible: root.eventCals.length > 0
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 26; height: 24; radius: Style.rTile
+                        color: addHov.containsMouse ? Style.tint(Style.accent, 0.55) : Style.tint(Style.accent, 0.32)
+                        Behavior on color { ColorAnimation { duration: 90 } }
+                        Text { anchors.centerIn: parent; text: "󰐕"; color: Colors.fgBright
+                               font.pixelSize: 14; font.family: Style.font }
+                        MouseArea { id: addHov; anchors.fill: parent; hoverEnabled: true
+                                    onClicked: calAddInput._openForm() }
+                    }
+                    Row {   // Week | Day | Month switcher
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 3
+                        Repeater {
+                            model: [{ v: "month", l: "Month" }, { v: "week", l: "Week" }, { v: "day", l: "Day" }]
+                            delegate: StyledRect {
+                                id: vseg
+                                required property var modelData
+                                readonly property bool on: root.calView === vseg.modelData.v
+                                width: vlbl.implicitWidth + 18; height: 24; radius: Style.rTile
+                                color: vseg.on ? Style.tint(Style.accent, 0.35)
+                                     : vHov.containsMouse ? Style.controlHover : "transparent"
+                                Behavior on color { ColorAnimation { duration: 90 } }
+                                Text { id: vlbl; anchors.centerIn: parent; text: vseg.modelData.l
+                                       color: vseg.on ? Colors.fgBright : Colors.fgMuted
+                                       font.pixelSize: 12; font.bold: vseg.on; font.family: Style.font }
+                                MouseArea { id: vHov; anchors.fill: parent; hoverEnabled: true
+                                            onClicked: root.calView = vseg.modelData.v }
                             }
                         }
-                        MouseArea {
-                            id: calRowHov
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: root.setHidden(calRow.modelData.id, !calRow.hidden)
-                        }
+                    }
+                    Row {   // ‹ today ›
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 4
+                        NavBtn { sym: "󰅁"; onTap: root.shiftView(-1) }
+                        NavBtn { sym: "󰋙"; onTap: root.goToday() }
+                        NavBtn { sym: "󰅂"; onTap: root.shiftView(1) }
                     }
                 }
             }
 
-            // Month grid column.
-            Column {
-                id: gridCol
-                width: parent.gridW
-                spacing: 10
-
-                // Month header: ‹ month year › + jump-to-today
-                Item {
-                    width: parent.width; height: 26
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text:  Qt.formatDate(new Date(root.viewYear, root.viewMonth, 1), "MMMM yyyy")
-                        color: Colors.fgBright; font.pixelSize: 15; font.bold: true; font.family: Style.font
-                    }
-                    Row {
-                        anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-                        spacing: 4
-                        NavBtn { sym: "󰅁"; onTap: root.shiftMonth(-1) }
-                        NavBtn { sym: "󰋙"; dim: root.dayKey(root.selDay) === root.dayKey(root.today)
-                                                && root.viewMonth === root.today.getMonth()
-                                                && root.viewYear === root.today.getFullYear()
-                                 onTap: root.goToday() }
-                        NavBtn { sym: "󰅂"; onTap: root.shiftMonth(1) }
-                    }
-                }
-
-                // Weekday header (respects the configured first day of week).
+            // ── Body: calendar (sidebar | views) with the full-page event editor overlaid ──
+            Item {
+                id: bodyArea
+                width:  parent.width
+                height: root.contentH - 38
                 Row {
-                    spacing: 4
-                    Repeater {
-                        model: 7
-                        delegate: Text {
-                            required property int index
-                            width: grid.cellW; horizontalAlignment: Text.AlignHCenter
-                            // 2026-07-05 is a Sunday — a stable base to name weekdays from.
-                            text:  Qt.formatDate(new Date(2026, 6, 5 + root.firstDow + index), "ddd")
-                            color: Colors.fgMuted; font.pixelSize: 10; font.bold: true; font.family: Style.font
+                    anchors.fill: parent
+                    spacing: 10
+
+                // Calendar sidebar — a coloured background block, hidden by default.
+                StyledRect {
+                    id: calSidebar
+                    width:  root.sidebarOpen ? 196 : 0
+                    height: parent.height
+                    clip: true
+                    radius: Style.rControl
+                    color:  Style.tint(Style.accent, 0.16)
+                    visible: width > 1
+                    Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+
+                    Flickable {
+                        anchors { fill: parent; margins: 8 }
+                        contentHeight: calCol.implicitHeight; clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+                        Column {
+                            id: calCol
+                            width: 196 - 16
+                            spacing: 3
+                            RailCaption { text: "CALENDARS" }
+                            Repeater {
+                                model: root.eventCals
+                                delegate: StyledRect {
+                                    id: calRow
+                                    required property var modelData
+                                    readonly property bool hidden: VtlConfig.caldavCalHidden(calRow.modelData.id)
+                                    width: calCol.width; height: 30
+                                    radius: Style.rTile
+                                    color: calRowHov.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : "transparent"
+                                    Behavior on color { ColorAnimation { duration: 90 } }
+                                    Rectangle {
+                                        anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+                                        width: 11; height: 11; radius: 5.5
+                                        color: CalDavService.colorFor(calRow.modelData.id)
+                                        opacity: calRow.hidden ? 0.35 : 1.0
+                                    }
+                                    Text {
+                                        anchors { left: parent.left; leftMargin: 24; right: eye.left; rightMargin: 6
+                                                  verticalCenter: parent.verticalCenter }
+                                        elide: Text.ElideRight
+                                        text:  calRow.modelData.name
+                                        color: calRow.hidden ? Colors.fgMuted : Colors.fgBright
+                                        font.pixelSize: 12; font.family: Style.font
+                                    }
+                                    Text {
+                                        id: eye
+                                        anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                                        text:  calRow.hidden ? "󰈉" : "󰈈"
+                                        color: calRow.hidden ? Colors.fgMuted : Colors.fgPrimary
+                                        font.pixelSize: 13; font.family: Style.font
+                                    }
+                                    MouseArea { id: calRowHov; anchors.fill: parent; hoverEnabled: true
+                                                onClicked: root.setHidden(calRow.modelData.id, !calRow.hidden) }
+                                }
+                            }
                         }
                     }
                 }
 
-                // Month grid with per-calendar event dots.
-                Grid {
-                    id: grid
-                    columns: 7
-                    spacing: 4
-                    readonly property int cellW: Math.floor((parent.width - 6 * 4) / 7)
-                    Repeater {
-                        model: root.gridDays
-                        delegate: StyledRect {
-                            id: cell
-                            required property var modelData
-                            readonly property int  k:       root.dayKey(modelData)
-                            readonly property bool inMonth: modelData.getMonth() === root.viewMonth
-                            readonly property bool isToday: k === root.dayKey(root.today)
-                            readonly property bool isSel:   k === root.dayKey(root.selDay)
-                            readonly property var  evs:     root.eventsByDay[k] ?? []
-                            width: grid.cellW
-                            height: Math.max(38, Math.round(grid.cellW * 0.62))   // grow with the panel
-                            radius: Style.rTile
-                            color:  isSel ? Style.tint(Style.accent, 0.45)
-                                  : cellHov.containsMouse ? Style.controlHover : "transparent"
-                            borderWidth: isToday ? 1 : 0
-                            borderColor: Style.accent
-                            Behavior on color { ColorAnimation { duration: 90 } }
+                // View content — week/day time grid or the month grid.
+                Item {
+                    width:  parent.width - (root.sidebarOpen ? 206 : 0)
+                    height: parent.height
 
-                            Column {
-                                anchors.centerIn: parent
-                                spacing: 3
-                                Text {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    text:  cell.modelData.getDate()
-                                    color: cell.isSel ? Colors.fgBright
-                                         : cell.inMonth ? (cell.isToday ? Style.accent : Colors.fgPrimary)
-                                         : Colors.fgMuted
-                                    font.pixelSize: 12; font.family: Style.font
-                                    font.bold: cell.isToday || cell.isSel
-                                    opacity: cell.inMonth ? 1.0 : 0.45
+                    // WEEK / DAY — Disponera-style time grid.
+                    TimeGrid {
+                        anchors.fill: parent
+                        visible: root.calView !== "month"
+                        days:        root.calView === "day" ? [root.selDay] : root.weekDays
+                        eventsByDay: root.eventsByDay
+                        today:       root.today
+                        onAddAt: day => { root.selDay = new Date(day); root.calView = "day"; calAddInput._openForm() }
+                    }
+
+                    // MONTH — calendar grid only; clicking a day opens the day view.
+                    Column {
+                        anchors.fill: parent
+                        visible: root.calView === "month"
+                        spacing: 6
+
+                        Row {
+                            spacing: 4
+                            Repeater {
+                                model: 7
+                                delegate: Text {
+                                    required property int index
+                                    width: mGrid.cellW; horizontalAlignment: Text.AlignHCenter
+                                    text:  Qt.formatDate(new Date(2026, 6, 5 + root.firstDow + index), "ddd")
+                                    color: Colors.fgMuted; font.pixelSize: 12; font.bold: true; font.family: Style.font
                                 }
-                                Row {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    spacing: 2
-                                    height: 4
-                                    Repeater {
-                                        model: Math.min(3, cell.evs.length)
-                                        delegate: Rectangle {
-                                            required property int index
-                                            width: 4; height: 4; radius: 2
-                                            color: CalDavService.colorFor(cell.evs[index].cal)
+                            }
+                        }
+                        Grid {
+                            id: mGrid
+                            columns: 7; spacing: 4
+                            readonly property int rowCount: Math.max(1, Math.round(root.gridDays.length / 7))
+                            readonly property int cellW: Math.floor((parent.width - 6 * 4) / 7)
+                            readonly property int cellH: Math.floor((parent.height - 22 - 6 - (mGrid.rowCount - 1) * 4) / mGrid.rowCount)
+                            Repeater {
+                                model: root.gridDays
+                                delegate: StyledRect {
+                                    id: cell
+                                    required property var modelData
+                                    readonly property int  k:       root.dayKey(cell.modelData)
+                                    readonly property bool inMonth: cell.modelData.getMonth() === root.viewMonth
+                                    readonly property bool isToday: cell.k === root.dayKey(root.today)
+                                    readonly property var  evs:     root.eventsByDay[cell.k] ?? []
+                                    readonly property int  shown:   Math.max(0, Math.floor((height - 22) / 16))
+                                    width: mGrid.cellW; height: mGrid.cellH
+                                    radius: Style.rTile
+                                    color:  cellHov.containsMouse ? Style.controlHover : Style.controlFill
+                                    borderWidth: cell.isToday ? 1 : 0
+                                    borderColor: Style.accent
+                                    Behavior on color { ColorAnimation { duration: 90 } }
+                                    Column {
+                                        anchors { fill: parent; margins: 4 }
+                                        spacing: 2
+                                        Text {
+                                            text:  cell.modelData.getDate()
+                                            color: cell.inMonth ? (cell.isToday ? Style.accent : Colors.fgPrimary) : Colors.fgMuted
+                                            font.pixelSize: 13; font.bold: cell.isToday; font.family: Style.font
+                                            opacity: cell.inMonth ? 1.0 : 0.45
                                         }
+                                        Repeater {
+                                            model: Math.min(cell.shown, cell.evs.length)
+                                            delegate: Rectangle {
+                                                id: bar
+                                                required property int index
+                                                width: parent.width; height: 14; radius: 3; clip: true
+                                                color: (cell.evs[bar.index].color && cell.evs[bar.index].color !== "")
+                                                       ? cell.evs[bar.index].color : CalDavService.colorFor(cell.evs[bar.index].cal)
+                                                Text {
+                                                    anchors { fill: parent; leftMargin: 4; rightMargin: 3 }
+                                                    verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
+                                                    text:  (cell.evs[bar.index].isTask === true ? "󰄰 " : "") + cell.evs[bar.index].summary
+                                                    color: "#ffffff"; font.pixelSize: 9; font.family: Style.font
+                                                }
+                                            }
+                                        }
+                                        Text {
+                                            visible: cell.evs.length > cell.shown
+                                            text:  "+" + (cell.evs.length - cell.shown)
+                                            color: Colors.fgMuted; font.pixelSize: 9; font.family: Style.font
+                                        }
+                                    }
+                                    MouseArea {
+                                        id: cellHov
+                                        anchors.fill: parent; hoverEnabled: true
+                                        onClicked: { root.selDay = new Date(cell.modelData); root.calView = "day" }
                                     }
                                 }
                             }
-                            MouseArea {
-                                id: cellHov
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                onClicked: root.selDay = new Date(cell.modelData)
-                                onDoubleClicked: { root.selDay = new Date(cell.modelData); addEventInput.focusInput() }
-                            }
                         }
                     }
                 }
-
             }
 
-            // Day agenda column: the selected day's events + the quick-add row.
-            Column {
-                width: parent.agendaW
-                spacing: 10
-
-                Text {
-                    text:  Qt.formatDate(root.selDay, "dddd, MMM d")
-                    color: Colors.fgMuted; font.pixelSize: 12; font.bold: true
-                    font.letterSpacing: 0.5; font.family: Style.font
-                }
-
-                Flickable {
-                    width:  parent.width
-                    height: Math.min(agendaCol.implicitHeight, root.contentH - 130)
-                    contentHeight: agendaCol.implicitHeight
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
-
-                Column {
-                    id: agendaCol
-                    width: parent.width
-                    spacing: 4
-                    Repeater {
-                        model: root.selEvents
-                        delegate: StyledRect {
-                            id: evRow
-                            required property var modelData
-                            width: parent.width; height: 40
-                            radius: Style.rTile
-                            color:  evHov.containsMouse ? Style.controlHover : Style.controlFill
-                            Behavior on color { ColorAnimation { duration: 90 } }
-
-                            Rectangle {   // calendar colour bar
-                                anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
-                                width: 3; height: parent.height - 14; radius: 1.5
-                                color: CalDavService.colorFor(evRow.modelData.cal)
-                            }
-                            Column {
-                                anchors { left: parent.left; leftMargin: 16; right: evDel.left; rightMargin: 6
-                                          verticalCenter: parent.verticalCenter }
-                                spacing: 1
-                                Text {
-                                    width: parent.width; elide: Text.ElideRight
-                                    text:  evRow.modelData.summary + (evRow.modelData.recurring ? "  󰑖" : "")
-                                    color: Colors.fgPrimary; font.pixelSize: 12; font.family: Style.font
-                                }
-                                Text {
-                                    width: parent.width; elide: Text.ElideRight
-                                    text: (evRow.modelData.allDay ? "all day"
-                                           : Qt.formatTime(new Date(evRow.modelData.startMs), "hh:mm") + " – "
-                                             + Qt.formatTime(new Date(evRow.modelData.endMs), "hh:mm"))
-                                          + (evRow.modelData.location ? "   󰍎 " + evRow.modelData.location : "")
-                                    color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font
-                                }
-                            }
-                            // Delete — single events only (removing a recurring master kills the series).
-                            Text {
-                                id: evDel
-                                anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
-                                visible: evHov.containsMouse && !evRow.modelData.recurring
-                                text: "󰅖"; color: delHov.containsMouse ? Colors.fgBright : Colors.fgMuted
-                                font.pixelSize: 12; font.family: Style.font
-                                MouseArea {
-                                    id: delHov
-                                    anchors.fill: parent; anchors.margins: -6
-                                    hoverEnabled: true
-                                    onClicked: CalDavService.deleteItem(evRow.modelData.cal, evRow.modelData.href)
-                                }
-                            }
-                            MouseArea { id: evHov; anchors.fill: parent; hoverEnabled: true
-                                        acceptedButtons: Qt.NoButton }
-                        }
-                    }
-                    Text {
-                        visible: root.selEvents.length === 0
-                        text: "no events"; color: Colors.fgMuted
-                        font.pixelSize: 11; font.family: Style.font
-                    }
-                }
-                }
-
-                InputRow {
-                    id: addEventInput
-                    visible: CalDavService.eventCalendars.length > 0
-                    placeholder: "add event — “14:00 title” for a timed one"
-                    onSubmit: text => root.addEventFromText(text)
-                }
-                CalPicker {
-                    visible: CalDavService.eventCalendars.length > 1
-                    cals:    CalDavService.eventCalendars
-                    current: root.eventCal
-                    onPick:  id => root.saveSetting("caldav_default_event_cal", id)
+                // Full-page event editor — overlays the calendar; opened by the header + button.
+                EventAdd {
+                    id: calAddInput
+                    anchors.fill: parent
+                    cals:       CalDavService.eventCalendars
+                    defaultCal: root.eventCal
+                    day:        root.selDay
                 }
             }
         }
 
-        // ══ TASKS TAB — project tree | grouped board (unified TodoService model) ══
-        Row {
+        // ══ TASKS TAB — project tree | grouped board, with the full-page task editor overlaid ══
+        Item {
+            id: taskBodyArea
             visible: root.tab === "tasks"
             width:   parent.width
             height:  root.contentH
-            spacing: 12
 
-            ProjectRail {
-                width:  root.projRailW
-                height: root.contentH
-                visible: TodoService.projects.length > 0
-                selectedId: root.selProject
-                onPick: id => root.selProject = id
+            Row {
+                anchors.fill: parent
+                spacing: 12
+
+                ProjectRail {
+                    width:  root.projRailW
+                    height: parent.height
+                    visible: TodoService.projects.length > 0
+                    selectedId: root.selProject
+                    onPick: id => root.selProject = id
+                }
+
+                TaskBoard {
+                    width: TodoService.projects.length > 0
+                           ? root.panelW - 2 * root.inPad - root.projRailW - 12
+                           : root.panelW - 2 * root.inPad
+                    filterProject: root.selProject
+                    boardH: root.contentH - 42   // minus its own quick-add row
+                    onNewTask:  pid  => taskEdit._openForm(pid)
+                    onEditTask: task => taskEdit.openEdit(task)
+                }
             }
 
-            TaskBoard {
-                width: TodoService.projects.length > 0
-                       ? root.panelW - 2 * root.inPad - root.projRailW - 12
-                       : root.panelW - 2 * root.inPad
-                filterProject: root.selProject
-                boardH: root.contentH - 42   // minus its own quick-add row
+            // Full-page task editor — overlays the tasks area; opened by the board's "+" button.
+            TaskEdit {
+                id: taskEdit
+                anchors.fill: parent
+                projects:       TodoService.projects.filter(p => p.writable)
+                defaultProject: root.selProject
             }
         }
 
@@ -494,7 +557,7 @@ Flyout {
             Row {
                 anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                 spacing: 10
-                // The focused-working counterpart: open the velora app.
+                // The focused-working counterpart: open the Disponera app.
                 Item {
                     width: appRow.width; height: 18
                     Row {
@@ -504,7 +567,7 @@ Flyout {
                         Text { text: "󱂬"; color: appHov.containsMouse ? Colors.fgBright : Colors.fgMuted
                                font.pixelSize: 13; font.family: Style.font
                                anchors.verticalCenter: parent.verticalCenter }
-                        Text { text: "velora"; color: appHov.containsMouse ? Colors.fgBright : Colors.fgMuted
+                        Text { text: "Disponera"; color: appHov.containsMouse ? Colors.fgBright : Colors.fgMuted
                                font.pixelSize: 10; font.family: Style.font
                                anchors.verticalCenter: parent.verticalCenter }
                     }
