@@ -97,19 +97,77 @@ Item {
     }
 
     // ── Switch the active layout (persist + apply live) ───────────────────────
+    // Applied through VTL_layouts_apply() rather than a direct hl.config: "float" is a policy,
+    // not a compositor layout, and hl.config would happily set general:layout to a name that
+    // doesn't exist. layout_manager.lua maps the policy modes onto a real layout.
     Process { id: switchProc; onExited: UiState.layoutPollSerial++ }
     function setLayout(value) {
         root.save("tiling_layout", value)
-        switchProc.command = ["bash", "-c",
-            "hyprctl eval \"hl.config({ general = { layout = [[$1]] } })\"", "vtl", value]
+        // Value passed straight to Lua: root.save is async, so re-reading the file there raced the
+        // write and applied the previous choice (see layout_manager.lua).
+        switchProc.command = ["bash", "-c", "hyprctl eval \"VTL_layouts_set([[$1]])\"", "vtl", value]
         switchProc.running = false; switchProc.running = true
     }
     readonly property var allLayouts: {
-        var out = [{ value: "dwindle", label: "Dwindle" }, { value: "master", label: "Master" }]
+        var out = [{ value: "dwindle", label: "Dwindle" }, { value: "master", label: "Master" },
+                   { value: "monocle", label: "Monocle" }, { value: "float",  label: "Float" }]
         var cs = VtlConfig.customLayouts
         for (var i = 0; i < cs.length; i++)
             out.push({ value: "lua:" + cs[i].name, label: cs[i].name + "  (custom)" })
         return out
+    }
+
+    // ── Per-monitor / per-workspace assignments ───────────────────────────────
+    // Overrides live in layout_monitors / layout_workspaces (precedence: workspace > monitor >
+    // global); after every write layout_manager.lua re-applies them live via VTL_layouts_apply().
+    Process { id: assignProc; onExited: UiState.layoutPollSerial++ }
+    // Scope + value go to Lua directly — root.save is async and re-reading the file in Lua raced
+    // the write (see layout_manager.lua). An empty mode clears the override.
+    function applyMonitor(name, mode) {
+        assignProc.command = ["bash", "-c",
+            "hyprctl eval \"VTL_layouts_set_monitor([[$1]], [[$2]])\"", "vtl", name, mode]
+        assignProc.running = false; assignProc.running = true
+    }
+    function applyWorkspace(id, mode) {
+        assignProc.command = ["bash", "-c",
+            "hyprctl eval \"VTL_layouts_set_workspace([[$1]], [[$2]])\"", "vtl", "" + id, mode]
+        assignProc.running = false; assignProc.running = true
+    }
+    // Dropdown options for an assignment: "" = follow the global layout. Endless (a scrolling
+    // strip of max-2-window workspaces) only exists per monitor, not per workspace.
+    function assignOptions(cur, withEndless) {
+        var out = [{ label: "Auto (follow global)", key: "", on: cur === "" }]
+        var modes = root.allLayouts.slice(0, 4)
+        if (withEndless) modes.push({ value: "endless", label: "Endless (strip)" })
+        var cs = VtlConfig.customLayouts
+        for (var i = 0; i < cs.length; i++)
+            modes.push({ value: "lua:" + cs[i].name, label: cs[i].name + "  (custom)" })
+        for (var j = 0; j < modes.length; j++)
+            out.push({ label: modes[j].label, key: modes[j].value, on: cur === modes[j].value })
+        return out
+    }
+    function assignLabel(v) {
+        if (v === "") return "Auto (follow global)"
+        if (v === "endless") return "Endless (strip)"
+        for (var i = 0; i < root.allLayouts.length; i++)
+            if (root.allLayouts[i].value === v) return root.allLayouts[i].label
+        return v
+    }
+    function setMonitorMode(name, mode) {
+        var m = {}
+        var cur = VtlConfig.layoutMonitors
+        for (var k in cur) m[k] = cur[k]
+        if (mode === "") delete m[name]; else m[name] = mode
+        root.save("layout_monitors", m)
+        root.applyMonitor(name, mode)
+    }
+    function setWorkspaceMode(id, mode) {
+        var m = {}
+        var cur = VtlConfig.layoutWorkspaces
+        for (var k in cur) m[k] = cur[k]
+        if (mode === "") delete m["" + id]; else m["" + id] = mode
+        root.save("layout_workspaces", m)
+        root.applyWorkspace(id, mode)
     }
 
     Flickable {
@@ -125,9 +183,8 @@ Item {
             spacing: Style.cardGap
 
             Card {
-                CardLabel { text: "ACTIVE LAYOUT" }
-                SubLabel { width: parent.width
-                           text: "Also switchable from the bar's Layout module. The choice survives reloads." }
+                CardLabel { text: "ACTIVE LAYOUT"
+                            hint: "Also switchable from the bar's Layout module. The choice survives reloads." }
                 Dropdown {
                     summary: {
                         var v = VtlConfig.tilingLayout
@@ -143,12 +200,95 @@ Item {
             }
 
             Card {
-                CardLabel { text: "CUSTOM LAYOUTS" }
-                SubLabel {
-                    width: parent.width
-                    text: "Built on the Lua layout API — pick a template, tune it, done. Custom layouts " +
-                          "appear in the bar module and can be used in workspace rules as “lua:<name>”."
+                CardLabel { text: "ASSIGNMENTS"
+                            hint: "Pin a layout to a monitor or a workspace — workspace beats monitor beats " +
+                                  "global. “Endless (strip)” is monitor-only: it turns the monitor into a " +
+                                  "scrolling band of max-2-window workspaces." }
+
+                // Per-monitor override: one dropdown per connected screen.
+                FieldLabel { text: "Per monitor" }
+                Repeater {
+                    model: Quickshell.screens
+                    delegate: Column {
+                        id: mrow
+                        required property var modelData
+                        readonly property string cur: VtlConfig.layoutMonitors[mrow.modelData.name] ?? ""
+                        width: parent.width; spacing: 4
+                        Text {
+                            text:  mrow.modelData.name
+                            color: Colors.fgPrimary; font.pixelSize: Style.fsLabel; font.family: Style.font
+                        }
+                        Dropdown {
+                            summary: root.assignLabel(mrow.cur)
+                            options: root.assignOptions(mrow.cur, true)
+                            onPicked: key => root.setMonitorMode(mrow.modelData.name, key)
+                        }
+                    }
                 }
+
+                // Per-workspace overrides: the existing ones as rows, plus an add-control.
+                FieldLabel { text: "Per workspace"
+                             hint: "Also switchable on the fly with Super+Alt+Tab." }
+                Repeater {
+                    model: Object.keys(VtlConfig.layoutWorkspaces)
+                               .sort(function (a, b) { return Number(a) - Number(b) })
+                    delegate: Rectangle {
+                        id: wrow
+                        required property var modelData
+                        width: parent.width; height: 40
+                        radius: Style.rControl
+                        color:  Style.controlFill
+                        border.width: Style.controlBorderW
+                        border.color: Style.controlBorderColor
+
+                        Text {
+                            anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                            text:  "Workspace " + wrow.modelData
+                            color: Colors.fgPrimary; font.pixelSize: Style.fsLabel; font.family: Style.font
+                        }
+                        Text {
+                            anchors { left: parent.left; leftMargin: 130; right: wrmB.left; rightMargin: 8
+                                      verticalCenter: parent.verticalCenter }
+                            elide: Text.ElideRight
+                            text:  root.assignLabel(VtlConfig.layoutWorkspaces[wrow.modelData] ?? "")
+                            color: Colors.fgMuted; font.pixelSize: Style.fsSub; font.family: Style.font
+                        }
+                        TextButton {
+                            id: wrmB
+                            anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                            label: "Remove"
+                            onClicked: root.setWorkspaceMode(wrow.modelData, "")
+                        }
+                    }
+                }
+                Stepper {
+                    id: wsIdStep
+                    label: "Workspace"
+                    value: 1; step: 1; min: 1; max: 20
+                    onChanged: v => wsIdStep.value = v
+                }
+                Dropdown {
+                    id: wsModePick
+                    property string mode: "dwindle"
+                    summary: root.assignLabel(wsModePick.mode)
+                    options: root.assignOptions(wsModePick.mode, false)
+                    onPicked: key => wsModePick.mode = key
+                }
+                Row {
+                    spacing: 8
+                    TextButton {
+                        label: "Add override"
+                        primary: true
+                        onClicked: root.setWorkspaceMode(wsIdStep.value, wsModePick.mode)
+                    }
+                }
+            }
+
+            Card {
+                CardLabel { text: "CUSTOM LAYOUTS"
+                            hint: "Built on the Lua layout API — pick a template, tune it, done. Custom layouts " +
+                                  "appear in the bar module and can be used in workspace rules as “lua:<name>”."
+                                  + "\n\n" + "Adding one saves it, regenerates user_layouts.lua and reloads Hyprland." }
 
                 // Existing custom layouts.
                 Repeater {
@@ -232,6 +372,7 @@ Item {
                     segments: root.kinds.map(function (k) { return { label: k.label, key: k.key } })
                     onPicked: key => kindPick.kind = key
                 }
+                // Stays visible: it describes the template you just picked, and changes with it.
                 SubLabel { width: parent.width; text: root.kindMeta(kindPick.kind).hint }
                 Stepper {
                     id: ratioStep
@@ -270,10 +411,6 @@ Item {
                             root.applyLayouts(next)
                             nameField.text = ""
                         }
-                    }
-                    SubLabel {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "Saves, regenerates user_layouts.lua and reloads Hyprland."
                     }
                 }
             }

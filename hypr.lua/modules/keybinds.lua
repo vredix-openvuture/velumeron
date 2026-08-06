@@ -46,8 +46,9 @@ end
 -- ══════════════════════════════════════════════════════
 
 hl.bind(MOD .. " + T",      hl.dsp.exec_cmd("[float] " .. terminal))
-hl.bind(MOD .. " + W",      hl.dsp.exec_cmd("[float] " .. browser_float))
-hl.bind(MOD .. " + E",      hl.dsp.exec_cmd("[float] " .. filemanager))
+-- Launch tiled by default (dwindle) — no [float] prefix; float is opt-in via Settings → Window rules.
+hl.bind(MOD .. " + W",      hl.dsp.exec_cmd(browser))
+hl.bind(MOD .. " + E",      hl.dsp.exec_cmd(filemanager))
 hl.bind(MOD .. " + C",      hl.dsp.window.close())
 hl.bind(MOD .. " + F",      hl.dsp.window.float({ action = "toggle" }))
 hl.bind(MOD .. " + N",      hl.dsp.exec_cmd(notifications))
@@ -55,11 +56,22 @@ hl.bind(MOD .. " + N",      hl.dsp.exec_cmd(notifications))
 hl.bind(MOD .. " + X",      hl.dsp.exec_cmd(VTL_DIR .. "/bin/velumeron -t"))
 hl.bind(MOD .. " + V",      hl.dsp.exec_cmd(clipboard))
 hl.bind(MOD .. " + M",      hl.dsp.focus({ monitor = "+1" }))
+-- Workspace next/prev, asymmetric on purpose: prev (`m-1`) wraps from the monitor's
+-- first workspace around to its LAST existing one; next (`+1`) always goes ONE
+-- further — past the last existing one it keeps creating fresh workspaces.
 hl.bind(MOD .. " + H",      hl.dsp.focus({ workspace = "m-1" }))
-hl.bind(MOD .. " + L",      hl.dsp.focus({ workspace = "m+1" }))
-hl.bind(MOD .. " + J",      hl.dsp.window.cycle_next())
-hl.bind(MOD .. " + K",      hl.dsp.window.cycle_next({ next = false }))
+hl.bind(MOD .. " + L",      hl.dsp.focus({ workspace = "+1" }))
+-- Cycle focus on the active workspace. NOT hl.dsp.window.cycle_next: that one does nothing at all
+-- under monocle and skips floating windows, so J/K were dead in exactly the layouts that need
+-- them most. VTL_ws_cycle (modules/layout_manager.lua) walks the workspace itself. Wrapped in a
+-- closure so the lookup happens at key-press time — layout_manager is required after this file.
+hl.bind(MOD .. " + J",      function() if VTL_ws_cycle then VTL_ws_cycle(1)  end end)
+hl.bind(MOD .. " + K",      function() if VTL_ws_cycle then VTL_ws_cycle(-1) end end)
 hl.bind(MOD .. " + TAB",    hl.dsp.exec_cmd(win_open))
+-- Layout quickswitcher — same pattern as the window switcher, cycles layout
+-- choices for the active workspace (confirm on Super release).
+hl.bind(MOD .. " + ALT + TAB",
+        hl.dsp.exec_cmd("qs -p " .. VTL_DIR .. "/quickshell ipc call layoutswitch open"))
 hl.bind(MOD .. " + SPACE",  hl.dsp.exec_cmd("qs -p " .. VTL_DIR .. "/quickshell ipc call launcher toggle"))
 hl.bind(MOD .. " + RETURN", hl.dsp.workspace.toggle_special("magic"))
 hl.bind(MOD .. " + PERIOD", hl.dsp.exec_cmd("hypremoji"))
@@ -138,7 +150,8 @@ hl.bind(MOD .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })
 hl.bind(MOD .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
 hl.bind(MOD .. " + mouse:274", hl.dsp.window.float({ action = "toggle" }))
 
-hl.bind(MOD .. " + CONTROL + mouse_up",   hl.dsp.focus({ workspace = "m+1" }))
+-- Same asymmetric next/prev as SUPER+H/L above.
+hl.bind(MOD .. " + CONTROL + mouse_up",   hl.dsp.focus({ workspace = "+1" }))
 hl.bind(MOD .. " + CONTROL + mouse_down", hl.dsp.focus({ workspace = "m-1" }))
 
 
@@ -278,3 +291,4 @@ hl.define_submap("system", function()
     hl.bind("ESCAPE", exit_submap)
     hl.bind("RETURN", exit_submap)
 end)
+

@@ -171,12 +171,34 @@ hl.window_rule({
     no_blur = true,
 })
 
+
 -- All floating windows get the same start size (last Phase-2 rule so nothing overrides it).
 hl.window_rule({
     name   = "float_cap",
     match  = { float = true, title = ".+", xwayland = false },
     center = true,
     size   = { "(monitor_w*0.5)", "(monitor_h*0.6)" },
+})
+
+-- The update session opened by the bar's Updates module (assets/scripts/term-run.sh sets this
+-- app-id on whichever terminal the user runs). Floating and centred, because it is a dialog you
+-- read and answer — tiling it into the workspace mid-update is exactly wrong.
+hl.window_rule({
+    name   = "velumeron_update",
+    match  = { class = "velumeron-update" },
+    float  = true,
+    center = true,
+    size   = { "(monitor_w*0.62)", "(monitor_h*0.7)" },
+})
+
+-- Same deal for the boot-theme session (Settings → Boot & Login): a sudo prompt plus a
+-- running initramfs/grub-mkconfig rebuild is a dialog, not a workspace tenant.
+hl.window_rule({
+    name   = "velumeron_boot",
+    match  = { class = "velumeron-boot" },
+    float  = true,
+    center = true,
+    size   = { "(monitor_w*0.62)", "(monitor_h*0.7)" },
 })
 
 -- Velumeron GUI gets a larger size — must come after float_cap to win.

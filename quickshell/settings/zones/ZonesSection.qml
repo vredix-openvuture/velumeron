@@ -58,18 +58,11 @@ Item {
             spacing: Style.cardGap
 
             Card {
-                CardLabel { text: "FANCY ZONES" }
-                SubLabel {
-                    width: parent.width
-                    text: "Hold Super and drag a floating window — the zones fade in as soft fields. " +
-                          "Drop the window inside one and it snaps to that zone."
-                }
-                Toggle {
-                    label: "Enable zones"
-                    sub:   "Show zones while Super-dragging floating windows"
-                    on:    VtlConfig.fancyZonesEnabled
-                    onToggled: root.save("fancy_zones_enabled", !VtlConfig.fancyZonesEnabled)
-                }
+                CardLabel { text: "FANCY ZONES"
+                            hint: "Hold Super and drag a floating window — the zones fade in as soft fields. " +
+                                  "Drop the window inside one and it snaps to that zone." }
+                // On/off lives in the one switch pinned atop this page (Settings.qml) — the
+                // component register drives both the overlay and the compositor's snap.
                 Stepper {
                     label: "Zone gap"; unit: "px"
                     value: VtlConfig.fancyZonesGap; step: 4; min: 0; max: 48
@@ -78,9 +71,8 @@ Item {
             }
 
             Card {
-                CardLabel { text: "LAYOUT" }
-                SubLabel { width: parent.width
-                           text: "Zones are laid out inside the monitor's free area (bars excluded)." }
+                CardLabel { text: "LAYOUT"
+                            hint: "Zones are laid out inside the monitor's free area (bars excluded)." }
 
                 // Scope: the global layout, or a per-monitor override.
                 Segmented {

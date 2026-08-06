@@ -19,11 +19,10 @@ PanelWindow {
     readonly property real   sy:    screen ? screen.y : 0
     readonly property int    wsId:  monitor?.activeWorkspace?.id ?? -1
 
-    property bool monFullscreen: false
-    Connections {
-        target: Hyprland
-        function onRawEvent(e) { if (e.name === "fullscreen") root.monFullscreen = (("" + e.data).trim() === "1") }
-    }
+    // Tags step aside only for a REAL fullscreen window on THIS monitor — per monitor, from the live
+    // client list. (The raw fullscreen event also fires for maximize and never resets, which silently
+    // killed the tags until the next fullscreen toggle.)
+    readonly property bool monFullscreen: Compositor.fullscreenOn(root.monId)
 
     // Every window visible on this monitor (incl. pinned, which live on all workspaces) — the
     // occlusion test below needs all of them, even ones that don't get a tag themselves.

@@ -53,12 +53,55 @@ QtObject {
     }
     function _pollCursor() { _curProc.running = false; _curProc.running = true }
 
+    // ── "A real fullscreen window covers this monitor" ───────────────────────────────────────────
+    // The bar-docked surfaces (flyouts, settings menu, notif centre, OSD, taskbar) need to know
+    // whether the bar is actually hidden, so they either dock onto its inner face or grow from the
+    // bare screen edge. Hyprland's raw "fullscreen>>0/1" event is the wrong source for that in three
+    // ways: it also fires for MAXIMIZED windows (mode 1 — those respect the exclusive zone, the bar
+    // stays visible), it carries no monitor/workspace, and nothing resets it when you switch away
+    // from (or close) the fullscreen window. A latched flag made every popout believe the bar was
+    // gone and draw ON TOP of it. Derive the state from the live client list instead: mode 2 only,
+    // on THIS monitor's ACTIVE workspace. The bar sits on the Bottom layer, so exactly that case
+    // hides it.
+    property var fsMons: ({})     // { monitorId: true } — monitors whose bar is covered right now
+    function fullscreenOn(monId) { return monId >= 0 && root.fsMons[monId] === true }
+    function _recheckFullscreen() {
+        var out  = {}
+        var mons = Hyprland.monitors ? Hyprland.monitors.values : []
+        var all  = root.windows
+        for (var i = 0; i < mons.length; i++) {
+            var m = mons[i]
+            if (!m) continue
+            var wsId = m.activeWorkspace ? m.activeWorkspace.id : -999
+            for (var j = 0; j < all.length; j++)
+                if (all[j].fsMode === 2 && all[j].monitorId === m.id && all[j].workspace === wsId) {
+                    out[m.id] = true
+                    break
+                }
+        }
+        // Only publish real changes — consumers bind on this and shouldn't churn on every re-query.
+        var s = JSON.stringify(out)
+        if (s === root._lastFsJson) return
+        root._lastFsJson = s
+        root.fsMons = out
+    }
+    property string _lastFsJson: "{}"
+    // A workspace switch changes which windows are visible without changing the client list, and the
+    // monitor graph may not have caught up yet when the event lands → re-check now AND after it settles.
+    readonly property Timer _fsSettle: Timer { interval: 200; repeat: false; onTriggered: root._recheckFullscreen() }
+
     // ── Re-query on window events (debounced) ────────────────────────────────────────────────────
     readonly property Timer _debounce: Timer { interval: 120; repeat: false; onTriggered: root._query() }
     readonly property Connections _ev: Connections {
         target: Hyprland
         function onRawEvent(event) {
             var n = event.name
+            if (n === "fullscreen" || n === "workspacev2" || n === "focusedmon" || n === "activespecial"
+                || n === "monitoraddedv2" || n === "monitorremoved" || n === "closewindow"
+                || n === "movewindowv2") {
+                root._recheckFullscreen()
+                root._fsSettle.restart()
+            }
             if (n === "activewindowv2") {
                 var a = ("" + event.data).trim()
                 root.activeAddr = (a.indexOf("0x") === 0) ? a : ("0x" + a)
@@ -107,16 +150,16 @@ QtObject {
                     focused:   w.address === root.activeAddr,
                     x: (w.at ? w.at[0] : 0), y: (w.at ? w.at[1] : 0),
                     w: (w.size ? w.size[0] : 0), h: (w.size ? w.size[1] : 0),
-                    fs: !!w.fullscreen
+                    fs: !!w.fullscreen,
+                    fsMode: (w.fullscreen || 0)   // 0 none · 1 maximized · 2 real fullscreen
                 }
             })
         } catch (e) { out = [] }
         // Skip the reassignment when nothing changed, so the 200ms tag poll doesn't churn every
         // consumer (Repeater models would rebuild their delegates each tick).
         var s = JSON.stringify(out)
-        if (s === root._lastJson) return
-        root._lastJson = s
-        root.windows = out
+        if (s !== root._lastJson) { root._lastJson = s; root.windows = out }
+        root._recheckFullscreen()
     }
     // Update just the focused flag in place (fast path for activewindowv2).
     function _markFocused() {

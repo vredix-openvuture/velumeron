@@ -23,16 +23,9 @@ Item {
             spacing: Style.cardGap
 
             Card {
-                CardLabel { text: "WINDOW TAGS" }
-                SubLabel { width: parent.width
-                           text: "A small name chip on the edge of every window. It fades out when the mouse comes near, so nothing underneath is ever blocked." }
-                Toggle {
-                    label: "Enable window tags"
-                    sub:   "Show a name chip on every open window"
-                    on:    VtlConfig.windowTagsEnabled
-                    onToggled: root.save("window_tags_enabled", !VtlConfig.windowTagsEnabled)
-                }
-
+                CardLabel { text: "WINDOW TAGS"
+                            hint: "A small name chip on the edge of every window. It fades out when the mouse comes near, so nothing underneath is ever blocked." }
+                // On/off lives in the one switch pinned atop this page (Settings.qml).
                 FieldLabel { text: "Position on the window" }
                 PosGrid { current: VtlConfig.windowTagsPosition; onPicked: root.save("window_tags_position", key) }
 
@@ -59,9 +52,8 @@ Item {
             // Per-monitor on/off overrides (same pattern as the taskbar's).
             Card {
                 visible: Quickshell.screens.length > 1
-                CardLabel { text: "PER MONITOR" }
-                SubLabel { width: parent.width
-                           text: "Override the master switch per monitor." }
+                CardLabel { text: "PER MONITOR"
+                            hint: "Override the master switch per monitor." }
                 Repeater {
                     model: Quickshell.screens
                     delegate: Toggle {

@@ -156,11 +156,8 @@ Item {
 
             // Global window decoration — applies to every window at once, live + persisted.
             Card {
-                CardLabel { text: "GLOBAL WINDOW LOOK" }
-                SubLabel {
-                    width: parent.width
-                    text: "Transparency and blur for every window at once. Blur, vibrancy and X-ray are Hyprland decoration features."
-                }
+                CardLabel { text: "GLOBAL WINDOW LOOK"
+                            hint: "Transparency and blur for every window at once. Blur, vibrancy and X-ray are Hyprland decoration features." }
                 Slider {
                     label: "Opacity"; from: 0.5; to: 1.0; decimals: 2; step: 0.01
                     value: VtlConfig.windowOpacity
@@ -199,20 +196,14 @@ Item {
             }
 
             Card {
-                CardLabel { text: "FLOATING APPS" }
-                SubLabel {
-                    width: parent.width
-                    text: "These apps always open as floating windows."
-                }
+                CardLabel { text: "FLOATING APPS"
+                            hint: "These apps always open as floating windows." }
                 RuleGroup { group: "floating"; tokens: root.floatingTokens }
             }
 
             Card {
-                CardLabel { text: "OPAQUE APPS" }
-                SubLabel {
-                    width: parent.width
-                    text: "These apps stay fully opaque — excluded from the global window transparency (handy for video players, image viewers, anything where you never want see-through)."
-                }
+                CardLabel { text: "OPAQUE APPS"
+                            hint: "These apps stay fully opaque — excluded from the global window transparency (handy for video players, image viewers, anything where you never want see-through)." }
                 RuleGroup { group: "opacity"; tokens: root.opacityTokens }
             }
 

@@ -67,7 +67,9 @@ Column {
             width:   ed.width
             spacing: 6
 
-            FieldLabel { text: modelData.var + "  —  " + modelData.output }
+            FieldLabel { text: modelData.var + "  —  " + modelData.output
+                         hint: "󰐃 keeps the workspace alive when empty · ◉ marks the monitor's start workspace. "
+                               + "Workspaces 10/90/99/111/112/1111 are managed by the system and stay hidden here." }
 
             Repeater {
                 model: ed.rulesFor(monGroup.modelData.var)
@@ -147,11 +149,6 @@ Column {
         }
     }
 
-    SubLabel {
-        width: parent.width
-        text: "󰐃 keeps the workspace alive when empty · ◉ marks the monitor's start workspace. "
-            + "Workspaces 10/90/99/111/112/1111 are managed by the system and stay hidden here."
-    }
 
     component IconBtn: Rectangle {
         property string glyph:  ""

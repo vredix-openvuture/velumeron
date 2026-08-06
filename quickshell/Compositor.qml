@@ -48,6 +48,12 @@ Item {
     readonly property var monitors:   Hyprland.monitors
     readonly property var workspaces: Hyprland.workspaces
 
+    // Is a REAL fullscreen window covering this monitor right now (i.e. is the bar hidden)?
+    // Every bar-docked surface asks this before deciding whether to dock onto the bar's inner
+    // face or grow from the bare screen edge. Do NOT go back to the raw "fullscreen>>0/1" event
+    // for it — see Hyprwindows.fullscreenOn(). Usable in a binding: it reads Hyprwindows.fsMons.
+    function fullscreenOn(monId) { return Hyprwindows.fullscreenOn(monId) }
+
     // Force the monitor/workspace graph to re-query (shell.qml's cold-start resync
     // uses this — the Hyprland event graph can latch a stale association at boot).
     function refreshMonitors()   { Hyprland.refreshMonitors() }

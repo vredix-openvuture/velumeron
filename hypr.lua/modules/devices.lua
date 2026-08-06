@@ -27,29 +27,38 @@ hl.config({
         hide_on_key_press    = true,
     },
 
-    -- Touchpad-swipe feel (tunes the 3-finger `workspace` gesture below).
-    gestures = {
-        -- Commit the swipe earlier so a short flick still switches workspace.
-        workspace_swipe_cancel_ratio = 0.15,
-        -- Stay within the persistent workspaces (autostart seeds 1–5) instead of
-        -- spawning a new empty one when you over-swipe past the last. Flip to true
-        -- if you want swipe-to-create at the edge.
-        workspace_swipe_create_new   = true,
-    },
 })
 
 
 -- ── Touchpad gestures (Hyprland 0.49+ `gesture` keyword) ──
--- The old `gestures { workspace_swipe = true }` block is gone; each gesture is now
--- its own `hl.gesture{ fingers, direction, action }`. Trim/retune to taste.
---   3-finger horizontal  → swipe between workspaces (continuous)
---   4-finger horizontal  → drag the active window across workspaces
+-- Each gesture is its own `hl.gesture{ fingers, direction, action }`. `action` may be
+-- a builtin string (workspace/fullscreen/…) OR a Lua function — the latter runs an
+-- arbitrary dispatch, which is how the launcher / settings overlays are wired here.
+--   3-finger left/right  → workspace next/prev, same asymmetric feel as SUPER+H/L:
+--                          back past the monitor's first workspace wraps to its LAST
+--                          existing one (`m-1` wraps monitor-locally), forward always
+--                          goes ONE further (`+1`) and keeps creating fresh workspaces
+--                          past the last one. The builtin `action = "workspace"` swipe
+--                          could not do this asymmetry (its endpoints either clamp
+--                          dead on ws1 or wrap instead of creating), so both sides are
+--                          explicit dispatches — trade-off: no finger-follow
+--                          animation, one step per swipe.
 --   3-finger up          → toggle fullscreen on the active window
---   3-finger down        → toggle the `magic` special workspace (matches Super+RETURN)
-hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })
-hl.gesture({ fingers = 4, direction = "horizontal", action = "move" })
+--   3-finger down        → toggle maximize on the active window
+--   4-finger up          → open the app launcher
+--   4-finger down        → toggle the settings menu
+--   (4-finger horizontal + pinch intentionally left unset — they weren't useful)
+hl.gesture({ fingers = 3, direction = "left",
+            action = function() hl.dispatch(hl.dsp.focus({ workspace = "+1" })) end })
+hl.gesture({ fingers = 3, direction = "right",
+            action = function() hl.dispatch(hl.dsp.focus({ workspace = "m-1" })) end })
 hl.gesture({ fingers = 3, direction = "up",   action = "fullscreen", mode = "fullscreen" })
-hl.gesture({ fingers = 3, direction = "down", action = "special", workspace_name = "magic" })
+hl.gesture({ fingers = 3, direction = "down",
+            action = function() hl.dispatch(hl.dsp.window.fullscreen({ mode = "maximized" })) end })
+hl.gesture({ fingers = 4, direction = "up",
+            action = function() hl.dispatch(hl.dsp.exec_cmd("qs -p " .. VTL_DIR .. "/quickshell ipc call launcher toggle")) end })
+hl.gesture({ fingers = 4, direction = "down",
+            action = function() hl.dispatch(hl.dsp.exec_cmd(VTL_DIR .. "/bin/velumeron -t")) end })
 
 
 -- ── Lid Switch ───────────────────────────────────────────
@@ -57,6 +66,7 @@ hl.gesture({ fingers = 3, direction = "down", action = "special", workspace_name
 -- Run: hyprctl devices  →  "switches" to verify the exact name
 local lid = "Lid Switch"
 
-hl.bind("switch:on:"  .. lid, hl.dsp.exec_cmd(on_sleep), { locked = true })
-hl.bind("switch:off:" .. lid, hl.dsp.exec_cmd(on_lock),  { locked = true })
+-- Lid closed → lock now + suspend after 2 min (cancelable); lid opened → cancel the pending suspend.
+hl.bind("switch:on:"  .. lid, hl.dsp.exec_cmd(VTL_DIR .. "/assets/scripts/lid.sh close"), { locked = true })
+hl.bind("switch:off:" .. lid, hl.dsp.exec_cmd(VTL_DIR .. "/assets/scripts/lid.sh open"),  { locked = true })
  

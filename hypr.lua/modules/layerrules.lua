@@ -75,6 +75,7 @@ hl.layer_rule({ name = "velumeron-hotcorners", match = { namespace = "velumeron-
 -- Velumeron window switcher — must NOT blur: you want to see the windows clearly, and its dim
 -- backdrop would otherwise frost the whole screen. Opt out of the global blur.
 hl.layer_rule({ name = "velumeron-window-switcher", match = { namespace = "velumeron-window-switcher" }, blur = false, no_anim = true, xray = true })
+hl.layer_rule({ name = "velumeron-layout-switcher", match = { namespace = "velumeron-layout-switcher" }, blur = false, no_anim = true, xray = true })
 
 -- Velumeron window tags — mostly-transparent full-screen overlay with tiny name chips; the global
 -- blur rule would frost the whole surface. Opt out.

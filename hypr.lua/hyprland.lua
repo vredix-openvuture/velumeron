@@ -67,6 +67,11 @@ require("modules.fancyzones")   -- after keybinds: replaces the MOD+LMB drag bin
 -- Generated file — a missing one is a no-op.
 _try_dofile(VTL_USER_DIR .. "/hypr.lua/user_layouts.lua")
 
+-- Per-monitor/per-workspace layout assignment + float/endless policies. AFTER
+-- user_layouts so custom lua:<name> layouts are registered before rules use
+-- them, and after user_settings' workspace rules so its own rules win.
+require("modules.layout_manager")
+
 
 
 -- ═══════════════════════════════════════════════════════
