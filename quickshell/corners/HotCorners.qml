@@ -1,7 +1,6 @@
 import ".."
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import Quickshell.Wayland
 
 // Hot corners / screen edges (KDE-style): a transparent overlay per monitor whose INPUT region is
@@ -18,14 +17,9 @@ PanelWindow {
     readonly property int sw: screen ? screen.width  : 1920
     readonly property int sh: screen ? screen.height : 1080
 
-    // Global fullscreen flag (Hyprland "fullscreen>>0/1") — same source the other surfaces use.
-    property bool monFullscreen: false
-    Connections {
-        target: Compositor
-        function onRawEvent(event) {
-            if (event.name === "fullscreen") root.monFullscreen = (("" + event.data).trim() === "1")
-        }
-    }
+    // A REAL fullscreen window on THIS monitor disarms the zones — same shared source every other
+    // surface uses (per monitor, from the live client list; maximize keeps the zones armed).
+    readonly property bool monFullscreen: Compositor.fullscreenOn(root.monitor?.id ?? -1)
 
     // Master on AND not fullscreen. Per-zone enable = action type !== "none".
     readonly property bool armedGlobally: VtlConfig.cornerActionsEnabled && !root.monFullscreen
@@ -156,34 +150,7 @@ PanelWindow {
     }
 
     // ── Action dispatch ──────────────────────────────────────────────────────────────────────────
-    Process { id: proc }
-    function run(cmd) { proc.command = ["bash", "-c", cmd]; proc.running = false; proc.running = true }
-    function launchApp(id) {
-        var apps = DesktopEntries.applications
-        var list = (apps && apps.values !== undefined) ? apps.values : (apps || [])
-        for (var i = 0; i < list.length; i++) {
-            var e = list[i]
-            if (e && (e.id === id || e.name === id)) { e.execute(); return }
-        }
-    }
-    function fire(id) {
-        var a = VtlConfig.cornerActionFor(id, root.mon)
-        var t = a.type, v = a.value || ""
-        switch (t) {
-        case "launcher":      UiState.launcherMon = root.mon; UiState.launcherOpen = true; break
-        case "settings":      UiState.menuMon     = root.mon; UiState.openDropdown = "vuture-icon"; break
-        case "wallpaper": {
-            var an = UiState.wallpaperAnchor(root.sw, root.sh, VtlConfig.wallpaperQuickPos)
-            UiState.toggleFlyout("wallpaper", an.ax, an.ay, an.edge, an.group, root.mon)
-            break
-        }
-        case "notifications": UiState.notifMon = root.mon; UiState.notifCenterOpen = true; break
-        case "cheatsheet":    UiState.keybindContext = (v || "all"); break
-        case "lock":          root.run("loginctl lock-session"); break   // → hypridle → native quickshell lock
-        case "dispatch":      if (v) root.run("hyprctl dispatch " + v); break
-        case "command":       if (v) root.run(v); break
-        case "app":           if (v) root.launchApp(v); break
-        default: break   // "none"
-        }
-    }
+    // The vocabulary itself lives in the shared Actions singleton (same types the dashboard's
+    // button module fires), so a new action type is added in exactly one place.
+    function fire(id) { Actions.fire(VtlConfig.cornerActionFor(id, root.mon), root.mon) }
 }

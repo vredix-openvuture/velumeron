@@ -327,9 +327,39 @@ PanelWindow {
     }
     onFilteredChanged: list.currentIndex = 0
 
+    Process { id: termProc }    // Terminal=true entries — see launch()
+
     function launch(i) {
         var a = root.filtered[i]
-        if (a) { a.execute(); UiState.launcherOpen = false }
+        if (!a) return
+        // Terminal entries (btop, htop, nvim, ranger, …) carry Terminal=true: their Exec line
+        // expects a tty. DesktopEntry.execute() runs the bare command, which dies instantly with
+        // no terminal attached — from the outside the launcher just did nothing. Run those in the
+        // velumeron kitty instead, the same invocation btop-drop.sh uses.
+        if (a.runInTerminal) {
+            var ud = Quickshell.env("VELUMERON_USER_DIR") || (Quickshell.env("HOME") + "/.config/velumeron")
+            var cmd = ["setsid", "-f", "kitty", "-c", ud + "/kitty/kitty.conf"]
+            var ac = a.command || []
+            for (var k = 0; k < ac.length; k++) cmd.push("" + ac[k])
+            termProc.command = cmd
+            termProc.running = false; termProc.running = true
+        } else {
+            a.execute()
+        }
+        UiState.launcherOpen = false
+    }
+
+    // Hover may only claim the selection when the POINTER ACTUALLY MOVED. Typing re-filters the
+    // list, which reshuffles the rows under a stationary cursor; Qt then delivers a synthetic
+    // hover move to whatever slid under the mouse, which yanked the selection off the typed match
+    // — so Enter launched an unrelated entry (or nothing at all). Compare in SCENE coordinates
+    // (mapToItem(null)): a real pointer move changes them, a reshuffle underneath does not.
+    property point _ptr: Qt.point(-1, -1)
+    function pointerMoved(item, x, y) {
+        var p = item.mapToItem(null, x, y)
+        if (Math.abs(p.x - root._ptr.x) < 1 && Math.abs(p.y - root._ptr.y) < 1) return false
+        root._ptr = p
+        return true
     }
     // Arrow navigation that respects the grid width (cols).
     function move(d) {
@@ -572,7 +602,7 @@ PanelWindow {
 
                         MouseArea {
                             id: uHov; anchors.fill: parent; hoverEnabled: true
-                            onPositionChanged: root.utilIndex = uRow.index
+                            onPositionChanged: e => { if (root.pointerMoved(uHov, e.x, e.y)) root.utilIndex = uRow.index }
                             onClicked: { root.utilIndex = uRow.index; root.activateUtil(uRow.index) }
                         }
                     }
@@ -684,7 +714,7 @@ PanelWindow {
 
                         MouseArea {
                             id: rHov; anchors.fill: parent; hoverEnabled: true
-                            onPositionChanged: list.currentIndex = row.index
+                            onPositionChanged: e => { if (root.pointerMoved(rHov, e.x, e.y)) list.currentIndex = row.index }
                             onClicked: { list.currentIndex = row.index; root.launch(row.index) }
                         }
                     }

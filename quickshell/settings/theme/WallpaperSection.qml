@@ -238,7 +238,8 @@ Item {
             width: parent.width; spacing: Style.cardGap
 
             Card {
-                CardLabel { text: "AUTO-CHANGE" }
+                CardLabel { text: "AUTO-CHANGE"
+                            hint: "Silent = swap in place · Show = switch to a free workspace for the transition." }
                 Segmented {
                     equal: true
                     current: VtlConfig.wallpaperAutoMode
@@ -246,8 +247,6 @@ Item {
                                { label: "Show", key: "show" }]
                     onPicked: root.save("wallpaper_auto_mode", key)
                 }
-                SubLabel { width: parent.width
-                           text: "Silent = swap in place · Show = switch to a free workspace for the transition." }
                 Stepper { label: "Every"; unit: "min"; step: 1; min: 1; max: 600; labelWidth: 78
                           value: VtlConfig.wallpaperAutoMinutes; onChanged: root.save("wallpaper_auto_minutes", v) }
             }

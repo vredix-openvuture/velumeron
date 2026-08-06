@@ -137,17 +137,11 @@ Item {
             topPadding: 4
             spacing: Style.cardGap
 
-            // ── Master + tuning ────────────────────────────────────────────────
+            // ── Tuning ─────────────────────────────────────────────────────────
             Card {
-                CardLabel { text: "HOT CORNERS" }
-                SubLabel { width: parent.width
-                           text: "Push the mouse into a corner or edge and hold — the assigned action fires. Leave and return to fire again." }
-                Toggle {
-                    label: "Enable hot corners"
-                    sub:   "Trigger zones are active (paused while a window is fullscreen)"
-                    on:    VtlConfig.cornerActionsEnabled
-                    onToggled: root.save("corner_actions_enabled", !VtlConfig.cornerActionsEnabled)
-                }
+                CardLabel { text: "HOT CORNERS"
+                            hint: "Push the mouse into a corner or edge and hold — the assigned action fires. Leave and return to fire again." }
+                // On/off lives in the one switch pinned atop this page (Settings.qml).
                 Stepper { label: "Default dwell"; unit: "ms"; step: 50; min: 50; max: 2000; labelWidth: 120
                           value: VtlConfig.cornerDefaultDwell; onChanged: root.save("corner_default_dwell", v) }
                 Stepper { label: "Corner size"; unit: "px"; step: 2; min: 2; max: 40; labelWidth: 120
@@ -158,8 +152,8 @@ Item {
 
             // ── Zone editor ────────────────────────────────────────────────────
             Card {
-                CardLabel { text: "ZONES" }
-                SubLabel { width: parent.width; text: "Pick a zone, then assign its action below." }
+                CardLabel { text: "ZONES"
+                            hint: "Pick a zone, then assign its action below." }
 
                 Toggle {
                     label: "Per-monitor zones"
@@ -199,7 +193,8 @@ Item {
                     ZoneBtn { zid: "bottom-right"; anchors { bottom: parent.bottom; right: parent.right; margins: 8 } }
                 }
 
-                FieldLabel { text: root.zoneLabel(root.sel) + " — action" }
+                FieldLabel { text: root.zoneLabel(root.sel) + " — action"
+                             hint: "hyprctl dispatch args — e.g. workspace e+1 · workspace e-1 · togglespecialworkspace · killactive" }
                 Dropdown {
                     summary: root.typeLabel(root.selAction.type)
                     options: root.actionTypes.map(function (t) { return { label: t.label, key: t.key, on: root.selAction.type === t.key } })
@@ -233,11 +228,6 @@ Item {
                                text: root.selAction.type === "dispatch" ? "e.g.  workspace e+1" : "shell command…"
                                color: Colors.fgMuted; font: valueInput.font }
                     }
-                }
-                SubLabel {
-                    visible: root.selAction.type === "dispatch"
-                    width: parent.width
-                    text: "hyprctl dispatch args — e.g. workspace e+1 · workspace e-1 · togglespecialworkspace · killactive"
                 }
 
                 // App picker.

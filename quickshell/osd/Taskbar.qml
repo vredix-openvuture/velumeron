@@ -2,6 +2,7 @@ import ".."
 import QtQuick
 import QtQuick.Shapes
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 
@@ -19,11 +20,11 @@ PanelWindow {
     readonly property int    sw:    screen ? screen.width  : 1920
     readonly property int    sh:    screen ? screen.height : 1080
 
-    property bool fullscreen: false
-    Connections {
-        target: Hyprland
-        function onRawEvent(e) { if (e.name === "fullscreen") root.fullscreen = (("" + e.data).trim() === "1") }
-    }
+    // A REAL fullscreen window (mode 2, not maximized) on this monitor's active workspace: the strip
+    // must not cover it, so it flips to hover (see hoverMode), and its dock geometry stops reserving
+    // the (now hidden) bar. Derived per monitor from the live client list — the raw fullscreen event
+    // is global, fires for maximize too, and never resets. See Hyprwindows.fullscreenOn().
+    readonly property bool monFullscreen: Compositor.fullscreenOn(root.monId)
 
     // ── Which windows this taskbar shows ────────────────────────────────────────────────────────
     readonly property var items: {
@@ -66,27 +67,49 @@ PanelWindow {
             if (v[i] && ("" + (v[i].id || "")).toLowerCase() === ("" + id).toLowerCase()) return v[i]
         return null
     }
-    // Dock model: one tile per pin (bound to its running window when there is one), then every
-    // remaining running window. Tiles: { key, pin(bool), id, entry, win }.
+    // Dock model — one tile per APP (grouped), not per window. A pinned app is a tile bound to all of
+    // its running windows (a launcher when none run); every remaining running app follows, ordered by
+    // its lowest workspace (WS1 first). Tiles: { key, pin(bool), id, entry, wins:[…], count, minWs }.
+    // `wins` drives the focus-cycle, the running dot / count badge and (step 2) the hover picker; an
+    // empty `wins` on a pinned tile is just a launcher.
+    function _appKey(w, entry) {
+        return entry ? ("" + entry.id).toLowerCase() : ("cls:" + ("" + w.cls).toLowerCase())
+    }
     readonly property var dockItems: {
         var wins = root.items, out = [], used = {}
+        // 1) pinned apps, in dock order — every running window whose app resolves to the pin id.
         for (var i = 0; i < root.pinned.length; i++) {
-            var id = root.pinned[i], win = null
+            var id = root.pinned[i], g = [], minWs = 1e9
             for (var j = 0; j < wins.length; j++) {
                 if (used[wins[j].address]) continue
                 var e = root.entryFor(wins[j].cls)
                 if (e && ("" + e.id).toLowerCase() === ("" + id).toLowerCase()) {
-                    win = wins[j]; used[wins[j].address] = true; break
+                    g.push(wins[j]); used[wins[j].address] = true
+                    if (wins[j].workspace < minWs) minWs = wins[j].workspace
                 }
             }
-            out.push({ key: "pin:" + id, pin: true, id: id, entry: root.entryById(id), win: win })
+            out.push({ key: "pin:" + id, pin: true, id: id, entry: root.entryById(id),
+                       wins: g, count: g.length, minWs: minWs })
         }
+        // 2) remaining running windows grouped by app; groups ordered by their lowest workspace.
+        var groups = [], byKey = {}
         for (var k = 0; k < wins.length; k++) {
-            if (used[wins[k].address]) continue
-            var e2 = root.entryFor(wins[k].cls)
-            out.push({ key: "win:" + wins[k].address, pin: false,
-                       id: e2 ? e2.id : "", entry: e2, win: wins[k] })
+            var w = wins[k]
+            if (used[w.address]) continue
+            var e2 = root.entryFor(w.cls)
+            var ak = root._appKey(w, e2)
+            var grp = byKey[ak]
+            if (!grp) {
+                grp = { key: "app:" + ak, pin: false, id: e2 ? e2.id : "",
+                        entry: e2, wins: [], count: 0, minWs: 1e9 }
+                byKey[ak] = grp; groups.push(grp)
+            }
+            grp.wins.push(w); grp.count = grp.wins.length
+            if (w.workspace < grp.minWs) grp.minWs = w.workspace
+            used[w.address] = true
         }
+        groups.sort(function (a, b) { return a.minWs - b.minWs })
+        for (var n = 0; n < groups.length; n++) out.push(groups[n])
         return out
     }
     function togglePin(id) {
@@ -106,6 +129,127 @@ PanelWindow {
         SettingsStore.set("taskbar_pinned", arr)
     }
 
+    // Focus a running app group. Normally raises its most-recently-used window, but if one of the
+    // group's windows already holds focus it advances to the next (alt-tab-style cycling in-app).
+    function focusGroup(g) {
+        if (!g || !g.wins || g.wins.length === 0) return
+        var ws = g.wins.slice().sort(function (a, b) { return a.fhi - b.fhi })   // most-recent first
+        var target = ws[0]
+        for (var i = 0; i < ws.length; i++)
+            if (ws[i].focused) { target = ws[(i + 1) % ws.length]; break }
+        root._focus(target.address)
+    }
+
+    // Focus a window WITHOUT the cursor warping to its centre: snapshot the pointer, focus, then move
+    // it back — all in one hyprctl batch so there is no visible jump. Global cursor:no_warps stays
+    // false on purpose (see hypr.lua/modules/devices.lua — cross-monitor workspace keybinds rely on the
+    // warp), so we undo the warp only for taskbar-driven focus.
+    readonly property Process focusProc: Process {}
+    function _focus(addr) {
+        if (!addr) return
+        focusProc.command = ["bash", "-c",
+            "pos=$(hyprctl cursorpos | tr -d ','); set -- $pos; " +
+            "hyprctl --batch \"dispatch hl.dsp.focus({ window = \\\"address:" + addr + "\\\" }) ; dispatch hl.dsp.cursor.move({ x = $1, y = $2 })\""]
+        focusProc.running = false; focusProc.running = true
+    }
+
+    // ── Stack picker (Windows-style): hover a stacked app tile → floating list of its windows over
+    //    the strip; click a row to focus that window. Rendered as a surface-root child (outside the
+    //    card so it can overhang), with its rect unioned back into the input mask while open. ────────
+    property var  stackWins: []
+    property real stackCX: 0        // hovered tile centre in window coords (anchor along the dock edge)
+    property real stackCY: 0
+    property bool stackOpen: false
+    readonly property Timer stackCloseT: Timer { interval: 180; onTriggered: root.stackOpen = false }
+    function openStack(g, cx, cy) {
+        // List the windows top-to-bottom by workspace, ascending (WS1 above WS9).
+        var ws = (g && g.wins) ? g.wins.slice() : []
+        ws.sort(function (a, b) { return (a.workspace || 0) - (b.workspace || 0) })
+        root.stackWins = ws
+        root.stackCX = cx; root.stackCY = cy
+        root.stackOpen = ws.length > 1
+        root.stackCloseT.stop()
+    }
+    function focusWin(addr) {
+        root._focus(addr)
+        root.stackOpen = false; root.stackCloseT.stop()
+    }
+    readonly property int  stackRowH: 34
+    readonly property int  stackPW:   260
+    readonly property int  stackGap:  10
+    readonly property int  stackPH:   Math.min(root.sh - 20, Math.max(1, root.stackWins.length) * stackRowH + 12)
+    readonly property real stackX: {
+        if (root.dockEdge === "left")  return root.openX + root.cardW + stackGap
+        if (root.dockEdge === "right") return root.openX - stackPW - stackGap
+        return Math.max(8, Math.min(root.sw - stackPW - 8, root.stackCX - stackPW / 2))
+    }
+    readonly property real stackY: {
+        if (root.dockEdge === "top")    return root.openY + root.cardH + stackGap
+        if (root.dockEdge === "bottom") return root.openY - stackGap - stackPH
+        return Math.max(8, Math.min(root.sh - stackPH - 8, root.stackCY - stackPH / 2))
+    }
+    // The popup rect PLUS the gap back to the card edge, so the pointer travelling from the tile up
+    // into the popup never leaves the input mask (and the hover doesn't drop mid-transit).
+    readonly property var stackMaskRect: {
+        if (!root.stackOpen) return [0, 0, 0, 0]
+        if (root.dockEdge === "bottom") return [stackX, stackY, stackPW, root.openY - stackY]
+        if (root.dockEdge === "top")    return [stackX, root.openY + root.cardH, stackPW, (stackY + stackPH) - (root.openY + root.cardH)]
+        if (root.dockEdge === "left")   return [root.openX + root.cardW, stackY, (stackX + stackPW) - (root.openX + root.cardW), stackPH]
+        if (root.dockEdge === "right")  return [stackX, stackY, root.openX - stackX, stackPH]
+        return [stackX, stackY, stackPW, stackPH]
+    }
+
+    // ── Right-click context menu (Pin / Close / Open). Rendered at the surface root; while open the
+    //    whole surface is interactive so a click on the backdrop dismisses it. ────────────────────────
+    property var  ctxItem: null
+    property real ctxCX: 0
+    property real ctxCY: 0
+    property bool ctxOpen: false
+    readonly property var ctxActions: {
+        var m = root.ctxItem
+        if (!m) return []
+        var a = []
+        if (m.id)        a.push({ key: "pin",   label: (root.pinned.indexOf(m.id) >= 0) ? "Unpin from bar" : "Pin to bar" })
+        if (m.count > 0) a.push({ key: "close", label: m.count > 1 ? ("Close all (" + m.count + ")") : "Close" })
+        if (m.entry)     a.push({ key: "open",  label: "Open" })
+        return a
+    }
+    readonly property int  ctxRowH: 32
+    readonly property int  ctxW:    190
+    readonly property int  ctxPad:  6
+    readonly property int  ctxH:    Math.max(ctxRowH, root.ctxActions.length * ctxRowH) + 2 * ctxPad
+    readonly property real ctxX: {
+        if (root.dockEdge === "left")  return root.openX + root.cardW + stackGap
+        if (root.dockEdge === "right") return root.openX - ctxW - stackGap
+        return Math.max(8, Math.min(root.sw - ctxW - 8, root.ctxCX - ctxW / 2))
+    }
+    readonly property real ctxY: {
+        if (root.dockEdge === "top")    return root.openY + root.cardH + stackGap
+        if (root.dockEdge === "bottom") return root.openY - stackGap - ctxH
+        return Math.max(8, Math.min(root.sh - ctxH - 8, root.ctxCY - ctxH / 2))
+    }
+    function openCtx(m, cx, cy) {
+        root.stackOpen = false; root.stackCloseT.stop()
+        root.ctxItem = m; root.ctxCX = cx; root.ctxCY = cy; root.ctxOpen = true
+    }
+    function closeCtx() { root.ctxOpen = false; root.ctxItem = null }
+    function closeGroup(m) {
+        if (!m || !m.wins) return
+        // close() ignores a bare "address:X" string and falls back to the ACTIVE window — the target
+        // window has to be resolved to a window object first (same { window = w } form move/resize use).
+        for (var i = 0; i < m.wins.length; i++)
+            Hyprland.dispatch("hl.dsp.window.close({ window = hl.get_window(\"address:" + m.wins[i].address + "\") })")
+    }
+    function ctxDo(key) {
+        var m = root.ctxItem
+        if (m) {
+            if (key === "pin" && m.id)      root.togglePin(m.id)
+            else if (key === "open")        { if (m.entry) m.entry.execute() }
+            else if (key === "close")       root.closeGroup(m)
+        }
+        root.closeCtx()
+    }
+
     readonly property bool enabled: VtlConfig.taskbarEnabledFor(root.mon)
                                     && (root.items.length > 0 || root.pinned.length > 0)
 
@@ -118,10 +262,10 @@ PanelWindow {
     readonly property string dockEdge: vside !== "center" ? vside : hside
 
     function _edgeThk(side) {
-        return (root.dock && !root.fullscreen && VtlConfig.edgeActiveFor(side, root.mon))
+        return (root.dock && !root.monFullscreen && VtlConfig.edgeActiveFor(side, root.mon))
                ? VtlConfig.edgeThicknessFor(side, root.mon) : 0
     }
-    readonly property bool   barOnEdge: root.dock && VtlConfig.edgeActiveFor(root.dockEdge, root.mon) && !root.fullscreen
+    readonly property bool   barOnEdge: root.dock && VtlConfig.edgeActiveFor(root.dockEdge, root.mon) && !root.monFullscreen
     readonly property int    barThk:    root.barOnEdge ? VtlConfig.edgeThicknessFor(root.dockEdge, root.mon) : 0
     readonly property int    vBarThk:   (root.vside === "top"  || root.vside === "bottom") ? _edgeThk(root.vside) : 0
     readonly property int    hBarThk:   (root.hside === "left" || root.hside === "right")  ? _edgeThk(root.hside) : 0
@@ -204,9 +348,11 @@ PanelWindow {
     }
 
     // ── Visibility / reveal ─────────────────────────────────────────────────────────────────────
-    readonly property bool hoverMode: VtlConfig.taskbarVisibility === "hover"
+    // Auto-hide (hover) either by config, OR forced while a real fullscreen window is up on this
+    // monitor: the strip springs into the edge and only peeks out on hover, never covering fullscreen.
+    readonly property bool hoverMode: VtlConfig.taskbarVisibility === "hover" || root.monFullscreen
     property bool hovered: false
-    readonly property bool revealed: root.enabled && (!root.hoverMode || root.hovered)
+    readonly property bool revealed: root.enabled && (!root.hoverMode || root.hovered || root.stackOpen || root.ctxOpen)
     property real reveal: 0
     onRevealedChanged: reveal = revealed ? 1 : 0
     Behavior on reveal { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.003 } }
@@ -281,6 +427,10 @@ PanelWindow {
         Region { intersection: Intersection.Subtract; x: root.hcx(5); y: root.hcy(5); width: root.hcw(5); height: root.hch(5) }
         Region { intersection: Intersection.Subtract; x: root.hcx(6); y: root.hcy(6); width: root.hcw(6); height: root.hch(6) }
         Region { intersection: Intersection.Subtract; x: root.hcx(7); y: root.hcy(7); width: root.hcw(7); height: root.hch(7) }
+        // Stack-picker overhang — unioned back in so the popup floating over the strip is clickable.
+        Region { x: root.stackMaskRect[0]; y: root.stackMaskRect[1]; width: root.stackMaskRect[2]; height: root.stackMaskRect[3] }
+        // Context menu open → whole surface interactive so a click on the backdrop can dismiss it.
+        Region { x: 0; y: 0; width: root.ctxOpen ? root.sw : 0; height: root.ctxOpen ? root.sh : 0 }
     }
 
     // Hover zone (plain Item, so item clicks pass straight through). A HoverHandler — not a MouseArea
@@ -363,11 +513,21 @@ PanelWindow {
                         delegate: Rectangle {
                             id: it
                             required property var modelData
-                            readonly property bool running: !!modelData.win
-                            readonly property bool foc: running && modelData.win.focused
+                            readonly property var  wins:    modelData.wins || []
+                            readonly property int  count:   modelData.count || 0
+                            readonly property bool running: it.count > 0
+                            readonly property bool foc: {
+                                for (var i = 0; i < it.wins.length; i++) if (it.wins[i].focused) return true
+                                return false
+                            }
                             readonly property int  isz: VtlConfig.taskbarIconSize
-                            readonly property bool showLabel: VtlConfig.taskbarLabels && root.horiz && running
-                            implicitWidth:  showLabel ? Math.min(200, isz + 10 + lbl.implicitWidth + 20) : (isz + 12)
+                            readonly property bool showLabel: VtlConfig.taskbarLabels && root.horiz
+                            // Single window → its title; a stacked app → the app name; a bare pin → its name.
+                            readonly property string labelText:
+                                  it.count === 1 ? (it.wins[0].title || it.modelData.entry?.name || it.wins[0].cls || "")
+                                : it.count  >  1 ? (it.modelData.entry?.name || it.wins[0].cls || "")
+                                : (it.modelData.entry?.name || it.modelData.id || "")
+                            implicitWidth:  showLabel ? Math.min(220, isz + 10 + lbl.implicitWidth + 20) : (isz + 12)
                             implicitHeight: isz + 12
                             radius: Style.rControl
                             color: it.foc ? Style.accent : (ihov.containsMouse ? Style.controlHover : "transparent")
@@ -381,11 +541,11 @@ PanelWindow {
                                 Image {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: it.isz; height: it.isz
-                                    // Pinned tiles resolve their icon from the desktop entry; window
-                                    // tiles from the window class (entry icon as the nicer fallback).
+                                    // Running groups resolve their icon from the window class; pinned
+                                    // launchers from the desktop entry (entry icon as the nicer fallback).
                                     source: Quickshell.iconPath(
-                                                it.modelData.win ? it.modelData.win.cls
-                                                                 : (it.modelData.entry?.icon ?? ""),
+                                                it.count > 0 ? it.wins[0].cls
+                                                             : (it.modelData.entry?.icon ?? ""),
                                                 it.modelData.entry?.icon ?? "application-x-executable")
                                     sourceSize.width: 48; sourceSize.height: 48; asynchronous: true
                                 }
@@ -394,14 +554,16 @@ PanelWindow {
                                     visible: it.showLabel
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: it.showLabel ? Math.min(150, implicitWidth) : 0
-                                    text: it.modelData.win?.title ?? ""
+                                    text: it.labelText
                                     color: it.foc ? Colors.fgBright : Colors.fgPrimary
                                     font.pixelSize: 12; font.family: Style.font; elide: Text.ElideRight
                                 }
                             }
-                            // macOS-style running dot on the strip's outer side.
+                            // Running indicator — every running app gets a macOS-style dot on the strip's
+                            // outer side (kept for stacks too, for consistency); stacks additionally get a
+                            // count badge on the icon.
                             Rectangle {
-                                visible: it.running && it.modelData.pin
+                                visible: it.running
                                 width: 4; height: 4; radius: 2
                                 color: it.foc ? Colors.fgBright : Colors.fgMuted
                                 anchors.horizontalCenter: root.horiz ? parent.horizontalCenter : undefined
@@ -410,6 +572,19 @@ PanelWindow {
                                 anchors.right:  root.horiz ? undefined : parent.right
                                 anchors.bottomMargin: root.horiz ? 1 : 0
                                 anchors.rightMargin:  root.horiz ? 0 : 1
+                            }
+                            Rectangle {
+                                visible: it.count > 1
+                                width: 15; height: 15; radius: 7.5
+                                color: it.foc ? Colors.fgBright : Style.accent
+                                border.width: 1; border.color: root.cardColor
+                                // Pinned to the icon's top-right (Row leftMargin 6 + icon isz), so it
+                                // stays on the icon even when a wide label stretches the tile.
+                                anchors.top: parent.top; anchors.topMargin: -1
+                                x: 6 + it.isz - width + 2
+                                Text { anchors.centerIn: parent; text: "" + it.count
+                                       color: it.foc ? Style.accent : Style.onAccent
+                                       font.pixelSize: 9; font.bold: true; font.family: Style.font }
                             }
                             MouseArea {
                                 id: ihov
@@ -432,16 +607,140 @@ PanelWindow {
                                     }
                                 }
                                 onReleased: Qt.callLater(function () { ihov.dragging = false })
+                                // Hovering a stacked tile opens the picker anchored to this tile's
+                                // centre (window coords); a single/empty tile closes any open picker.
+                                onEntered: {
+                                    if (it.count > 1) {
+                                        var p = it.mapToItem(null, it.width / 2, it.height / 2)
+                                        root.openStack(it.modelData, p.x, p.y)
+                                    } else root.stackCloseT.restart()
+                                }
+                                onExited: root.stackCloseT.restart()
                                 onClicked: e => {
                                     if (ihov.dragging) return
-                                    if (e.button === Qt.RightButton) { root.togglePin(it.modelData.id); return }
+                                    if (e.button === Qt.RightButton) {
+                                        var p = it.mapToItem(null, it.width / 2, it.height / 2)
+                                        root.openCtx(it.modelData, p.x, p.y); return
+                                    }
                                     if (e.button === Qt.MiddleButton) { it.modelData.entry?.execute(); return }
-                                    if (it.running)
-                                        Hyprland.dispatch("hl.dsp.focus({ window = \"address:" + it.modelData.win.address + "\" })")
-                                    else
-                                        it.modelData.entry?.execute()
+                                    if (it.running) root.focusGroup(it.modelData)
+                                    else it.modelData.entry?.execute()
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Stack picker popup — a floating list of a stacked app's windows, over the strip. Sits at the
+    //    surface root (so it overhangs the card), shown only while a stacked tile or the popup itself
+    //    is hovered; a row click focuses that window. Its rect is unioned into the mask (see above). ──
+    Item {
+        id: stackPicker
+        visible: root.stackOpen && root.stackWins.length > 1
+        x: root.stackX; y: root.stackY
+        width: root.stackPW; height: root.stackPH
+        opacity: visible ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: 120 } }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: Style.rCard
+            color: root.cardColor
+            border.width: Style.chromeBorderWidth; border.color: Style.chromeBorder
+        }
+        Column {
+            anchors.fill: parent; anchors.margins: 6
+            Repeater {
+                model: root.stackWins
+                delegate: Rectangle {
+                    id: row
+                    required property var modelData
+                    width: parent.width; height: root.stackRowH
+                    radius: Style.rControl
+                    color: row.modelData.focused ? Style.accent
+                         : (rowHov.containsMouse ? Style.controlHover : "transparent")
+                    Behavior on color { ColorAnimation { duration: 80 } }
+                    Row {
+                        anchors { left: parent.left; leftMargin: 8; right: parent.right; rightMargin: 8
+                                  verticalCenter: parent.verticalCenter }
+                        spacing: 8
+                        Image {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 18; height: 18
+                            source: Quickshell.iconPath(row.modelData.cls, "application-x-executable")
+                            sourceSize.width: 36; sourceSize.height: 36; asynchronous: true
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - 18 - 8 - wsl.width - 8
+                            text: row.modelData.title || row.modelData.cls || ""
+                            color: row.modelData.focused ? Colors.fgBright : Colors.fgPrimary
+                            font.pixelSize: 12; font.family: Style.font; elide: Text.ElideRight
+                        }
+                        Text {
+                            id: wsl
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: row.modelData.workspace > 0 ? ("WS" + row.modelData.workspace) : ""
+                            color: row.modelData.focused ? Colors.fgBright : Colors.fgMuted
+                            font.pixelSize: 10; font.family: Style.font
+                        }
+                    }
+                    MouseArea {
+                        id: rowHov
+                        anchors.fill: parent; hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.focusWin(row.modelData.address)
+                    }
+                }
+            }
+        }
+        // Keep the popup open while the pointer is over it; leaving arms the close timer.
+        HoverHandler { onHoveredChanged: hovered ? root.stackCloseT.stop() : root.stackCloseT.restart() }
+    }
+
+    // ── Right-click context menu — a full-surface backdrop (click = dismiss) with the little Pin /
+    //    Close / Open card floating over the strip, anchored to the right-clicked tile. ──────────────
+    Item {
+        id: ctxMenu
+        visible: root.ctxOpen
+        anchors.fill: parent
+        MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; onPressed: root.closeCtx() }
+
+        Rectangle {
+            id: ctxCard
+            x: root.ctxX; y: root.ctxY
+            width: root.ctxW; height: root.ctxH
+            radius: Style.rCard
+            color: root.cardColor
+            border.width: Style.chromeBorderWidth; border.color: Style.chromeBorder
+            // Absorb clicks on the card body so they don't fall through to the backdrop.
+            MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
+            Column {
+                anchors.fill: parent; anchors.margins: root.ctxPad
+                Repeater {
+                    model: root.ctxActions
+                    delegate: Rectangle {
+                        id: crow
+                        required property var modelData
+                        width: parent.width; height: root.ctxRowH
+                        radius: Style.rControl
+                        color: crHov.containsMouse ? Style.controlHover : "transparent"
+                        Behavior on color { ColorAnimation { duration: 80 } }
+                        Text {
+                            anchors { left: parent.left; leftMargin: 10; right: parent.right; rightMargin: 10
+                                      verticalCenter: parent.verticalCenter }
+                            text: crow.modelData.label
+                            color: crow.modelData.key === "close" ? Colors.fgPrimary : Colors.fgBright
+                            font.pixelSize: 12; font.family: Style.font; elide: Text.ElideRight
+                        }
+                        MouseArea {
+                            id: crHov
+                            anchors.fill: parent; hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.ctxDo(crow.modelData.key)
                         }
                     }
                 }

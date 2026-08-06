@@ -94,15 +94,10 @@ PanelWindow {
 
     // ── Placement ─────────────────────────────────────────────────────────────────
     readonly property string mon: root.monitor?.name ?? ""
-    // Track the focused window's fullscreen state — when fullscreen, the bar is hidden, so the
-    // card docks to the bare screen edge instead of the (absent) bar.
-    property bool fullscreen: false
-    Connections {
-        target: Compositor
-        function onRawEvent(event) {
-            if (event.name === "fullscreen") root.fullscreen = (("" + event.data).trim() === "1")
-        }
-    }
+    // A REAL fullscreen window on this monitor hides the bar, so the card docks to the bare screen
+    // edge instead of the (absent) bar. Per monitor, from the live client list — a maximized window
+    // keeps the bar, and a stale flag made the card sit on top of it.
+    readonly property bool fullscreen: Compositor.fullscreenOn(root.monitor?.id ?? -1)
 
     readonly property var    _pp:   VtlConfig.osdPositionFor(root.mon).split("-")
     readonly property string vside: root._pp[0]                   // top | center | bottom

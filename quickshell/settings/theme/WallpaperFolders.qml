@@ -127,9 +127,8 @@ Item {
 
             // ── Folder ────────────────────────────────────────────────────────
             Card {
-                CardLabel { text: "WALLPAPER FOLDER" }
-                SubLabel { width: parent.width
-                           text: "One folder per monitor. Clear (✕) falls back to the legacy / bundled wallpapers." }
+                CardLabel { text: "WALLPAPER FOLDER"
+                            hint: "One folder per monitor. Clear (✕) falls back to the legacy / bundled wallpapers." }
 
                 Flow {
                     visible: root.monitors.length > 1
@@ -189,7 +188,8 @@ Item {
 
                 // Slide / push: which side the new wallpaper enters from.
                 FieldLabel { text: "From"
-                             visible: VtlConfig.wallpaperTransition === "slide" || VtlConfig.wallpaperTransition === "push" }
+                             visible: VtlConfig.wallpaperTransition === "slide" || VtlConfig.wallpaperTransition === "push"
+                             hint: "Random rolls the transition (and direction) fresh on every change." }
                 Flow {
                     width: parent.width; spacing: 6
                     visible: VtlConfig.wallpaperTransition === "slide" || VtlConfig.wallpaperTransition === "push"
@@ -203,8 +203,6 @@ Item {
                         }
                     }
                 }
-                SubLabel { visible: VtlConfig.wallpaperTransition === "random"; width: parent.width
-                           text: "Random rolls the transition (and direction) fresh on every change." }
 
                 Stepper { label: "Duration"; unit: "ms"; step: 50; min: 150; max: 2000; labelWidth: 90
                           value: VtlConfig.wallpaperTransitionMs; onChanged: root.saveKey("wallpaper_transition_ms", v) }

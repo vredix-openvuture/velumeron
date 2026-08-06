@@ -28,14 +28,10 @@ PanelWindow {
     readonly property int scrH: screen ? screen.height : 1080
     readonly property var  _lr: VtlConfig.lockRect(root.mon, root.scrW, root.scrH)
 
-    // Bar hidden by a fullscreen window → grow straight out of the bare screen edge.
-    property bool monFullscreen: false
-    Connections {
-        target: Compositor
-        function onRawEvent(event) {
-            if (event.name === "fullscreen") root.monFullscreen = (("" + event.data).trim() === "1")
-        }
-    }
+    // Bar hidden by a REAL fullscreen window on this monitor → grow straight out of the bare screen
+    // edge. Per-monitor, from the live client list: a maximized window keeps the bar, so it must not
+    // count (it used to, and the centre then rendered on top of the bar).
+    readonly property bool monFullscreen: Compositor.fullscreenOn(root.monitor?.id ?? -1)
 
     // ── Anchor: the notiftray bell publishes its edge / group / position; else fall back to the
     // top-right corner (where the bell usually lives) so it still grows sensibly. ──────────────
@@ -55,8 +51,11 @@ PanelWindow {
 
     // Panel size — width + height from Settings → Notifications. 0 = match the settings menu
     // (same percent-of-screen formula as Settings.qml), so the centre defaults to the menu's size.
-    readonly property int menuW: Math.max(420, Math.round(root.scrW * VtlConfig.menuWidthPctFor(root.mon)  / 100))
-    readonly property int menuH: Math.round(root.scrH * VtlConfig.menuHeightPctFor(root.mon) / 100)
+    // Matches the settings menu, which is now sized by the dashboard raster instead of a
+    // percentage (see Style.dashGrid*). 52 stands in for the settings rail the centre has
+    // no equivalent of, so the two panels still read as the same width.
+    readonly property int menuW: Math.min(Math.round(root.scrW * 0.94), Style.menuContentW + 52)
+    readonly property int menuH: Math.min(Math.round(root.scrH * 0.94), Style.dashGridH + Style.dashChromeH)
     readonly property int panelW: VtlConfig.notifyCenterWidth > 0
                                   ? Math.max(220, VtlConfig.notifyCenterWidth) : root.menuW
     readonly property int panelH: VtlConfig.notifyCenterHeight > 0
@@ -86,7 +85,9 @@ PanelWindow {
 
     readonly property int edgeR:  Style.panelR(VtlConfig.barInnerRadiusFor(root.mon))
     readonly property int flareR: VtlConfig.barInnerRadiusFor(root.mon)
-    readonly property color cFill: Style.panelColor(VtlConfig.osdColorful)
+    // Bar-panel colour (like the notification popups' tray) so the module-pill cards on it read the
+    // same in the centre as in the toasts.
+    readonly property color cFill: Style.panelColor(VtlConfig.barColorful)
     // Overlap the anchored bar edge by a hair so the bar's own inner border line is hidden.
     readonly property int seam:   2
     // Grow the Shapes by `pad` on every side so the fillet wedges + seam + the elastic bulge (all

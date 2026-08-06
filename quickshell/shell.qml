@@ -160,6 +160,16 @@ ShellRoot {
         function toggle(): void { if (UiState.windowSwitcherOpen) UiState.windowSwitcherOpen = false; else open() }
         function close():  void { UiState.windowSwitcherOpen = false }
     }
+    // Layout quick-switcher: Super+Alt+Tab — same open-advances semantics as the window switcher.
+    IpcHandler {
+        target: "layoutswitch"
+        function open(): void {
+            if (!UiState.layoutSwitcherOpen) { UiState.layoutSwitcherMon = Hyprland.focusedMonitor?.name ?? ""; UiState.layoutSwitcherOpen = true }
+            else UiState.layoutSwitcherNext++
+        }
+        function toggle(): void { if (UiState.layoutSwitcherOpen) UiState.layoutSwitcherOpen = false; else open() }
+        function close():  void { UiState.layoutSwitcherOpen = false }
+    }
     IpcHandler {
         target: "session"
         function toggle(): void { if (!UiState.sessionOpen) UiState.sessionMon = Hyprland.focusedMonitor?.name ?? ""; UiState.sessionOpen = !UiState.sessionOpen }
@@ -174,6 +184,9 @@ ShellRoot {
     IpcHandler {
         target: "lock"
         function lock(): void { LockState.engageRequested() }
+        // TEMP DEBUG (2026-07-28, dead-keyboard-after-resume): rescue hatch so the suspend repro
+        // never needs a reboot. REMOVE once the resume bug is fixed — this bypasses PAM!
+        function unlock(): void { LockState.locked = false }
     }
 
     // IPC: FancyZones overlay — poked by hypr.lua/modules/fancyzones.lua while a floating
@@ -248,9 +261,12 @@ ShellRoot {
     Process { id: weatherProc }
     function _fetchWeather() {
         if (!(VtlConfig.lockWidgetEnabled("weather") && VtlConfig.lockWeatherCity !== "")) return
+        // 3rd argument = how many forecast days to include (0 = current conditions only).
+        var days = VtlConfig.lockWeatherForecast
+                   ? Math.max(1, Math.min(3, VtlConfig.lockWeatherForecastDays)) : 0
         weatherProc.command = ["bash",
             Quickshell.env("VELUMERON_DIR") + "/assets/scripts/weather-fetch.sh",
-            VtlConfig.lockWeatherCity, VtlConfig.lockWeatherUnit]
+            VtlConfig.lockWeatherCity, VtlConfig.lockWeatherUnit, "" + days]
         weatherProc.running = false
         weatherProc.running = true
     }
@@ -265,6 +281,10 @@ ShellRoot {
         target: VtlConfig
         function onLockWeatherCityChanged() { _fetchWeather() }
         function onLockWeatherUnitChanged() { _fetchWeather() }
+        // Turning the outlook on (or asking for more days) needs a refetch — weather.json only
+        // carries the days that were requested when it was written.
+        function onLockWeatherForecastChanged()     { _fetchWeather() }
+        function onLockWeatherForecastDaysChanged() { _fetchWeather() }
     }
 
     // Native wallpaper engine: one background-layer surface per monitor (static images + live video
@@ -345,8 +365,16 @@ ShellRoot {
 
     // rofi successors: window switcher, clipboard history, session menu — one per screen.
     Variants { model: VtlConfig.componentEnabled("windowswitcher") ? Quickshell.screens : []; delegate: WindowSwitcher { required property var modelData; screen: modelData } }
+    Variants { model: VtlConfig.componentEnabled("windowswitcher") ? Quickshell.screens : []; delegate: LayoutQuickSwitcher { required property var modelData; screen: modelData } }
     Variants { model: VtlConfig.componentEnabled("clipboard") ? Quickshell.screens : []; delegate: ClipboardMenu  { required property var modelData; screen: modelData } }
     Variants { model: VtlConfig.componentEnabled("session") ? Quickshell.screens : []; delegate: SessionOverlay { required property var modelData; screen: modelData } }
+
+    // Startup splash — the curtain over the shell's own start (once per session; SplashState makes
+    // that call). The surfaces only exist while it plays, so it costs nothing afterwards.
+    Variants {
+        model: SplashState.active ? Quickshell.screens : []
+        delegate: Splash { required property var modelData; screen: modelData }
+    }
 
     // Native lockscreen: a single WlSessionLock that manages one surface per monitor itself (not a
     // per-screen Variants). Engaged via the `lock` IPC / LockState.locked.
@@ -457,6 +485,13 @@ ShellRoot {
     Variants {
         model: VtlConfig.componentEnabled("zones") ? Quickshell.screens : []
         delegate: ZoneOverlay { required property var modelData; screen: modelData }
+    }
+
+    // Dashboard editor: a standalone window over everything, opened from the settings home page's
+    // pencil (UiState.dashEditOpen). Shows on the monitor the menu was on; the menu hides meanwhile.
+    Variants {
+        model: Quickshell.screens
+        delegate: DashEditor { required property var modelData; screen: modelData }
     }
 
     // Keybind cheatsheet: one per screen, shown via UiState.keybindContext

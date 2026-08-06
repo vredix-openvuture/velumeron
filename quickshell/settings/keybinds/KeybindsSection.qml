@@ -73,13 +73,10 @@ Item {
             }
 
             Card {
-                CardLabel { text: "EDITING BINDS" }
-                SubLabel {
-                    width: parent.width
-                    text: "Keybinds are code, not settings: they live in hypr.lua/modules/keybinds.lua " +
-                          "(hl.bind, Lua). Edit the file and run “hyprctl reload” — the cheatsheet " +
-                          "content follows in quickshell/keybind/KeybindHelp.qml."
-                }
+                CardLabel { text: "EDITING BINDS"
+                            hint: "Keybinds are code, not settings: they live in hypr.lua/modules/keybinds.lua " +
+                                  "(hl.bind, Lua). Edit the file and run “hyprctl reload” — the cheatsheet " +
+                                  "content follows in quickshell/keybind/KeybindHelp.qml." }
                 SubLabel {
                     width: parent.width
                     text: "IPC from a terminal:  qs -p $VELUMERON_DIR/quickshell ipc call keybind all"

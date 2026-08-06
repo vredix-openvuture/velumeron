@@ -61,11 +61,8 @@ Item {
             spacing: Style.cardGap
 
             Card {
-                CardLabel { text: "BACKGROUND DAEMONS" }
-                SubLabel {
-                    width: parent.width
-                    text: "Commands started once when the session begins (exec_once)."
-                }
+                CardLabel { text: "BACKGROUND DAEMONS"
+                            hint: "Commands started once when the session begins (exec_once)." }
                 Repeater {
                     model: root.daemons.length
                     delegate: Row {
@@ -88,11 +85,8 @@ Item {
             }
 
             Card {
-                CardLabel { text: "WORKSPACE START APPS" }
-                SubLabel {
-                    width: parent.width
-                    text: "Apps launched on a specific workspace when the session begins."
-                }
+                CardLabel { text: "WORKSPACE START APPS"
+                            hint: "Apps launched on a specific workspace when the session begins." }
                 Repeater {
                     model: root.startApps.length
                     delegate: Row {

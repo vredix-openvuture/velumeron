@@ -200,12 +200,9 @@ Item {
             }
 
             Card {
-                CardLabel { text: "FUNCTION KEYS" }
-                SubLabel {
-                    width: parent.width
-                    text: "Stored for keyboards without dedicated media keys — the default keybinds "
-                        + "use the XF86 media events directly, so these mappings are not consumed yet."
-                }
+                CardLabel { text: "FUNCTION KEYS"
+                            hint: "Stored for keyboards without dedicated media keys — the default keybinds "
+                                  + "use the XF86 media events directly, so these mappings are not consumed yet." }
                 Repeater {
                     model: root.fnKeys
                     delegate: Dropdown {

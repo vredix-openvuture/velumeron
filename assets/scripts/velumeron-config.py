@@ -421,7 +421,7 @@ def verb_export(path):
 
     path = os.path.abspath(os.path.expanduser(path))
     if not os.path.splitext(path)[1]:
-        path += ".json"
+        path += ".velbak"          # the bundle is JSON, but it is OUR bundle — give it our suffix
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(bundle, f, indent=2, ensure_ascii=False)
@@ -433,7 +433,9 @@ def verb_import(path):
     path = os.path.abspath(os.path.expanduser(path))
     data = read_json(path, None)
     if not isinstance(data, dict) or not data.get("_velumeron_export"):
-        print("import:invalid", file=sys.stderr)
+        # stdout, not stderr: this line is the protocol the settings page listens on (it only
+        # reads stdout), so on stderr the "not a backup file" message never reached the user.
+        print("import:invalid")
         sys.exit(1)
 
     new_settings = data.get("settings")

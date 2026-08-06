@@ -28,6 +28,7 @@ source "$SCRIPT_DIR/lib/env.sh"
 # Fields are split on '|'; no snippet below may contain a literal '|'.
 SERVICES=(
     "hypridle|pgrep -x hypridle|hypridle|pkill -x hypridle"
+    "lid-inhibit|pgrep -f 'systemd-inhibit.*handle-lid-switch'|systemd-inhibit --what=handle-lid-switch --who=velumeron --why='Hyprland handles the lid' --mode=block sleep infinity|pkill -f 'systemd-inhibit.*handle-lid-switch'"
     "nm-applet|pgrep -x nm-applet|nm-applet|pkill -x nm-applet"
     "polkit|systemctl --user is-active --quiet hyprpolkitagent|systemctl --user start hyprpolkitagent|systemctl --user stop hyprpolkitagent"
     "keyring|pgrep -x gnome-keyring-d|gnome-keyring-daemon --start --components=secrets|pkill -x gnome-keyring-d"

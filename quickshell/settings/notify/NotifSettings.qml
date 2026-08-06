@@ -49,20 +49,19 @@ Item {
             // ── Centre ────────────────────────────────────────────────────────
             Card {
                 CardLabel { text: "CENTRE" }
-                FieldLabel { text: "Position" }
+                FieldLabel { text: "Position"
+                             hint: "Auto: dock to the notifications module, else the Velumeron icon, else top-left." }
                 Dropdown {
                     summary: root.posLabel(VtlConfig.notifyCenterPos)
                     options: root.centrePositions.map(function (p) { return { label: root.posLabel(p), key: p, on: VtlConfig.notifyCenterPos === p } })
                     onPicked: root.save("notify_center_position", key)
                 }
-                SubLabel { width: parent.width
-                           text: "Auto: dock to the notifications module, else the Velumeron icon, else top-left." }
-                FieldLabel { text: "Size" }
+                FieldLabel { text: "Size"
+                             hint: "0 = match the settings menu size." }
                 Stepper { label: "Width"; unit: VtlConfig.notifyCenterWidth > 0 ? "px" : "auto"; step: 5; min: 0; max: 900
                           value: VtlConfig.notifyCenterWidth; onChanged: root.save("notify_center_width", v) }
                 Stepper { label: "Height"; unit: VtlConfig.notifyCenterHeight > 0 ? "px" : "auto"; step: 5; min: 0; max: 2000
                           value: VtlConfig.notifyCenterHeight; onChanged: root.save("notify_center_height", v) }
-                SubLabel { width: parent.width; text: "0 = match the settings menu size." }
             }
 
             // ── Behaviour ─────────────────────────────────────────────────────

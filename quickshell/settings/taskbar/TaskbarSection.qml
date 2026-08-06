@@ -36,16 +36,9 @@ Item {
             spacing: Style.cardGap
 
             Card {
-                CardLabel { text: "TASKBAR" }
-                SubLabel { width: parent.width
-                           text: "A strip of the open windows — click one to focus it. Placement follows the OSD." }
-                Toggle {
-                    label: "Enable taskbar"
-                    sub:   "Show the open-windows strip"
-                    on:    VtlConfig.taskbarEnabled
-                    onToggled: root.save("taskbar_enabled", !VtlConfig.taskbarEnabled)
-                }
-
+                CardLabel { text: "TASKBAR"
+                            hint: "A strip of the open windows — click one to focus it. Placement follows the OSD." }
+                // On/off lives in the one switch pinned atop this page (Settings.qml).
                 FieldLabel { text: "Position" }
                 PosGrid { current: VtlConfig.taskbarPosition; onPicked: root.save("taskbar_position", key) }
 
@@ -95,8 +88,8 @@ Item {
                 Stepper { label: "Float margin"; unit: "px"; step: 4; min: 0; max: 100; labelWidth: 110
                           value: VtlConfig.taskbarMargin; onChanged: root.save("taskbar_margin", v) }
 
-                FieldLabel { text: "Per monitor" }
-                SubLabel { width: parent.width; text: "Override the master switch on individual screens." }
+                FieldLabel { text: "Per monitor"
+                             hint: "Override the master switch on individual screens." }
                 Repeater {
                     model: Quickshell.screens
                     delegate: Toggle {

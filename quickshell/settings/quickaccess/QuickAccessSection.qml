@@ -50,11 +50,8 @@ Item {
             spacing: Style.cardGap
 
             Card {
-                CardLabel { text: "QUICK ACCESS APPS" }
-                SubLabel {
-                    width: parent.width
-                    text: "Launched with SUPER + F1–F12. Type to search installed apps or enter any command."
-                }
+                CardLabel { text: "QUICK ACCESS APPS"
+                            hint: "Launched with SUPER + F1–F12. Type to search installed apps or enter any command." }
 
                 Repeater {
                     model: 12

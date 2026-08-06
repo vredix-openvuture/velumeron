@@ -33,25 +33,23 @@ PanelWindow {
     readonly property int    sw:     screen ? screen.width  : 1920
     readonly property int    sh:     screen ? screen.height : 1080
 
-    // Track the focused window's fullscreen state (Hyprland "fullscreen>>0/1").
-    property bool monFullscreen: false
-    Connections {
-        target: Hyprland
-        function onRawEvent(event) {
-            if (event.name === "fullscreen") root.monFullscreen = (("" + event.data).trim() === "1")
-        }
-    }
+    // Is a real fullscreen window hiding THIS monitor's bar? Derived per monitor from the live
+    // client list — the raw "fullscreen>>0/1" event also fires for maximized windows (bar stays
+    // visible) and never resets, which made the menu drop to the screen edge and cover the bar.
+    readonly property bool monFullscreen: Compositor.fullscreenOn(root.monitor?.id ?? -1)
 
     // Menu dimensions — a % of the monitor (set in Settings → Bar; per-monitor capable). A % of a
     // NARROW (e.g. portrait) monitor collapses the menu until the content truncates, so guard both
     // axes: never smaller than a usable floor, never larger than 94% of the screen (so the floor
     // itself can't overflow a small monitor either).
+    // Sized BY the dashboard raster (Style.dashGrid*), not by a percentage the user sets
+    // separately: two independent numbers could never divide evenly, and the remainder
+    // showed as dead space under the last row. Still clamped to the monitor — a big raster
+    // on a small screen must not grow a menu that does not fit.
     readonly property int menuW:  screen
-        ? Math.min(Math.round(screen.width  * 0.94),
-                   Math.max(420, Math.round(screen.width  * VtlConfig.menuWidthPctFor(root.mon)  / 100))) : 300
+        ? Math.min(Math.round(screen.width  * 0.94), Style.menuContentW + root.railW) : 300
     readonly property int menuH:  screen
-        ? Math.min(Math.round(screen.height * 0.94),
-                   Math.max(460, Math.round(screen.height * VtlConfig.menuHeightPctFor(root.mon) / 100))) : 540
+        ? Math.min(Math.round(screen.height * 0.94), Style.dashGridH + Style.dashChromeH) : 540
 
     // ── How the menu merges into the bar ─────────────────────────────────────────
     // The menu butts against its anchored edge (mEdge) and, on an L-bar, also blends into the
@@ -204,6 +202,7 @@ PanelWindow {
         { key: "monitors",      icon: "󰍺", title: "Monitors",      comp: monitorsComp },
         { key: "workspaces",    icon: "󱂬", title: "Workspaces",    comp: workspacesComp },
         { key: "peripherals",   icon: "󰍽", title: "Peripherals",   comp: peripheralsComp },
+        { key: "boot",          icon: "󰘚", title: "Boot & Login",  comp: bootComp },
         { key: "autostart",     icon: "󱓞", title: "Autostart",     comp: autostartComp },
         { key: "quickaccess",   icon: "󱊫", title: "Quick access",  comp: quickAccessComp },
         { key: "integrations",  icon: "󰐱", title: "Integrations",  comp: integrationsComp },
@@ -224,7 +223,7 @@ PanelWindow {
         { key: "layouts",       icon: "󰕴", title: "Layouts",       comp: layoutsComp },
         { key: "windowtags",    icon: "󰓹", title: "Window tags",   comp: windowTagsComp },
         { key: "windowrules",   icon: "󱪯", title: "Window rules",  comp: windowRulesComp },
-        { key: "backup",        icon: "󰆓", title: "Import / Export", comp: backupComp },
+        { key: "velumeron",     icon: "󰒓", title: "Shell",         comp: velumeronComp },
         { key: "info",          icon: "󰋽", title: "Info",          comp: null,
           hint: "System information." },
         { key: "network",       rail: false, title: "Network",     comp: networkComp },
@@ -239,13 +238,30 @@ PanelWindow {
     // sections array) keeps the array non-reactive — a style switch must not reload the open page.
     function sectionHint(s)  { return s === "info" ? Wording.s("hint.info") : (root.sectionMeta(s)?.hint ?? "") }
 
+    // A section can take itself out of navigation. Kept as a FUNCTION rather than a flag
+    // in `sections`: that array is deliberately non-reactive (a reactive entry reloads the
+    // open page on every unrelated change), while navSections below is recomputed anyway.
+    function sectionShown(key) {
+        if (key === "boot") return VtlConfig.anyBootComponent
+        return true
+    }
+    // Leaving the page you are standing on hidden would strand you on it — the rail would
+    // no longer have an icon to leave by.
+    Connections {
+        target: VtlConfig
+        function onAnyBootComponentChanged() {
+            if (!VtlConfig.anyBootComponent && root.activeSection === "boot") root.activeSection = "home"
+        }
+    }
+
     // ── Section grouping — shared by the sidebar rail AND the page-mode nav list ──
     readonly property var navGroups: [
-        { name: "System",   keys: ["home", "monitors", "workspaces", "peripherals", "keybinds"] },
+        { name: "System",   keys: ["home", "monitors", "workspaces", "peripherals", "boot", "keybinds"] },
         { name: "Look",     keys: ["autostart", "quickaccess", "integrations", "style", "wallpaper"] },
         { name: "Services", keys: ["bar", "osd", "notifications", "launcher", "taskbar",
                                    "windowtags", "lockscreen", "calendar", "corners"] },
-        { name: "Windows",  keys: ["windowrules", "layouts", "zones", "backup"] }
+        { name: "Windows",  keys: ["windowrules", "layouts", "zones"] },
+        { name: "Velumeron", keys: ["velumeron"] }
     ]
     // Resolve each group's keys → section metas; any rail-eligible section not placed lands in a
     // trailing "More" group so nothing ever vanishes from navigation.
@@ -257,12 +273,15 @@ PanelWindow {
             var keys = root.navGroups[s].keys
             for (var i = 0; i < keys.length; i++) {
                 var m = root.sectionMeta(keys[i])
-                if (m && m.rail !== false && m.key !== "info") { metas.push(m); placed[keys[i]] = true }
+                if (m && m.rail !== false && m.key !== "info" && root.sectionShown(keys[i]))
+                    { metas.push(m); placed[keys[i]] = true }
             }
             if (metas.length > 0) out.push({ name: root.navGroups[s].name, metas: metas })
         }
         var extra = []
-        var all = root.sections.filter(function (x) { return x.rail !== false && x.key !== "info" })
+        var all = root.sections.filter(function (x) {
+            return x.rail !== false && x.key !== "info" && root.sectionShown(x.key)
+        })
         for (var k = 0; k < all.length; k++)
             if (!placed[all[k].key]) extra.push(all[k])
         if (extra.length > 0) out.push({ name: "More", metas: extra })
@@ -655,7 +674,7 @@ PanelWindow {
             Component { id: launcherComp;  LauncherSection  {} }
             Component { id: wallpaperComp; WallpaperSection {} }
             Component { id: styleComp;     StyleSection     {} }
-            Component { id: backupComp;    BackupSection    {} }
+            Component { id: velumeronComp; VelumeronSection {} }
             Component { id: osdComp;       OsdSection       {} }
             Component { id: notifyComp;    NotifSettings    {} }
             Component { id: lockComp;      LockscreenSection {} }
@@ -672,6 +691,7 @@ PanelWindow {
             Component { id: integrationsComp; IntegrationsSection {} }
             Component { id: quickAccessComp; QuickAccessSection {} }
             Component { id: peripheralsComp; PeripheralsSection {} }
+            Component { id: bootComp;        BootSection {} }
             Component { id: windowRulesComp; WindowRulesSection {} }
 
             // Placeholder for registry entries without a page yet (comp: null).

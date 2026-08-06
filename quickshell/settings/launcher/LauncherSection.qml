@@ -99,11 +99,10 @@ Item {
             // ── Fullscreen grid ───────────────────────────────────────────────
             Card {
                 visible: VtlConfig.launcherFullscreen
-                CardLabel { text: "FULLSCREEN GRID" }
+                CardLabel { text: "FULLSCREEN GRID"
+                            hint: "Number of app columns in the fullscreen grid." }
                 Stepper { label: "Columns"; step: 1; min: 3; max: 12; labelWidth: 96
                           value: VtlConfig.launcherFsCols; onChanged: root.save("launcher_fs_cols", v) }
-                SubLabel { width: parent.width
-                           text: "Number of app columns in the fullscreen grid." }
             }
         }
     }

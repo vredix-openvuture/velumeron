@@ -209,7 +209,9 @@ Item {
             id: arrHdr
             anchors { top: parent.top; left: parent.left; right: parent.right }
             height: 34
-            CardLabel { text: "ARRANGEMENT"; anchors.verticalCenter: parent.verticalCenter }
+            CardLabel { text: "ARRANGEMENT"; anchors.verticalCenter: parent.verticalCenter
+                        hint: "Drag a monitor to arrange — it snaps to the raster, flush edges win. "
+                              + "Monitors set to automatic position don't move." }
             TextButton {
                 anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                 label: "Done"; primary: true
@@ -229,11 +231,6 @@ Item {
             id: arrFoot
             anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
             spacing: 8
-            SubLabel {
-                width: parent.width
-                text: "Drag a monitor to arrange — it snaps to the raster, flush edges win. "
-                    + "Monitors set to automatic position don't move."
-            }
             Row {
                 spacing: 10
                 TextButton { label: "Apply & reload"; primary: root.dirty; onClicked: root.apply() }
@@ -262,7 +259,8 @@ Item {
             Card {
                 Item {
                     width: parent.width; height: 22
-                    CardLabel { text: "ARRANGEMENT"; anchors.verticalCenter: parent.verticalCenter }
+                    CardLabel { text: "ARRANGEMENT"; anchors.verticalCenter: parent.verticalCenter
+                                hint: "Click to open the arrange view (fixed snap raster)." }
                     TextButton {
                         anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                         label: "󰊓  Arrange"
@@ -284,10 +282,6 @@ Item {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.arranging = true
                     }
-                }
-                SubLabel {
-                    width: parent.width
-                    text: "Click to open the arrange view (fixed snap raster)."
                 }
                 Flow {
                     width: parent.width; spacing: 6
@@ -328,7 +322,12 @@ Item {
                     onPicked: key => root.upd({ scale: parseFloat(key) })
                 }
 
-                FieldLabel { text: "Rotation" }
+                FieldLabel { text: "Rotation"
+                             hint: "In HDR mode the SDR desktop maps to reference brightness/gamut and looks dim "
+                                   + "and washed out — raise these until it matches your usual look "
+                                   + "(brightness 150–200 %, saturation 110–125 % are typical)."
+                                   + "\n\n" + "Workspace rules and the lockscreen follow the primary/secondary order (mon1/mon2) — "
+                                   + "changing it re-targets them on apply." }
                 Segmented {
                     equal: true
                     segments: [
@@ -387,13 +386,6 @@ Item {
                     value: root.selMon ? Math.round((root.selMon.sdrsaturation || 1) * 100) : 100
                     onChanged: v => root.upd({ sdrsaturation: v / 100 })
                 }
-                SubLabel {
-                    visible: root.selMon ? root.selMon.supports_hdr === true : false
-                    width: parent.width
-                    text: "In HDR mode the SDR desktop maps to reference brightness/gamut and looks dim "
-                        + "and washed out — raise these until it matches your usual look "
-                        + "(brightness 150–200 %, saturation 110–125 % are typical)."
-                }
 
                 Row {
                     spacing: 10
@@ -407,12 +399,6 @@ Item {
                         label: "Remove"
                         onClicked: root.removeSelected()
                     }
-                }
-                SubLabel {
-                    visible: root.mons.length > 1
-                    width: parent.width
-                    text: "Workspace rules and the lockscreen follow the primary/secondary order (mon1/mon2) — "
-                        + "changing it re-targets them on apply."
                 }
             }
 

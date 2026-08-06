@@ -106,12 +106,10 @@ Item {
             readonly property bool expanded: stacked && root.expandedApps[modelData.app] === true
             width:  parent.width
             radius:      Style.rControl
-            // Match the settings menu's cards — the accent-tinted card fill — but always carry a soft,
-            // subtle hairline border (the flat style's cardBorderW is 0), so each message reads as a
-            // gently outlined card.
-            color:       cardMa.containsMouse && item.stacked ? Style.controlHover : Style.cardFill
-            borderWidth: 1
-            borderColor: Style.tint(Colors.boNormal, 0.5)
+            // Match the notification popups / bar modules — the module-pill fill (bgElement at the
+            // module-bg opacity), borderless (the fill alone defines the card).
+            color:       cardMa.containsMouse && item.stacked ? Style.controlHover : Style.tint(Colors.bgElement, Style.lift(VtlConfig.barModuleBgOpacity))
+            borderWidth: 0
             implicitHeight: item.expanded ? igroup.y + igroup.implicitHeight + 14
                                           : Math.max(54, ibody.y + ibody.implicitHeight + 14)
 

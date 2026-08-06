@@ -58,12 +58,9 @@ Item {
 
             // ── Wallpaper quick-menu ──────────────────────────────────────────
             Card {
-                CardLabel { text: "WALLPAPER QUICK-MENU" }
-                SubLabel {
-                    width: parent.width
-                    text: "Swaps the focused monitor's wallpaper, grown out of the bar (per-monitor folder). "
-                        + "Bind it in Hyprland, e.g.:\n  bind = $mod, W, exec, qs -p ~/.config/velumeron/quickshell ipc call wallpaper toggle"
-                }
+                CardLabel { text: "WALLPAPER QUICK-MENU"
+                            hint: "Swaps the focused monitor's wallpaper, grown out of the bar (per-monitor folder). "
+                                  + "Bind it in Hyprland, e.g.:\n  bind = $mod, W, exec, qs -p ~/.config/velumeron/quickshell ipc call wallpaper toggle" }
             }
 
             // ── System OSD: placement ─────────────────────────────────────────
