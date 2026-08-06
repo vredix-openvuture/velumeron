@@ -1,0 +1,86 @@
+# theme.txt — Velumeron's GRUB boot menu.
+#
+# Source template. `boot-theme.py generate` copies this into
+# ~/.config/velumeron/boot/grub/velumeron/, replaces every @token@ with the brand
+# colours, and renders background.png (purple wash + the wordmark in the upper
+# third) plus the select_* 9-slice next to it.
+#
+# LAYOUT — the wordmark owns the top, the menu sits below it, and they must not
+# meet. The mark is baked into background.png centred on 19% of the height and is
+# ~17% of the height tall, so it ends around 28%. The menu therefore starts at 42%:
+# that gap is deliberate, and moving either number without the other is what caused
+# the first version to draw the menu straight through the logo.
+#
+# FONTS — GRUB cannot read a TTF, so boot-theme.py converts Fredoka to .pf2 (one
+# file per size, since GRUB cannot scale a bitmap font) and drops them beside this
+# file. grub-mkconfig's 00_header loads every *.pf2 it finds in the theme dir, so
+# the real boot needs no further wiring; a hand-written grub.cfg (the qemu preview)
+# has to `loadfont` them itself.
+#
+# The names below are exactly what grub-mkfont writes into each file
+# ("<family> <style> <size>"). Naming a font that is NOT loaded drops the whole
+# theme back to the plain text menu — a silent, confusing failure — so these
+# strings and GRUB_FONT_SIZES in boot-theme.py have to move together.
+
+title-text: ""
+desktop-image: "background.png"
+desktop-color: "@bg@"
+
+terminal-box: "terminal_*.png"
+terminal-border: "0"
+
++ boot_menu {
+    left       = 28%
+    width      = 44%
+    top        = 42%
+    height     = 34%
+
+    # item_height has to clear the 9-slice's own minimum (2 corners + 1 edge) or
+    # GRUB stretches the highlight past the row and it swallows the next entry —
+    # exactly what the first version did. Corners are 6px, edge 4px → 16px minimum.
+    #
+    # The highlight GRUB draws is item_height PLUS the pixmap's own north/south
+    # edges, and the text is inset by item_padding plus the west edge. Those two
+    # sums are what have to match for the label to sit evenly inside the box, which
+    # is why these three numbers are tuned against a real render, not guessed.
+    # The icon column, now that it carries actual icons (icons/<class>.png, rendered
+    # from the Nerd Font by boot-theme.py). It was zeroed while it was empty, because
+    # GRUB reserves the space either way and it was silently pushing every label 27px
+    # to the right of the highlight's edge.
+    icon_width   = 28
+    icon_height  = 28
+    # GRUB insets an item's text by its pixmap's border size. Give ONLY the selected
+    # row a pixmap and it sits `corner` px lower than every other row — that is the
+    # drift toward the neighbour below. So the unselected rows get item_*.png: the
+    # same geometry, painted fully transparent. Same inset everywhere, no drift.
+    #
+    # item_height is the text height; all the visible padding around the highlight
+    # comes from the pixmap's 10px corners, which is also why item_padding is 0 —
+    # otherwise the left inset would be 10 + padding while the top stayed 10.
+    item_height  = 20
+    item_spacing = 32
+    item_padding = 0
+    item_font           = "Fredoka Regular 20"
+    item_color          = "@fg@"
+    selected_item_color = "@bright@"
+    item_pixmap_style          = "item_*.png"
+    selected_item_pixmap_style = "select_*.png"
+
+    scrollbar       = true
+    scrollbar_width = 3
+    scrollbar_thumb = "select_c.png"
+}
+
+# The countdown as a thin rule under the menu — the same gesture the bar makes.
++ progress_bar {
+    id     = "__timeout__"
+    left   = 28%
+    width  = 44%
+    top    = 82%
+    height = 8
+
+    show_text    = false
+    bg_color     = "@track@"
+    fg_color     = "@glow@"
+    border_color = "@track@"
+}

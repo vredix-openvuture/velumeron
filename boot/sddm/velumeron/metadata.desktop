@@ -1,0 +1,12 @@
+[SddmGreeterTheme]
+Name=Velumeron
+Description=Velumeron login — the lockscreen's surface, coloured from the live wallust palette
+Author=Velumeron
+Type=sddm-theme
+Version=1.0
+License=GPL-3.0
+Screenshot=preview.png
+Preview=preview.png
+MainScript=Main.qml
+ConfigFile=theme.conf
+QtVersion=6

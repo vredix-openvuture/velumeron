@@ -1,0 +1,10 @@
+[Plymouth Theme]
+Name=Velumeron
+Description=Velumeron boot splash — the mark emerges, coloured from the live wallust palette
+ModuleName=script
+
+[script]
+# Absolute paths: plymouth reads this from inside the initramfs, where relative
+# paths do not resolve to the theme dir. @theme_dir@ is where boot-theme.py installs.
+ImageDir=@theme_dir@
+ScriptFile=@theme_dir@/velumeron.script

@@ -1,0 +1,97 @@
+# velumeron.script — Velumeron's Plymouth boot splash.
+#
+# The wordmark, large and centred on the purple wash, with a highlight sweeping
+# across it left to right — the boot's "still working" signal, in place of a
+# spinner. Plymouth's script language has no shaders and no per-pixel access, so
+# the sweep is PRE-RENDERED: boot-theme.py writes sweep-0.png … sweep-N.png, each
+# the same wordmark with the bright band a step further right, and this cycles
+# through them. @frames@ is filled in with how many were written.
+#
+# Source template — `boot-theme.py generate` substitutes every @token@ and copies
+# it into ~/.config/velumeron/boot/plymouth/velumeron/. Edit here, not there.
+
+Window.SetBackgroundTopColor(@bg_r@, @bg_g@, @bg_b@);
+Window.SetBackgroundBottomColor(@bg2_r@, @bg2_g@, @bg2_b@);
+
+screen_width  = Window.GetWidth();
+screen_height = Window.GetHeight();
+
+# ── The sweep ────────────────────────────────────────────────────────────────
+frame_count = @frames@;
+
+i = 0;
+while (i < frame_count) {
+    frames[i] = Image("sweep-" + i + ".png");
+    i++;
+}
+
+mark = Sprite();
+mark.SetZ(10);
+
+# Plymouth refreshes ~50×/s. Holding each frame for @hold@ refreshes makes one
+# pass take about @seconds@ s — slow enough to read as a sweep, not a flicker.
+hold  = @hold@;
+tick  = 0;
+index = 0;
+
+fun refresh_callback() {
+    tick++;
+    if (tick >= hold) {
+        tick = 0;
+        index++;
+        if (index >= frame_count)
+            index = 0;
+    }
+
+    img = frames[index];
+    mark.SetImage(img);
+    mark.SetX(screen_width  / 2 - img.GetWidth()  / 2);
+    mark.SetY(screen_height / 2 - img.GetHeight() / 2);
+}
+Plymouth.SetRefreshFunction(refresh_callback);
+
+# ── Password prompt (encrypted root) ─────────────────────────────────────────
+# A theme without this shows the animation and silently swallows every keystroke,
+# which on a LUKS system means an unbootable machine with no clue why.
+prompt_sprite = Sprite();
+prompt_sprite.SetZ(20);
+bullets_sprite = Sprite();
+bullets_sprite.SetZ(20);
+
+fun display_password_callback(prompt, bullets) {
+    text = Image.Text(prompt, @fg_r@, @fg_g@, @fg_b@);
+    prompt_sprite.SetImage(text);
+    prompt_sprite.SetX(screen_width / 2 - text.GetWidth() / 2);
+    prompt_sprite.SetY(screen_height * 0.72);
+
+    dots = "";
+    i = 0;
+    while (i < bullets) {
+        dots += "•";
+        i++;
+    }
+    dot_img = Image.Text(dots, @gl_r@, @gl_g@, @gl_b@);
+    bullets_sprite.SetImage(dot_img);
+    bullets_sprite.SetX(screen_width / 2 - dot_img.GetWidth() / 2);
+    bullets_sprite.SetY(screen_height * 0.72 + 34);
+}
+
+fun display_normal_callback() {
+    prompt_sprite.SetImage(Image.Text(""));
+    bullets_sprite.SetImage(Image.Text(""));
+}
+
+Plymouth.SetDisplayPasswordFunction(display_password_callback);
+Plymouth.SetDisplayNormalFunction(display_normal_callback);
+
+# ── Boot messages (fsck progress, systemd complaints) ────────────────────────
+message_sprite = Sprite();
+message_sprite.SetZ(20);
+
+fun message_callback(text) {
+    img = Image.Text(text, @mu_r@, @mu_g@, @mu_b@);
+    message_sprite.SetImage(img);
+    message_sprite.SetX(screen_width / 2 - img.GetWidth() / 2);
+    message_sprite.SetY(screen_height * 0.88);
+}
+Plymouth.SetMessageFunction(message_callback);
