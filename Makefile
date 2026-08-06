@@ -27,3 +27,9 @@ install:
 	ln -sf $(PREFIX)/share/velumeron/bin/velumeron-purge-goodby $(BIN)/velumeron-purge-goodby
 	ln -sf $(PREFIX)/share/velumeron/welcome_to_velumeron.sh $(BIN)/velumeron-setup
 	install -Dm644 assets/velumeron.desktop $(SESSIONS)/velumeron.desktop
+	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/velumeron/LICENSE
+	# Exec bits explicitly: a tree that arrived as a tarball (or through a copy that
+	# dropped them) would otherwise install scripts nobody can run.
+	find $(SHARE) -name '*.sh' -exec chmod 755 {} +
+	find $(SHARE)/assets/scripts -name '*.py' -exec chmod 755 {} +
+	chmod 755 $(SHARE)/welcome_to_velumeron.sh $(SHARE)/bin/*
