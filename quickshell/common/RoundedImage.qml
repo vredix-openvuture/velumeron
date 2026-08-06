@@ -18,6 +18,9 @@ Item {
     property int    radius:   12
     property string fallback: "󰝚"
     property int    decode:   512      // decode resolution — art is small on screen, not on disk
+    // How much bigger than the item the internal layers are rendered. 1 = off; raise it for
+    // surfaces that rotate or scale (see the layer comments below).
+    property int    supersample: 1
     readonly property bool ready: img.status === Image.Ready
 
     Image {
@@ -33,6 +36,13 @@ Item {
         // Drawn only through the effect below, never directly.
         visible: false
         layer.enabled: true
+        // Supersampled, because the result gets TRANSFORMED: the mpris disc spins, and a layer
+        // rendered at exactly item size turns to mush the moment it is rotated — the texture is
+        // built once at 18×18 and then resampled every frame. Rendering it at 3× and letting the
+        // GPU scale down keeps the cover crisp while it turns.
+        layer.smooth: true
+        layer.textureSize: Qt.size(Math.max(1, root.width) * root.supersample,
+                                   Math.max(1, root.height) * root.supersample)
     }
 
     Rectangle {
@@ -41,7 +51,11 @@ Item {
         radius: root.radius
         color: "black"
         visible: false
+        antialiasing: true
         layer.enabled: true
+        layer.smooth: true
+        layer.textureSize: Qt.size(Math.max(1, root.width) * root.supersample,
+                                   Math.max(1, root.height) * root.supersample)
     }
 
     MultiEffect {

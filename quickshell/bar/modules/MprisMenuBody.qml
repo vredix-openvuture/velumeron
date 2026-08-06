@@ -99,11 +99,30 @@ Column {
     }
 
     // ── Square hi-res cover ───────────────────────────────────────────────
-    RoundedImage {
+    // Size is a share of the popout width (Settings → Bar → Media): a fixed pixel cover would
+    // be a stamp on a wide popout and overflow a narrow one. Centred, so shrinking it does not
+    // push the artwork into a corner.
+    Item {
         width:  parent.width
-        height: parent.width
-        radius: Math.max(6, Style.rCard - 4)
-        source: root.player?.trackArtUrl ?? ""
+        height: cover.height
+        RoundedImage {
+            id: cover
+            anchors.horizontalCenter: parent.horizontalCenter
+            width:  Math.round(parent.width * VtlConfig.moduleSetting("mpris", "art_size_pct", 100) / 100)
+            height: width
+            radius: Math.max(6, Style.rCard - 4)
+            source: root.player?.trackArtUrl ?? ""
+
+            // Click takes you to the player's own window — the cover is the one thing on this
+            // popout that is unambiguously "that app over there". Off by default is wrong for a
+            // picture that looks clickable, so it is on unless switched off.
+            MouseArea {
+                anchors.fill: parent
+                enabled: VtlConfig.moduleSetting("mpris", "jump_to_player", true)
+                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: Actions.focusPlayer(root.player)
+            }
+        }
     }
 
     // ── Title + artist ────────────────────────────────────────────────────
@@ -170,7 +189,9 @@ Column {
         width:  big ? 48 : 40
         height: big ? 48 : 40
         radius: width / 2
-        color:  ch.containsMouse ? Style.accent : Style.controlFill
+        // Opaque on purpose: controlFill is a translucent accent tint, so with the wave running
+        // behind the popout the transport buttons had the spectrum shining through them.
+        color:  ch.containsMouse ? Style.accent : Style.liftSolid(Colors.bgElement)
         Behavior on color { ColorAnimation { duration: 100 } }
         Text {
             anchors.centerIn: parent

@@ -61,11 +61,19 @@ Item {
               def: false },
             { type: "toggle",  name: "cava_wave", label: "Audio wave behind the module",
               def: false },
+            { type: "toggle",  name: "show_controls", label: "Show controls", def: true },
+            // Title width ceiling in px — the title scrolls by itself once it is wider than this.
+            { type: "stepper", name: "max_title",       label: "Max title px", def: 180, min: 60, max: 480, step: 5 },
             // The flyout that grows out of this module on hover. Width is fixed, height
             // auto-fits the content up to this ceiling — so the second value is a LIMIT,
             // not a size: a short player does not stretch to fill it.
             { type: "stepper", name: "menu_width_pct",  label: "Popout width %",      def: 16, min: 8,  max: 40, step: 1 },
-            { type: "stepper", name: "menu_height_pct", label: "Popout max height %", def: 52, min: 20, max: 90, step: 2 } ]
+            { type: "stepper", name: "menu_height_pct", label: "Popout max height %", def: 52, min: 20, max: 90, step: 2 },
+            // Cover size inside the popout, as a share of its width — a pixel value would not
+            // survive the popout itself being resized above.
+            { type: "stepper", name: "art_size_pct",    label: "Popout cover %",      def: 100, min: 40, max: 100, step: 5 },
+            { type: "toggle",  name: "jump_to_player",  label: "Cover click jumps to the player",
+              def: true } ]
         case "battery": return [
             { type: "toggle",  name: "show_percent",  label: "Show percentage", def: true },
             { type: "stepper", name: "low_threshold", label: "Low at %", def: 10, min: 5, max: 50, step: 5 },
@@ -75,13 +83,6 @@ Item {
         case "workspaces":  return [
             { type: "stepper", name: "max_workspaces", label: "Max workspaces", def: 10, min: 1, max: 20, step: 1 },
             { type: "toggle",  name: "show_number",    label: "Number on active", def: true } ]
-        case "mpris": return [
-            { type: "toggle",  name: "show_art",  label: "Album art in the bar",
-              def: false },
-            { type: "toggle",  name: "cava_wave", label: "Audio wave behind the module",
-              def: false },
-            { type: "toggle",  name: "show_controls", label: "Show controls", def: true },
-            { type: "stepper", name: "max_title",     label: "Max title px", def: 180, min: 60, max: 480, step: 5 } ]
         case "temperature": return [
             { type: "dropdown", name: "unit", label: "Unit", def: "C",
               options: [{ label: "Celsius", key: "C" }, { label: "Fahrenheit", key: "F" }] } ]
@@ -183,6 +184,10 @@ Item {
                     onChanged: root.changed("icon_size", v)
                     onReset:   root.changed("icon_size", "")
                 }
+
+                // Reset belongs to the LAST card on the page, not below everything as a lone
+                // button — it only shows here for modules that have no settings card of their own.
+                ResetAll { visible: root.specFor(root.moduleKey).length === 0 }
             }
 
             // ── Module-specific (descriptor-driven, see specFor) ──────────────────
@@ -204,15 +209,18 @@ Item {
                         onLoaded: { item.spec = modelData }
                     }
                 }
+
+                ResetAll { }
             }
 
-            // Hands every field above — framework and module-specific — back to its default.
-            TextButton {
-                label: "Reset all to default"
-                width: parent.width
-                onClicked: root.resetAll()
-            }
         }
+    }
+
+    // Hands every field on the page — framework and module-specific — back to its default.
+    component ResetAll: TextButton {
+        label: "Reset all to default"
+        width: parent ? parent.width : 0
+        onClicked: root.resetAll()
     }
 
     // ── Spec-driven control components ────────────────────────────────────────────

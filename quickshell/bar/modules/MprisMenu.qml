@@ -14,7 +14,24 @@ Flyout {
     panelW:   Math.round(root.sw * VtlConfig.moduleSetting("mpris", "menu_width_pct",  16) / 100)
     maxH:     Math.round(root.sh * VtlConfig.moduleSetting("mpris", "menu_height_pct", 52) / 100)
 
+    // The wave lives HERE and not in the body: the body is a Column, and an anchored child
+    // inside a Column is not a background — it becomes a layout item and takes the panel's
+    // height with it (which is exactly how the popout stopped opening once).
+    CavaWave {
+        anchors.fill: parent
+        z: -1
+        // Backdrop, not a visualiser: few wide bars, kept low and dim so the cover, the title
+        // and the transport stay the subject of the popout.
+        radius: Style.rCard
+        bars: 10
+        intensity: 0.35
+        barGap: 4
+        opacity: 0.35
+        active: root.isOpen && (body.item?.player?.isPlaying ?? false)
+    }
+
     Loader {
+        id: body
         active: root.visible
         anchors { left: parent.left; right: parent.right; top: parent.top }
         sourceComponent: bodyComp

@@ -39,36 +39,18 @@ Item {
     // Only while this module is actually on screen AND something is playing: cava reads the
     // audio device, and keeping it alive for a paused player would burn CPU for a flat line.
     readonly property bool _waveOn: root._wave && root.visible && (root.player?.isPlaying ?? false)
-    on_WaveOnChanged: {
-        if (root._waveOn) CavaService.acquire()
-        else              CavaService.release()
-    }
-    Component.onDestruction: if (root._waveOn) CavaService.release()
 
-    Item {
+    CavaWave {
         anchors.fill: parent
-        visible: root._waveOn && CavaService.levels.length > 0
-        clip: true
         z: -1                              // behind the controls and the title
-        opacity: 0.5                       // decoration, not a readout
-        Row {
-            anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-            height: parent.height
-            spacing: 1
-            Repeater {
-                model: CavaService.levels.length
-                delegate: Rectangle {
-                    required property int index
-                    width: Math.max(1, (root.width - (CavaService.levels.length - 1)) / CavaService.levels.length)
-                    // A floor of 2px keeps the wave from vanishing entirely between beats.
-                    height: Math.max(2, (CavaService.levels[index] ?? 0) * parent.height)
-                    anchors.bottom: parent.bottom
-                    radius: 1
-                    color: Style.accent
-                    Behavior on height { NumberAnimation { duration: 70; easing.type: Easing.OutQuad } }
-                }
-            }
-        }
+        // The quietest of the three: in the bar the wave sits DIRECTLY behind the title, with
+        // no card between them, so anything more than a hint competes with the text.
+        radius: VtlConfig.barModuleBgRadiusFor(root.barMon)
+        bars: 14
+        intensity: 0.4
+        barGap: 2
+        opacity: 0.35
+        active: root._waveOn
     }
 
     TextMetrics { id: tm; font.family: root._font; font.pixelSize: root.fontSize; text: root.full }
@@ -90,16 +72,57 @@ Item {
         anchors.centerIn: parent
         spacing: 8
 
-        // Album art, off by default. Sized from the icon size so it lines up with the
-        // control glyphs instead of dictating the module's height.
-        RoundedImage {
-            visible: root._showArt && (root.player?.trackArtUrl ?? "") !== ""
+        // Album art as a little record: round, and it turns while the track plays. FIXED size on
+        // purpose — it is a picture, not a glyph, so tying it to the module's icon size made it
+        // shrink along with the transport arrows and turned the cover into a smudge. Shown
+        // whenever art is switched on: with no art the component's own glyph stands in, so the
+        // disc is there either way instead of the module changing width when a player ships no
+        // cover.
+        Item {
+            id: disc
+            // A little air to the module's edges — at 26 it sat flush against the bar's inner
+            // edge and read as cramped.
+            readonly property int size: 22
+            visible: root._showArt
             anchors.verticalCenter: parent.verticalCenter
-            width:  root.iconSize + 4
-            height: root.iconSize + 4
-            radius: Math.round((root.iconSize + 4) * 0.28)
-            decode: 128
-            source: root.player?.trackArtUrl ?? ""
+            width:  disc.size
+            height: disc.size
+
+            RoundedImage {
+                id: art
+                anchors.fill: parent
+                radius: Math.round(parent.width / 2)     // a circle, whatever the icon size is
+                // It spins, so it is rendered at 3× and scaled down — at 1× the rotation
+                // resampling made the cover look smeared. Decode close to that size too: a
+                // 128 px cover squeezed into 18 px is a five-step downscale for nothing.
+                supersample: 3
+                decode: 64
+                source: root.player?.trackArtUrl ?? ""
+
+                // The spindle hole — small, and only over real art (on the fallback glyph it
+                // would just sit on top of the note).
+                Rectangle {
+                    visible: art.ready
+                    anchors.centerIn: parent
+                    width:  Math.max(3, Math.round(parent.width * 0.16))
+                    height: width
+                    radius: width / 2
+                    color:  Colors.bgPrimary
+                    border.width: 1
+                    border.color: Style.tint(Colors.fgBright, 0.25)
+                }
+            }
+
+            // Turntable behaviour: the animation runs for as long as the disc is on screen and is
+            // PAUSED when playback is — pausing holds the current angle, so hitting play picks the
+            // rotation up where it stopped instead of snapping back to zero.
+            RotationAnimator on rotation {
+                running: disc.visible
+                paused:  !(root.player?.isPlaying ?? false)
+                from: 0; to: 360
+                duration: 6000
+                loops: Animation.Infinite
+            }
         }
 
         Ctl { visible: root._showCtl; icon: "󰒮"; onTrig: root.player?.previous() }
@@ -139,7 +162,9 @@ Item {
                     running:  root.overflow && root.visible
                     from:     0
                     to:       -marquee.seg
-                    duration: Math.max(3000, Math.round(marquee.seg * 20))
+                    // ~20 px/s: slow enough to read a long title while walking past the bar.
+                    // (Was twice that, which read as "scrolling" rather than as text.)
+                    duration: Math.max(6000, Math.round(marquee.seg * 50))
                     loops:    Animation.Infinite
                 }
             }

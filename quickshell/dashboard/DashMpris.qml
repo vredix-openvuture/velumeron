@@ -15,6 +15,23 @@ DashTile {
     // module shows a real picture instead of a thumbnail.
     readonly property int  cover: Math.max(52, Math.min(128, root.innerH - 24))
 
+    // Same wave as the bar module and the popout, behind the tile's content while something
+    // plays. Inset by the tile radius so it cannot paint over the rounded corners.
+    CavaWave {
+        anchors { fill: parent; margins: 1 }
+        z: -1
+        // A tile is small and already carries cover, title and transport: few wide bars, kept
+        // low, so the wave stays a backdrop instead of a second subject fighting the artwork.
+        // Clipped to the tile's own corner radius, so the outer bars end WITH the card
+        // instead of poking over its rounded bottom corners.
+        radius: Style.rCard
+        bars: 10
+        intensity: 0.45
+        barGap: 3
+        opacity: 0.6
+        active: root.player !== null && (root.player?.isPlaying ?? false)
+    }
+
     // ── No player ────────────────────────────────────────────────────────────
     Column {
         visible: root.player === null
@@ -41,6 +58,14 @@ DashTile {
             decode: 256
             anchors.verticalCenter: parent.verticalCenter
             source: root.player?.trackArtUrl ?? ""
+
+            // Click goes to the player's own window (Settings → Bar → Media).
+            MouseArea {
+                anchors.fill: parent
+                enabled: VtlConfig.moduleSetting("mpris", "jump_to_player", true)
+                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: Actions.focusPlayer(root.player)
+            }
         }
         Column {
             anchors.verticalCenter: parent.verticalCenter
@@ -82,7 +107,17 @@ DashTile {
             width: parent.width
             height: Math.max(0, parent.height - info.height - prog.height - bigCtl.height - 3 * parent.spacing)
             RoundedImage {
-                anchors.centerIn: parent
+                // Equal air on three sides. The cover is a square inside a box that is rarely
+                // square itself, so whichever side is short decides its size and the other one
+                // is left with the difference. Centring it horizontally splits that difference
+                // into two side gaps — so the top gets exactly the same amount as a margin, and
+                // left, right and top end up identical whatever the tile's proportions are.
+                // Whatever remains falls below the cover, where the title follows anyway.
+                anchors {
+                    top: parent.top
+                    topMargin: Math.round((parent.width - width) / 2)
+                    horizontalCenter: parent.horizontalCenter
+                }
                 width: Math.max(52, Math.min(parent.width, parent.height))
                 height: width
                 // A notch tighter than the card it sits in. Nested corners of the SAME radius
@@ -90,6 +125,14 @@ DashTile {
                 // out next to its frame.
                 radius: Math.max(6, Style.rCard - 6)
                 source: root.player?.trackArtUrl ?? ""
+
+                // Click goes to the player's own window (Settings → Bar → Media).
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: VtlConfig.moduleSetting("mpris", "jump_to_player", true)
+                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: Actions.focusPlayer(root.player)
+                }
             }
         }
         Column {
@@ -127,11 +170,13 @@ DashTile {
         property int    size: 34
         signal trig()
         width: size; height: size; radius: size / 2
-        color: mbHov.containsMouse ? Colors.bgActive : Style.tint(Colors.bgActive, 0.18)
+        // Opaque: this was an accent tint at 18 % alpha, so the wave behind the tile shone
+        // straight through the transport buttons.
+        color: mbHov.containsMouse ? Style.accent : Style.liftSolid(Colors.bgElement)
         Behavior on color { ColorAnimation { duration: 100 } }
         Text { anchors.centerIn: parent; text: mb.icon
-               color: mbHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
-               font.pixelSize: Math.round(mb.size * 0.47); font.family: Style.font }
+               color: mbHov.containsMouse ? Style.onAccent : Colors.fgPrimary
+               font.pixelSize: Math.round(mb.size * 0.47); font.family: Style.iconFont }
         MouseArea { id: mbHov; anchors.fill: parent; hoverEnabled: true; onClicked: mb.trig() }
     }
 }
