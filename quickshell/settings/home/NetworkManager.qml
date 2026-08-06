@@ -92,7 +92,7 @@ Item {
         anchors { verticalCenter: hdr.verticalCenter; right: parent.right }
         spacing: 8
         IconBtn { icon: "󰑐"; onTrig: root.refresh() }
-        Toggle { on: root.wifiOn; onToggled: root.run("nmcli radio wifi " + (root.wifiOn ? "off" : "on"), "") }
+        Switch { on: root.wifiOn; onToggled: root.run("nmcli radio wifi " + (root.wifiOn ? "off" : "on"), "") }
     }
 
     Text {
@@ -121,8 +121,8 @@ Item {
                     width: list.width; spacing: 4
                     Rectangle {
                         width: parent.width; height: 44; radius: 10
-                        color: modelData.active ? Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.28)
-                             : (rHov.containsMouse ? Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.16) : Style.controlFill)
+                        color: modelData.active ? Style.selFill
+                             : (rHov.containsMouse ? Style.controlHover : Style.controlFill)
                         Behavior on color { ColorAnimation { duration: 100 } }
                         Text { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
                                text: root.sigIcon(modelData.signal) + (modelData.sec ? "  󰌾" : "   ")
@@ -175,28 +175,24 @@ Item {
     // ── Reusable bits ──────────────────────────────────────────────────────────────
     component BackBtn: Rectangle {
         signal trig()
-        width: 34; height: 34; radius: 8; color: bHov.containsMouse ? Style.accent : Style.controlFill
+        width: 34; height: 34; radius: Style.rControl
+        color: bHov.containsMouse ? Style.accent : Style.controlFill
         Behavior on color { ColorAnimation { duration: 100 } }
-        Text { anchors.centerIn: parent; text: "󰁍"; color: Colors.fgBright; font.pixelSize: 16; font.family: Style.font }
+        Text { anchors.centerIn: parent; text: "󰁍"
+               color: bHov.containsMouse ? Style.onAccent : Colors.fgPrimary
+               font.pixelSize: 16; font.family: Style.iconFont }
         MouseArea { id: bHov; anchors.fill: parent; hoverEnabled: true; onClicked: parent.trig() }
     }
     component IconBtn: Rectangle {
         property string icon: ""
         signal trig()
-        width: 28; height: 28; radius: 7; color: iHov.containsMouse ? Style.accent : Style.controlFill
+        width: 28; height: 28; radius: Style.rTile
+        color: iHov.containsMouse ? Style.accent : Style.controlFill
         anchors.verticalCenter: parent ? parent.verticalCenter : undefined
         Behavior on color { ColorAnimation { duration: 100 } }
-        Text { anchors.centerIn: parent; text: parent.icon; color: Colors.fgPrimary; font.pixelSize: 13; font.family: Style.font }
+        Text { anchors.centerIn: parent; text: parent.icon
+               color: iHov.containsMouse ? Style.onAccent : Colors.fgPrimary
+               font.pixelSize: 13; font.family: Style.iconFont }
         MouseArea { id: iHov; anchors.fill: parent; hoverEnabled: true; onClicked: parent.trig() }
-    }
-    component Toggle: Rectangle {
-        property bool on: false
-        signal toggled()
-        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-        width: 42; height: 22; radius: 11; color: on ? Style.accent : Colors.bgPrimary
-        Behavior on color { ColorAnimation { duration: 120 } }
-        Rectangle { width: 16; height: 16; radius: 8; color: Colors.fgBright; anchors.verticalCenter: parent.verticalCenter
-                    x: parent.on ? parent.width - width - 3 : 3; Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } } }
-        MouseArea { anchors.fill: parent; onClicked: parent.toggled() }
     }
 }
