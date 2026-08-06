@@ -99,28 +99,11 @@ Column {
     }
 
     // ── Square hi-res cover ───────────────────────────────────────────────
-    Rectangle {
+    RoundedImage {
         width:  parent.width
         height: parent.width
-        radius: 14
-        clip:   true
-        color:  Style.menuRowFill
-        Image {
-            anchors.fill: parent
-            source:   root.player?.trackArtUrl ?? ""
-            fillMode: Image.PreserveAspectCrop
-            sourceSize.width:  512
-            sourceSize.height: 512
-            smooth: true; mipmap: true
-            visible: status === Image.Ready
-        }
-        Text {
-            anchors.centerIn: parent
-            visible: !root.player || (root.player.trackArtUrl ?? "") === ""
-            text:  "󰝚"
-            color: Colors.fgMuted
-            font.family: Style.font; font.pixelSize: 64
-        }
+        radius: Math.max(6, Style.rCard - 4)
+        source: root.player?.trackArtUrl ?? ""
     }
 
     // ── Title + artist ────────────────────────────────────────────────────
@@ -187,14 +170,13 @@ Column {
         width:  big ? 48 : 40
         height: big ? 48 : 40
         radius: width / 2
-        color:  ch.containsMouse ? Colors.bgActive
-              : Style.tint(Colors.bgActive, 0.18)
+        color:  ch.containsMouse ? Style.accent : Style.controlFill
         Behavior on color { ColorAnimation { duration: 100 } }
         Text {
             anchors.centerIn: parent
             text:  parent.icon
-            color: ch.containsMouse ? Colors.fgBright : Colors.fgPrimary
-            font.family: Style.font; font.pixelSize: parent.big ? 22 : 18
+            color: ch.containsMouse ? Style.onAccent : Colors.fgPrimary
+            font.family: Style.iconFont; font.pixelSize: parent.big ? 22 : 18
         }
         MouseArea { id: ch; anchors.fill: parent; hoverEnabled: true; onClicked: parent.trig() }
     }

@@ -31,7 +31,45 @@ Item {
     readonly property int    fontSize: VtlConfig.moduleFontSizeFor("mpris", root.barMon)
     readonly property int    iconSize: VtlConfig.moduleIconSizeFor("mpris", root.barMon)
     readonly property int    maxLen:   VtlConfig.moduleSetting("mpris", "max_title", 180)
+    readonly property bool   _showArt: VtlConfig.moduleSetting("mpris", "show_art", false)
+    readonly property bool   _wave:    VtlConfig.moduleSetting("mpris", "cava_wave", false)
     readonly property string full:     root.player?.trackTitle ?? ""
+
+    // ── Audio wave behind the module ─────────────────────────────────────────
+    // Only while this module is actually on screen AND something is playing: cava reads the
+    // audio device, and keeping it alive for a paused player would burn CPU for a flat line.
+    readonly property bool _waveOn: root._wave && root.visible && (root.player?.isPlaying ?? false)
+    on_WaveOnChanged: {
+        if (root._waveOn) CavaService.acquire()
+        else              CavaService.release()
+    }
+    Component.onDestruction: if (root._waveOn) CavaService.release()
+
+    Item {
+        anchors.fill: parent
+        visible: root._waveOn && CavaService.levels.length > 0
+        clip: true
+        z: -1                              // behind the controls and the title
+        opacity: 0.5                       // decoration, not a readout
+        Row {
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+            height: parent.height
+            spacing: 1
+            Repeater {
+                model: CavaService.levels.length
+                delegate: Rectangle {
+                    required property int index
+                    width: Math.max(1, (root.width - (CavaService.levels.length - 1)) / CavaService.levels.length)
+                    // A floor of 2px keeps the wave from vanishing entirely between beats.
+                    height: Math.max(2, (CavaService.levels[index] ?? 0) * parent.height)
+                    anchors.bottom: parent.bottom
+                    radius: 1
+                    color: Style.accent
+                    Behavior on height { NumberAnimation { duration: 70; easing.type: Easing.OutQuad } }
+                }
+            }
+        }
+    }
 
     TextMetrics { id: tm; font.family: root._font; font.pixelSize: root.fontSize; text: root.full }
     readonly property bool overflow: tm.width > maxLen
@@ -51,6 +89,18 @@ Item {
         id: lay
         anchors.centerIn: parent
         spacing: 8
+
+        // Album art, off by default. Sized from the icon size so it lines up with the
+        // control glyphs instead of dictating the module's height.
+        RoundedImage {
+            visible: root._showArt && (root.player?.trackArtUrl ?? "") !== ""
+            anchors.verticalCenter: parent.verticalCenter
+            width:  root.iconSize + 4
+            height: root.iconSize + 4
+            radius: Math.round((root.iconSize + 4) * 0.28)
+            decode: 128
+            source: root.player?.trackArtUrl ?? ""
+        }
 
         Ctl { visible: root._showCtl; icon: "󰒮"; onTrig: root.player?.previous() }
         Ctl { visible: root._showCtl; icon: root.player?.isPlaying ? "󰏤" : "󰐊"; onTrig: root.player?.togglePlaying() }

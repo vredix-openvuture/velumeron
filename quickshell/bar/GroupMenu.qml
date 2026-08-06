@@ -279,8 +279,8 @@ Flyout {
         color: mcH.containsMouse ? Style.accent : "transparent"
         Behavior on color { ColorAnimation { duration: 90 } }
         Text { anchors.centerIn: parent; text: icon
-               color: mcH.containsMouse ? Colors.fgBright : Colors.fgPrimary
-               font.pixelSize: 13; font.family: Style.font }
+               color: mcH.containsMouse ? Style.onAccent : Colors.fgPrimary
+               font.pixelSize: 13; font.family: Style.iconFont }
         MouseArea { id: mcH; anchors.fill: parent; hoverEnabled: true; onClicked: trig() }
     }
 }

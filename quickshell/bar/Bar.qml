@@ -61,9 +61,38 @@ PanelWindow {
     readonly property real rBR: (edgeOn("right") && edgeOn("bottom")) ? r : 0
     readonly property real rBL: (edgeOn("left")  && edgeOn("bottom")) ? r : 0
 
+    // ── Fullscreen peek ────────────────────────────────────────────────────────
+    // The bar lives on the Bottom layer, so a REAL fullscreen window covers it. With peek on it
+    // lifts to Overlay while such a window is up — but arms only a thin strip at the screen edge
+    // and stays invisible until the pointer gets there. Touch the edge → it fades in; leave → gone.
+    // Off (Settings → Bar): fullscreen simply hides the bar, as before.
+    readonly property int  monId:     root.monitor?.id ?? -1
+    readonly property bool fsCovered: Compositor.fullscreenOn(root.monId)
+    readonly property bool peekMode:  root.fsCovered && VtlConfig.barFullscreenPeekFor(root.mon)
+    readonly property int  peekEdge:  3          // px of screen edge that arms the reveal
+
+    property bool peeking: false
+    // A short grace on leave: the pointer crossing a module gap must not drop the bar mid-move.
+    Timer { id: peekOut; interval: 240; onTriggered: root.peeking = false }
+    HoverHandler {
+        id: peekHover
+        enabled: root.peekMode
+        onHoveredChanged: {
+            if (peekHover.hovered) { peekOut.stop(); root.peeking = true }
+            else                     peekOut.restart()
+        }
+    }
+    onPeekModeChanged: if (!root.peekMode) { peekOut.stop(); root.peeking = false }
+
+    readonly property bool barShown: !root.peekMode || root.peeking
+    property real peekOpacity: root.barShown ? 1 : 0
+    Behavior on peekOpacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+
     color: "transparent"
     anchors { top: true; left: true; right: true; bottom: true }
-    WlrLayershell.layer:         WlrLayer.Bottom
+    // Above a fullscreen window only while peeking is armed — otherwise the bar belongs at the
+    // bottom, under every window.
+    WlrLayershell.layer:         root.peekMode ? WlrLayer.Overlay : WlrLayer.Bottom
     WlrLayershell.exclusiveZone: -1
 
     // ── Path builders (SVG strings) ─────────────────────────────────────────────
@@ -222,11 +251,22 @@ PanelWindow {
     }
 
     // ── Input mask: union of the active edge strips ──────────────────────────────
+    // While a fullscreen window is up and the bar is hidden, only `peekEdge` pixels hugging the
+    // screen border stay interactive — the rest of the fullscreen window keeps every click.
+    function armRect(e) {
+        var s = root.stripRect(e)
+        if (s[2] === 0 || s[3] === 0 || root.barShown) return s
+        var t = root.peekEdge
+        if (e === "top")    return [s[0], 0, s[2], t]
+        if (e === "bottom") return [s[0], root.sh - t, s[2], t]
+        if (e === "left")   return [0, s[1], t, s[3]]
+        return [root.sw - t, s[1], t, s[3]]                          // right
+    }
     mask: Region {
-        Region { x: root.stripRect("top")[0];    y: root.stripRect("top")[1];    width: root.stripRect("top")[2];    height: root.stripRect("top")[3]    }
-        Region { x: root.stripRect("bottom")[0]; y: root.stripRect("bottom")[1]; width: root.stripRect("bottom")[2]; height: root.stripRect("bottom")[3] }
-        Region { x: root.stripRect("left")[0];   y: root.stripRect("left")[1];   width: root.stripRect("left")[2];   height: root.stripRect("left")[3]   }
-        Region { x: root.stripRect("right")[0];  y: root.stripRect("right")[1];  width: root.stripRect("right")[2];  height: root.stripRect("right")[3]  }
+        Region { x: root.armRect("top")[0];    y: root.armRect("top")[1];    width: root.armRect("top")[2];    height: root.armRect("top")[3]    }
+        Region { x: root.armRect("bottom")[0]; y: root.armRect("bottom")[1]; width: root.armRect("bottom")[2]; height: root.armRect("bottom")[3] }
+        Region { x: root.armRect("left")[0];   y: root.armRect("left")[1];   width: root.armRect("left")[2];   height: root.armRect("left")[3]   }
+        Region { x: root.armRect("right")[0];  y: root.armRect("right")[1];  width: root.armRect("right")[2];  height: root.armRect("right")[3]  }
     }
 
     // ── Fill ───────────────────────────────────────────────────────────────────
@@ -234,6 +274,7 @@ PanelWindow {
     // even-odd hole that contains an arc, which left the whole screen filled in frame mode.
     Shape {
         anchors.fill: parent
+        opacity: root.peekOpacity
         preferredRendererType: Shape.GeometryRenderer
         ShapePath {
             fillColor:   root.cFill
@@ -246,6 +287,7 @@ PanelWindow {
     // CurveRenderer for a smooth inner-edge stroke (a single open/closed outline, no hole).
     // Cupertino draws no bar outline at all — the macOS strip is just a frosted band.
     Shape {
+        opacity: root.peekOpacity
         anchors.fill: parent
         visible: !Style.isCupertino
         preferredRendererType: Shape.CurveRenderer
@@ -279,6 +321,10 @@ PanelWindow {
         // removed (but still has modules saved in the config) would render them at (0,0) — the
         // stray "fragment". Inactive edge → invisible (children don't draw).
         visible: root.edgeOn(em.edge)
+        // Hidden behind a fullscreen window: fade with the bar and take no clicks, so the armed
+        // edge strip can't trigger a module the user cannot even see.
+        opacity: root.peekOpacity
+        enabled: root.barShown
 
         ModGroup {
             edge: em.edge; group: "start"
@@ -339,7 +385,9 @@ PanelWindow {
             width:  mg.horiz ? parent.width             : (mg.barT - 2 * mg.pad)
             height: mg.horiz ? (mg.barT - 2 * mg.pad)   : parent.height
             radius: VtlConfig.barModuleBgRadiusFor(root.mon)
-            color:  Style.tint(Colors.bgElement, VtlConfig.barModuleBgOpacityFor(root.mon))
+            // Your BG-opacity setting, scaled by the surface-contrast knob (Style.lift) so the bar
+            // pills lift off the bar in step with the cards and menu rows.
+            color:  Style.tint(Colors.bgElement, Style.lift(VtlConfig.barModuleBgOpacityFor(root.mon)))
         }
         Row {
             id: rowLay
@@ -413,13 +461,37 @@ PanelWindow {
             visible: ms.moduleBg && ms.hasContent
             anchors.fill: parent
             radius: VtlConfig.barModuleBgRadiusFor(root.mon)
-            readonly property real _o: VtlConfig.barModuleBgOpacityFor(root.mon)
+            // Same as the group pill: the user's opacity, scaled by the surface-contrast knob.
+            readonly property real _o: Style.lift(VtlConfig.barModuleBgOpacityFor(root.mon))
             // On hover, shift slightly toward the accent and a touch more opaque.
             color: msHover.hovered
                  ? Style.tint(Colors.bgActive, Math.min(1.0, _o + 0.12))
                  : Style.tint(Colors.bgElement, _o)
             Behavior on color { ColorAnimation { duration: 130 } }
         }
+        // Double RIGHT-click → this module's own settings page. Right button only, so a plain
+        // left click never sees this area at all. The SINGLE right-click is explicitly handed
+        // back (propagateComposedEvents + accepted = false): accepting the right button here
+        // swallows the module's own right-click otherwise, which killed the tray context menus,
+        // the Updates refresh and the vuture menu. A parent TapHandler is NOT an option — once
+        // the module's MouseArea accepts the press, handlers further up never see the event.
+        // Double rather than single, because a single right-click is what several modules
+        // already use for their own menus.
+        MouseArea {
+            anchors.fill: parent
+            z: 10
+            acceptedButtons: Qt.RightButton
+            propagateComposedEvents: true
+            enabled: ms.hasContent
+            onClicked: e => { e.accepted = false }
+            onDoubleClicked: {
+                UiState.barCustomizeRequest    = ms.mkey
+                UiState.settingsRequestSection = "bar"
+                UiState.menuMon                = root.mon
+                UiState.openDropdown           = "vuture-icon"
+            }
+        }
+
         Loader {
             id: ldr
             anchors.centerIn: parent

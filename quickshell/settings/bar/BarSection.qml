@@ -32,8 +32,6 @@ Item {
     property int    fontSize:   13
     property string bgMode:     "none"
     property int    bgRadius:   8
-    property int    menuWPct:   20
-    property int    menuHPct:   50
     property var    modules:    ({})            // {edge:{group:[keys]}}
     property string activeEdge: "top"
     property string addTarget:  ""              // "edge:group" while the add-picker is open
@@ -80,8 +78,18 @@ Item {
     }
     function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s }
 
-    Component.onCompleted: reload()
-    onVisibleChanged:      if (visible) reload()
+    // Arrived by double right-clicking a module in the bar? Open THAT module's page, not
+    // the module list. Consumed from BOTH hooks on purpose: the section is created fresh
+    // each time the menu opens, and an item that is already visible when it is built never
+    // emits visibleChanged — so onVisibleChanged alone never fired on the very entry this
+    // is for, and the request sat unread until some later, unrelated visit.
+    function _consumeRequest() {
+        if (UiState.barCustomizeRequest === "") return
+        root.customizeKey = UiState.barCustomizeRequest
+        UiState.barCustomizeRequest = ""
+    }
+    Component.onCompleted: { reload(); root._consumeRequest() }
+    onVisibleChanged:      { if (visible) { reload(); root._consumeRequest() } }
 
     // When the menu opens (on whichever monitor it grew from), preselect that monitor for editing.
     Connections {
@@ -118,8 +126,6 @@ Item {
         fontSize   = VtlConfig.barFontSizeFor(mn)
         bgMode     = VtlConfig.barModuleBgFor(mn)
         bgRadius   = VtlConfig.barModuleBgRadiusFor(mn)
-        menuWPct   = VtlConfig.menuWidthPctFor(mn)
-        menuHPct   = VtlConfig.menuHeightPctFor(mn)
         reloadModules()
         addTarget = ""
         if (currentEdges().indexOf(activeEdge) < 0) activeEdge = currentEdges()[0] || "top"
@@ -250,8 +256,6 @@ Item {
     function setBgMode(m)    { bgMode = m; save("bar_module_bg", m) }
     function setBgRadius(v)  { bgRadius = Math.max(0, Math.min(30, v)); save("bar_module_bg_radius", bgRadius) }
     function setBgOpacity(v) { save("bar_module_bg_opacity", Math.max(0, Math.min(100, v)) / 100) }
-    function setMenuWPct(v)  { menuWPct = Math.max(8,  Math.min(80, v)); save("menu_width_pct",  menuWPct) }
-    function setMenuHPct(v)  { menuHPct = Math.max(20, Math.min(95, v)); save("menu_height_pct", menuHPct) }
 
     function toggleEdge(e) {
         var set = {}
@@ -387,56 +391,32 @@ Item {
         anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 2 }
         spacing: 8
 
-        Rectangle {
-            width: parent.width; height: 40; radius: 10; color: Style.controlFill
-            Column {
-                anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                spacing: 1
-                Text { text: "Per monitor"; color: Colors.fgPrimary; font.pixelSize: 13
-                       font.family: Style.font }
-                Text { text: "Set each setting separately per monitor"; color: Colors.fgMuted
-                       font.pixelSize: 10; font.family: Style.font }
-            }
-            Rectangle {
-                anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                width: 42; height: 22; radius: 11
-                color: root.perMonitor ? Style.accent : Colors.bgPrimary
-                Behavior on color { ColorAnimation { duration: 120 } }
-                Rectangle {
-                    width: 16; height: 16; radius: 8; color: Colors.fgBright
-                    anchors.verticalCenter: parent.verticalCenter
-                    x: root.perMonitor ? parent.width - width - 3 : 3
-                    Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-                }
-                MouseArea { anchors.fill: parent; onClicked: root.setPerMonitor(!root.perMonitor) }
-            }
+        // Hand-rolled switch rows replaced by the shared Toggle: same behaviour, and the
+        // explanation moves into its hover hint instead of a permanent second line.
+        Toggle {
+            label: "Per monitor"
+            sub:   "Set each setting separately per monitor"
+            on:    root.perMonitor
+            onToggled: root.setPerMonitor(!root.perMonitor)
         }
 
         // Minimal bar on every non-main monitor (only with more than one connected).
-        Rectangle {
-            width: parent.width; height: 40; radius: 10; color: Style.controlFill
-            Column {
-                anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                spacing: 1
-                Text { text: "Minimal secondary bars"; color: Colors.fgPrimary; font.pixelSize: 13
-                       font.family: Style.font }
-                Text { text: "Non-main monitors show only clock + submap / workspaces"; color: Colors.fgMuted
-                       font.pixelSize: 10; font.family: Style.font }
-            }
-            Rectangle {
-                anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                width: 42; height: 22; radius: 11
-                color: VtlConfig.secondaryBarsMinimal ? Style.accent : Colors.bgPrimary
-                Behavior on color { ColorAnimation { duration: 120 } }
-                Rectangle {
-                    width: 16; height: 16; radius: 8; color: Colors.fgBright
-                    anchors.verticalCenter: parent.verticalCenter
-                    x: VtlConfig.secondaryBarsMinimal ? parent.width - width - 3 : 3
-                    Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-                }
-                MouseArea { anchors.fill: parent
-                            onClicked: root.saveKey("secondary_bars_minimal", !VtlConfig.secondaryBarsMinimal, "") }
-            }
+        Toggle {
+            label: "Minimal secondary bars"
+            sub:   "Non-main monitors show only clock + submap / workspaces"
+            on:    VtlConfig.secondaryBarsMinimal
+            onToggled: root.saveKey("secondary_bars_minimal", !VtlConfig.secondaryBarsMinimal, "")
+        }
+
+        // Fullscreen peek — per monitor when "Per monitor" is on, so a media screen can keep the
+        // bar out of the way while the others still reveal it.
+        Toggle {
+            label: "Peek in fullscreen"
+            sub:   "A fullscreen window hides the bar; with this on it lifts above the window and "
+                 + "returns when the pointer touches its screen edge. Off: fullscreen hides it outright."
+            on:    VtlConfig.barFullscreenPeekFor(root.editMon)
+            onToggled: root.saveKey("bar_fullscreen_peek",
+                                    !VtlConfig.barFullscreenPeekFor(root.editMon), root.editMon)
         }
 
         // Which monitor is being edited (live screen list).
@@ -445,11 +425,11 @@ Item {
             width: parent.width; spacing: 6
             Repeater {
                 model: root.monitors
-                delegate: Seg {
+                delegate: Chip {
                     required property var modelData
-                    label: root.monName(modelData)
-                    sel:   root.targetMon === root.monName(modelData)
-                    onPicked: root.setTargetMon(root.monName(modelData))
+                    label:    root.monName(modelData)
+                    selected: root.targetMon === root.monName(modelData)
+                    onClicked: root.setTargetMon(root.monName(modelData))
                 }
             }
         }
@@ -539,42 +519,44 @@ Item {
                 width: parent.width
                 spacing: 16
 
-                Group {
-                    Text { text: "SIZE"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-                           font.family: Style.font }
-                    Stepper { label: "Thickness"; value: root.thickness; onChanged: root.setThickness(v) }
-                    Stepper { label: root.mode === "dock" ? "End air" : "Gap"; value: root.gap
+                Card {
+                    CardLabel { text: "SIZE" }
+                    Stepper { label: "Thickness"; unit: "px"; value: root.thickness; onChanged: root.setThickness(v) }
+                    Stepper { label: root.mode === "dock" ? "End air" : "Gap"; unit: "px"; value: root.gap
                               visible: root.mode === "float" || root.mode === "dock"; onChanged: root.setGap(v) }
-                    Stepper { label: "Radius"; value: root.radius
+                    Stepper { label: "Radius"; unit: "px"; value: root.radius
                               visible: root.mode === "frame" || root.mode === "dock"; onChanged: root.setRadius(v) }
-                    Stepper { label: "Icon size"; value: root.iconSize; onChanged: root.setIconSize(v) }
-                    Stepper { label: "Font size"; value: root.fontSize; onChanged: root.setFontSize(v) }
+                    Stepper { label: "Icon size"; unit: "px"; value: root.iconSize; onChanged: root.setIconSize(v) }
+                    Stepper { label: "Font size"; unit: "px"; value: root.fontSize; onChanged: root.setFontSize(v) }
                 }
-                Group {
-                    Text { text: "LAYOUT"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-                           font.family: Style.font }
-                    Stepper { label: "Edge gap"; value: root.margin;     onChanged: root.setMargin(v) }
-                    Stepper { label: "Spacing";  value: root.modSpacing; onChanged: root.setSpacing(v) }
+                Card {
+                    CardLabel { text: "LAYOUT" }
+                    Stepper { label: "Edge gap"; unit: "px"; value: root.margin;     onChanged: root.setMargin(v) }
+                    Stepper { label: "Spacing";  unit: "px"; value: root.modSpacing; onChanged: root.setSpacing(v) }
 
-                    Text { text: "Module background"; color: Colors.fgPrimary; font.pixelSize: 12
-                           font.family: Style.font }
-                    Row {
-                        spacing: 6
-                        Seg { label: "None";   sel: root.bgMode === "none";   onPicked: root.setBgMode("none")   }
-                        Seg { label: "Group";  sel: root.bgMode === "group";  onPicked: root.setBgMode("group")  }
-                        Seg { label: "Module"; sel: root.bgMode === "module"; onPicked: root.setBgMode("module") }
+                    FieldLabel { text: "Module background"
+                                 hint: "Whether each module gets its own little background pill, one pill per group, or none at all." }
+                    Segmented {
+                        equal: true
+                        current: root.bgMode
+                        segments: [{ label: "None",   key: "none"   },
+                                   { label: "Group",  key: "group"  },
+                                   { label: "Module", key: "module" }]
+                        onPicked: root.setBgMode(key)
                     }
-                    Stepper { label: "BG radius";  value: root.bgRadius; visible: root.bgMode !== "none"; onChanged: root.setBgRadius(v) }
-                    Stepper { label: "BG opacity"; value: Math.round(VtlConfig.barModuleBgOpacityFor(root.editMon) * 100)
+                    Stepper { label: "BG radius";  unit: "px"; value: root.bgRadius; visible: root.bgMode !== "none"; onChanged: root.setBgRadius(v) }
+                    Stepper { label: "BG opacity"; unit: "%"; max: 100; value: Math.round(VtlConfig.barModuleBgOpacityFor(root.editMon) * 100)
                               visible: root.bgMode !== "none"; onChanged: root.setBgOpacity(v) }
                 }
-                Group {
-                    Text { text: "MENU"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-                           font.family: Style.font }
+                Card {
+                    CardLabel { text: "MENU" }
                     Text { text: "Corner-menu size (% of the monitor)"; color: Colors.fgMuted
                            font.pixelSize: 10; font.family: Style.font }
-                    Stepper { label: "Width %";  value: root.menuWPct; step: 5; onChanged: root.setMenuWPct(v) }
-                    Stepper { label: "Height %"; value: root.menuHPct; step: 5; onChanged: root.setMenuHPct(v) }
+                    SubLabel {
+                        width: parent.width
+                        text: "The menu is sized by the dashboard raster — set columns and rows in "
+                            + "Settings → Velumeron → Dashboard → Arrange."
+                    }
                 }
             }
 
@@ -593,16 +575,18 @@ Item {
                         width: parent.width; spacing: 6
                         Repeater {
                             model: root.currentEdges()
-                            delegate: Rectangle {
+                            delegate: StyledRect {
                                 required property string modelData
                                 readonly property bool on: root.activeEdge === modelData
                                 width:  (modPage.width - (root.currentEdges().length - 1) * 6) / Math.max(1, root.currentEdges().length)
-                                height: 30; radius: 8
-                                color: on ? Style.accent
-                                     : (eHov.containsMouse ? Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.18) : Style.controlFill)
+                                height: 30; radius: Style.rTile
+                                color: on ? Style.selFill
+                                     : (eHov.containsMouse ? Style.controlHover : Style.controlFill)
+                                borderWidth: on ? Style.selBorderW : Style.controlBorderW
+                                borderColor: on ? Style.selBorderColor : Style.controlBorderColor
                                 Behavior on color { ColorAnimation { duration: 100 } }
                                 Text { anchors.centerIn: parent; text: root.cap(modelData)
-                                       color: parent.on ? Colors.fgBright : Colors.fgPrimary
+                                       color: parent.on ? Style.selText : Colors.fgPrimary
                                        font.pixelSize: 12; font.family: Style.font }
                                 MouseArea { id: eHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.activeEdge = modelData }
                             }
@@ -627,14 +611,19 @@ Item {
             id: addBack
             anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 2 }
             height: 34; spacing: 8
-            Rectangle {
-                width: 34; height: 34; radius: 8; color: abHov.containsMouse ? Style.accent : Style.controlFill
+            StyledRect {
+                width: 34; height: 34; radius: Style.rControl
+                color: abHov.containsMouse ? Style.accent : Style.controlFill
+                borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
                 Behavior on color { ColorAnimation { duration: 100 } }
-                Text { anchors.centerIn: parent; text: "󰁍"; color: Colors.fgBright; font.pixelSize: 16; font.family: Style.font }
+                Text { anchors.centerIn: parent; text: "󰁍"
+                       color: abHov.containsMouse ? Style.onAccent : Colors.fgPrimary
+                       font.pixelSize: 16; font.family: Style.iconFont }
                 MouseArea { id: abHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.addTarget = "" }
             }
             Text { anchors.verticalCenter: parent.verticalCenter; text: "Add module"; color: Colors.fgBright
-                   font.pixelSize: 16; font.bold: true; font.family: Style.font }
+                   font.pixelSize: Style.fsSection; font.bold: true; font.letterSpacing: 1.2
+                   font.family: Style.font }
         }
         Flickable {
             anchors { top: addBack.bottom; topMargin: 14; left: parent.left; right: parent.right; bottom: parent.bottom }
@@ -653,19 +642,19 @@ Item {
                             width: parent.width; spacing: 8
                             Repeater {
                                 model: catCol.modelData.keys
-                                delegate: Rectangle {
+                                delegate: StyledRect {
                                     id: chip
                                     required property string modelData
-                                    width: chipRow.implicitWidth + 22; height: 34; radius: 9
-                                    color: chHov.containsMouse ? Style.accent
-                                         : Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.20)
+                                    width: chipRow.implicitWidth + 22; height: 34; radius: Style.rControl
+                                    color: chHov.containsMouse ? Style.controlHover : Style.controlFill
+                                    borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
                                     Behavior on color { ColorAnimation { duration: 90 } }
                                     Row {
                                         id: chipRow
                                         anchors.centerIn: parent; spacing: 8
                                         Text { anchors.verticalCenter: parent.verticalCenter; text: root.iconFor(chip.modelData)
                                                color: chHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
-                                               font.pixelSize: 14; font.family: Style.font }
+                                               font.pixelSize: 14; font.family: Style.iconFont }
                                         Text { anchors.verticalCenter: parent.verticalCenter; text: root.labelFor(chip.modelData)
                                                color: chHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
                                                font.pixelSize: 12; font.family: Style.font }
@@ -697,12 +686,14 @@ Item {
             anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 2 }
             height:  34
             spacing: 8
-            Rectangle {
-                width: 34; height: 34; radius: 8
+            StyledRect {
+                width: 34; height: 34; radius: Style.rControl
                 color: bkHov.containsMouse ? Style.accent : Style.controlFill
+                borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
                 Behavior on color { ColorAnimation { duration: 100 } }
-                Text { anchors.centerIn: parent; text: "󰁍"; color: Colors.fgBright
-                       font.pixelSize: 16; font.family: Style.font }
+                Text { anchors.centerIn: parent; text: "󰁍"
+                       color: bkHov.containsMouse ? Style.onAccent : Colors.fgPrimary
+                       font.pixelSize: 16; font.family: Style.iconFont }
                 MouseArea { id: bkHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.customizeKey = "" }
             }
             Text { anchors.verticalCenter: parent.verticalCenter; text: "Back to modules"
@@ -723,7 +714,7 @@ Item {
     // ── Reusable bits ────────────────────────────────────────────────────────────
 
     // Top-level tab button (Form / Stil / Module).
-    component TabBtn: Rectangle {
+    component TabBtn: StyledRect {
         id: tb
         property string icon:  ""
         property string label: ""
@@ -731,9 +722,10 @@ Item {
         readonly property bool on: root.tab === tb.key
         width:  (tabBar.width - 2 * tabBar.spacing) / 3
         height: tabBar.height
-        radius: 9
-        color:  tb.on ? Style.accent
-              : (tbHov.containsMouse ? Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.18) : Style.controlFill)
+        radius: Style.rControl
+        color:  tb.on ? Style.selFill : (tbHov.containsMouse ? Style.controlHover : Style.controlFill)
+        borderWidth: tb.on ? Style.selBorderW : Style.controlBorderW
+        borderColor: tb.on ? Style.selBorderColor : Style.controlBorderColor
         Behavior on color { ColorAnimation { duration: 100 } }
         Row {
             anchors.centerIn: parent
@@ -742,102 +734,22 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 visible:        tb.icon !== ""
                 text:           tb.icon
-                color:          tb.on ? Colors.fgBright : Colors.fgPrimary
+                color:          tb.on ? Style.selText : Colors.fgPrimary
                 font.pixelSize: 15
-                font.family:    Style.font
+                font.family:    Style.iconFont
             }
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text:           tb.label
-                color:          tb.on ? Colors.fgBright : Colors.fgPrimary
-                font.pixelSize: 13
+                color:          tb.on ? Style.selText : Colors.fgPrimary
+                font.pixelSize: Style.fsLabel
                 font.family:    Style.font
             }
         }
         MouseArea { id: tbHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.tab = tb.key }
     }
 
-    // Small muted field label above a control.
-    component FieldLabel: Text {
-        color: Colors.fgMuted; font.pixelSize: 11; font.bold: true
-        font.letterSpacing: 0.5; font.family: Style.font
-    }
 
-    // A compact dropdown select (inline-expanding, so it never clips inside the Flickable).
-    // `multi: true` keeps it open and toggles checkmarks; single-select closes on pick.
-    component Dropdown: Column {
-        id: dd
-        property var    options: []        // [{ label, key, on }]
-        property bool   multi:   false
-        property string summary: ""
-        property bool   open:    false
-        signal picked(string key)
-
-        width:   parent ? parent.width : 0
-        spacing: 4
-
-        Rectangle {
-            width:  parent.width
-            height: 34
-            radius: 8
-            // Accent-tinted fill + accent border so the control clearly stands out from the panel.
-            color:  ddHov.containsMouse ? Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.34)
-                                        : Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.20)
-            border.width: dd.open ? 2 : 1
-            border.color: Style.accent
-            Behavior on color { ColorAnimation { duration: 100 } }
-
-            Text {
-                anchors { left: parent.left; leftMargin: 12; right: chev.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                text:  dd.summary
-                color: Colors.fgPrimary
-                elide: Text.ElideRight
-                font.pixelSize: 13; font.family: Style.font
-            }
-            Text {
-                id: chev
-                anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                text:  dd.open ? "▴" : "▾"
-                color: Colors.fgMuted; font.pixelSize: 12; font.family: Style.font
-            }
-            MouseArea { id: ddHov; anchors.fill: parent; hoverEnabled: true; onClicked: dd.open = !dd.open }
-        }
-
-        Column {
-            visible: dd.open
-            width:   parent.width
-            spacing: 3
-            Repeater {
-                model: dd.options
-                delegate: Rectangle {
-                    required property var modelData
-                    width:  dd.width
-                    height: 30
-                    radius: 7
-                    // Same accent-tinted background as the button, so the whole dropdown is uniform.
-                    color:  modelData.on ? Style.accent
-                          : (oHov.containsMouse ? Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.34)
-                                                : Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.20))
-                    Behavior on color { ColorAnimation { duration: 90 } }
-                    Text {
-                        anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                        text:  modelData.label
-                        color: modelData.on ? Colors.fgBright : Colors.fgPrimary
-                        font.pixelSize: 12; font.family: Style.font
-                    }
-                    Text {
-                        visible: modelData.on
-                        anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                        text: "✓"; color: Colors.fgBright; font.pixelSize: 12; font.family: Style.font
-                    }
-                    MouseArea {
-                        id: oHov; anchors.fill: parent; hoverEnabled: true
-                        onClicked: { dd.picked(modelData.key); if (!dd.multi) dd.open = false }
-                    }
-                }
-            }
-        }
-    }
 
     // One zone (Start / Center / End) for the active edge: a labelled drop area whose chips can
     // be dragged to reorder, with a subtle "+" that opens the add-module overlay.
@@ -852,12 +764,14 @@ Item {
         Row {
             width: parent.width; spacing: 8
             FieldLabel { text: zone.title; anchors.verticalCenter: parent.verticalCenter }
-            Rectangle {
+            StyledRect {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 22; height: 22; radius: 11
-                color: addHov.containsMouse ? Style.accent : Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.18)
+                color: addHov.containsMouse ? Style.accent : Style.controlFill
+                borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
                 Behavior on color { ColorAnimation { duration: 100 } }
-                Text { anchors.centerIn: parent; text: "+"; color: Colors.fgBright
+                Text { anchors.centerIn: parent; text: "+"
+                       color: addHov.containsMouse ? Style.onAccent : Colors.fgPrimary
                        font.pixelSize: 14; font.family: Style.font }
                 MouseArea { id: addHov; anchors.fill: parent; hoverEnabled: true
                             onClicked: root.addTarget = root.activeEdge + ":" + zone.grp }
@@ -868,12 +782,12 @@ Item {
             id: dropArea
             width:  parent.width
             height: Math.max(40, chipFlow.implicitHeight + 12)
-            radius: 10
-            color:  Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b,
-                            root.chipDragging && root.hoverGrp === zone.grp ? 0.14 : 0.06)
-            border.width: 1
-            border.color: Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b,
-                                  root.chipDragging && root.hoverGrp === zone.grp ? 0.5 : 0.15)
+            radius: Style.rControl
+            // Accent wash on purpose: it is a drop TARGET, and it brightens while a chip hovers it.
+            color:  Style.tint(Style.accent, root.chipDragging && root.hoverGrp === zone.grp ? 0.14 : 0.06)
+            border.width: Math.max(1, Style.controlBorderW)
+            border.color: Style.tint(Style.accent,
+                                     root.chipDragging && root.hoverGrp === zone.grp ? 0.5 : 0.15)
             Behavior on height { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
             Component.onCompleted: {
                 root.zoneAreas[zone.grp] = dropArea
@@ -929,10 +843,10 @@ Item {
                             id: chipV
                             width:  crow.implicitWidth + 16
                             height: 28
-                            radius: 8
-                            color:  dragMA.drag.active ? Style.accent : Style.controlFill
-                            border.width: dragMA.drag.active ? 1 : 0
-                            border.color: Colors.boActive
+                            radius: Style.rControl
+                            color:  dragMA.drag.active ? Style.selFill : Style.controlFill
+                            border.width: dragMA.drag.active ? Math.max(1, Style.selBorderW) : Style.controlBorderW
+                            border.color: dragMA.drag.active ? Style.selBorderColor : Style.controlBorderColor
                             opacity: dragMA.drag.active ? 0.85 : 1
                             z: dragMA.drag.active ? 50 : 0
 
@@ -974,18 +888,21 @@ Item {
                                 anchors.centerIn: parent
                                 spacing: 6
                                 Text { anchors.verticalCenter: parent.verticalCenter
-                                       text: root.iconFor(slot.modelData); color: Colors.fgPrimary
-                                       font.pixelSize: 13; font.family: Style.font }
+                                       text: root.iconFor(slot.modelData)
+                                       color: dragMA.drag.active ? Style.selText : Colors.fgPrimary
+                                       font.pixelSize: 13; font.family: Style.iconFont }
                                 Text { anchors.verticalCenter: parent.verticalCenter
-                                       text: root.labelFor(slot.modelData); color: Colors.fgPrimary
+                                       text: root.labelFor(slot.modelData)
+                                       color: dragMA.drag.active ? Style.selText : Colors.fgPrimary
                                        font.pixelSize: 12; font.family: Style.font }
                                 // Customize (font / colour / size / module-specific settings)
                                 Rectangle {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: 16; height: 16; radius: 8
                                     color: grHov.containsMouse ? Style.accent : "transparent"
-                                    Text { anchors.centerIn: parent; text: "󰒓"; color: Colors.fgMuted; font.pixelSize: 11
-                                           font.family: Style.font }
+                                    Text { anchors.centerIn: parent; text: "󰒓"
+                                           color: grHov.containsMouse ? Style.onAccent : Colors.fgMuted
+                                           font.pixelSize: 11; font.family: Style.iconFont }
                                     MouseArea { id: grHov; anchors.fill: parent; hoverEnabled: true
                                                 onClicked: { root.customizeKey = slot.modelData; root.loadFonts() } }
                                 }
@@ -993,7 +910,8 @@ Item {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: 16; height: 16; radius: 8
                                     color: rmHov.containsMouse ? Style.tint(Colors.fgUrgent, 0.25) : "transparent"
-                                    Text { anchors.centerIn: parent; text: "✕"; color: Colors.fgMuted; font.pixelSize: 9 }
+                                    Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 9
+                                           color: rmHov.containsMouse ? Colors.fgBright : Colors.fgMuted }
                                     MouseArea { id: rmHov; anchors.fill: parent; hoverEnabled: true
                                                 onClicked: root.removeModule(root.activeEdge, zone.grp, slot.modelData) }
                                 }
@@ -1013,8 +931,10 @@ Item {
         signal picked(string key)
 
         width:  parent ? parent.width : 0
-        radius: 12
-        color:  Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.08)
+        radius: Style.rCard
+        color:  Style.cardFill
+        border.width: Style.cardBorderW
+        border.color: Style.cardBorderColor
         height: 6 + hdr.height + (body.implicitHeight > 0 ? 8 + body.implicitHeight + 10 : 6)
 
         Row {
@@ -1024,16 +944,18 @@ Item {
             spacing: 4
             Repeater {
                 model: blk.items
-                delegate: Rectangle {
+                delegate: StyledRect {
                     required property var modelData
                     width:  (hdr.width - (blk.items.length - 1) * hdr.spacing) / Math.max(1, blk.items.length)
                     height: hdr.height
-                    radius: 7
-                    color: modelData.on ? Style.accent
-                         : (sh.containsMouse ? Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.18) : Style.controlFill)
+                    radius: Style.rTile
+                    color: modelData.on ? Style.selFill
+                         : (sh.containsMouse ? Style.controlHover : Style.controlFill)
+                    borderWidth: modelData.on ? Style.selBorderW : Style.controlBorderW
+                    borderColor: modelData.on ? Style.selBorderColor : Style.controlBorderColor
                     Behavior on color { ColorAnimation { duration: 100 } }
                     Text { anchors.centerIn: parent; text: modelData.label
-                           color: modelData.on ? Colors.fgBright : Colors.fgPrimary
+                           color: modelData.on ? Style.selText : Colors.fgPrimary
                            font.pixelSize: 12; font.family: Style.font }
                     MouseArea { id: sh; anchors.fill: parent; hoverEnabled: true; onClicked: blk.picked(modelData.key) }
                 }
@@ -1047,73 +969,7 @@ Item {
         }
     }
 
-    component Group: Rectangle {
-        default property alias content: inner.data
-        width:  parent ? parent.width : 0
-        radius: 12
-        color:  Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.08)
-        height: inner.implicitHeight + 24
-        Column {
-            id: inner
-            anchors { top: parent.top; left: parent.left; right: parent.right
-                      topMargin: 12; leftMargin: 12; rightMargin: 12 }
-            spacing: 8
-        }
-    }
 
-    component Seg: Rectangle {
-        id: sg
-        property string label: ""
-        property bool   sel:   false
-        signal picked()
-        width: sl.implicitWidth + 20; height: 28; radius: 8
-        color: sel ? Style.accent
-             : (sh.containsMouse ? Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.18) : Style.controlFill)
-        Behavior on color { ColorAnimation { duration: 100 } }
-        Text { id: sl; anchors.centerIn: parent; text: sg.label
-               color: sg.sel ? Colors.fgBright : Colors.fgPrimary
-               font.pixelSize: 12; font.family: Style.font }
-        MouseArea { id: sh; anchors.fill: parent; hoverEnabled: true; onClicked: sg.picked() }
-    }
 
-    component Stepper: Row {
-        id: st
-        property string label: ""
-        property int    value: 0
-        property int    step:  5
-        signal changed(int v)
-        spacing: 8
-        // Snap to the step grid so − / + always land on a clean multiple of `step`.
-        function _up()   { return (Math.floor(st.value / st.step) + 1) * st.step }
-        function _down() { return Math.max(0, (Math.ceil(st.value / st.step) - 1) * st.step) }
-        Text { anchors.verticalCenter: parent.verticalCenter; width: 78; text: st.label
-               color: Colors.fgPrimary; font.pixelSize: 12; font.family: Style.font }
-        Rectangle {
-            width: 26; height: 26; radius: 6; color: mh.containsMouse ? Style.accent : Style.controlFill
-            Text { anchors.centerIn: parent; text: "−"; color: Colors.fgPrimary; font.pixelSize: 14 }
-            MouseArea { id: mh; anchors.fill: parent; hoverEnabled: true; onClicked: st.changed(st._down()) }
-        }
-        Text { anchors.verticalCenter: parent.verticalCenter; width: 34; horizontalAlignment: Text.AlignHCenter
-               text: st.value; color: Colors.fgBright; font.pixelSize: 13; font.family: Style.font }
-        Rectangle {
-            width: 26; height: 26; radius: 6; color: ph2.containsMouse ? Style.accent : Style.controlFill
-            Text { anchors.centerIn: parent; text: "+"; color: Colors.fgPrimary; font.pixelSize: 14 }
-            MouseArea { id: ph2; anchors.fill: parent; hoverEnabled: true; onClicked: st.changed(st._up()) }
-        }
-    }
 
-    component Chip: Rectangle {
-        id: cp
-        property string label: ""
-        signal removed()
-        width: cl2.implicitWidth + 30; height: 26; radius: 13; color: Style.controlFill
-        Text { id: cl2; anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-               text: cp.label; color: Colors.fgPrimary; font.pixelSize: 11; font.family: Style.font }
-        Rectangle {
-            anchors { right: parent.right; rightMargin: 4; verticalCenter: parent.verticalCenter }
-            width: 18; height: 18; radius: 9; color: xh.containsMouse ? Style.accent : "transparent"
-            Text { anchors.centerIn: parent; text: "✕"; color: Colors.fgMuted; font.pixelSize: 10 }
-            MouseArea { id: xh; anchors.fill: parent; hoverEnabled: true; onClicked: cp.removed() }
-        }
-    }
 }

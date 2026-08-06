@@ -101,17 +101,21 @@ Item {
         onExited: root.checking = false
     }
 
-    // Update terminal — velumeron kitty (wallust colours); re-check once it closes.
+    // Update terminal: term-run.sh opens whatever emulator the user actually has (the terminal is a
+    // role app, not a dependency), update-run.sh dresses the session — banner, the pending packages
+    // in the live palette, a readable sudo prompt — and runs the configured command verbatim.
+    // Re-check once the window closes.
     Process {
         id: updateProc
         onExited: root.check()
     }
     function runUpdate() {
-        var sh = root._cmd + "; echo; read -n1 -s -p '── done — press any key ──'"
+        var flags = (root._withAur ? "" : " --no-aur") + (root._withFp ? "" : " --no-flatpak")
+        var inner = "\"$VELUMERON_DIR/assets/scripts/update-run.sh\" "
+                  + "'" + root._cmd.replace(/'/g, "'\\''") + "'" + flags
         updateProc.command = ["bash", "-c",
-            "kitty --class velumeron-update --title 'System update' " +
-            "-c \"$VELUMERON_USER_DIR/kitty/kitty.conf\" bash -lc " +
-            "'" + sh.replace(/'/g, "'\\''") + "'"]
+            "\"$VELUMERON_DIR/assets/scripts/term-run.sh\" velumeron-update 'System update' "
+            + "\"" + inner.replace(/"/g, "\\\"") + "\""]
         updateProc.running = false
         updateProc.running = true
     }

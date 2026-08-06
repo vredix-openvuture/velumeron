@@ -120,8 +120,8 @@ Column {
         width: parent.width; height: 26
         Text { anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                text: "Bluetooth"; color: Colors.fgBright; font.pixelSize: 14; font.bold: true; font.family: Style.font }
-        BtToggle { anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-                   on: root.powered; onToggled: root.run("bluetoothctl power " + (root.powered ? "off" : "on"), "") }
+        Switch { anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                 on: root.powered; onToggled: root.run("bluetoothctl power " + (root.powered ? "off" : "on"), "") }
     }
 
     Text { visible: root.busy !== "" || root.scanning
@@ -166,15 +166,9 @@ Column {
                font.pixelSize: 12; font.family: Style.font }
 
         // Add-new button — accent-outlined action, distinct from the solid device rows.
-        Rectangle {
-            width: addTxt.implicitWidth + 24; height: 28; radius: 8
-            color: addH.containsMouse ? Style.tint(Colors.boActive, 0.22) : "transparent"
-            border.width: 1; border.color: Colors.boActive
-            Behavior on color { ColorAnimation { duration: 100 } }
-            Text { id: addTxt; anchors.centerIn: parent; text: "  Add new device"; color: Colors.boActive
-                   font.pixelSize: 11; font.bold: true; font.family: Style.font }
-            MouseArea { id: addH; anchors.fill: parent; hoverEnabled: true
-                        onClicked: { root.mode = "add"; root.scan() } }
+        TextButton {
+            label: "  Add new device"
+            onClicked: { root.mode = "add"; root.scan() }
         }
     }
 
@@ -182,15 +176,21 @@ Column {
     Column {
         visible: root.mode === "add"
         width: parent.width; spacing: 6
-        Rectangle {
-            width: parent.width; height: 32; radius: 8
-            color: bkH.containsMouse ? Style.tint(Colors.boActive, 0.22) : "transparent"
-            border.width: 1; border.color: Colors.boActive
+        StyledRect {
+            width: parent.width; height: 32; radius: Style.rControl
+            color: bkH.containsMouse ? Style.controlHover : Style.controlFill
+            borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
+            Behavior on color { ColorAnimation { duration: 100 } }
             Text { anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                   text: "󰁍  Paired devices"; color: Colors.boActive; font.bold: true; font.pixelSize: 12; font.family: Style.font }
-            Rectangle { anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
-                width: 28; height: 22; radius: 6; color: scH.containsMouse ? Colors.boActive : Colors.bgPrimary
-                Text { anchors.centerIn: parent; text: "󰍉"; color: Colors.fgBright; font.pixelSize: 12; font.family: Style.font }
+                   text: "󰁍  Paired devices"; color: Colors.fgPrimary; font.bold: true
+                   font.pixelSize: Style.fsLabel; font.family: Style.font }
+            StyledRect { anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
+                width: 28; height: 22; radius: Style.rTile
+                color: scH.containsMouse ? Style.accent : Style.controlFill
+                borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
+                Text { anchors.centerIn: parent; text: "󰍉"
+                       color: scH.containsMouse ? Style.onAccent : Colors.fgPrimary
+                       font.pixelSize: 12; font.family: Style.iconFont }
                 MouseArea { id: scH; anchors.fill: parent; hoverEnabled: true; onClicked: root.scan() } }
             MouseArea { id: bkH; anchors.fill: parent; anchors.rightMargin: 40; hoverEnabled: true; onClicked: root.mode = "known" }
         }
@@ -208,12 +208,14 @@ Column {
         width: parent.width; spacing: 10
 
         // Back to the device list.
-        Rectangle {
-            width: parent.width; height: 32; radius: 8
-            color: dbH.containsMouse ? Style.tint(Colors.boActive, 0.22) : "transparent"
-            border.width: 1; border.color: Colors.boActive
+        StyledRect {
+            width: parent.width; height: 32; radius: Style.rControl
+            color: dbH.containsMouse ? Style.controlHover : Style.controlFill
+            borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
+            Behavior on color { ColorAnimation { duration: 100 } }
             Text { anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                   text: "󰁍  Devices"; color: Colors.boActive; font.bold: true; font.pixelSize: 12; font.family: Style.font }
+                   text: "󰁍  Devices"; color: Colors.fgPrimary; font.bold: true
+                   font.pixelSize: Style.fsLabel; font.family: Style.font }
             MouseArea { id: dbH; anchors.fill: parent; hoverEnabled: true; onClicked: root.mode = "known" }
         }
 
@@ -233,20 +235,16 @@ Column {
 
         // Rename.
         FieldLabel { text: "NAME" }
-        Rectangle {
-            width: parent.width; height: 38; radius: 8; color: Colors.bgPrimary
-            border.width: 1; border.color: Colors.bgActive
-            TextInput { id: dNameIn
-                anchors { left: parent.left; leftMargin: 12; right: rnBtn.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                color: Colors.fgBright; font.pixelSize: 13; font.family: Style.font; clip: true
-                onAccepted: root.setAlias(root.openMac, text)
+        Row {
+            width: parent.width; spacing: 6
+            InputField {
+                id: dNameIn
+                width: parent.width - rnBtn.width - parent.spacing
+                placeholder: "Device name"
+                onEdited: root.setAlias(root.openMac, v)
             }
-            Rectangle { id: rnBtn
-                anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
-                width: 62; height: 26; radius: 6; color: rnH.containsMouse ? Colors.boActive : Colors.bgActive
-                Text { anchors.centerIn: parent; text: "Rename"; color: Colors.fgBright; font.pixelSize: 10; font.family: Style.font }
-                MouseArea { id: rnH; anchors.fill: parent; hoverEnabled: true; onClicked: root.setAlias(root.openMac, dNameIn.text) }
-            }
+            TextButton { id: rnBtn; label: "Rename"; anchors.verticalCenter: parent.verticalCenter
+                         onClicked: root.setAlias(root.openMac, dNameIn.text) }
         }
 
         // Group assignment.
@@ -255,42 +253,36 @@ Column {
         Flow {
             visible: VtlConfig.btGroupNames().length > 0
             width: parent.width; spacing: 6
-            GroupChip { label: "None"; sel: VtlConfig.btGroup(root.openMac) === ""; onPick: root.setGroup(root.openMac, "") }
+            Chip { label: "None"; selected: VtlConfig.btGroup(root.openMac) === ""
+                   onClicked: root.setGroup(root.openMac, "") }
             Repeater {
                 model: VtlConfig.btGroupNames()
-                delegate: GroupChip { required property string modelData
-                                      label: modelData; sel: VtlConfig.btGroup(root.openMac) === modelData
-                                      onPick: root.setGroup(root.openMac, modelData) }
+                delegate: Chip { required property string modelData
+                                 label: modelData; selected: VtlConfig.btGroup(root.openMac) === modelData
+                                 onClicked: root.setGroup(root.openMac, modelData) }
             }
         }
         // Create a new group.
-        Rectangle {
-            width: parent.width; height: 38; radius: 8; color: Colors.bgPrimary
-            border.width: 1; border.color: Colors.bgActive
-            TextInput { id: newGrpIn
-                anchors { left: parent.left; leftMargin: 12; right: ngBtn.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                color: Colors.fgBright; font.pixelSize: 13; font.family: Style.font; clip: true
-                onAccepted: { if (text.trim() !== "") { root.setGroup(root.openMac, text.trim()); text = "" } }
+        Row {
+            width: parent.width; spacing: 6
+            InputField {
+                id: newGrpIn
+                width: parent.width - ngBtn.width - parent.spacing
+                placeholder: "New group…"
+                onEdited: { if (v.trim() !== "") { root.setGroup(root.openMac, v.trim()); newGrpIn.text = "" } }
             }
-            Text { visible: newGrpIn.text === ""; anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                   text: "New group…"; color: Colors.fgMuted; font.pixelSize: 13; font.family: Style.font }
-            Rectangle { id: ngBtn
-                anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
-                width: 30; height: 26; radius: 6; color: ngH.containsMouse ? Colors.boActive : Colors.bgActive
-                Text { anchors.centerIn: parent; text: "✓"; color: Colors.fgBright; font.pixelSize: 12; font.family: Style.font }
-                MouseArea { id: ngH; anchors.fill: parent; hoverEnabled: true
-                            onClicked: { if (newGrpIn.text.trim() !== "") { root.setGroup(root.openMac, newGrpIn.text.trim()); newGrpIn.text = "" } } }
-            }
+            TextButton { id: ngBtn; label: "✓"; primary: true; anchors.verticalCenter: parent.verticalCenter
+                         onClicked: { if (newGrpIn.text.trim() !== "") { root.setGroup(root.openMac, newGrpIn.text.trim()); newGrpIn.text = "" } } }
         }
 
         Item { width: 1; height: 2 }
 
         // Forget (destructive).
         Rectangle {
-            width: parent.width; height: 36; radius: 10
+            width: parent.width; height: 36; radius: Style.rControl
             color: fgPH.containsMouse ? Style.tint(Colors.fgUrgent, 0.30)
                                       : Style.tint(Colors.fgUrgent, 0.12)
-            border.width: 1; border.color: Colors.fgUrgent
+            border.width: Math.max(1, Style.controlBorderW); border.color: Colors.fgUrgent
             Behavior on color { ColorAnimation { duration: 100 } }
             Text { anchors.centerIn: parent; text: "󰩹  Forget device"; color: Colors.fgUrgent
                    font.pixelSize: 12; font.bold: true; font.family: Style.font }
@@ -357,32 +349,5 @@ Column {
             MouseArea { id: gH; anchors.fill: parent; hoverEnabled: true; onClicked: br.gear() }
         }
         MouseArea { id: brH; anchors.fill: parent; anchors.rightMargin: br.gearVisible ? 40 : 0; hoverEnabled: true; onClicked: br.trig() }
-    }
-    component FieldLabel: Text {
-        color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-        font.letterSpacing: 0.5; font.family: Style.font
-    }
-    component GroupChip: Rectangle {
-        property string label: ""
-        property bool   sel:   false
-        signal pick()
-        width:  gcT.implicitWidth + 22; height: 28; radius: 8
-        color:  sel ? Colors.bgActive
-              : (gcH.containsMouse ? Style.tint(Colors.bgActive, 0.22) : Style.menuRowFill)
-        border.width: 1; border.color: sel ? Colors.boActive : "transparent"
-        Behavior on color { ColorAnimation { duration: 90 } }
-        Text { id: gcT; anchors.centerIn: parent; text: parent.label
-               color: parent.sel ? Colors.fgBright : Colors.fgPrimary
-               font.pixelSize: 11; font.family: Style.font }
-        MouseArea { id: gcH; anchors.fill: parent; hoverEnabled: true; onClicked: parent.pick() }
-    }
-    component BtToggle: Rectangle {
-        property bool on: false
-        signal toggled()
-        width: 42; height: 22; radius: 11; color: on ? Colors.bgActive : Colors.bgPrimary
-        Behavior on color { ColorAnimation { duration: 120 } }
-        Rectangle { width: 16; height: 16; radius: 8; color: Colors.fgBright; anchors.verticalCenter: parent.verticalCenter
-                    x: parent.on ? parent.width - width - 3 : 3; Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } } }
-        MouseArea { anchors.fill: parent; onClicked: parent.toggled() }
     }
 }

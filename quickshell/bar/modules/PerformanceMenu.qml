@@ -154,7 +154,7 @@ Flyout {
         }
         // Overall bar
         Rectangle {
-            width: parent.width; height: 8; radius: 4; color: Colors.bgElement
+            width: parent.width; height: 8; radius: 4; color: Style.liftSolid(Colors.bgElement)
             Rectangle { width: Math.round(parent.width * root.cpuPct / 100); height: parent.height
                         radius: parent.radius; color: root._loadColor(root.cpuPct)
                         Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } } }
@@ -171,7 +171,7 @@ Flyout {
                     width: 10; height: 44
                     Rectangle {
                         anchors.bottom: parent.bottom; width: parent.width
-                        height: parent.height; radius: 3; color: Colors.bgElement
+                        height: parent.height; radius: 3; color: Style.liftSolid(Colors.bgElement)
                     }
                     Rectangle {
                         anchors.bottom: parent.bottom; width: parent.width
@@ -193,7 +193,7 @@ Flyout {
                    color: Colors.fgPrimary; font.pixelSize: Style.fsLabel; font.bold: true; font.family: Style.font }
         }
         Rectangle {
-            width: parent.width; height: 8; radius: 4; color: Colors.bgElement
+            width: parent.width; height: 8; radius: 4; color: Style.liftSolid(Colors.bgElement)
             Rectangle { width: Math.round(parent.width * root.memPct / 100); height: parent.height
                         radius: parent.radius; color: root._loadColor(root.memPct)
                         Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } } }
@@ -210,7 +210,7 @@ Flyout {
         }
         Rectangle {
             visible: root.gpuPct >= 0
-            width: parent.width; height: 8; radius: 4; color: Colors.bgElement
+            width: parent.width; height: 8; radius: 4; color: Style.liftSolid(Colors.bgElement)
             Rectangle { width: Math.round(parent.width * Math.max(0, root.gpuPct) / 100); height: parent.height
                         radius: parent.radius; color: root._loadColor(root.gpuPct)
                         Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } } }

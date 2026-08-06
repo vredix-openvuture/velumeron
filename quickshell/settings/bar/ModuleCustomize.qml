@@ -56,6 +56,16 @@ Item {
             { type: "toggle", name: "glide_gpu_temp",  label: "Glide: GPU temp",  def: true },
             { type: "stepper", name: "btop_width_pct",  label: "btop width %",  def: 44, min: 20, max: 90, step: 2 },
             { type: "stepper", name: "btop_height_pct", label: "btop height %", def: 55, min: 20, max: 90, step: 5 } ]
+        case "mpris": return [
+            { type: "toggle",  name: "show_art",  label: "Album art in the bar",
+              def: false },
+            { type: "toggle",  name: "cava_wave", label: "Audio wave behind the module",
+              def: false },
+            // The flyout that grows out of this module on hover. Width is fixed, height
+            // auto-fits the content up to this ceiling — so the second value is a LIMIT,
+            // not a size: a short player does not stretch to fill it.
+            { type: "stepper", name: "menu_width_pct",  label: "Popout width %",      def: 16, min: 8,  max: 40, step: 1 },
+            { type: "stepper", name: "menu_height_pct", label: "Popout max height %", def: 52, min: 20, max: 90, step: 2 } ]
         case "battery": return [
             { type: "toggle",  name: "show_percent",  label: "Show percentage", def: true },
             { type: "stepper", name: "low_threshold", label: "Low at %", def: 10, min: 5, max: 50, step: 5 },
@@ -66,6 +76,10 @@ Item {
             { type: "stepper", name: "max_workspaces", label: "Max workspaces", def: 10, min: 1, max: 20, step: 1 },
             { type: "toggle",  name: "show_number",    label: "Number on active", def: true } ]
         case "mpris": return [
+            { type: "toggle",  name: "show_art",  label: "Album art in the bar",
+              def: false },
+            { type: "toggle",  name: "cava_wave", label: "Audio wave behind the module",
+              def: false },
             { type: "toggle",  name: "show_controls", label: "Show controls", def: true },
             { type: "stepper", name: "max_title",     label: "Max title px", def: 180, min: 60, max: 480, step: 5 } ]
         case "temperature": return [
@@ -92,6 +106,11 @@ Item {
         }
     }
 
+    // ── View ──────────────────────────────────────────────────────────────────────
+    // Everything below is built from the SHARED settings components (Card, CardLabel, FieldLabel,
+    // Toggle, Dropdown, Stepper, InputField, TextButton) and Style tokens — never a local copy.
+    // The page used to re-implement each of them with its own radii, accent alphas and font sizes,
+    // which is exactly why the module pages didn't read as part of the settings menu.
     Flickable {
         anchors.fill: parent
         contentHeight: col.implicitHeight
@@ -101,52 +120,76 @@ Item {
         Column {
             id: col
             width: parent.width
-            spacing: 12
+            spacing: Style.cardGap
 
-            // Header
+            // ── Header: which module you are editing ──────────────────────────────
             Row {
                 spacing: 10
-                Text { text: root.icon; color: Colors.fgBright; font.pixelSize: 20
+                Text { text: root.icon; color: Style.accent; font.pixelSize: 20
+                       font.family: Style.iconFont; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: root.title; color: Colors.fgBright; font.pixelSize: Style.fsSection
+                       font.bold: true; font.letterSpacing: 1.2
                        font.family: Style.font; anchors.verticalCenter: parent.verticalCenter }
-                Text { text: root.title; color: Colors.fgBright; font.pixelSize: 16; font.bold: true
-                       font.family: Style.font; anchors.verticalCenter: parent.verticalCenter }
             }
 
-            // ── Appearance (framework) ─────────────────────────────────────────
-            CapLabel { text: "APPEARANCE" }
+            // ── Appearance (framework controls every module has) ──────────────────
+            Card {
+                CardLabel { text: "APPEARANCE"
+                            hint: "Type and size for this module alone. Everything here starts out following the bar's own settings — while a value is inherited it stays greyed out, and once you change it a ↺ hands it back." }
 
-            FieldLabel { text: "Font" }
-            Dropdown {
-                summary: { var f = root.ms("font", ""); return f === "" ? "Default" : f }
-                options: {
-                    var o = [{ label: "Default", key: "" }]
-                    for (var i = 0; i < root.fonts.length; i++) o.push({ label: root.fonts[i], key: root.fonts[i] })
-                    return o
+                FieldLabel { text: "Font" }
+                Dropdown {
+                    summary: { var f = root.ms("font", ""); return f === "" ? "Default" : f }
+                    options: {
+                        var cur = root.ms("font", "")
+                        var o = [{ label: "Default", key: "", on: cur === "" }]
+                        for (var i = 0; i < root.fonts.length; i++)
+                            o.push({ label: root.fonts[i], key: root.fonts[i], on: cur === root.fonts[i] })
+                        return o
+                    }
+                    onPicked: root.changed("font", key)
                 }
-                current: root.ms("font", "")
-                onPicked: root.changed("font", key)
-            }
 
-            FieldLabel { text: "Colour" }
-            Dropdown {
-                summary: {
-                    var n = root.ms("color", "")
-                    for (var i = 0; i < root.colorRoles.length; i++) if (root.colorRoles[i].name === n) return root.colorRoles[i].label
-                    return "Default"
+                FieldLabel { text: "Colour" }
+                Dropdown {
+                    summary: {
+                        var n = root.ms("color", "")
+                        for (var i = 0; i < root.colorRoles.length; i++)
+                            if (root.colorRoles[i].name === n) return root.colorRoles[i].label
+                        return "Default"
+                    }
+                    options: {
+                        var cur = root.ms("color", "")
+                        return root.colorRoles.map(function (r) {
+                            return { label: r.label, key: r.name, on: r.name === cur, swatch: r.name }
+                        })
+                    }
+                    onPicked: root.changed("color", key)
                 }
-                current: root.ms("color", "")
-                options: root.colorRoles.map(function (r) { return { label: r.label, key: r.name, swatch: r.name } })
-                onPicked: root.changed("color", key)
+
+                Stepper {
+                    label: "Font size"; unit: "px"; step: 1; min: 4; max: 64; labelWidth: 110
+                    inheritable: true
+                    inherited: root.ms("font_size", "") === ""
+                    value: root.ms("font_size", VtlConfig.barFontSize)
+                    onChanged: root.changed("font_size", v)
+                    onReset:   root.changed("font_size", "")
+                }
+                Stepper {
+                    label: "Icon size"; unit: "px"; step: 1; min: 4; max: 64; labelWidth: 110
+                    inheritable: true
+                    inherited: root.ms("icon_size", "") === ""
+                    value: root.ms("icon_size", VtlConfig.barIconSize)
+                    onChanged: root.changed("icon_size", v)
+                    onReset:   root.changed("icon_size", "")
+                }
             }
 
-            FrameStepper { label: "Font size"; name: "font_size"; fallback: VtlConfig.barFontSize }
-            FrameStepper { label: "Icon size"; name: "icon_size"; fallback: VtlConfig.barIconSize }
-
-            // ── Module-specific ────────────────────────────────────────────────
-            Column {
-                width: parent.width; spacing: 12
+            // ── Module-specific (descriptor-driven, see specFor) ──────────────────
+            Card {
                 visible: root.specFor(root.moduleKey).length > 0
-                CapLabel { text: "SETTINGS" }
+                CardLabel { text: "SETTINGS"
+                            hint: "Options this module has on its own — they only exist for " + root.title + "." }
                 Repeater {
                     model: root.specFor(root.moduleKey)
                     delegate: Loader {
@@ -163,15 +206,11 @@ Item {
                 }
             }
 
-            // Reset all
-            Rectangle {
-                width: parent.width; height: 34; radius: 8
-                color: rstHov.containsMouse ? Style.tint(Colors.fgUrgent, 0.22)
-                                            : Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.14)
-                Behavior on color { ColorAnimation { duration: 100 } }
-                Text { anchors.centerIn: parent; text: "Reset all to default"; color: Colors.fgPrimary
-                       font.pixelSize: 12; font.family: Style.font }
-                MouseArea { id: rstHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.resetAll() }
+            // Hands every field above — framework and module-specific — back to its default.
+            TextButton {
+                label: "Reset all to default"
+                width: parent.width
+                onClicked: root.resetAll()
             }
         }
     }
@@ -189,27 +228,56 @@ Item {
     Component {
         id: dropdownC
         Column {
+            id: ddRoot
             property var spec
             width: parent ? parent.width : 0
             spacing: 4
-            FieldLabel { text: parent.spec ? parent.spec.label : "" }
+            FieldLabel { text: ddRoot.spec ? ddRoot.spec.label : "" }
             Dropdown {
-                current: parent.spec ? root.ms(parent.spec.name, parent.spec.def) : ""
                 summary: {
-                    if (!parent.spec) return ""
-                    var v = root.ms(parent.spec.name, parent.spec.def)
-                    for (var i = 0; i < parent.spec.options.length; i++) if (parent.spec.options[i].key === v) return parent.spec.options[i].label
+                    if (!ddRoot.spec) return ""
+                    var v = root.ms(ddRoot.spec.name, ddRoot.spec.def)
+                    for (var i = 0; i < ddRoot.spec.options.length; i++)
+                        if (ddRoot.spec.options[i].key === v) return ddRoot.spec.options[i].label
                     return v
                 }
-                options: parent.spec ? parent.spec.options.map(function (o) {
-                    return { label: o.label, key: o.key } }) : []
-                onPicked: if (parent.spec) root.changed(parent.spec.name, key)
+                options: {
+                    if (!ddRoot.spec) return []
+                    var v = root.ms(ddRoot.spec.name, ddRoot.spec.def)
+                    return ddRoot.spec.options.map(function (o) {
+                        return { label: o.label, key: o.key, on: o.key === v }
+                    })
+                }
+                onPicked: if (ddRoot.spec) root.changed(ddRoot.spec.name, key)
             }
         }
     }
     Component {
         id: stepperC
-        SpecStepper { property var spec; specRef: spec }
+        Stepper {
+            property var spec
+            label:      spec ? spec.label : ""
+            min:        spec ? spec.min  : 0
+            max:        spec ? spec.max  : 100
+            step:       spec ? spec.step : 1
+            labelWidth: 110
+            value:      spec ? root.ms(spec.name, spec.def) : 0
+            onChanged:  if (spec) root.changed(spec.name, v)
+        }
+    }
+    Component {
+        id: textC
+        Column {
+            id: txtRoot
+            property var spec
+            width: parent ? parent.width : 0
+            spacing: 4
+            FieldLabel { text: txtRoot.spec ? txtRoot.spec.label : "" }
+            InputField {
+                text: txtRoot.spec ? root.ms(txtRoot.spec.name, txtRoot.spec.def) : ""
+                onEdited: if (txtRoot.spec) root.changed(txtRoot.spec.name, v)
+            }
+        }
     }
     // Member picker for group instances: toggle a module in/out of the group; the number badge
     // shows its position in the flyout stack (= activation order).
@@ -219,7 +287,7 @@ Item {
             id: memRoot
             property var spec
             width: parent ? parent.width : 0
-            spacing: 6
+            spacing: Style.rowGap
             readonly property var groupable: [
                 { key: "volume",    label: "Volume",    icon: "󰕾" },
                 { key: "bluetooth", label: "Bluetooth", icon: "󰂯" },
@@ -234,202 +302,45 @@ Item {
                 if (i >= 0) arr.splice(i, 1); else arr.push(k)
                 root.changed(memRoot.spec.name, arr)
             }
-            FieldLabel { text: memRoot.spec ? memRoot.spec.label : "" }
-            Text { text: "Toggle to include — activation order = stacking order in the flyout."
-                   color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font }
+            FieldLabel { text: memRoot.spec ? memRoot.spec.label : ""
+                         hint: "Toggle a module to include it. The badge is its position in the flyout stack, so the order you switch them on is the order they stack." }
             Repeater {
                 model: memRoot.groupable
-                delegate: Rectangle {
+                delegate: StyledRect {
                     id: memRow
                     required property var modelData
                     readonly property int memIdx: memRoot.members ? memRoot.members.indexOf(modelData.key) : -1
                     readonly property bool on: memIdx >= 0
                     width: parent ? parent.width : 0
-                    height: 38; radius: 10
-                    color: on ? Style.tint(Style.accent, 0.22)
-                         : (memHov.containsMouse ? Style.tint(Style.accent, 0.12) : Style.controlFill)
+                    height: 38; radius: Style.rControl
+                    color: memRow.on ? Style.selFill
+                         : (memHov.containsMouse ? Style.controlHover : Style.controlFill)
+                    borderWidth: memRow.on ? Style.selBorderW : Style.controlBorderW
+                    borderColor: memRow.on ? Style.selBorderColor : Style.controlBorderColor
                     Behavior on color { ColorAnimation { duration: 90 } }
                     Row {
                         anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
                         spacing: 8
                         Text { anchors.verticalCenter: parent.verticalCenter; text: memRow.modelData.icon
-                               color: memRow.on ? Colors.fgBright : Colors.fgMuted
-                               font.pixelSize: 14; font.family: Style.font }
+                               color: memRow.on ? Style.selText : Colors.fgMuted
+                               font.pixelSize: 14; font.family: Style.iconFont }
                         Text { anchors.verticalCenter: parent.verticalCenter; text: memRow.modelData.label
-                               color: memRow.on ? Colors.fgBright : Colors.fgPrimary
-                               font.pixelSize: 13; font.family: Style.font }
+                               color: memRow.on ? Style.selText : Colors.fgPrimary
+                               font.pixelSize: Style.fsLabel; font.family: Style.font }
                     }
-                    Rectangle {
+                    StyledRect {
                         anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
                         width: 22; height: 22; radius: 11
-                        color: memRow.on ? Style.accent : Colors.bgPrimary
+                        color: memRow.on ? Style.tint(Colors.fgBright, 0.20) : Style.controlFill
+                        borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
                         Behavior on color { ColorAnimation { duration: 90 } }
                         Text { anchors.centerIn: parent
                                text: memRow.on ? ("" + (memRow.memIdx + 1)) : "+"
-                               color: memRow.on ? Colors.fgBright : Colors.fgMuted
+                               color: memRow.on ? Style.selText : Colors.fgMuted
                                font.pixelSize: 11; font.bold: true; font.family: Style.font }
                     }
                     MouseArea { id: memHov; anchors.fill: parent; hoverEnabled: true
                                 onClicked: memRoot.toggleMember(memRow.modelData.key) }
-                }
-            }
-        }
-    }
-
-    Component {
-        id: textC
-        Column {
-            id: txtRoot
-            property var spec
-            width: parent ? parent.width : 0
-            spacing: 4
-            FieldLabel { text: txtRoot.spec ? txtRoot.spec.label : "" }
-            Rectangle {
-                width: parent.width; height: 34; radius: 8; color: Colors.bgPrimary
-                border.width: 1; border.color: Style.accent
-                TextInput {
-                    id: ti
-                    anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12
-                    verticalAlignment: TextInput.AlignVCenter
-                    color: Colors.fgBright; font.pixelSize: 15; font.family: Style.font
-                    clip: true
-                    text: txtRoot.spec ? root.ms(txtRoot.spec.name, txtRoot.spec.def) : ""
-                    onEditingFinished: if (txtRoot.spec) root.changed(txtRoot.spec.name, ti.text)
-                }
-            }
-        }
-    }
-
-    // ── Reusable bits ──────────────────────────────────────────────────────────────
-    component CapLabel: Text {
-        color: Colors.fgMuted; font.pixelSize: 10; font.bold: true
-        font.letterSpacing: 0.5; font.family: Style.font
-    }
-    component FieldLabel: Text {
-        color: Colors.fgBright; font.pixelSize: 12; font.bold: true
-        font.family: Style.font
-    }
-
-    // Font/icon-size stepper with inherit (reset → "").
-    component FrameStepper: Row {
-        id: fs
-        property string label:    ""
-        property string name:     ""
-        property int    fallback: 13
-        readonly property bool overridden: root.ms(fs.name, "") !== ""
-        readonly property int  value:      root.ms(fs.name, fs.fallback)
-        spacing: 8
-        Text { anchors.verticalCenter: parent.verticalCenter; width: 70; text: fs.label
-               color: Colors.fgPrimary; font.pixelSize: 12; font.family: Style.font }
-        StepBtn { sym: "−"; onTrig: root.changed(fs.name, Math.max(4,  fs.value - 1)) }
-        Text { anchors.verticalCenter: parent.verticalCenter; width: 48; horizontalAlignment: Text.AlignHCenter
-               text: fs.value + (fs.overridden ? "" : " ·"); color: fs.overridden ? Colors.fgBright : Colors.fgMuted
-               font.pixelSize: 13; font.family: Style.font }
-        StepBtn { sym: "+"; onTrig: root.changed(fs.name, Math.min(64, fs.value + 1)) }
-        StepBtn { sym: "↺"; visible: fs.overridden; onTrig: root.changed(fs.name, "") }
-    }
-    component SpecStepper: Row {
-        id: ss
-        property var specRef
-        readonly property int value: ss.specRef ? root.ms(ss.specRef.name, ss.specRef.def) : 0
-        spacing: 8
-        Text { anchors.verticalCenter: parent.verticalCenter; width: 96; text: ss.specRef ? ss.specRef.label : ""
-               color: Colors.fgPrimary; font.pixelSize: 12; font.family: Style.font }
-        StepBtn { sym: "−"; onTrig: if (ss.specRef) root.changed(ss.specRef.name, Math.max(ss.specRef.min, ss.value - ss.specRef.step)) }
-        Text { anchors.verticalCenter: parent.verticalCenter; width: 48; horizontalAlignment: Text.AlignHCenter
-               text: ss.value; color: Colors.fgBright; font.pixelSize: 13; font.family: Style.font }
-        StepBtn { sym: "+"; onTrig: if (ss.specRef) root.changed(ss.specRef.name, Math.min(ss.specRef.max, ss.value + ss.specRef.step)) }
-    }
-    component StepBtn: Rectangle {
-        id: sb
-        property string sym: ""
-        signal trig()
-        width: 26; height: 26; radius: 6
-        color: sbHov.containsMouse ? Style.accent : Style.controlFill
-        Behavior on color { ColorAnimation { duration: 90 } }
-        Text { anchors.centerIn: parent; text: sb.sym; color: Colors.fgPrimary; font.pixelSize: 13
-               font.family: Style.font }
-        MouseArea { id: sbHov; anchors.fill: parent; hoverEnabled: true; onClicked: sb.trig() }
-    }
-
-    component Toggle: Rectangle {
-        id: tg
-        property string label: ""
-        property bool   on:    false
-        signal toggled()
-        width:  parent ? parent.width : 0
-        height: 38; radius: 10; color: Style.controlFill
-        Text { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-               text: tg.label; color: Colors.fgPrimary; font.pixelSize: 13; font.family: Style.font }
-        Rectangle {
-            anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-            width: 42; height: 22; radius: 11
-            color: tg.on ? Style.accent : Colors.bgPrimary
-            Behavior on color { ColorAnimation { duration: 120 } }
-            Rectangle { width: 16; height: 16; radius: 8; color: Colors.fgBright
-                        anchors.verticalCenter: parent.verticalCenter
-                        x: tg.on ? parent.width - width - 3 : 3
-                        Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } } }
-            MouseArea { anchors.fill: parent; onClicked: tg.toggled() }
-        }
-    }
-
-    // Inline-expanding dropdown with an optional colour swatch per option.
-    component Dropdown: Column {
-        id: dd
-        property var    options: []
-        property string summary: ""
-        property var    current: ""
-        property bool   open:    false
-        signal picked(string key)
-        width:   parent ? parent.width : 0
-        spacing: 4
-        Rectangle {
-            width: parent.width; height: 34; radius: 8
-            color: ddHov.containsMouse ? Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.34)
-                                       : Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.20)
-            border.width: dd.open ? 2 : 1; border.color: Style.accent
-            Behavior on color { ColorAnimation { duration: 100 } }
-            Text { anchors { left: parent.left; leftMargin: 12; right: chev.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                   text: dd.summary; color: Colors.fgPrimary; elide: Text.ElideRight
-                   font.pixelSize: 13; font.family: Style.font }
-            Text { id: chev; anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                   text: dd.open ? "▴" : "▾"; color: Colors.fgMuted; font.pixelSize: 12; font.family: Style.font }
-            MouseArea { id: ddHov; anchors.fill: parent; hoverEnabled: true; onClicked: dd.open = !dd.open }
-        }
-        Column {
-            visible: dd.open
-            width: parent.width; spacing: 3
-            Repeater {
-                model: dd.options
-                delegate: Rectangle {
-                    id: optRow
-                    required property var modelData
-                    readonly property bool on: dd.current === modelData.key
-                    width: dd.width; height: 30; radius: 7
-                    color: on ? Style.accent
-                         : (oHov.containsMouse ? Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.34)
-                                               : Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.20))
-                    Behavior on color { ColorAnimation { duration: 90 } }
-                    Row {
-                        anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                        spacing: 8
-                        Rectangle {
-                            visible: modelData.swatch !== undefined && modelData.swatch !== ""
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 14; height: 14; radius: 4
-                            color: (modelData.swatch !== undefined && modelData.swatch !== "" && Colors[modelData.swatch] !== undefined)
-                                   ? Colors[modelData.swatch] : "transparent"
-                            border.width: 1; border.color: Colors.boNormal
-                        }
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.label
-                               color: optRow.on ? Colors.fgBright : Colors.fgPrimary
-                               font.pixelSize: 12; font.family: Style.font }
-                    }
-                    Text { visible: optRow.on; anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                           text: "✓"; color: Colors.fgBright; font.pixelSize: 12; font.family: Style.font }
-                    MouseArea { anchors.fill: parent; hoverEnabled: true; id: oHov
-                                onClicked: { dd.picked(modelData.key); dd.open = false } }
                 }
             }
         }

@@ -18,7 +18,9 @@ Flyout {
     readonly property var entries: {
         var out = [
             { value: "dwindle", label: "Dwindle", icon: "󰕴", hint: "binary splits" },
-            { value: "master",  label: "Master",  icon: "󰨑", hint: "master + stack" }
+            { value: "master",  label: "Master",  icon: "󰨑", hint: "master + stack" },
+            { value: "monocle", label: "Monocle", icon: "󰖲", hint: "one window at a time" },
+            { value: "float",   label: "Float",   icon: "󰖯", hint: "all windows floating" }
         ]
         var cs = VtlConfig.customLayouts
         for (var i = 0; i < cs.length; i++) {
@@ -37,20 +39,28 @@ Flyout {
         command: ["bash", "-c", "hyprctl getoption general:layout -j | tr -d '\\n'"]
         stdout: SplitParser {
             onRead: line => {
-                try { root.current = JSON.parse(line).str ?? "dwindle" } catch (e) { /* keep */ }
+                // "float" is a policy (layout_manager.lua floats every window), not a compositor
+                // layout — general:layout then reports the layout leftovers tile with, so the
+                // persisted choice is what this module has to show.
+                try {
+                    var real = JSON.parse(line).str ?? "dwindle"
+                    root.current = VtlConfig.tilingLayout === "float" ? "float" : real
+                } catch (e) { /* keep */ }
             }
         }
     }
     function poll() { pollProc.running = false; pollProc.running = true }
 
-    // Switch: persist the choice (settings.json → restored on reload by user_layouts.lua),
-    // then apply it live via hl.config and re-poll every consumer.
+    // Switch: persist the choice (settings.json → restored on reload by user_layouts.lua), then
+    // apply it live through layout_manager.lua and re-poll every consumer. VTL_layouts_apply()
+    // rather than a direct hl.config, so the policy modes map onto a real layout.
     Process { id: setProc; onExited: { root.poll(); UiState.layoutPollSerial++ } }
     function setLayout(value) {
         root.current = value
         SettingsStore.set("tiling_layout", value)
-        setProc.command = ["bash", "-c",
-            "hyprctl eval \"hl.config({ general = { layout = [[$1]] } })\"", "vtl", value]
+        // Value handed over directly: SettingsStore.set is async, so having Lua re-read the file
+        // here raced the write and applied the previous choice (see layout_manager.lua).
+        setProc.command = ["bash", "-c", "hyprctl eval \"VTL_layouts_set([[$1]])\"", "vtl", value]
         setProc.running = false
         setProc.running = true
     }

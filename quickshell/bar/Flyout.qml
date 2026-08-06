@@ -23,6 +23,7 @@ PanelWindow {
 
     property HyprlandMonitor monitor: Hyprland.monitorFor(root.screen)
     readonly property string mon:    monitor?.name ?? ""
+    readonly property int    monId:  monitor?.id   ?? -1
     readonly property bool   isOpen: UiState.flyout === root.flyoutId && UiState.flyoutMon === root.mon
     // Open on SOME monitor (the panel only grows on `isOpen`'s monitor, but every screen grabs its
     // lock region so a click on any monitor — outside that monitor's bar — dismisses the flyout).
@@ -36,15 +37,12 @@ PanelWindow {
     readonly property int    sh:     screen ? screen.height : 1080
     readonly property int    inPad:  14
 
-    // Track the focused window's fullscreen state — when fullscreen the bar is hidden, so the panel
-    // grows as a free tab from the bare screen edge instead of merging into the (absent) bar.
-    property bool monFullscreen: false
-    Connections {
-        target: Hyprland
-        function onRawEvent(event) {
-            if (event.name === "fullscreen") root.monFullscreen = (("" + event.data).trim() === "1")
-        }
-    }
+    // Is a real fullscreen window hiding THIS monitor's bar? Then the panel grows as a free tab
+    // from the bare screen edge instead of merging into the (absent) bar. Derived per monitor from
+    // the live client list (Compositor.fullscreenOn → Hyprwindows) — a maximized window or a
+    // fullscreen one on another workspace/monitor must NOT count, or the panel drops to the screen
+    // edge and renders over the still-visible bar.
+    readonly property bool monFullscreen: Compositor.fullscreenOn(root.monId)
 
     // ── Dock geometry (ported from Settings.qml) ──────────────────────────────────────────────
     readonly property bool   edgeBar: VtlConfig.edgeActiveFor(mEdge, root.mon) && !root.monFullscreen

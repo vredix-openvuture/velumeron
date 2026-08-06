@@ -101,7 +101,7 @@ Column {
             anchors { right: parent.right; verticalCenter: parent.verticalCenter }
             spacing: 8
             IconBtn { icon: "󰑐"; onTrig: root.refresh() }
-            NetToggle { on: root.wifiOn; onToggled: root.run("nmcli radio wifi " + (root.wifiOn ? "off" : "on"), "") }
+            Switch { on: root.wifiOn; onToggled: root.run("nmcli radio wifi " + (root.wifiOn ? "off" : "on"), "") }
         }
     }
 
@@ -179,8 +179,10 @@ Column {
                     Rectangle {
                         id: goBtn
                         anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
-                        width: 56; height: 28; radius: 7; color: gHov.containsMouse ? Colors.boActive : Colors.bgActive
-                        Text { anchors.centerIn: parent; text: "Connect"; color: Colors.fgBright; font.pixelSize: 11; font.family: Style.font }
+                        width: 56; height: 28; radius: Style.rTile
+                        color: gHov.containsMouse ? Colors.boActive : Style.accent
+                        Text { anchors.centerIn: parent; text: "Connect"; color: Style.onAccent
+                               font.pixelSize: 11; font.family: Style.font }
                         MouseArea { id: gHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.connectPw(nd.modelData.ssid, pw.text) }
                     }
                 }
@@ -248,14 +250,5 @@ Column {
         Behavior on color { ColorAnimation { duration: 100 } }
         Text { anchors.centerIn: parent; text: parent.icon; color: Colors.fgPrimary; font.pixelSize: 13; font.family: Style.font }
         MouseArea { id: iHov; anchors.fill: parent; hoverEnabled: true; onClicked: parent.trig() }
-    }
-    component NetToggle: Rectangle {
-        property bool on: false
-        signal toggled()
-        width: 42; height: 22; radius: 11; color: on ? Colors.bgActive : Colors.bgPrimary
-        Behavior on color { ColorAnimation { duration: 120 } }
-        Rectangle { width: 16; height: 16; radius: 8; color: Colors.fgBright; anchors.verticalCenter: parent.verticalCenter
-                    x: parent.on ? parent.width - width - 3 : 3; Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } } }
-        MouseArea { anchors.fill: parent; onClicked: parent.toggled() }
     }
 }
