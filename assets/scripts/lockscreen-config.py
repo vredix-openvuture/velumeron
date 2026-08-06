@@ -32,8 +32,12 @@ MARKER = os.path.join(UD, "active-lockscreen.json")
 
 # The lock keys a preset owns — must stay in sync with VtlConfig.lockKeys.
 LOCK_KEYS = [
-    "lock_reveal", "lock_blur", "lock_dim", "lock_card_wallpaper", "lock_widget_zones",
-    "lock_weather_city", "lock_weather_unit", "lock_clock_format", "lock_date_format",
+    "lock_reveal", "lock_blur", "lock_dim", "lock_card_wallpaper", "lock_card_avatar",
+    "lock_uniform_wallpaper", "lock_widget_zones",
+    "lock_card_pos", "lock_card_width_pct", "lock_card_height_pct",
+    "lock_weather_city", "lock_weather_unit", "lock_weather_forecast",
+    "lock_weather_forecast_days", "lock_clock_format", "lock_date_format",
+    "lock_clock_scale", "lock_clock_style", "lock_blur_target",
 ]
 
 

@@ -20,6 +20,29 @@ Item {
     // monitor as the base layer, so the iris grows out of the real screen instead of black.
     readonly property string _shotDir: Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"
 
+    // ── Suspend sequencing: "the lockscreen is fully up" flag ───────────────────────────────────
+    // hypridle's inhibit_sleep=3 holds the sleep inhibitor only until the compositor reports the
+    // ext-session-lock ACTIVE — that is "the surfaces exist", not "they have drawn". A suspend
+    // triggered from the session menu / a keybind therefore cut into the still-assembling lock
+    // (screenshot base, wallpaper decode, iris reveal). We touch this flag once the surfaces are up
+    // AND the reveal has played; assets/scripts/suspend.sh waits for it before pulling the plug.
+    readonly property string _readyFlag: root._shotDir + "/velumeron-lock-ready"
+    Process { id: readyProc }
+    function _setReady(on) {
+        readyProc.command = ["bash", "-c",
+            (on ? "touch " : "rm -f ") + "\"" + root._readyFlag + "\""]
+        readyProc.running = false; readyProc.running = true
+    }
+    // Reveal duration (LockContent's openAnim is 640 ms) + a frame of margin; "none" only needs the
+    // surfaces to have painted once.
+    Timer {
+        id: readyTimer
+        interval: VtlConfig.lockReveal === "none" ? 120 : 760
+        onTriggered: root._setReady(true)
+    }
+    // A crash while locked would leave the flag behind and make the next suspend skip its wait.
+    Component.onCompleted: root._setReady(false)
+
     WlSessionLock {
         id: sessionLock
         locked: LockState.locked
@@ -48,6 +71,24 @@ Item {
         if (!pam.start()) {
             LockState.authenticating = false
             LockState.failMsg = "Authentifizierung nicht möglich"
+            return
+        }
+        pamWatchdog.restart()
+    }
+
+    // LockContent drops EVERY keystroke while `authenticating` is set, so a conversation that never
+    // reports back turns the lockscreen into a dead end with no way out but a hard reboot. The
+    // onError handler below covers the failure PAM tells us about; this covers a helper that simply
+    // never answers (seen after resume, 2026-07-28).
+    Timer {
+        id: pamWatchdog
+        interval: 15000
+        onTriggered: {
+            if (!LockState.authenticating) return
+            pam.abort()
+            LockState.authenticating = false
+            LockState.buffer = ""
+            LockState.failMsg = "Zeitüberschreitung — bitte erneut versuchen"
         }
     }
 
@@ -101,10 +142,17 @@ Item {
             grimProc.running = false; grimProc.running = true
         }
         function onLockedChanged() {
-            if (LockState.locked) { LockState.unlocking = false; statusProc.running = false; statusProc.running = true }  // capture + pause media
-            else if (root._wasPlaying) {
-                root._wasPlaying = false
-                playProc.command = ["playerctl", "play"]; playProc.running = false; playProc.running = true
+            if (LockState.locked) {
+                LockState.unlocking = false
+                statusProc.running = false; statusProc.running = true   // capture + pause media
+                readyTimer.restart()                                    // → suspend may proceed once it fires
+            } else {
+                readyTimer.stop()
+                root._setReady(false)
+                if (root._wasPlaying) {
+                    root._wasPlaying = false
+                    playProc.command = ["playerctl", "play"]; playProc.running = false; playProc.running = true
+                }
             }
         }
     }
@@ -112,6 +160,7 @@ Item {
         target: pam
         function onPamMessage() { if (pam.responseRequired) pam.respond(LockState.buffer) }
         function onCompleted(result) {
+            pamWatchdog.stop()
             LockState.authenticating = false
             if (result === PamResult.Success) {
                 root.doUnlock()
@@ -122,6 +171,17 @@ Item {
                                   : (result === PamResult.Error)    ? "PAM-Fehler"
                                   :                                    "Falsches Passwort"
             }
+        }
+        // PamContext reports a broken conversation through `error`, and then `completed` never
+        // arrives — without this the lockscreen stayed in `authenticating` forever and ignored all
+        // further input. Always hand input back; the message says which stage broke.
+        function onError(err) {
+            pamWatchdog.stop()
+            LockState.authenticating = false
+            LockState.buffer = ""
+            LockState.failMsg = (err === PamError.StartFailed)   ? "PAM startet nicht (Konfiguration?)"
+                              : (err === PamError.TryAuthFailed) ? "PAM-Abfrage fehlgeschlagen"
+                              :                                    "Interner PAM-Fehler"
         }
     }
 

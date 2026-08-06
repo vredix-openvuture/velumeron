@@ -123,14 +123,13 @@ Item {
 
             // ── Timers ────────────────────────────────────────────────────────
             Card {
-                CardLabel { text: "TIMERS" }
+                CardLabel { text: "TIMERS"
+                            hint: "Idle time before the lockscreen appears, then before the system suspends." }
                 Stepper { label: "Lock after"; unit: "min"; min: 1; max: 120; labelWidth: 110
                           value: root.lockMin; onChanged: { root.lockMin = v; root.commitTimes() } }
                 Stepper { label: "Suspend after"; unit: root.suspendMin > 0 ? "min" : "off"; min: 0; max: 240
                           labelWidth: 110
                           value: root.suspendMin; onChanged: { root.suspendMin = v; root.commitTimes() } }
-                SubLabel { width: parent.width
-                           text: "Idle time before the lockscreen appears, then before the system suspends." }
             }
         }
     }

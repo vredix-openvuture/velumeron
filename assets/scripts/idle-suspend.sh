@@ -40,4 +40,6 @@ if command -v pactl >/dev/null 2>&1 && pactl list short sinks 2>/dev/null | grep
     skip "audio playing"
 fi
 
-exec systemctl suspend
+# Through suspend.sh so the lockscreen is drawn before the outputs go. On this path the idle lock
+# fired minutes ago, so its ready-flag is already there and the wait returns immediately.
+exec "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/suspend.sh"
