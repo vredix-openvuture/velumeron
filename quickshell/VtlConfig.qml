@@ -21,6 +21,10 @@ Item {
         return Quickshell.env("HOME") + "/.config/velumeron"
     }
 
+    // Public handle on the user dir for the few services that own a file of their
+    // own next to settings.json (caldav-accounts.json, local.json).
+    readonly property string userDir: _userDir
+
     readonly property string settingsPath: _userDir + "/gui/settings.json"
 
     // ── Raw parsed data ───────────────────────────────────────────────────────

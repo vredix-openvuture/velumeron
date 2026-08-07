@@ -110,7 +110,7 @@ Item {
                                 required property var modelData
                                 width: parent.width; height: 16; radius: 5
                                 color: Style.tint((adEv.modelData.color && adEv.modelData.color !== "")
-                                       ? adEv.modelData.color : CalDavService.colorFor(adEv.modelData.cal), 0.5)
+                                       ? adEv.modelData.color : EventService.colorFor(adEv.modelData.cal), 0.5)
                                 Text {
                                     anchors { fill: parent; leftMargin: 6; rightMargin: 4 }
                                     verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
@@ -200,7 +200,7 @@ Item {
                             readonly property real   usable:   dayCol.width - leftSep - 2 * tg.evPad
                             readonly property bool   isTask:   ev.modelData.ev.isTask === true
                             readonly property color  calColor: (ev.modelData.ev.color && ev.modelData.ev.color !== "")
-                                                              ? ev.modelData.ev.color : CalDavService.colorFor(ev.modelData.ev.cal)
+                                                              ? ev.modelData.ev.color : EventService.colorFor(ev.modelData.ev.cal)
                             // Remap stale image-cache dirs from the velorganize→velora→disponera
                             // rename so older events' pictures still resolve.
                             readonly property string _img: {

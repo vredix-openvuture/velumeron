@@ -55,6 +55,13 @@ StyledRect {
     readonly property color  _projColor:     te.project !== "" ? TodoService.colorFor(te.project) : Colors.fgMuted
     readonly property string _repeatSummary: te.repeatUnit === "none" ? "No repeat"
                                              : ("Every " + te.repeatCount + " " + te.repeatUnit)
+    // Only Vikunja tasks recur — see the Repeat button below. Switching the task to a
+    // project that can't recur drops the cadence rather than saving one that never fires.
+    readonly property bool repeatable: ("" + te.project).indexOf("vk:") === 0
+    onRepeatableChanged: if (!te.repeatable) {
+        te.repeatUnit = "none"
+        if (te._picker === "repeat") te._picker = ""
+    }
 
     function _openForm(projectId) {
         te.editing = false; te._task = ({}); te._origNotes = ""; te._picker = ""
@@ -138,7 +145,10 @@ StyledRect {
                       active: te._picker === "priority"; onTap: te._togglePicker("priority") }
             AttrBtn { icon: "󰉋"; label: te._projSummary;   accentColor: te._projColor
                       active: te._picker === "project";  onTap: te._togglePicker("project") }
-            AttrBtn { icon: "󰑖"; label: te._repeatSummary; accentColor: te.repeatUnit === "none" ? Colors.fgMuted : Style.accent
+            // Recurrence is a server feature (Vikunja rolls the task over on completion);
+            // a CalDAV or local task has nothing to do the rolling, so don't offer it.
+            AttrBtn { visible: te.repeatable
+                      icon: "󰑖"; label: te._repeatSummary; accentColor: te.repeatUnit === "none" ? Colors.fgMuted : Style.accent
                       active: te._picker === "repeat";   onTap: te._togglePicker("repeat") }
         }
 

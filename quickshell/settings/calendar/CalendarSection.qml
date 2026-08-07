@@ -3,14 +3,27 @@ import "../.."
 import QtQuick
 import Quickshell.Io
 
-// Calendar / CalDAV settings — accounts (Nextcloud, Vikunja, any CalDAV server), per-calendar
-// visibility, sync cadence and the month-view first day. The account list itself lives in
-// gui/caldav-accounts.json (managed by caldav-client.py, chmod 600); everything else goes to
-// settings.json like every other page.
+// Calendar / CalDAV settings — accounts (Nextcloud, Vikunja, any CalDAV server), the local
+// (account-free) lists, per-calendar visibility, sync cadence and the month-view first day.
+// The account list itself lives in gui/caldav-accounts.json (managed by caldav-client.py,
+// chmod 600) and the local lists in gui/local.json (local-store.py, shared with Disponera);
+// everything else goes to settings.json like every other page.
 Item {
     id: root
 
     function save(key, value) { SettingsStore.set(key, value) }
+
+    // List colours offered for local calendars/lists — "" means "let the shell pick".
+    readonly property var swatches: ["", "#e06c75", "#e5c07b", "#98c379", "#56b6c2",
+                                     "#61afef", "#c678dd", "#d19a66", "#8a8f98"]
+    property string newListKind: "todo"
+
+    function addLocalList(field) {
+        var n = ("" + field.text).trim()
+        if (n === "") return
+        LocalService.addList(n, root.newListKind, "")
+        field.text = ""
+    }
 
     function setHidden(calId, hidden) {
         var m = {}
@@ -159,6 +172,144 @@ Item {
                             fName.text = ""; fUrl.text = ""; fUser.text = ""; fPass.text = ""
                         }
                     }
+                }
+            }
+
+            // ── Local lists (no account — this machine only) ─────────────────────
+            Card {
+                CardLabel { text: "ON THIS MACHINE"
+                            hint: "Calendars and task lists that live in one file here — no server, no " +
+                                  "account, nothing leaves the machine. The Disponera app reads and writes " +
+                                  "the same lists, so both stay in step." }
+
+                Repeater {
+                    model: LocalService.lists
+                    delegate: Rectangle {
+                        id: locRow
+                        required property var modelData
+                        readonly property string calId:  "loc:" + locRow.modelData.id
+                        readonly property bool   hidden: VtlConfig.caldavCalHidden(locRow.calId)
+                        property bool swatchesOpen: false
+                        property bool confirming:   false
+
+                        width: parent.width
+                        height: 44 + (locRow.swatchesOpen ? 38 : 0)
+                        radius: Style.rControl
+                        color:  Style.controlFill
+                        border.width: Style.controlBorderW
+                        border.color: Style.controlBorderColor
+                        Behavior on height { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+                        clip: true
+
+                        // Colour dot — opens the swatch strip below.
+                        Rectangle {
+                            id: locDot
+                            anchors { left: parent.left; leftMargin: 12; top: parent.top; topMargin: 17 }
+                            width: 12; height: 12; radius: 6
+                            color: EventService.colorFor(locRow.calId)
+                            border.width: locRow.swatchesOpen ? 2 : 0
+                            border.color: Colors.fgBright
+                            MouseArea { anchors.fill: parent; anchors.margins: -6
+                                        onClicked: locRow.swatchesOpen = !locRow.swatchesOpen }
+                        }
+
+                        // Inline rename.
+                        TextInput {
+                            id: locName
+                            anchors { left: parent.left; leftMargin: 34; right: locKind.left; rightMargin: 8
+                                      top: parent.top; topMargin: 0 }
+                            height: 44
+                            verticalAlignment: TextInput.AlignVCenter
+                            text:  locRow.modelData.name
+                            color: Colors.fgPrimary; font.pixelSize: 12; font.family: Style.font
+                            clip: true; selectByMouse: true
+                            onEditingFinished: {
+                                var v = text.trim()
+                                if (v !== "" && v !== locRow.modelData.name)
+                                    LocalService.renameList(locRow.modelData.id, v)
+                                else if (v === "") text = locRow.modelData.name
+                            }
+                        }
+
+                        Text {
+                            id: locKind
+                            anchors { right: locEye.left; rightMargin: 12; top: parent.top; topMargin: 15 }
+                            text:  locRow.modelData.kind === "calendar" ? "Calendar" : "Tasks"
+                            color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
+                        }
+                        Text {
+                            id: locEye
+                            anchors { right: locDel.left; rightMargin: 12; top: parent.top; topMargin: 14 }
+                            text:  locRow.hidden ? "󰈉" : "󰈈"
+                            color: locRow.hidden ? Colors.fgMuted : Style.accent
+                            font.pixelSize: 14; font.family: Style.font
+                            MouseArea { anchors.fill: parent; anchors.margins: -6
+                                        onClicked: root.setHidden(locRow.calId, !locRow.hidden) }
+                        }
+                        // Two-step delete — a list takes its items with it.
+                        TextButton {
+                            id: locDel
+                            anchors { right: parent.right; rightMargin: 8; top: parent.top; topMargin: 8 }
+                            label: locRow.confirming ? "Delete for good" : "Delete"
+                            onClicked: {
+                                if (locRow.confirming) LocalService.deleteList(locRow.modelData.id)
+                                else                   locRow.confirming = true
+                            }
+                        }
+
+                        Row {
+                            anchors { left: parent.left; leftMargin: 34; top: parent.top; topMargin: 46 }
+                            spacing: 8
+                            visible: locRow.swatchesOpen
+                            Repeater {
+                                model: root.swatches
+                                delegate: Rectangle {
+                                    id: sw
+                                    required property string modelData
+                                    readonly property bool on: (locRow.modelData.color ?? "") === sw.modelData
+                                    width: 20; height: 20; radius: 10
+                                    color: sw.modelData === "" ? "transparent" : sw.modelData
+                                    border.width: sw.on ? 2 : 1
+                                    border.color: sw.on ? Colors.fgBright : Colors.fgMuted
+                                    Text {
+                                        anchors.centerIn: parent
+                                        visible: sw.modelData === ""
+                                        text: "󰃞"; color: Colors.fgMuted
+                                        font.pixelSize: 10; font.family: Style.font
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        onClicked: {
+                                            LocalService.setListColor(locRow.modelData.id, sw.modelData)
+                                            locRow.swatchesOpen = false
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                FieldLabel { text: LocalService.hasLists ? "Add another list" : "Add a local calendar or task list" }
+                Row {
+                    width: parent.width
+                    spacing: 8
+                    InputField {
+                        id: locNew
+                        width: parent.width - 96
+                        placeholder: "Name (e.g. Personal)"
+                        onEdited: root.addLocalList(locNew)
+                    }
+                    TextButton {
+                        anchors.verticalCenter: parent.verticalCenter
+                        label: "Add"; primary: true
+                        onClicked: root.addLocalList(locNew)
+                    }
+                }
+                Segmented {
+                    segments: [{ label: "Task list", key: "todo" }, { label: "Calendar", key: "calendar" }]
+                    current: root.newListKind
+                    onPicked: key => root.newListKind = key
                 }
             }
 

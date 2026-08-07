@@ -11,6 +11,7 @@ Everything lives in `assets/scripts/`. All scripts source `lib/env.sh` for `$VEL
 | `wallpaper-auto.sh` | Timer-driven next-wallpaper pick (order from settings) |
 | `wallpaper-random.sh` | Random pick helper |
 | `caldav-client.py` | Complete CalDAV client for the calendar menu (discovery, sync → JSON cache, add/complete/delete todos & events). stdlib only. Commands: `load` `sync` `add-account` `remove-account` `add-todo` `toggle-todo` `add-event` `delete-item` |
+| `local-store.py` | The account-free calendar/task lists (`gui/local.json`) — the store the Disponera app shares. Every command re-reads, patches and atomically replaces the file, then prints it. stdlib only. Commands: `load` `add-list` `rename-list` `set-list-color` `delete-list` `add-todo` `add-event` `update-item` `toggle-item` `delete-item` |
 | `btop-drop.sh` | The btop dropdown: generates a btop theme from the live palette, places + pins a kitty float below the bar via `hyprctl eval`, toggles on re-run |
 | `update-check.sh` | Prints `{"repo":N,"aur":N,"flatpak":N,"total":N}` for the Updates module (`--no-aur`, `--no-flatpak`) |
 | `volume-up.sh` / `brightness.sh` / `osd-show.sh` | Hardware keys → change + OSD trigger |
@@ -32,6 +33,7 @@ Everything lives in `assets/scripts/`. All scripts source `lib/env.sh` for `$VEL
 | `$VELUMERON_USER_DIR/gui/last-seen-version` | onboarding-state.py `mark-seen` → update-report decision |
 | `$VELUMERON_USER_DIR/hypr.lua/user_settings.lua` | user-settings-io.py / .setup/hyprland.sh → hypr.lua (device config) |
 | `$VELUMERON_USER_DIR/gui/caldav-accounts.json` | caldav-client.py (600) |
+| `$VELUMERON_USER_DIR/gui/local.json` | local-store.py ⇄ Disponera (shared local lists) |
 | `$VELUMERON_USER_DIR/quickshell/colors.json` | wallust → Colors.qml (live recolour) |
 | `$VELUMERON_USER_DIR/quickshell/wallpapers.json` | wallpaper-set.sh → wallpaper engine |
 | `$VELUMERON_USER_DIR/hypr.lua/colors.lua` | wallust → hypr.lua (borders) |

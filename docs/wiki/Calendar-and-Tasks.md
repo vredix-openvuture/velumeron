@@ -1,8 +1,25 @@
 # Calendar & Tasks
 
-Click the **clock** in the bar: a calendar + task menu grows out of it. It speaks plain
-**CalDAV**, so Nextcloud Calendar, Nextcloud Tasks and Vikunja all work — events (VEVENT) feed the
-month view, todos (VTODO) feed the task list.
+Click the **clock** in the bar: a calendar + task menu grows out of it. No account needed — you
+can keep calendars and task lists **on this machine** and never sync anything. If you do want
+them synced, it speaks plain **CalDAV**, so Nextcloud Calendar, Nextcloud Tasks and Vikunja all
+work: events (VEVENT) feed the month view, todos (VTODO) feed the task list.
+
+Local lists and synced ones sit side by side everywhere — the same month grid, the same task
+board, the same editors. Only the little colour dot tells them apart.
+
+## Local calendars & lists (Settings → Calendar → On this machine)
+
+Type a name, pick **Task list** or **Calendar**, hit Add. That's the whole setup.
+
+- Everything lives in one file: `~/.config/velumeron/gui/local.json`. Nothing leaves the machine.
+- Rename in place by clicking the name; the colour dot opens a swatch strip; the eye hides a list
+  from the menu without deleting it; **Delete** asks twice (a list takes its items with it).
+- The **Disponera** app reads and writes the same file, so a list you make in the shell is there
+  in the app and vice versa — live, no sync button. (If you used local lists in Disponera before,
+  they are copied over on first start; the old file is left untouched.)
+- Local task lists behave like any other: due dates and times, priorities, notes, and they show
+  up on the calendar on their due day.
 
 ## Connecting accounts (Settings → Calendar)
 
@@ -41,6 +58,8 @@ settings.json.
 
 ## Sync behaviour
 
+- Local lists need no sync at all: the shell watches `gui/local.json` and redraws the moment it
+  changes, whoever wrote it.
 - Instant load from the local cache (`~/.cache/velumeron/caldav-cache.json`), then a refresh on
   open and every N minutes (Settings → Calendar → Refresh).
 - Recurring events are expanded locally (daily/weekly/monthly/yearly incl. `BYDAY` ordinals,

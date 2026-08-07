@@ -5,23 +5,25 @@ import Quickshell
 import Quickshell.Io
 
 // Unified todo state shared by the calendar flyout and (by contract) Disponera.
-// Two backends feed ONE model: vikunja-client.py delivers the project TREE +
+// Three backends feed ONE model: vikunja-client.py delivers the project TREE +
 // task→subtask relations over Vikunja's REST API; every other CalDAV account
-// contributes its flat VTODO lists through CalDavService. The merge spec below
-// is duplicated in Disponera's src/disponera/todomodel.py — keep them in
-// lockstep (both read the same two cache files, so they agree by construction
-// after any sync).
+// contributes its flat VTODO lists through CalDavService; LocalService adds the
+// lists that live only on this machine (gui/local.json, no account, no network).
+// The merge spec below is duplicated in Disponera's src/disponera/todomodel.py —
+// keep them in lockstep (both read the same cache files and the same local store,
+// so they agree by construction after any sync).
 //
 // Unified model:
-//   project = { id: "vk:8"|"cd:<calId>", title, parentId (""=root), source,
-//               color, writable, openCount }
-//   task    = { id: "vk:16"|"cd:<calId>|<href>", projectId, title, done, doneMs,
-//               dueMs, priority (0..5, Vikunja scale), parentTaskId, notes,
-//               cal, href (cd only — kept for mutations) }
+//   project = { id: "vk:8"|"cd:<calId>"|"loc:<listId>", title, parentId (""=root),
+//               source, color, writable, openCount }
+//   task    = { id: "vk:16"|"cd:<calId>|<href>"|"loc:<itemId>", projectId, title,
+//               done, doneMs, dueMs, priority (0..5, Vikunja scale), parentTaskId,
+//               notes, cal, href (cd only — kept for mutations) }
 //
 // Merge rule: Vikunja first; every CalDAV account whose URL host equals the
-// Vikunja host is dropped (same data, richer over REST). iCal priorities
-// (1=highest…9) map onto Vikunja's 0..5 (0=unset, 5=highest).
+// Vikunja host is dropped (same data, richer over REST); local lists always come
+// last and are never filtered (they have no account to have a role). iCal
+// priorities (1=highest…9) map onto Vikunja's 0..5 (0=unset, 5=highest).
 Singleton {
     id: root
 
@@ -56,6 +58,9 @@ Singleton {
     }
     readonly property var _cdCals: CalDavService.calendars.filter(c => c.vtodo && root._cdKept(c.id))
 
+    // Local todo lists — hidden ones drop out here (same caldav_hidden map, "loc:" keys).
+    readonly property var _locProjects: LocalService.todoProjects.filter(p => !VtlConfig.caldavCalHidden(p.id))
+
     function _icalPrio(p) {   // iCal 1=highest…9=lowest → Vikunja 0..5 (5=highest)
         if (!p || p <= 0) return 0
         if (p === 1) return 5
@@ -81,6 +86,8 @@ Singleton {
             out.push({ id: "cd:" + cc[j].id, title: cc[j].name, parentId: "",
                        source: "caldav", color: cc[j].color ?? "",
                        writable: cc[j].writable === true, openCount: 0 })
+        var lp = root._locProjects
+        for (var m = 0; m < lp.length; m++) out.push(lp[m])
         // Fill openCount (own open tasks per project).
         var counts = {}
         var ts = root.tasks
@@ -118,10 +125,14 @@ Singleton {
                        notes: t.notes ?? "", cal: t.cal, href: t.href,
                        recurring: t.recurring === true, repeatAfter: 0 })
         }
+        var lt = LocalService.todoTasks
+        for (var m = 0; m < lt.length; m++)
+            if (!VtlConfig.caldavCalHidden(lt[m].projectId)) out.push(lt[m])
         return out
     }
 
     readonly property bool hasTodoAccounts: root.vkOk || root._cdCals.length > 0
+                                            || root._locProjects.length > 0
     readonly property int  openCount: {
         var n = 0, ts = root.tasks
         for (var i = 0; i < ts.length; i++) if (!ts[i].done) n++
@@ -183,15 +194,27 @@ Singleton {
 
     function sync() {
         CalDavService.sync()
+        LocalService.reload()          // no network — just re-read the shared store
         if (root._queue.some(a => a[0] === "sync")) return
         root.syncing = true
         _run(["sync"])
     }
 
     // ── Mutations — routed on the id prefix, vikunja side patched optimistically ──
-    function _vkId(id) { return parseInt(("" + id).slice(3), 10) }
+    function _vkId(id)  { return parseInt(("" + id).slice(3), 10) }
+    function _locId(id) { return ("" + id).slice(4) }
+    function _isLoc(id) { return ("" + id).indexOf("loc:") === 0 }
 
-    // extra (optional): { priority, notes, repeatAfter } — Vikunja only.
+    // The editor sends a due as "YYYY-MM-DD" or "YYYY-MM-DD HH:MM"; the local store
+    // keeps the date and the time in separate fields → ["ymd", "hm"].
+    function _splitDue(v) {
+        var s = ("" + (v ?? "")).trim()
+        if (s === "") return ["", ""]
+        var p = s.split(/\s+/)
+        return [p[0], p.length > 1 ? p[1] : ""]
+    }
+
+    // extra (optional): { priority, notes, repeatAfter } — repeatAfter is Vikunja only.
     function addTask(projectId, title, dueYmd, parentTaskId, extra) {
         if (("" + projectId).indexOf("vk:") === 0) {
             var parent = (parentTaskId && ("" + parentTaskId).indexOf("vk:") === 0) ? "" + _vkId(parentTaskId) : ""
@@ -200,6 +223,10 @@ Singleton {
             _run(args)
         } else if (("" + projectId).indexOf("cd:") === 0) {
             CalDavService.addTodo(("" + projectId).slice(3), title, dueYmd ?? "")
+        } else if (root._isLoc(projectId)) {
+            var d = root._splitDue(dueYmd)
+            LocalService.addTodo(root._locId(projectId), title, d[0], d[1],
+                                 extra ? { priority: extra.priority ?? 0, notes: extra.notes ?? "" } : null)
         }
     }
 
@@ -212,6 +239,8 @@ Singleton {
                 : t)
             root.vkData = d
             _run(["toggle-task", "" + nid, task.done ? "0" : "1"])
+        } else if (root._isLoc(task.id)) {
+            LocalService.toggleItem(root._locId(task.id))
         } else {
             CalDavService.toggleTodo({ cal: task.cal, href: task.href, completed: task.done })
         }
@@ -224,25 +253,49 @@ Singleton {
             d.tasks = (d.tasks ?? []).filter(t => t.id !== nid)
             root.vkData = d
             _run(["delete-task", "" + nid])
+        } else if (root._isLoc(task.id)) {
+            LocalService.deleteItem(root._locId(task.id))
         } else {
             CalDavService.deleteItem(task.cal, task.href)
         }
     }
 
-    function setDue(task, dueYmd) {   // vikunja only in M1 (caldav-client has no set-due yet)
-        if (("" + task.id).indexOf("vk:") !== 0) return
-        _run(["set-due", "" + _vkId(task.id), dueYmd ?? ""])
+    function setDue(task, dueYmd) {   // caldav-client has no set-due yet
+        if (root._isLoc(task.id)) {
+            var d = root._splitDue(dueYmd)
+            LocalService.updateItem(root._locId(task.id), { ymd: d[0], hm: d[1] })
+        } else if (("" + task.id).indexOf("vk:") === 0) {
+            _run(["set-due", "" + _vkId(task.id), dueYmd ?? ""])
+        }
     }
 
-    // Full edit — patch keys: { title, notes, priority, dueYmd, repeatAfter } (Vikunja only).
+    // Full edit — patch keys: { title, notes, priority, dueYmd, repeatAfter }.
+    // Local tasks take everything but repeatAfter (no recurrence without a server).
     function updateTask(task, patch) {
+        if (root._isLoc(task.id)) {
+            var p = {}
+            if (patch.title !== undefined)    p.title = patch.title
+            if (patch.notes !== undefined)    p.notes = patch.notes
+            if (patch.priority !== undefined) p.priority = patch.priority
+            if (patch.dueYmd !== undefined) {
+                var d = root._splitDue(patch.dueYmd)
+                p.ymd = d[0]; p.hm = d[1]
+            }
+            LocalService.updateItem(root._locId(task.id), p)
+            return
+        }
         if (("" + task.id).indexOf("vk:") !== 0) return
         _run(["update-task", "" + _vkId(task.id), JSON.stringify(patch)])
     }
-    // Move a task to another project (both Vikunja).
+    // Move a task to another project — within Vikunja, or between local lists.
+    // Across backends it would have to be a delete + re-create, so it's a no-op.
     function moveTask(task, newProjectId) {
-        if (("" + task.id).indexOf("vk:") !== 0 || ("" + newProjectId).indexOf("vk:") !== 0) return
         if (task.projectId === newProjectId) return
+        if (root._isLoc(task.id) && root._isLoc(newProjectId)) {
+            LocalService.updateItem(root._locId(task.id), { listId: root._locId(newProjectId) })
+            return
+        }
+        if (("" + task.id).indexOf("vk:") !== 0 || ("" + newProjectId).indexOf("vk:") !== 0) return
         _run(["move-task", "" + _vkId(task.id), "" + _vkId(newProjectId)])
     }
 

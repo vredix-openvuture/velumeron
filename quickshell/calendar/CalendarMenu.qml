@@ -8,9 +8,11 @@ import Quickshell.Wayland
 // VIEW next to the Disponera app (focused working; footer button launches it). Sized as a
 // percentage of the screen: a two-column calendar tab (month grid | day agenda + quick-add)
 // and a tasks tab with the unified project tree (ProjectRail: Vikunja projects/subprojects +
-// CalDAV lists via TodoService) beside the grouped TaskBoard (subtasks indent under their
-// parents). Quick-add rows create events ("14:00 Standup" → timed, otherwise all-day) and
-// tasks in place; the calendar rail toggles per-calendar visibility (caldav_hidden).
+// CalDAV lists + local lists via TodoService) beside the grouped TaskBoard (subtasks indent
+// under their parents). Events come from EventService, which merges the synced calendars with
+// the account-free local ones — nothing here knows which is which beyond the calendar id.
+// Quick-add rows create events ("14:00 Standup" → timed, otherwise all-day) and tasks in place;
+// the calendar rail toggles per-calendar visibility (caldav_hidden, local ids included).
 Flyout {
     id: root
     flyoutId: "calendar"
@@ -69,8 +71,7 @@ Flyout {
     // ── Layout: a left rail beside each tab's content ────────────────────────────
     readonly property int railW:     130        // calendar tab: visibility toggles
     readonly property int projRailW: 220        // tasks tab: project tree
-    readonly property var eventCals: CalDavService.calendars.filter(c => c.vevent
-                                     && VtlConfig.caldavRole(c.account) !== "tasks")
+    readonly property var eventCals: EventService.visibleCalendars
     readonly property int mainW: root.panelW - 2 * root.inPad - root.railW - 12
 
     // ── Date helpers ─────────────────────────────────────────────────────────────
@@ -118,7 +119,9 @@ Flyout {
     // as calendar items: date-only (stored at noon) → an all-day line at the top; timed → a marker at
     // the time. Vikunja REST tasks belong to the "Vikunja" account; CalDAV todos to their own.
     function _taskAccount(t) {
-        return ("" + t.id).indexOf("vk:") === 0 ? "Vikunja" : CalDavService.accountOf(t.cal)
+        if (("" + t.id).indexOf("vk:") === 0)  return "Vikunja"
+        if (("" + t.id).indexOf("loc:") === 0) return "Local"
+        return CalDavService.accountOf(t.cal)
     }
     readonly property var taskEvents: {
         var out = []
@@ -130,7 +133,8 @@ Flyout {
             var d = new Date(t.dueMs)
             out.push({ isTask: true, task: t, summary: t.title,
                        startMs: t.dueMs, endMs: t.dueMs,
-                       allDay: d.getHours() === 12 && d.getMinutes() === 0,   // noon = date-only
+                       // Vikunja stores a date-only due at noon; a local task says so outright.
+                       allDay: t.dueAllDay === true || (d.getHours() === 12 && d.getMinutes() === 0),
                        cal: t.projectId, color: TodoService.colorFor(t.projectId),
                        recurring: t.recurring === true })
         }
@@ -140,7 +144,7 @@ Flyout {
     // Events indexed by day (multi-day events land on every day they span; DTEND is exclusive).
     readonly property var eventsByDay: {
         var map = {}
-        var evs = CalDavService.events
+        var evs = EventService.events
         for (var i = 0; i < evs.length; i++) {
             var e = evs[i]
             var s = new Date(e.startMs)
@@ -174,7 +178,7 @@ Flyout {
     // Event quick-add target — the remembered default (settings.json), else the
     // first writable calendar.
     readonly property string eventCal: {
-        var cs = CalDavService.eventCalendars
+        var cs = EventService.eventCalendars
         var want = VtlConfig.caldavDefaultEventCal
         for (var i = 0; i < cs.length; i++) if (cs[i].id === want) return want
         return cs.length > 0 ? cs[0].id : ""
@@ -196,9 +200,9 @@ Flyout {
         var t = text.trim()
         if (t === "" || root.eventCal === "") return
         var m = t.match(/^(\d{1,2}):(\d{2})\s+(.+)$/)
-        if (m) CalDavService.addEvent(root.eventCal, m[3], root.ymd(root.selDay),
+        if (m) EventService.addEvent(root.eventCal, m[3], root.ymd(root.selDay),
                                       ("0" + m[1]).slice(-2) + ":" + m[2], 60)
-        else   CalDavService.addEvent(root.eventCal, t, root.ymd(root.selDay), "", 0)
+        else   EventService.addEvent(root.eventCal, t, root.ymd(root.selDay), "", 0)
     }
 
     // ── Content ──────────────────────────────────────────────────────────────────
@@ -214,9 +218,10 @@ Flyout {
             onPicked: key => root.tab = key
         }
 
-        // No account yet → point at the settings page (works offline as a plain month view).
+        // Nothing set up at all → point at the settings page. Local lists count: once the
+        // user has one, this is a working calendar and the connect nag would be wrong.
         StyledRect {
-            visible: !CalDavService.hasAccounts
+            visible: !CalDavService.hasAccounts && !LocalService.hasLists
             width: parent.width
             height: hintCol.implicitHeight + 20
             radius: Style.rControl
@@ -228,7 +233,8 @@ Flyout {
                 spacing: 8
                 Text {
                     width: parent.width; wrapMode: Text.WordWrap
-                    text: "No CalDAV account yet — connect Nextcloud or Vikunja to see events and manage tasks here."
+                    text: "Nothing connected yet — add a local calendar or task list to keep things on this "
+                          + "machine, or connect Nextcloud or Vikunja to sync them."
                     color: Colors.fgPrimary; font.pixelSize: 12; font.family: Style.font
                 }
                 TextButton {
@@ -363,7 +369,7 @@ Flyout {
                                     Rectangle {
                                         anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
                                         width: 11; height: 11; radius: 5.5
-                                        color: CalDavService.colorFor(calRow.modelData.id)
+                                        color: EventService.colorFor(calRow.modelData.id)
                                         opacity: calRow.hidden ? 0.35 : 1.0
                                     }
                                     Text {
@@ -460,7 +466,7 @@ Flyout {
                                                 required property int index
                                                 width: parent.width; height: 14; radius: 3; clip: true
                                                 color: (cell.evs[bar.index].color && cell.evs[bar.index].color !== "")
-                                                       ? cell.evs[bar.index].color : CalDavService.colorFor(cell.evs[bar.index].cal)
+                                                       ? cell.evs[bar.index].color : EventService.colorFor(cell.evs[bar.index].cal)
                                                 Text {
                                                     anchors { fill: parent; leftMargin: 4; rightMargin: 3 }
                                                     verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
@@ -491,7 +497,7 @@ Flyout {
                 EventAdd {
                     id: calAddInput
                     anchors.fill: parent
-                    cals:       CalDavService.eventCalendars
+                    cals:       EventService.eventCalendars
                     defaultCal: root.eventCal
                     day:        root.selDay
                 }
@@ -540,15 +546,15 @@ Flyout {
         // ── Footer: sync state + open-the-app + manual refresh + settings ─────────
         Item {
             width: parent.width; height: 18
-            readonly property bool busy: CalDavService.syncing || TodoService.syncing
-            readonly property string err: CalDavService.lastError !== "" ? CalDavService.lastError
+            readonly property bool busy: EventService.syncing || TodoService.syncing
+            readonly property string err: EventService.lastError !== "" ? EventService.lastError
                                                                          : TodoService.lastError
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: parent.err !== "" ? "󰀦 " + parent.err
                     : parent.busy       ? "syncing…"
-                    : CalDavService.data.syncedAt > 0
-                      ? "synced " + Qt.formatTime(new Date(CalDavService.data.syncedAt), "hh:mm")
+                    : EventService.syncedAt > 0
+                      ? "synced " + Qt.formatTime(new Date(EventService.syncedAt), "hh:mm")
                       : ""
                 color: parent.err !== "" ? Colors.bgHover : Colors.fgMuted
                 font.pixelSize: 10; font.family: Style.font
@@ -579,7 +585,7 @@ Flyout {
                     text: "󰑐"; color: syncHov.containsMouse ? Colors.fgBright : Colors.fgMuted
                     font.pixelSize: 13; font.family: Style.font
                     RotationAnimation on rotation {
-                        running: CalDavService.syncing || TodoService.syncing; from: 0; to: 360
+                        running: EventService.syncing || TodoService.syncing; from: 0; to: 360
                         duration: 900; loops: Animation.Infinite
                         onRunningChanged: if (!running) syncBtn.rotation = 0
                     }
@@ -688,7 +694,7 @@ Flyout {
                     spacing: 4
                     Rectangle { width: 6; height: 6; radius: 3
                                 anchors.verticalCenter: parent.verticalCenter
-                                color: CalDavService.colorFor(cpChip.modelData.id) }
+                                color: EventService.colorFor(cpChip.modelData.id) }
                     Text { id: cpLbl; text: cpChip.modelData.name
                            color: cpChip.on ? Colors.fgBright : Colors.fgMuted
                            font.pixelSize: 10; font.family: Style.font }

@@ -88,8 +88,11 @@ Splash            1.0 splash/Splash.qml
 # Keybind cheatsheet overlay
 KeybindHelp       1.0 keybind/KeybindHelp.qml
 
-# Calendar + tasks (CalDAV: Nextcloud Calendar / Tasks; Vikunja REST for the project tree)
+# Calendar + tasks (CalDAV: Nextcloud Calendar / Tasks; Vikunja REST for the project tree;
+# LocalService: account-free lists on this machine, shared with the Disponera app)
 singleton CalDavService 1.0 calendar/CalDavService.qml
+singleton LocalService  1.0 calendar/LocalService.qml
+singleton EventService  1.0 calendar/EventService.qml
 singleton TodoService   1.0 calendar/TodoService.qml
 ProjectRail             1.0 calendar/ProjectRail.qml
 TaskBoard               1.0 calendar/TaskBoard.qml

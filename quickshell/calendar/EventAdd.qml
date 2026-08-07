@@ -4,7 +4,8 @@ import QtQuick
 
 // Full-page event editor for the calendar flyout — overlays the calendar area (opened by the header
 // "+" button or a double-click on an empty time slot). Sets a start date+time and an end date+time
-// (or an all-day date range), a title, and a target calendar → CalDavService.
+// (or an all-day date range), a title, and a target calendar → EventService, which routes it to
+// the CalDAV server or the local store depending on the calendar picked.
 StyledRect {
     id: ea
     property var    cals:       []          // [{ id, name }] writable event calendars
@@ -43,14 +44,14 @@ StyledRect {
         var t = titleIn.text.trim()
         if (t === "" || ea.cal === "") return
         if (ea.allDay) {
-            CalDavService.addEventRange(ea.cal, t, ea._ymd(ea.startDate), ea._ymd(ea.endDate), descIn.text)
+            EventService.addEventRange(ea.cal, t, ea._ymd(ea.startDate), ea._ymd(ea.endDate), descIn.text)
         } else {
             var sp = ("" + startTimeIn.text).split(":"), ep = ("" + endTimeIn.text).split(":")
             var sd = new Date(ea.startDate); sd.setHours(parseInt(sp[0]) || 0, parseInt(sp[1]) || 0, 0, 0)
             var ed = new Date(ea.endDate);   ed.setHours(parseInt(ep[0]) || 0, parseInt(ep[1]) || 0, 0, 0)
             var dur = Math.round((ed.getTime() - sd.getTime()) / 60000)
             if (dur < 5) dur = 60
-            CalDavService.addEvent(ea.cal, t, ea._ymd(ea.startDate), "" + startTimeIn.text, dur, descIn.text)
+            EventService.addEvent(ea.cal, t, ea._ymd(ea.startDate), "" + startTimeIn.text, dur, descIn.text)
         }
         ea._close(); ea.added()
     }
@@ -175,13 +176,13 @@ StyledRect {
                         required property var modelData
                         readonly property bool on: ea.cal === cc.modelData.id
                         width: ccT.implicitWidth + 28; height: 28; radius: Style.rTile
-                        color: cc.on ? Style.tint(CalDavService.colorFor(cc.modelData.id), 0.5) : "transparent"
+                        color: cc.on ? Style.tint(EventService.colorFor(cc.modelData.id), 0.5) : "transparent"
                         borderWidth: 1
-                        borderColor: cc.on ? CalDavService.colorFor(cc.modelData.id) : Style.controlBorderColor
+                        borderColor: cc.on ? EventService.colorFor(cc.modelData.id) : Style.controlBorderColor
                         Row {
                             anchors.centerIn: parent; spacing: 6
                             Rectangle { anchors.verticalCenter: parent.verticalCenter
-                                        width: 9; height: 9; radius: 4.5; color: CalDavService.colorFor(cc.modelData.id) }
+                                        width: 9; height: 9; radius: 4.5; color: EventService.colorFor(cc.modelData.id) }
                             Text { id: ccT; anchors.verticalCenter: parent.verticalCenter; text: cc.modelData.name
                                    color: cc.on ? Colors.fgBright : Colors.fgMuted; font.pixelSize: 12; font.family: Style.font }
                         }
