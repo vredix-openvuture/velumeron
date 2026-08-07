@@ -208,6 +208,13 @@ Singleton {
         if (extra) a.push(JSON.stringify(extra))
         _run(a)
     }
+
+    // One `load` at startup, like the CalDAV and Vikunja services. Reads are the
+    // FileView's job — this is here for the side effect: local-store.py copies a
+    // pre-move store (Disponera's own config dir) across on its first read, and
+    // without this the user's existing lists would stay invisible until something
+    // else happened to write.
+    Component.onCompleted: _run(["load"])
     function addEvent(listId, ev)            { _run(["add-event", listId, JSON.stringify(ev)]) }
     function updateItem(id, patch)           { _run(["update-item", id, JSON.stringify(patch)]) }
     function toggleItem(id)                  { _run(["toggle-item", id]) }
