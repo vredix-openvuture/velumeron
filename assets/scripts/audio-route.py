@@ -96,6 +96,64 @@ def streams():
     return out
 
 
+def _cards():
+    """card name → {profiles, activeProfile, key}. The profile is the only place the Bluetooth
+    "high-quality music OR headset mic, never both" choice lives."""
+    out = {}
+    for c in _pactl_json("cards"):
+        name = c.get("name") or ""
+        profs = c.get("profiles")
+        active = c.get("active_profile") or ""
+        items = []
+        if isinstance(profs, dict):
+            for pname, p in profs.items():
+                p = p or {}
+                if not p.get("available", True):
+                    continue
+                items.append({"name": pname,
+                              "label": p.get("description") or pname,
+                              "active": pname == active})
+        # A card's own name carries the device id its sinks/sources also carry:
+        #   alsa_card.pci-0000_00_1f.3   ↔ alsa_output.pci-0000_00_1f.3.analog-stereo
+        #   bluez_card.E8_EE_CC_F9_58_8D ↔ bluez_output.E8_EE_CC_F9_58_8D.1
+        # pactl reports NO card field on a sink (checked: it is null), and the properties name the
+        # ALSA card but never the pulse card, so the shared id is the only reliable link.
+        out[name] = {"profiles": items, "activeProfile": active,
+                     "key": name.split(".", 1)[1] if "." in name else name}
+    return out
+
+
+def devices():
+    """Everything about a sink/source that Quickshell does NOT expose: its ports, its card's
+    profiles, the negotiated format and (on Bluetooth) the codec."""
+    cards = _cards()
+    out = []
+    for kind, what in (("sink", "sinks"), ("source", "sources")):
+        for d in _pactl_json(what):
+            props = d.get("properties") or {}
+            dname = d.get("name") or ""
+            card_name = ""
+            for cn, cd in cards.items():
+                if cd["key"] and cd["key"] in dname:
+                    card_name = cn
+                    break
+            out.append({
+                "kind":   kind,
+                "name":   dname,
+                "label":  d.get("description") or dname,
+                "format": d.get("sample_specification") or "",
+                "codec":  props.get("api.bluez5.codec") or "",
+                "ports":  [{"name": p.get("name"),
+                            "label": p.get("description") or p.get("name"),
+                            "active": p.get("name") == d.get("active_port")}
+                           for p in (d.get("ports") or [])],
+                "card":     card_name,
+                "profiles": (cards.get(card_name) or {}).get("profiles", []),
+                "monitor":  dname.endswith(".monitor"),
+            })
+    return out
+
+
 def main():
     argv = sys.argv[1:]
     if not argv:
@@ -107,6 +165,15 @@ def main():
         json.dump(streams(), sys.stdout)
         sys.stdout.write("\n")
         return 0
+    if cmd == "devices":
+        json.dump(devices(), sys.stdout)
+        sys.stdout.write("\n")
+        return 0
+    if cmd == "set-port" and len(args) == 2:
+        return 0 if _run(["pactl", "set-sink-port", args[0], args[1]]) \
+                    or _run(["pactl", "set-source-port", args[0], args[1]]) else 1
+    if cmd == "set-profile" and len(args) == 2:
+        return 0 if _run(["pactl", "set-card-profile", args[0], args[1]]) else 1
     if cmd == "move" and len(args) == 2:
         return 0 if move(args[0], args[1], "sink") else 1
     if cmd == "move-source" and len(args) == 2:

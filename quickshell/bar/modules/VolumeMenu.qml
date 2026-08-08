@@ -7,8 +7,8 @@ import QtQuick
 Flyout {
     id: root
     flyoutId: "volume"
-    panelW:   560
-    maxH:     760          // master card + tabs + a rack of channel strips
+    panelW:   680          // a dashboard, not a strip — the app pucks need the width
+    maxH:     780
 
     Loader {
         active: root.visible
