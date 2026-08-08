@@ -10,9 +10,11 @@ import Quickshell.Services.Pipewire
 // because it is the one you can read across. Horizontal sliders stacked in a column made every
 // row look like a settings field; strips make the levels comparable at a glance.
 //
-// Faders are stepped, not continuous: twenty blocks of 5%, so the ladder itself is the readout and
-// two channels at the same level look identical instead of nearly identical. The top blocks light
-// urgent — the console convention for "you are at the ceiling".
+// The VALUE steps in 5% — that is what makes two channels at the same level look the same — but the
+// column is one capsule, not twenty bricks: the steps are hairline detents drawn onto it, and the
+// fill rides the shell's own spring (Style.elSpring/elDamping, the same one every panel emerges
+// with), so a step settles instead of jumping. Twenty stacked blocks read as a bar chart; this
+// reads as a fader, which is what the flat/rounded house style (Mirobo) asks for.
 //
 // The levels are real. Quickshell exposes PwNodePeakMonitor (per-channel peaks) and PwAudioSpectrum
 // (banded FFT) per node, so nothing is faked and no cava process is involved. Both are gated on the
@@ -126,7 +128,7 @@ Column {
 
         width:  parent.width
         height: 96
-        radius: Style.rControl
+        radius: Style.rCard
         color:  Style.tint(Colors.bgActive, 0.18)
 
         PwAudioSpectrum {
@@ -140,21 +142,24 @@ Column {
         // Spectrum as the card's floor — a texture the name sits on, not a chart.
         ClippingRectangle {
             anchors.fill: parent
-            radius: Style.rControl
+            radius: Style.rCard
             color:  "transparent"
             Row {
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
                 height: 44
-                spacing: 2
+                spacing: 3
                 Repeater {
                     model: spectrum.values.length
                     delegate: Rectangle {
                         required property int index
                         readonly property real v: Math.max(0, Math.min(1, spectrum.values[index] ?? 0))
-                        width:  Math.max(1, (master.width - 2 * (spectrum.values.length - 1)) / spectrum.values.length)
-                        height: Math.max(2, parent.height * v)
+                        width:  Math.max(1, (master.width - 3 * (spectrum.values.length - 1)) / spectrum.values.length)
+                        height: Math.max(3, parent.height * v)
                         anchors.bottom: parent.bottom
-                        radius: 1
+                        // CavaWave's rule: softened tops, not lozenges — a full pill radius turns
+                        // a spectrum into a row of blobs. Capped by the height so a bar near the
+                        // floor keeps its shape.
+                        radius: Math.min(3, width / 2, height / 2)
                         color:  Style.tint(Colors.bgSecondary, 0.75)
                         opacity: 0.55
                         Behavior on height { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
@@ -175,7 +180,7 @@ Column {
             Column {
                 anchors.verticalCenter: parent.verticalCenter
                 width: Math.max(0, parent.width - 36 - mPct.implicitWidth - 20)
-                spacing: 2
+                spacing: 3
                 Text {
                     width: parent.width; elide: Text.ElideRight
                     text:  root._label(master.node)
@@ -276,8 +281,11 @@ Column {
 
     // ── Building blocks ────────────────────────────────────────────────────────────────────────
 
-    // Upright fader: twenty blocks of 5%, dragged up and down. The ladder IS the readout, so two
-    // channels at the same level look identical rather than nearly identical.
+    // Upright fader. The value still steps in 5% — that was the ask and it is what makes two
+    // channels at the same level look the same — but the COLUMN is one capsule, not twenty bricks.
+    // The steps are drawn onto it as hairline detents instead of cut out of it, and the fill rides
+    // the shell's own spring (Style.elSpring/elDamping, the same one every panel emerges with), so
+    // a step settles rather than jumps. Blocks read as a bar chart; this reads as a fader.
     component Fader: Item {
         id: fad
         property var au: null
@@ -286,27 +294,53 @@ Column {
         readonly property int  steps: 20
         width: 38
 
-        Column {
+        // What is drawn, as opposed to what is set: it chases `vol` on a spring.
+        property real shown: fad.vol
+        onVolChanged: fad.shown = fad.vol
+        Behavior on shown { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.002 } }
+
+        ClippingRectangle {
+            id: track
             anchors.fill: parent
-            spacing: 2
-            Repeater {
-                model: fad.steps
-                delegate: Rectangle {
-                    required property int index
-                    // Index 0 is the TOP block, so it stands for the highest step.
-                    readonly property real level: (fad.steps - index) / fad.steps
-                    readonly property bool lit:   fad.vol >= level - 0.001
-                    width:  parent.width
-                    height: (fad.height - (fad.steps - 1) * 2) / fad.steps
-                    radius: 2
-                    color: !lit                ? Style.tint(Colors.bgPrimary, 0.85)
-                         : fad.muted           ? Colors.fgMuted
-                         : level > 0.9         ? Colors.fgUrgent
-                         : level > 0.75        ? Style.tint(Colors.fgUrgent, 0.45)
-                                               : Colors.bgActive
-                    Behavior on color { ColorAnimation { duration: 90 } }
+            radius: width / 2                       // a capsule, so both ends stay soft
+            color:  Style.tint(Colors.bgPrimary, 0.85)
+
+            Rectangle {
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                height: Math.max(0, track.height * fad.shown)
+                radius: track.radius
+                color:  fad.muted     ? Colors.fgMuted
+                      : fad.vol > 0.9 ? Colors.fgUrgent     // at the ceiling, the console cue
+                                      : Colors.bgActive
+                Behavior on color { ColorAnimation { duration: 160 } }
+            }
+
+            // The 5% grid, drawn ON the column: legible detents, no bricks.
+            Column {
+                anchors.fill: parent
+                spacing: (track.height - fad.steps) / fad.steps
+                topPadding: (track.height - fad.steps) / fad.steps
+                Repeater {
+                    model: fad.steps - 1
+                    delegate: Rectangle {
+                        width:  track.width; height: 1
+                        color:  Colors.bgPrimary
+                        opacity: 0.35
+                    }
                 }
             }
+        }
+
+        // Grip at the top of the fill — the thing your eye follows while dragging.
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width:  fad.width + 4
+            height: 5
+            radius: 2.5
+            y: Math.max(0, Math.min(fad.height - height, fad.height * (1 - fad.shown) - height / 2))
+            color: fad.muted ? Colors.fgMuted : Colors.fgBright
+            opacity: fad.shown > 0.001 ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 140 } }
         }
 
         MouseArea {
@@ -315,7 +349,7 @@ Column {
             function apply(my) {
                 if (!fad.au) return
                 fad.au.muted = false
-                // Top of the column is 100%. Snap to the block grid — the steps are the point.
+                // Top of the column is 100%. Snap to the 5% grid — the steps are the point.
                 var v = 1 - ((my + 4) / fad.height)
                 fad.au.volume = Math.max(0, Math.min(1, Math.round(v * fad.steps) / fad.steps))
             }
@@ -328,13 +362,15 @@ Column {
         }
     }
 
-    // Upright level meter — the actual signal, beside the fader that asks for it.
+    // Upright level meter — the actual signal, beside the fader that asks for it. Capsules with
+    // soft caps, matching the fader beside them; the decay math stays in the tick (a spring here
+    // would smear the attack, and a meter that lags is a meter that lies).
     component Meter: Item {
         id: met
         property var node: null
         readonly property var peaks: mon.peaks ?? []
         property var _disp: [0, 0]
-        width: 10
+        width: 12
 
         PwNodePeakMonitor { id: mon; node: met.node; enabled: root.active }
         Connections {
@@ -356,18 +392,20 @@ Column {
             spacing: 2
             Repeater {
                 model: 2
-                delegate: Rectangle {
+                delegate: ClippingRectangle {
+                    id: lane
                     required property int index
                     readonly property real v: met._disp.length > index ? met._disp[index] : 0
-                    width:  4; height: met.height
-                    radius: 2
+                    width:  5; height: met.height
+                    radius: 2.5
                     color:  Style.tint(Colors.bgPrimary, 0.85)
                     Rectangle {
                         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                        height: Math.max(0, parent.height * parent.v)
-                        radius: parent.radius
-                        color:  parent.v > 0.92 ? Colors.fgUrgent : Colors.bgActive
+                        height: Math.max(0, lane.height * lane.v)
+                        radius: lane.radius
+                        color:  lane.v > 0.92 ? Colors.fgUrgent : Colors.bgActive
                         Behavior on height { NumberAnimation { duration: 55; easing.type: Easing.OutQuad } }
+                        Behavior on color  { ColorAnimation  { duration: 120 } }
                     }
                 }
             }
@@ -387,10 +425,20 @@ Column {
 
         width:  96
         height: 360
-        radius: Style.rControl
+        // A strip is a card in a panel, so it takes the card radius rather than the control one —
+        // the rounder corner is what keeps a rack of them from reading as a row of boxes.
+        radius: Style.rCard
         color:  strip.isDef ? Style.tint(Colors.bgActive, 0.26)
               : sHov.containsMouse ? Style.controlHover : Style.menuRowFill
         Behavior on color { ColorAnimation { duration: 110 } }
+
+        // Strips arrive on the shell's spring rather than appearing — switching tabs should feel
+        // like the rack sliding in, not like a redraw.
+        property real appear: 0
+        Component.onCompleted: strip.appear = 1
+        Behavior on appear { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.004 } }
+        opacity: Math.max(0, Math.min(1, strip.appear))
+        y:       (1 - Math.max(0, Math.min(1, strip.appear))) * 14
 
         MouseArea { id: sHov; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
 
@@ -460,8 +508,8 @@ Column {
             }
             StyledRect {
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: 34; height: 24
-                radius: Style.rTile
+                width: 36; height: 26
+                radius: height / 2              // a pill, like everything else in the strip
                 color: strip.muted ? Style.tint(Colors.fgUrgent, 0.30)
                      : mHov.containsMouse ? Style.controlHover : Style.controlFill
                 Behavior on color { ColorAnimation { duration: 90 } }
