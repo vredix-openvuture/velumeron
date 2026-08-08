@@ -36,6 +36,15 @@ Flyout {
         setProc.running = false; setProc.running = true
     }
 
+    // Rolling history for the curves. The panel used to show only "now", which answers
+    // "is it busy" but never "was that a spike or is it always like this".
+    property var cpuHist: new Array(60).fill(0)
+    property var gpuHist: new Array(60).fill(0)
+    function _pushHist() {
+        var c = root.cpuHist.slice(1); c.push(Math.max(0, Math.min(1, root.cpuPct / 100))); root.cpuHist = c
+        var g = root.gpuHist.slice(1); g.push(Math.max(0, Math.min(1, Math.max(0, root.gpuPct) / 100))); root.gpuHist = g
+    }
+
     // ── Polling (only while the panel is open) ───────────────────────────────────
     Process { id: setProc }
     Process {
@@ -123,7 +132,9 @@ Flyout {
     }
     Timer {
         interval: 1200; repeat: true; running: root.isOpen; triggeredOnStart: true
-        onTriggered: root._poll()
+        // Sample the curve BEFORE the new poll: the values on hand are the ones the last poll
+        // produced, so the history is a record of readings rather than of empty slots.
+        onTriggered: { root._pushHist(); root._poll() }
     }
     onIsOpenChanged: if (isOpen) { root._cpuPrev = null; root._corePrev = ({}); _poll() }
 
@@ -144,76 +155,113 @@ Flyout {
             onPicked: key => root.setProfile(key)
         }
 
-        // CPU
+        // The three loads as dials, side by side — comparable at a glance, which stacked
+        // labelled bars never were.
         Row {
             width: parent.width
-            CardLabel { text: "CPU"; width: parent.width - cpuMeta.width }
-            Text { id: cpuMeta; text: root.cpuPct + "%   " + (root.cpuTemp > 0 ? root.cpuTemp + "°" : "")
-                   color: root._loadColor(root.cpuPct); font.pixelSize: Style.fsLabel; font.bold: true
-                   font.family: Style.font }
+            spacing: 10
+            ValueGauge {
+                width: (parent.width - 20) / 3
+                value: root.cpuPct / 100; label: "CPU"
+                warn: root.cpuPct >= 85
+            }
+            ValueGauge {
+                width: (parent.width - 20) / 3
+                value: Math.max(0, root.gpuPct) / 100; label: "GPU"
+                warn: root.gpuPct >= 85
+                opacity: root.gpuPct >= 0 ? 1 : 0.35
+            }
+            ValueGauge {
+                width: (parent.width - 20) / 3
+                value: root.memPct / 100; label: "MEM"
+                warn: root.memPct >= 90
+            }
         }
-        // Overall bar
-        Rectangle {
-            width: parent.width; height: 8; radius: 4; color: Style.liftSolid(Colors.bgElement)
-            Rectangle { width: Math.round(parent.width * root.cpuPct / 100); height: parent.height
-                        radius: parent.radius; color: root._loadColor(root.cpuPct)
-                        Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } } }
+
+        // What they have been doing.
+        DataTile {
+            pad: 12
+            Row {
+                width: parent.width
+                CardLabel { text: "CPU · LAST MINUTE"; width: parent.width - cpuMeta.width }
+                Text { id: cpuMeta
+                       text: root.cpuPct + "%" + (root.cpuTemp > 0 ? "   " + root.cpuTemp + "°" : "")
+                       color: root._loadColor(root.cpuPct)
+                       font.pixelSize: Style.fsLabel; font.bold: true; font.family: Style.font }
+            }
+            Sparkline {
+                width: parent.width; implicitHeight: 44
+                values: root.cpuHist
+                lineColor: root._loadColor(root.cpuPct)
+            }
         }
-        // Per-core vertical bars
-        Row {
-            width: parent.width
-            spacing: Math.max(2, Math.round((parent.width - root.cores.length * 10) / Math.max(1, root.cores.length)))
-            Repeater {
-                model: root.cores
-                delegate: Item {
-                    required property var modelData
-                    required property int index
-                    width: 10; height: 44
-                    Rectangle {
-                        anchors.bottom: parent.bottom; width: parent.width
-                        height: parent.height; radius: 3; color: Style.liftSolid(Colors.bgElement)
-                    }
-                    Rectangle {
-                        anchors.bottom: parent.bottom; width: parent.width
-                        height: Math.max(2, Math.round(parent.height * modelData / 100))
-                        radius: 3; color: root._loadColor(modelData)
-                        Behavior on height { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+        DataTile {
+            pad: 12
+            visible: root.gpuPct >= 0
+            Row {
+                width: parent.width
+                CardLabel { text: "GPU · LAST MINUTE"; width: parent.width - gpuMeta.width }
+                Text { id: gpuMeta
+                       text: Math.round(root.gpuPct) + "%" + (root.gpuTemp > 0 ? "   " + root.gpuTemp + "°" : "")
+                       color: root._loadColor(root.gpuPct)
+                       font.pixelSize: Style.fsLabel; font.bold: true; font.family: Style.font }
+            }
+            Sparkline {
+                width: parent.width; implicitHeight: 40
+                values: root.gpuHist
+                lineColor: root._loadColor(Math.max(0, root.gpuPct))
+            }
+        }
+
+        // Per-core, kept: the dials say how hard, this says how evenly.
+        DataTile {
+            pad: 12
+            Row {
+                width: parent.width
+                CardLabel { text: "CORES"; width: parent.width - coreMeta.width }
+                Text { id: coreMeta; text: root.cores.length + ""
+                       color: Colors.fgMuted; font.pixelSize: Style.fsSub; font.family: Style.font }
+            }
+            Row {
+                width: parent.width
+                spacing: Math.max(2, Math.round((parent.width - root.cores.length * 9)
+                                                / Math.max(1, root.cores.length)))
+                Repeater {
+                    model: root.cores
+                    delegate: Item {
+                        required property var modelData
+                        width: 9; height: 38
+                        Rectangle { anchors.bottom: parent.bottom; width: parent.width
+                                    height: parent.height; radius: 4.5
+                                    color: Style.tint(Colors.bgPrimary, 0.85) }
+                        Rectangle {
+                            anchors.bottom: parent.bottom; width: parent.width
+                            height: Math.max(3, Math.round(parent.height * modelData / 100))
+                            radius: 4.5; color: root._loadColor(modelData)
+                            Behavior on height { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+                        }
                     }
                 }
             }
         }
-        SubLabel { text: root.cores.length + " cores" }
 
-        // Memory
-        Row {
-            width: parent.width
-            CardLabel { text: "MEMORY"; width: parent.width - memMeta.width }
-            Text { id: memMeta
-                   text: root.memUsed.toFixed(1) + " / " + root.memTotal.toFixed(1) + " GiB"
-                   color: Colors.fgPrimary; font.pixelSize: Style.fsLabel; font.bold: true; font.family: Style.font }
+        DataTile {
+            pad: 12
+            Row {
+                width: parent.width
+                CardLabel { text: "MEMORY"; width: parent.width - memMeta.width }
+                Text { id: memMeta
+                       text: root.memUsed.toFixed(1) + " / " + root.memTotal.toFixed(1) + " GiB"
+                       color: Colors.fgPrimary; font.pixelSize: Style.fsLabel; font.bold: true
+                       font.family: Style.font }
+            }
+            Rectangle {
+                width: parent.width; height: 6; radius: 3
+                color: Style.tint(Colors.bgPrimary, 0.85)
+                Rectangle { width: Math.round(parent.width * root.memPct / 100); height: parent.height
+                            radius: parent.radius; color: root._loadColor(root.memPct)
+                            Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } } }
+            }
         }
-        Rectangle {
-            width: parent.width; height: 8; radius: 4; color: Style.liftSolid(Colors.bgElement)
-            Rectangle { width: Math.round(parent.width * root.memPct / 100); height: parent.height
-                        radius: parent.radius; color: root._loadColor(root.memPct)
-                        Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } } }
-        }
-
-        // GPU (only when present)
-        Row {
-            width: parent.width
-            visible: root.gpuPct >= 0
-            CardLabel { text: "GPU"; width: parent.width - gpuMeta.width }
-            Text { id: gpuMeta; text: Math.round(root.gpuPct) + "%   " + (root.gpuTemp > 0 ? root.gpuTemp + "°" : "")
-                   color: root._loadColor(root.gpuPct); font.pixelSize: Style.fsLabel; font.bold: true
-                   font.family: Style.font }
-        }
-        Rectangle {
-            visible: root.gpuPct >= 0
-            width: parent.width; height: 8; radius: 4; color: Style.liftSolid(Colors.bgElement)
-            Rectangle { width: Math.round(parent.width * Math.max(0, root.gpuPct) / 100); height: parent.height
-                        radius: parent.radius; color: root._loadColor(root.gpuPct)
-                        Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } } }
-        }
-    }
+}
 }

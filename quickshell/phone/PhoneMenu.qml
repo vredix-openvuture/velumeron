@@ -70,110 +70,105 @@ Flyout {
 
         Repeater {
             model: PhoneService.devices
-            delegate: StyledRect {
+            delegate: DataTile {
                 id: card
                 required property var modelData
                 readonly property bool live: card.modelData.reachable && card.modelData.paired
                 readonly property var  bat:  card.modelData.battery ?? ({})
                 readonly property var  con:  card.modelData.connectivity ?? ({})
+                readonly property bool low:  card.bat.ok === true && card.bat.charge >= 0
+                                             && card.bat.charge <= 15 && !card.bat.charging
 
-                width:  parent.width
-                height: body.implicitHeight + 22
-                radius: Style.rControl
-                color:  cardHov.containsMouse ? Style.controlHover : Style.menuRowFill
+                interactive: true
                 opacity: card.live ? 1.0 : 0.55
-                Behavior on color { ColorAnimation { duration: 100 } }
+                // A drop lands on whichever card the cursor is over.
+                onHoveredChanged: if (card.hovered && card.live) root.dropTarget = card.modelData.id
 
-                // Which device a drop lands on: whichever card the cursor is over.
-                MouseArea {
-                    id: cardHov
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    acceptedButtons: Qt.NoButton
-                    onContainsMouseChanged: if (containsMouse && card.live) root.dropTarget = card.modelData.id
-                }
+                Row {
+                    width: parent.width
+                    spacing: 12
 
-                Column {
-                    id: body
-                    anchors { left: parent.left; right: parent.right; top: parent.top
-                              leftMargin: 12; rightMargin: 12; topMargin: 11 }
-                    spacing: 9
-
-                    Row {
-                        width: parent.width
-                        spacing: 9
+                    // Charge as a ring — the same shape a volume puck uses, so a device and a
+                    // stream read as the same kind of thing across the two panels.
+                    ValueRing {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 46; height: 46
+                        visible: card.bat.ok === true && card.bat.charge >= 0
+                        value: Math.max(0, Math.min(1, (card.bat.charge ?? 0) / 100))
+                        halo:  card.bat.charging ? 0.55 : 0
+                        dim:   !card.live
+                        ringColor: card.low ? Colors.fgUrgent : Style.accent
                         Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text:  PhoneService.icon(card.modelData)
-                            color: card.live ? Style.accent : Colors.fgMuted
-                            font.family: Style.font; font.pixelSize: 19
+                            anchors.centerIn: parent
+                            text: card.bat.charge + ""
+                            color: card.low ? Colors.fgUrgent : Colors.fgBright
+                            font.family: Style.font; font.pixelSize: 13; font.bold: true
                         }
-                        Column {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: parent.width - 28 - batT.implicitWidth - 18
-                            spacing: 1
-                            Text {
-                                width: parent.width; elide: Text.ElideRight
-                                text:  card.modelData.name
-                                color: Colors.fgBright
-                                font.family: Style.font; font.pixelSize: 14; font.bold: true
-                            }
-                            Text {
-                                width: parent.width; elide: Text.ElideRight
+                    }
+                    // No battery plugin → the device icon keeps the slot, so the row never jumps.
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: !(card.bat.ok === true && card.bat.charge >= 0)
+                        width: 46; horizontalAlignment: Text.AlignHCenter
+                        text: PhoneService.icon(card.modelData)
+                        color: card.live ? Style.accent : Colors.fgMuted
+                        font.family: Style.font; font.pixelSize: 22
+                    }
+
+                    Column {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.max(0, parent.width - 58 - sig.width - 12)
+                        spacing: 2
+                        Text {
+                            width: parent.width; elide: Text.ElideRight
+                            text: card.modelData.name
+                            color: Colors.fgBright
+                            font.family: Style.font; font.pixelSize: 14; font.bold: true
+                        }
+                        Row {
+                            spacing: 8
+                            MetaTag {
                                 text: !card.modelData.paired ? "not paired"
                                     : !card.modelData.reachable ? "offline"
-                                    : (card.con.ok && card.con.type !== ""
-                                       ? PhoneService.signalGlyph(card.con.strength) + "  " + card.con.type
-                                       : "connected")
-                                color: Colors.fgMuted
-                                font.family: Style.font; font.pixelSize: 11
+                                    : (card.con.ok && card.con.type !== "" ? card.con.type : "connected")
+                                good: card.live
                             }
-                        }
-                        Text {
-                            id: batT
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: card.bat.ok === true && card.bat.charge >= 0
-                            text:  (card.bat.charging ? "󰂄 " : "󰁹 ") + card.bat.charge + "%"
-                            color: card.bat.charging ? Style.accent
-                                 : card.bat.charge <= 15 ? Colors.fgUrgent : Colors.fgPrimary
-                            font.family: Style.font; font.pixelSize: 12
+                            MetaTag { text: card.bat.charging ? "charging" : ""; good: true }
                         }
                     }
 
-                    // Battery bar — a number alone reads slower than a line you can glance at.
-                    Rectangle {
-                        visible: card.bat.ok === true && card.bat.charge >= 0
-                        width: parent.width; height: 5; radius: 2.5
-                        color: Colors.bgPrimary
-                        Rectangle {
-                            width:  parent.width * Math.max(0, Math.min(1, card.bat.charge / 100))
-                            height: parent.height; radius: parent.radius
-                            color:  card.bat.charging ? Style.accent
-                                  : card.bat.charge <= 15 ? Colors.fgUrgent : Colors.bgActive
-                            Behavior on width { NumberAnimation { duration: 200 } }
-                        }
+                    SignalArc {
+                        id: sig
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 30; height: 30
+                        visible: card.con.ok === true && card.con.strength >= 0
+                        value: Math.max(0, Math.min(1, (card.con.strength ?? 0) / 4))
+                        dim: !card.live
+                        arcColor: Style.accent
                     }
+                }
 
-                    Flow {
-                        width: parent.width
-                        spacing: 6
-                        visible: card.live
-                        Act {
-                            label: "󰅧  Send files…"
-                            primary: true
-                            enabled: PhoneService.hasPlugin(card.modelData, "share")
-                            onTap: PhoneService.pickAndShare(card.modelData.id)
-                        }
-                        Act {
-                            label: "󰄜  Ring"
-                            enabled: PhoneService.hasPlugin(card.modelData, "findmyphone")
-                            onTap: PhoneService.ring(card.modelData.id)
-                        }
-                        Act {
-                            label: "󰎇  Ping"
-                            enabled: PhoneService.hasPlugin(card.modelData, "ping")
-                            onTap: PhoneService.ping(card.modelData.id)
-                        }
+                Flow {
+                    width: parent.width
+                    spacing: 5
+                    visible: card.live
+                    DataChip {
+                        label: "󰅧  Send files"; on: true
+                        enabled: PhoneService.hasPlugin(card.modelData, "share")
+                        opacity: enabled ? 1 : 0.4
+                        onTap: PhoneService.pickAndShare(card.modelData.id)
+                    }
+                    DataChip {
+                        label: "󰄜  Ring"
+                        enabled: PhoneService.hasPlugin(card.modelData, "findmyphone")
+                        opacity: enabled ? 1 : 0.4
+                        onTap: PhoneService.ring(card.modelData.id)
+                    }
+                    DataChip {
+                        label: "󰎇  Ping"
+                        enabled: PhoneService.hasPlugin(card.modelData, "ping")
+                        opacity: enabled ? 1 : 0.4
+                        onTap: PhoneService.ping(card.modelData.id)
                     }
                 }
             }
@@ -184,35 +179,6 @@ Flyout {
             width: parent.width; wrapMode: Text.WordWrap
             text:  "Drop files onto a device to send them."
             color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font
-        }
-    }
-
-    component Act: StyledRect {
-        id: act
-        property string label:   ""
-        property bool   primary: false
-        signal tap()
-        // No `enabled` of its own: Item already has one, and setting it also stops the MouseArea
-        // below from firing — so a device without the plugin is inert, not just faded.
-        width:  actT.implicitWidth + 22
-        height: 28
-        radius: Style.rTile
-        opacity: act.enabled ? 1.0 : 0.4
-        color: act.primary ? (actHov.containsMouse ? Style.tint(Style.accent, 0.55) : Style.tint(Style.accent, 0.34))
-                           : (actHov.containsMouse ? Style.controlHover : Style.controlFill)
-        Behavior on color { ColorAnimation { duration: 90 } }
-        Text {
-            id: actT
-            anchors.centerIn: parent
-            text:  act.label
-            color: act.primary ? Colors.fgBright : Colors.fgPrimary
-            font.family: Style.font; font.pixelSize: 12
-        }
-        MouseArea {
-            id: actHov
-            anchors.fill: parent
-            hoverEnabled: true
-            onClicked: act.tap()
         }
     }
 }

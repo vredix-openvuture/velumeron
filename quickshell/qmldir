@@ -45,6 +45,17 @@ AppField    1.0 common/AppField.qml
 IconGlyphPicker 1.0 common/IconGlyphPicker.qml
 ColorPicker      1.0 common/ColorPicker.qml
 
+# Data-display kit — the shared vocabulary every popout is composed from, so the sound, phone,
+# performance, network and bluetooth panels cannot drift apart by being hand-drawn each time.
+DataTile    1.0 common/DataTile.qml
+DataChip    1.0 common/DataChip.qml
+ChipPicker  1.0 common/ChipPicker.qml
+MetaTag     1.0 common/MetaTag.qml
+Sparkline   1.0 common/Sparkline.qml
+ValueRing   1.0 common/ValueRing.qml
+ValueGauge  1.0 common/ValueGauge.qml
+SignalArc   1.0 common/SignalArc.qml
+
 # Native wallpaper engine (per-monitor background surface)
 WallpaperWindow   1.0 WallpaperWindow.qml
 Launcher          1.0 launcher/Launcher.qml

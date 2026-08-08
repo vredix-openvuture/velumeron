@@ -128,16 +128,15 @@ Column {
                     color: nd.modelData.active ? Style.tint(Style.accent, 0.16)
                          : (rHov.containsMouse ? Style.tint(Colors.bgActive, 0.14) : "transparent")
                     Behavior on color { ColorAnimation { duration: 100 } }
-                    // Signal glyph — lit in an accent disc only while active, bare otherwise.
-                    Rectangle {
+                    // Signal as the shared arc rather than a glyph: it is the same shape the phone
+                    // popout uses for cellular, so "how good is this link" reads the same everywhere.
+                    SignalArc {
                         id: wTile
                         anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
-                        width: 28; height: 28; radius: 14
-                        color: nd.modelData.active ? Style.accent : "transparent"
-                        Behavior on color { ColorAnimation { duration: 120 } }
-                        Text { anchors.centerIn: parent; text: root.sigIcon(nd.modelData.signal)
-                               color: nd.modelData.active ? Colors.fgBright : Colors.fgMuted
-                               font.pixelSize: 15; font.family: Style.font }
+                        width: 28; height: 28
+                        value: Math.max(0, Math.min(1, (nd.modelData.signal ?? 0) / 100))
+                        dim: !nd.modelData.active
+                        arcColor: Style.accent
                     }
                     Column {
                         anchors { left: wTile.right; leftMargin: 8; right: actRow.left; rightMargin: 8

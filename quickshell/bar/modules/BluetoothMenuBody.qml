@@ -57,10 +57,15 @@ Column {
             "  c=$(grep -q 'Connected: yes' <<<\"$i\" && echo 1 || echo 0); " +
             "  p=$(grep -q 'Paired: yes' <<<\"$i\" && echo 1 || echo 0); " +
             "  ic=$(grep -m1 'Icon:' <<<\"$i\" | awk '{print $2}'); " +
-            "  echo \"$mac|$c|$p|$ic|$name\"; done"]
+            // Battery Percentage is only there when the device reports it AND is connected —
+            // headphones do, a mouse usually does, a speaker never. -1 means "no such reading",
+            // which is why the ring is hidden rather than drawn at zero.
+            "  b=$(grep -m1 'Battery Percentage' <<<\"$i\" | sed -n 's/.*(\\([0-9]*\\)).*/\\1/p'); " +
+            "  echo \"$mac|$c|$p|$ic|${b:--1}|$name\"; done"]
         stdout: SplitParser { onRead: line => {
-            var p = ("" + line).split("|"); if (p.length < 5) return
-            listProc._buf.push({ mac: p[0], connected: p[1] === "1", paired: p[2] === "1", icon: p[3], name: p.slice(4).join("|") })
+            var p = ("" + line).split("|"); if (p.length < 6) return
+            listProc._buf.push({ mac: p[0], connected: p[1] === "1", paired: p[2] === "1", icon: p[3],
+                                 battery: parseInt(p[4]), name: p.slice(5).join("|") })
         }}
         onRunningChanged: if (!running) {
             listProc._buf.sort(function (a, b) { return (b.connected - a.connected) || (b.paired - a.paired) })
@@ -320,16 +325,37 @@ Column {
             }
             NumberAnimation on x { running: br.busy; from: -70; to: br.width; duration: 1100; loops: Animation.Infinite }
         }
-        // Device glyph — lit in an accent disc only while connected, bare otherwise.
-        Rectangle {
+        // Device glyph — and, when the device reports one, its charge as the ring around it: the
+        // same shape the phone popout and the sound pucks use, so a battery reads the same
+        // everywhere. Only bluetoothctl-reported values; -1 means no such reading, and then the
+        // ring is absent rather than drawn empty.
+        Item {
             id: bTile
             anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
-            width: 28; height: 28; radius: 14
-            color: br.dev && br.dev.connected ? Style.accent : "transparent"
-            Behavior on color { ColorAnimation { duration: 120 } }
-            Text { anchors.centerIn: parent; text: br.dev ? root.devIcon(br.dev.icon) : ""
-                   color: br.dev && br.dev.connected ? Colors.fgBright : Colors.fgMuted
-                   font.pixelSize: 16; font.family: Style.font }
+            width: 30; height: 30
+            readonly property int charge: br.dev ? (br.dev.battery ?? -1) : -1
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: 26; height: 26; radius: 13
+                visible: bTile.charge < 0
+                color: br.dev && br.dev.connected ? Style.accent : "transparent"
+                Behavior on color { ColorAnimation { duration: 120 } }
+            }
+            ValueRing {
+                anchors.fill: parent
+                visible: bTile.charge >= 0
+                value: Math.max(0, Math.min(1, bTile.charge / 100))
+                thickness: 3
+                dim: !(br.dev && br.dev.connected)
+                ringColor: bTile.charge <= 15 ? Colors.fgUrgent : Style.accent
+            }
+            Text {
+                anchors.centerIn: parent
+                text: br.dev ? root.devIcon(br.dev.icon) : ""
+                color: br.dev && br.dev.connected ? Colors.fgBright : Colors.fgMuted
+                font.pixelSize: bTile.charge >= 0 ? 13 : 16; font.family: Style.font
+            }
         }
         Column {
             anchors { left: bTile.right; leftMargin: 8; right: gB.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
