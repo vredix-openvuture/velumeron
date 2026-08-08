@@ -5,25 +5,28 @@ import Quickshell.Io
 import Quickshell.Widgets
 import Quickshell.Services.Pipewire
 
-// The sound menu. Not a stack of sliders — a menu you can read at a glance: the active output on a
-// card with its own live spectrum behind it, then Output / Input / Apps as tabs rather than three
-// lists fighting for the same column, and every row carrying a real LEVEL METER next to its volume
-// slider. A slider says what you asked for; the meter says what is actually coming out, and those
-// are different questions — "is this app the one making noise" was unanswerable before.
+// The sound menu, built as a mixing desk: a rack of channel strips side by side, each with an
+// upright fader you drag, a live meter beside it, and its own mute — the layout a console has
+// because it is the one you can read across. Horizontal sliders stacked in a column made every
+// row look like a settings field; strips make the levels comparable at a glance.
 //
-// The levels are real: Quickshell exposes PwNodePeakMonitor (per-channel peaks) and PwAudioSpectrum
+// Faders are stepped, not continuous: twenty blocks of 5%, so the ladder itself is the readout and
+// two channels at the same level look identical instead of nearly identical. The top blocks light
+// urgent — the console convention for "you are at the ceiling".
+//
+// The levels are real. Quickshell exposes PwNodePeakMonitor (per-channel peaks) and PwAudioSpectrum
 // (banded FFT) per node, so nothing is faked and no cava process is involved. Both are gated on the
-// menu being open — they cost CPU per node and there is no reason to meter a closed panel.
+// menu being open, and only the visible tab builds strips — a closed panel meters nothing.
 //
-// Meter movement is fast-attack / slow-decay off one shared tick, the way a VU behaves: jumping up
-// instantly and falling back smoothly is what makes a level read as motion rather than flicker.
+// Meter movement is fast-attack / slow-decay off one shared tick, the way a VU behaves: snapping up
+// and gliding down is what makes a level read as motion rather than flicker.
 //
-// Spectrum colour follows CavaWave's rule — a surface tone, never the accent: it sits BEHIND the
+// Spectrum colour follows CavaWave's rule — a surface tone, never the accent: it sits behind the
 // device name, and an accent-bright spectrum turns the text into something you read twice.
 //
-// Routing goes through assets/scripts/audio-route.py, because the id Quickshell hands out for a
-// stream is not the id pactl takes: node 64 is sink-input 6978. The script owns that lookup and
-// also reports which device each stream plays on, which Quickshell doesn't expose.
+// Routing and the app/track names come from assets/scripts/audio-route.py: the id Quickshell hands
+// out for a stream is not the id pactl takes (node 64 is sink-input 6978), and neither the playing
+// device nor the media title is available from Quickshell at all.
 Column {
     id: root
     property bool active: false
@@ -34,12 +37,13 @@ Column {
 
     readonly property string script: Quickshell.env("VELUMERON_DIR") + "/assets/scripts/audio-route.py"
 
-    // One tick drives every meter's decay — six rows with six timers would be six wake-ups for the
+    // One tick drives every meter's decay — a timer per strip would be a wake-up per strip for the
     // same 20 Hz job.
     property int tick: 0
     Timer { interval: 45; repeat: true; running: root.active; onTriggered: root.tick++ }
 
-    property string tab: "out"          // out | in | apps
+    property string tab:     "out"        // out | in | apps
+    property var    routeFor: null        // the stream whose target picker is open
 
     function _sinks()   { return Pipewire.nodes.values.filter(n => n && n.isSink && !n.isStream && n.audio) }
     function _sources() { return Pipewire.nodes.values.filter(n => n && !n.isSink && !n.isStream && n.audio
@@ -50,13 +54,14 @@ Column {
         return Pipewire.nodes.values.filter(n => n && n.isStream && n.audio
                                             && root._ownStreams.indexOf(("" + (n.name ?? "")).toLowerCase()) < 0)
     }
+    function _strips() {
+        return root.tab === "out" ? root._sinks() : root.tab === "in" ? root._sources() : root._streams()
+    }
 
     function _label(n) {
         if (!n) return "device"
         return (n.description && n.description !== "") ? n.description : (n.nickname || n.name || "device")
     }
-    // Streams carry no description or nick — node.name is the application ("LibreWolf"), which is
-    // also the best handle for its icon.
     function _appName(n) { return (n && n.name && n.name !== "") ? n.name : ((n && n.description) || "audio") }
     function _appIcon(n) {
         var nm = ("" + ((n && n.name) ?? "")).trim()
@@ -70,9 +75,17 @@ Column {
             if (ns[i] && ns[i].name === nodeName) return root._label(ns[i])
         return nodeName === "" ? "—" : nodeName
     }
+    function _channels(n) {
+        var c = (n && n.audio && n.audio.channels) ? n.audio.channels.length : 0
+        return c === 1 ? "mono" : c === 2 ? "stereo" : c > 2 ? c + " ch" : ""
+    }
+    // What the script knows and Quickshell doesn't: the playing device and the track title.
+    function _info(n)  { return (n && root._routes[n.id]) ? root._routes[n.id] : null }
+    function _media(n) { var i = root._info(n); return i ? ("" + (i.media ?? "")) : "" }
+    function _devOf(n) { var i = root._info(n); return i ? ("" + (i.deviceName ?? "")) : "" }
 
-    // ── Routing ────────────────────────────────────────────────────────────────────────────────
-    property var _routes: ({})            // PipeWire node id → device node name
+    // ── Routing + stream info ──────────────────────────────────────────────────────────────────
+    property var _routes: ({})            // PipeWire node id → { deviceName, app, media }
     Process {
         id: routeProc
         property string _acc: ""
@@ -82,14 +95,14 @@ Column {
             try {
                 var arr = JSON.parse(routeProc._acc.trim())
                 var m = {}
-                for (var i = 0; i < arr.length; i++) m[arr[i].nodeId] = arr[i].deviceName ?? ""
+                for (var i = 0; i < arr.length; i++) m[arr[i].nodeId] = arr[i]
                 root._routes = m
             } catch (e) { /* keep the last good map */ }
             routeProc._acc = ""
         }
     }
     function refreshRoutes() { routeProc._acc = ""; routeProc.running = false; routeProc.running = true }
-    onActiveChanged: if (root.active) root.refreshRoutes()
+    onActiveChanged: if (root.active) root.refreshRoutes(); else root.routeFor = null
     Timer { interval: 2000; repeat: true; running: root.active; onTriggered: root.refreshRoutes() }
 
     Process { id: actProc; onRunningChanged: if (!running) root.refreshRoutes() }
@@ -112,15 +125,15 @@ Column {
         readonly property real vol:   master.au ? Math.max(0, Math.min(1, master.au.volume)) : 0
 
         width:  parent.width
-        height: 104
+        height: 96
         radius: Style.rControl
         color:  Style.tint(Colors.bgActive, 0.18)
 
         PwAudioSpectrum {
             id: spectrum
-            node:     master.node
-            enabled:  root.active && !master.muted
-            barCount: 32
+            node:      master.node
+            enabled:   root.active && !master.muted
+            barCount:  40
             smoothing: true
         }
 
@@ -131,7 +144,7 @@ Column {
             color:  "transparent"
             Row {
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                height: 46
+                height: 44
                 spacing: 2
                 Repeater {
                     model: spectrum.values.length
@@ -150,36 +163,39 @@ Column {
             }
         }
 
-        Column {
+        Row {
             anchors { left: parent.left; right: parent.right; top: parent.top
-                      leftMargin: 14; rightMargin: 14; topMargin: 13 }
+                      leftMargin: 14; rightMargin: 14; topMargin: 12 }
             spacing: 10
-
-            Row {
-                width: parent.width
-                spacing: 9
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text:  master.muted ? "󰝟" : "󰕾"
+                color: Colors.fgBright; font.family: Style.font; font.pixelSize: 19
+            }
+            Column {
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.max(0, parent.width - 36 - mPct.implicitWidth - 20)
+                spacing: 2
                 Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text:  master.muted ? "󰝟" : "󰕾"
-                    color: Colors.fgBright; font.family: Style.font; font.pixelSize: 17
-                }
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Math.max(0, parent.width - 34 - mPct.implicitWidth - 18)
-                    elide: Text.ElideRight
+                    width: parent.width; elide: Text.ElideRight
                     text:  root._label(master.node)
                     color: Colors.fgBright
-                    font.family: Style.font; font.pixelSize: 14; font.bold: true
+                    font.family: Style.font; font.pixelSize: 15; font.bold: true
                 }
                 Text {
-                    id: mPct
-                    anchors.verticalCenter: parent.verticalCenter
-                    text:  Math.round(master.vol * 100) + "%"
-                    color: Colors.fgBright
-                    font.family: Style.font; font.pixelSize: 13; font.bold: true
+                    width: parent.width; elide: Text.ElideRight
+                    text:  "master  ·  " + root._channels(master.node)
+                    color: Style.tint(Colors.fgBright, 0.55)
+                    font.family: Style.font; font.pixelSize: 11
                 }
             }
-            MixTrack { width: parent.width; big: true; au: master.au }
+            Text {
+                id: mPct
+                anchors.verticalCenter: parent.verticalCenter
+                text:  Math.round(master.vol * 100) + "%"
+                color: Colors.fgBright
+                font.family: Style.font; font.pixelSize: 20; font.bold: true
+            }
         }
     }
 
@@ -188,60 +204,137 @@ Column {
         width: parent.width
         equal: true
         current: root.tab
-        segments: [{ label: "Output", key: "out" },
-                   { label: "Input",  key: "in" },
-                   { label: "Apps" + (root._streams().length > 0 ? "  " + root._streams().length : ""),
-                     key: "apps" }]
-        onPicked: key => root.tab = key
+        segments: [{ label: "Output  " + root._sinks().length,   key: "out" },
+                   { label: "Input  " + root._sources().length,  key: "in" },
+                   { label: "Apps  " + root._streams().length,   key: "apps" }]
+        onPicked: key => { root.tab = key; root.routeFor = null }
     }
 
-    // ── The active tab ─────────────────────────────────────────────────────────────────────────
-    Column {
-        width: parent.width
-        spacing: 7
-        opacity: 1
-        // A tab swap that just snaps reads as a redraw; a short fade reads as a move.
-        Behavior on opacity { NumberAnimation { duration: 110 } }
+    // ── The rack ───────────────────────────────────────────────────────────────────────────────
+    Flickable {
+XXX: rack.width
+        clip: true
+        flickableDirection: Flickable.HorizontalFlick
+        boundsBehavior: Flickable.StopAtBounds
 
-        Repeater {
-            model: root.tab === "out" ? root._sinks() : root.tab === "in" ? root._sources() : []
-            delegate: DeviceRow {
-                required property var modelData
-                node: modelData
-                kind: root.tab === "out" ? "sink" : "source"
-                def:  root.tab === "out" ? Pipewire.defaultAudioSink : Pipewire.defaultAudioSource
+        Row {
+            id: rack
+            height: parent.height
+            spacing: 8
+            Repeater {
+                model: root._strips()
+                delegate: Strip { required property var modelData; node: modelData }
             }
         }
-        Repeater {
-            model: root.tab === "apps" ? root._streams() : []
-            delegate: AppRow { required property var modelData; node: modelData }
-        }
+    }
+    Text {
+        visible: root._strips().length === 0
+        text:  root.tab === "apps" ? "nothing playing" : "no devices"
+        color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
+    }
+
+    // ── Target picker — full width under the rack, where a 96px strip has no room ───────────────
+    Column {
+        width: parent.width
+        spacing: 4
+        visible: root.routeFor !== null
         Text {
-            visible: (root.tab === "apps" ? root._streams().length
-                    : root.tab === "out"  ? root._sinks().length : root._sources().length) === 0
-            text:  root.tab === "apps" ? "nothing playing" : "no devices"
-            color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
+            text:  "Send " + (root.routeFor ? root._appName(root.routeFor) : "") + " to"
+            color: Colors.fgMuted; font.bold: true
+            font.pixelSize: 11; font.letterSpacing: 0.5; font.family: Style.font
+        }
+        Repeater {
+            model: root.routeFor === null ? []
+                 : (root.routeFor.isSink ? root._sinks() : root._sources())
+            delegate: StyledRect {
+                id: tgt
+                required property var modelData
+                readonly property bool on: root.routeFor && tgt.modelData.name === root._devOf(root.routeFor)
+                width: parent.width; height: 30
+                radius: Style.rTile
+                color: tgt.on ? Style.tint(Colors.bgActive, 0.30)
+                     : tgtHov.containsMouse ? Style.controlHover : Style.menuRowFill
+                Behavior on color { ColorAnimation { duration: 90 } }
+                Text {
+                    anchors { left: parent.left; leftMargin: 10; right: parent.right
+                              rightMargin: 10; verticalCenter: parent.verticalCenter }
+                    elide: Text.ElideRight
+                    text:  (tgt.on ? "󰄬  " : "") + root._label(tgt.modelData)
+                    color: tgt.on ? Colors.fgBright : Colors.fgPrimary
+                    font.family: Style.font; font.pixelSize: 12
+                }
+                MouseArea {
+                    id: tgtHov
+                    anchors.fill: parent; hoverEnabled: true
+                    onClicked: { root.moveStream(root.routeFor, tgt.modelData.name); root.routeFor = null }
+                }
+            }
         }
     }
 
     // ── Building blocks ────────────────────────────────────────────────────────────────────────
 
-    // Per-channel level meter. Fast attack, decaying fall — a level that only followed the raw peak
-    // flickers; one that only eased lags behind the beat.
-    component Meter: Row {
+    // Upright fader: twenty blocks of 5%, dragged up and down. The ladder IS the readout, so two
+    // channels at the same level look identical rather than nearly identical.
+    component Fader: Item {
+        id: fad
+        property var au: null
+        readonly property real vol:   fad.au ? Math.max(0, Math.min(1, fad.au.volume)) : 0
+        readonly property bool muted: !!(fad.au && fad.au.muted)
+        readonly property int  steps: 20
+        width: 38
+
+        Column {
+            anchors.fill: parent
+            spacing: 2
+            Repeater {
+                model: fad.steps
+                delegate: Rectangle {
+                    required property int index
+                    // Index 0 is the TOP block, so it stands for the highest step.
+                    readonly property real level: (fad.steps - index) / fad.steps
+                    readonly property bool lit:   fad.vol >= level - 0.001
+                    width:  parent.width
+                    height: (fad.height - (fad.steps - 1) * 2) / fad.steps
+                    radius: 2
+                    color: !lit                ? Style.tint(Colors.bgPrimary, 0.85)
+                         : fad.muted           ? Colors.fgMuted
+                         : level > 0.9         ? Colors.fgUrgent
+                         : level > 0.75        ? Style.tint(Colors.fgUrgent, 0.45)
+                                               : Colors.bgActive
+                    Behavior on color { ColorAnimation { duration: 90 } }
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            anchors.margins: -4
+            function apply(my) {
+                if (!fad.au) return
+                fad.au.muted = false
+                // Top of the column is 100%. Snap to the block grid — the steps are the point.
+                var v = 1 - ((my + 4) / fad.height)
+                fad.au.volume = Math.max(0, Math.min(1, Math.round(v * fad.steps) / fad.steps))
+            }
+            onPressed:         e => apply(e.y)
+            onPositionChanged: e => { if (pressed) apply(e.y) }
+            onWheel: e => {
+                if (!fad.au) return
+                fad.au.volume = Math.max(0, Math.min(1, fad.au.volume + (e.angleDelta.y > 0 ? 0.05 : -0.05)))
+            }
+        }
+    }
+
+    // Upright level meter — the actual signal, beside the fader that asks for it.
+    component Meter: Item {
         id: met
-        property var  node: null
+        property var node: null
         readonly property var peaks: mon.peaks ?? []
         property var _disp: [0, 0]
-        spacing: 2
-        width:  12
-        height: 18
+        width: 10
 
-        PwNodePeakMonitor {
-            id: mon
-            node:    met.node
-            enabled: root.active
-        }
+        PwNodePeakMonitor { id: mon; node: met.node; enabled: root.active }
         Connections {
             target: root
             function onTickChanged() {
@@ -256,262 +349,171 @@ Column {
             }
         }
 
-        Repeater {
-            model: 2
-            delegate: Rectangle {
-                required property int index
-                readonly property real v: met._disp.length > index ? met._disp[index] : 0
-                width: 5; height: met.height; radius: 2
-                color: Style.tint(Colors.bgSecondary, 0.5)
-                Rectangle {
-                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                    height: Math.max(0, parent.height * parent.v)
-                    radius: parent.radius
-                    color: parent.v > 0.92 ? Colors.fgUrgent : Colors.bgActive
-                    Behavior on height { NumberAnimation { duration: 55; easing.type: Easing.OutQuad } }
+        Row {
+            anchors.fill: parent
+            spacing: 2
+            Repeater {
+                model: 2
+                delegate: Rectangle {
+                    required property int index
+                    readonly property real v: met._disp.length > index ? met._disp[index] : 0
+                    width:  4; height: met.height
+                    radius: 2
+                    color:  Style.tint(Colors.bgPrimary, 0.85)
+                    Rectangle {
+                        anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                        height: Math.max(0, parent.height * parent.v)
+                        radius: parent.radius
+                        color:  parent.v > 0.92 ? Colors.fgUrgent : Colors.bgActive
+                        Behavior on height { NumberAnimation { duration: 55; easing.type: Easing.OutQuad } }
+                    }
                 }
             }
         }
     }
 
-    component MuteBtn: Text {
-        property var au: null
-        readonly property bool muted: !!(au && au.muted)
-        text:  muted ? "󰝟" : "󰕾"
-        color: muted ? Colors.fgUrgent : (mbHov.containsMouse ? Colors.fgBright : Colors.fgMuted)
-        font.family: Style.font; font.pixelSize: 14
-        Behavior on color { ColorAnimation { duration: 90 } }
-        MouseArea {
-            id: mbHov
-            anchors.fill: parent; anchors.margins: -5
-            hoverEnabled: true
-            onClicked: if (parent.au) parent.au.muted = !parent.au.muted
-        }
-    }
+    // One channel: what it is on top, fader and meter in the middle, level and mute at the foot.
+    component Strip: StyledRect {
+        id: strip
+        property var node: null
+        readonly property var  au:    strip.node ? strip.node.audio : null
+        readonly property bool isApp: root.tab === "apps"
+        readonly property bool isDef: !strip.isApp && strip.node !== null
+                                      && strip.node === (root.tab === "out" ? Pipewire.defaultAudioSink
+                                                                            : Pipewire.defaultAudioSource)
+        readonly property bool muted: !!(strip.au && strip.au.muted)
 
-    // Level track with a knob. `big` is the master's. Dragging unmutes by design — the mute button
-    // is what gets you to silence and back.
-    component MixTrack: Item {
-        id: trk
-        property var  au:  null
-        property bool big: false
-        readonly property real vol:   trk.au ? Math.max(0, Math.min(1, trk.au.volume)) : 0
-        readonly property bool muted: !!(trk.au && trk.au.muted)
-        width:  parent ? parent.width : 0
-        height: trk.big ? 14 : 10
-
-        Rectangle {
-            id: rail
-            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
-            height: trk.big ? 8 : 6
-            radius: height / 2
-            color:  Colors.bgPrimary
-            Rectangle {
-                width:  parent.width * trk.vol
-                height: parent.height; radius: parent.radius
-                color:  trk.muted ? Colors.fgMuted : Colors.bgActive
-                Behavior on width { NumberAnimation { duration: 70; easing.type: Easing.OutCubic } }
-            }
-        }
-        Rectangle {
-            visible: trkHov.containsMouse || trkHov.pressed || trk.big
-            x: Math.max(0, Math.min(rail.width - width, rail.width * trk.vol - width / 2))
-            anchors.verticalCenter: parent.verticalCenter
-            width: trk.big ? 14 : 11; height: width; radius: width / 2
-            color: trk.muted ? Colors.fgMuted : Colors.fgBright
-            border.width: 1; border.color: Style.tint(Colors.bgActive, 0.6)
-            Behavior on x { NumberAnimation { duration: 70; easing.type: Easing.OutCubic } }
-        }
-        MouseArea {
-            id: trkHov
-            anchors.fill: parent; anchors.margins: -4
-            hoverEnabled: true
-            function apply(mx) {
-                if (!trk.au) return
-                trk.au.muted = false
-                // Snap to 5% steps so the slider only ever sets 0, 5, 10 … %.
-                trk.au.volume = Math.max(0, Math.min(1, Math.round(((mx - 4) / rail.width) / 0.05) * 0.05))
-            }
-            onPressed:         e => apply(e.x)
-            onPositionChanged: e => { if (pressed) apply(e.x) }
-        }
-    }
-
-    // A device: click anywhere but the track to make it the default.
-    component DeviceRow: StyledRect {
-        id: drow
-        property var    node: null
-        property string kind: "sink"
-        property var    def:  null
-        readonly property bool isDef: drow.def !== null && drow.node === drow.def
-        readonly property var  au:    drow.node ? drow.node.audio : null
-
-        width:  parent ? parent.width : 0
-        height: 62
+        width:  96
+        height: 360
         radius: Style.rControl
-        color:  drow.isDef ? Style.tint(Colors.bgActive, 0.26)
-              : dHov.containsMouse ? Style.controlHover : Style.menuRowFill
+        color:  strip.isDef ? Style.tint(Colors.bgActive, 0.26)
+              : sHov.containsMouse ? Style.controlHover : Style.menuRowFill
         Behavior on color { ColorAnimation { duration: 110 } }
 
-        Row {
+        MouseArea { id: sHov; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+
+        // ── Head: what this channel is ──
+        Column {
+            id: head
             anchors { left: parent.left; right: parent.right; top: parent.top
-                      leftMargin: 12; rightMargin: 12; topMargin: 9 }
-            spacing: 10
+                      leftMargin: 8; rightMargin: 8; topMargin: 9 }
+            spacing: 3
 
-            Meter { anchors.verticalCenter: parent.verticalCenter; node: drow.node }
-
-            Column {
-                anchors.verticalCenter: parent.verticalCenter
-                width: Math.max(0, parent.width - 22 - 10)
-                spacing: 7
-                Row {
-                    width: parent.width
-                    spacing: 8
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text:  drow.isDef ? "󰄬" : "󰝥"
-                        color: drow.isDef ? Colors.boActive : Colors.fgMuted
-                        font.family: Style.font; font.pixelSize: 13
-                    }
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Math.max(0, parent.width - 29 - dPct.implicitWidth - dMute.implicitWidth - 16)
-                        elide: Text.ElideRight
-                        text:  root._label(drow.node)
-                        color: drow.isDef ? Colors.fgBright : Colors.fgPrimary
-                        font.family: Style.font; font.pixelSize: 13
-                    }
-                    Text {
-                        id: dPct
-                        anchors.verticalCenter: parent.verticalCenter
-                        text:  Math.round(drow.au ? Math.max(0, Math.min(1, drow.au.volume)) * 100 : 0) + "%"
-                        color: (drow.au && drow.au.muted) ? Colors.fgMuted : Colors.fgPrimary
-                        font.family: Style.font; font.pixelSize: 11
-                    }
-                    MuteBtn { id: dMute; anchors.verticalCenter: parent.verticalCenter; au: drow.au }
+            Item {
+                width: parent.width; height: 20
+                IconImage {
+                    visible: strip.isApp
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 20; height: 20; implicitSize: 20
+                    source: strip.isApp ? root._appIcon(strip.node) : ""
                 }
-                MixTrack { width: parent.width; au: drow.au }
+                Text {
+                    visible: !strip.isApp
+                    anchors.centerIn: parent
+                    text:  strip.isDef ? "󰄬" : "󰝥"
+                    color: strip.isDef ? Colors.boActive : Colors.fgMuted
+                    font.family: Style.font; font.pixelSize: 14
+                }
+            }
+            Text {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+                text:  strip.isApp ? root._appName(strip.node) : root._label(strip.node)
+                color: strip.isDef ? Colors.fgBright : Colors.fgPrimary
+                font.family: Style.font; font.pixelSize: 12; font.bold: strip.isDef
+            }
+            // The second line earns its place: the track for an app, the format for a device.
+            Text {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+                text:  strip.isApp ? root._media(strip.node) : root._channels(strip.node)
+                color: Colors.fgMuted
+                font.family: Style.font; font.pixelSize: 10
             }
         }
 
-        MouseArea {
-            id: dHov
-            anchors.fill: parent
-            anchors.bottomMargin: 20        // leave the track to its own MouseArea
-            hoverEnabled: true
-            onClicked: if (drow.node) root.setDefault(drow.kind, drow.node.name)
-        }
-    }
-
-    // An application: same shape, plus where it plays and a picker to move it.
-    component AppRow: StyledRect {
-        id: arow
-        property var node: null
-        readonly property var  au:      arow.node ? arow.node.audio : null
-        readonly property bool isOut:   arow.node ? arow.node.isSink : true
-        readonly property string devName: arow.node ? ("" + (root._routes[arow.node.id] ?? "")) : ""
-        property bool pickOpen: false
-
-        width:  parent ? parent.width : 0
-        height: 74 + (arow.pickOpen ? devPick.implicitHeight + 10 : 0)
-        radius: Style.rControl
-        color:  aHov.containsMouse ? Style.controlHover : Style.menuRowFill
-        clip:   true
-        Behavior on height { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-        Behavior on color  { ColorAnimation  { duration: 110 } }
-
-        MouseArea { id: aHov; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
-
+        // ── Fader + meter ──
         Row {
-            anchors { left: parent.left; right: parent.right; top: parent.top
-                      leftMargin: 12; rightMargin: 12; topMargin: 10 }
-            spacing: 10
+            anchors { top: head.bottom; topMargin: 10; horizontalCenter: parent.horizontalCenter }
+            height: 190
+            spacing: 6
+            Fader { height: parent.height; au: strip.au }
+            Meter { height: parent.height; node: strip.node }
+        }
 
-            Meter { anchors.top: parent.top; anchors.topMargin: 4; node: arow.node }
+        // ── Foot: level, mute, and where an app plays ──
+        Column {
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom
+                      leftMargin: 8; rightMargin: 8; bottomMargin: 9 }
+            spacing: 5
 
-            Column {
-                width: Math.max(0, parent.width - 22 - 10)
-                spacing: 7
-
-                Row {
-                    width: parent.width
-                    spacing: 9
-                    IconImage {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 22; height: 22; implicitSize: 22
-                        source: root._appIcon(arow.node)
-                    }
-                    Column {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Math.max(0, parent.width - 31 - aPct.implicitWidth - aMute.implicitWidth - 18)
-                        spacing: 1
-                        Text {
-                            width: parent.width; elide: Text.ElideRight
-                            text:  root._appName(arow.node)
-                            color: Colors.fgPrimary
-                            font.family: Style.font; font.pixelSize: 13
-                        }
-                        Text {
-                            width: parent.width; elide: Text.ElideRight
-                            text:  (arow.isOut ? "󰓃 " : "󰍬 ") + root._deviceLabelFor(arow.devName)
-                            color: devHov.containsMouse || arow.pickOpen ? Style.accent : Colors.fgMuted
-                            font.family: Style.font; font.pixelSize: 11
-                            Behavior on color { ColorAnimation { duration: 90 } }
-                            MouseArea {
-                                id: devHov
-                                anchors.fill: parent; anchors.margins: -3
-                                hoverEnabled: true
-                                onClicked: arow.pickOpen = !arow.pickOpen
-                            }
-                        }
-                    }
-                    Text {
-                        id: aPct
-                        anchors.verticalCenter: parent.verticalCenter
-                        text:  Math.round(arow.au ? Math.max(0, Math.min(1, arow.au.volume)) * 100 : 0) + "%"
-                        color: (arow.au && arow.au.muted) ? Colors.fgMuted : Colors.fgPrimary
-                        font.family: Style.font; font.pixelSize: 11
-                    }
-                    MuteBtn { id: aMute; anchors.verticalCenter: parent.verticalCenter; au: arow.au }
+            Text {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                text:  Math.round((strip.au ? Math.max(0, Math.min(1, strip.au.volume)) : 0) * 100) + "%"
+                color: strip.muted ? Colors.fgMuted : Colors.fgBright
+                font.family: Style.font; font.pixelSize: 14; font.bold: true
+            }
+            StyledRect {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 34; height: 24
+                radius: Style.rTile
+                color: strip.muted ? Style.tint(Colors.fgUrgent, 0.30)
+                     : mHov.containsMouse ? Style.controlHover : Style.controlFill
+                Behavior on color { ColorAnimation { duration: 90 } }
+                Text {
+                    anchors.centerIn: parent
+                    text:  strip.muted ? "󰝟" : "󰕾"
+                    color: strip.muted ? Colors.fgUrgent : Colors.fgPrimary
+                    font.family: Style.font; font.pixelSize: 13
                 }
-
-                MixTrack { width: parent.width; au: arow.au }
-
-                Column {
-                    id: devPick
-                    width: parent.width
-                    spacing: 3
-                    visible: arow.pickOpen
-                    Repeater {
-                        model: arow.pickOpen ? (arow.isOut ? root._sinks() : root._sources()) : []
-                        delegate: StyledRect {
-                            id: tgt
-                            required property var modelData
-                            readonly property bool on: arow.node && tgt.modelData.name === arow.devName
-                            width: devPick.width; height: 26
-                            radius: Style.rTile
-                            color: tgt.on ? Style.tint(Colors.bgActive, 0.30)
-                                 : tgtHov.containsMouse ? Style.controlHover : "transparent"
-                            Behavior on color { ColorAnimation { duration: 90 } }
-                            Text {
-                                anchors { left: parent.left; leftMargin: 9; right: parent.right
-                                          rightMargin: 9; verticalCenter: parent.verticalCenter }
-                                elide: Text.ElideRight
-                                text:  (tgt.on ? "󰄬  " : "") + root._label(tgt.modelData)
-                                color: tgt.on ? Colors.fgBright : Colors.fgPrimary
-                                font.family: Style.font; font.pixelSize: 11
-                            }
-                            MouseArea {
-                                id: tgtHov
-                                anchors.fill: parent; hoverEnabled: true
-                                onClicked: {
-                                    root.moveStream(arow.node, tgt.modelData.name)
-                                    arow.pickOpen = false
-                                }
-                            }
-                        }
-                    }
+                MouseArea {
+                    id: mHov
+                    anchors.fill: parent; hoverEnabled: true
+                    onClicked: if (strip.au) strip.au.muted = !strip.au.muted
                 }
+            }
+            // Apps: where it plays, tap to move it. Devices: tap the strip to make it the default.
+            Text {
+                visible: strip.isApp
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+                text:  "󰓃 " + root._deviceLabelFor(root._devOf(strip.node))
+                color: (root.routeFor === strip.node || rHov.containsMouse) ? Style.accent : Colors.fgMuted
+                font.family: Style.font; font.pixelSize: 10
+                Behavior on color { ColorAnimation { duration: 90 } }
+                MouseArea {
+                    id: rHov
+                    anchors.fill: parent; anchors.margins: -4
+                    hoverEnabled: true
+                    onClicked: root.routeFor = (root.routeFor === strip.node) ? null : strip.node
+                }
+            }
+            Text {
+                visible: !strip.isApp && !strip.isDef
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                text:  defHov.containsMouse ? "make default" : "󰝥"
+                color: defHov.containsMouse ? Style.accent : Colors.fgMuted
+                font.family: Style.font; font.pixelSize: 10
+                MouseArea {
+                    id: defHov
+                    anchors.fill: parent; anchors.margins: -4
+                    hoverEnabled: true
+                    onClicked: if (strip.node) root.setDefault(root.tab === "out" ? "sink" : "source",
+                                                               strip.node.name)
+                }
+            }
+            Text {
+                visible: !strip.isApp && strip.isDef
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                text:  "default"
+                color: Colors.boActive
+                font.family: Style.font; font.pixelSize: 10; font.bold: true
             }
         }
     }

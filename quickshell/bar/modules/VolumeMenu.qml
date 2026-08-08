@@ -7,8 +7,8 @@ import QtQuick
 Flyout {
     id: root
     flyoutId: "volume"
-    panelW:   430
-    maxH:     680          // master + output + input + applications
+    panelW:   560
+    maxH:     760          // master card + tabs + a rack of channel strips
 
     Loader {
         active: root.visible
