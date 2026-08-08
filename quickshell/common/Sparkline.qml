@@ -16,7 +16,9 @@ Item {
     property real  lineWidth: 1.6
     property bool  dim:       false          // muted / inactive: the whole curve steps back
     // A faint floor line, so an empty tile still reads as a chart rather than a hole.
-    property bool  baseline:  true
+    // NOT called `baseline`: Item already has one as a FINAL anchor line, and overriding it is a
+    // hard load error ("Cannot override FINAL property") that no lint here reports.
+    property bool  floorLine: true
 
     implicitHeight: 34
 
@@ -39,7 +41,7 @@ Item {
     }
 
     Rectangle {
-        visible: sl.baseline
+        visible: sl.floorLine
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
         height: 1
         color: Style.tint(Colors.boNormal, 0.45)
