@@ -212,7 +212,9 @@ Column {
 
     // ── The rack ───────────────────────────────────────────────────────────────────────────────
     Flickable {
-XXX: rack.width
+        width:  parent.width
+        height: 360
+        contentWidth: rack.width
         clip: true
         flickableDirection: Flickable.HorizontalFlick
         boundsBehavior: Flickable.StopAtBounds
