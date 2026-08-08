@@ -48,6 +48,94 @@ Singleton {
         return (e && e.icon) ? Quickshell.iconPath(e.icon, "application-x-executable") : ""
     }
 
+    // ── "Take me to whatever wants my attention" ────────────────────────────────────────────────
+    // Clicking a notification should land you in the app that sent it. Two mechanisms do that and
+    // they complement each other: the freedesktop "default" action is how an app says WHICH mail or
+    // chat to open — but plenty of notifications carry no actions at all, and even those that do
+    // don't necessarily raise their window. So invoke the action when there is one, AND focus the
+    // sender's window when one can be found. Shared by the toasts and the centre; the two used to
+    // only invoke the action, which is why most notifications did nothing at all when clicked.
+    function defaultActionOf(n) {
+        if (!n) return null
+        var acts = (n.actions && n.actions.values) ? n.actions.values : (n.actions || [])
+        for (var i = 0; i < acts.length; i++) if (acts[i].identifier === "default") return acts[i]
+        return null
+    }
+
+    // Every string that could name the sender's window class. A notification names its app the way
+    // a human would ("Telegram Desktop"); Hyprland knows windows by class ("org.telegram.desktop"),
+    // so the desktop entry is the bridge — its startupClass IS that class.
+    function _appKeys(n) {
+        var keys = []
+        function add(s) {
+            var v = ("" + (s ?? "")).trim().toLowerCase()
+            if (v !== "" && keys.indexOf(v) < 0) keys.push(v)
+        }
+        var e = n.desktopEntry ? DesktopEntries.byId(n.desktopEntry) : null
+        if (!e && n.appName) e = DesktopEntries.heuristicLookup(n.appName)
+        if (e) { add(e.startupClass); add(e.id) }
+        add(n.desktopEntry)
+        add(n.appName)
+        var an = ("" + (n.appName ?? "")).trim().toLowerCase()
+        if (an.indexOf(" ") > 0) { add(an.split(" ")[0]); add(an.replace(/\s+/g, "")) }
+        return keys
+    }
+
+    // The sender's window, or null. An exact class match wins over a partial one (partials are
+    // needed for the "firefox" / "firefox-esr" kind of near-miss, and capped at 4 characters so a
+    // short name can't match half the desktop); among equals, the most recently focused window.
+    function windowFor(n) {
+        if (!n) return null
+        var keys = root._appKeys(n)
+        if (keys.length === 0) return null
+        var ws = Hyprwindows.windows
+        var best = null, bestScore = 0
+        for (var i = 0; i < ws.length; i++) {
+            var cls = ("" + (ws[i].cls ?? "")).toLowerCase()
+            if (cls === "") continue
+            var score = 0
+            for (var k = 0; k < keys.length; k++) {
+                var key = keys[k]
+                if (cls === key) { score = 2; break }
+                if (key.length >= 4 && (cls.indexOf(key) >= 0 || key.indexOf(cls) >= 0)) score = 1
+            }
+            if (score === 0) continue
+            if (score > bestScore || (score === bestScore && best
+                                      && (ws[i].fhi ?? 999) < (best.fhi ?? 999))) {
+                best = ws[i]; bestScore = score
+            }
+        }
+        return best
+    }
+
+    // Focus lands a beat late on purpose: the notification centre holds an OnDemand keyboard grab,
+    // and Hyprland restores focus when that grab drops — a dispatch sent before the panel is gone
+    // is simply overridden by the restore (the same trap WindowSwitcher documents).
+    Timer {
+        id: focusTimer
+        interval: 130; repeat: false
+        property string addr: ""
+        onTriggered: if (focusTimer.addr !== "") Compositor.focusWindowAddress(focusTimer.addr)
+    }
+    function focusWindowOf(n) {
+        var w = root.windowFor(n)
+        if (!w || !w.address) return false
+        focusTimer.addr = "" + w.address
+        focusTimer.restart()
+        return true
+    }
+
+    // Returns true when the click led somewhere — the callers use that to decide between dropping
+    // just the toast and dismissing the notification outright.
+    function activate(n) {
+        if (!n) return false
+        var acted = false
+        var a = root.defaultActionOf(n)
+        if (a) { a.invoke(); acted = true }
+        if (root.focusWindowOf(n)) acted = true
+        return acted
+    }
+
     // The D-Bus server is gated on the `notifications` component: with it OFF, velumeron never
     // registers org.freedesktop.Notifications, so mako/dunst/swaync can own it instead. The Loader
     // destroys the server (releasing the name) the instant the feature is switched off, and

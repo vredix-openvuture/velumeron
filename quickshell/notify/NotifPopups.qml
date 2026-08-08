@@ -10,7 +10,8 @@ import Quickshell.Services.Notifications
 // menu) and grows downward as notifications arrive; the individual notifications load as cards ON that
 // surface (in the bar-module pill colour). Shows NotifService.popups on the focused monitor (or always
 // on the main monitor when set). A card auto-dismisses (NotifService; criticals stay); clicking it
-// invokes the default action if it has one, otherwise discards it; the × dismisses.
+// takes you to whatever wants attention — the default action if it has one, plus focus on the
+// sender's window (NotifService.activate) — and discards it when neither applies; the × dismisses.
 PanelWindow {
     id: root
 
@@ -95,12 +96,6 @@ PanelWindow {
     readonly property int    pad:     flareR + Math.max(seam, perpSeam)
                                       + Math.ceil(Math.max(Style.elTopBulge, Style.elSideBulge))
 
-    function defaultActionOf(n) {
-        if (!n) return null
-        var acts = (n.actions && n.actions.values) ? n.actions.values : (n.actions || [])
-        for (var i = 0; i < acts.length; i++) if (acts[i].identifier === "default") return acts[i]
-        return null
-    }
 
     // Fillet outline for the tray, built in (a, d) space — a runs along the docked edge, d is the depth
     // away from it (edge at d = 0) — then mapped onto the top/bottom edge. Returns [borderOpen,
@@ -254,10 +249,11 @@ PanelWindow {
         clip:    true
 
         TapHandler {
+            // Default action + focus the sender's window (NotifService.activate). A toast that led
+            // somewhere only retracts — the entry stays in the centre; one that led nowhere is gone.
             onTapped: {
-                var a = root.defaultActionOf(card.notif)
-                if (a) { a.invoke(); NotifService.dropPopup(card.notif) }
-                else   { NotifService.dismiss(card.notif) }
+                if (NotifService.activate(card.notif)) NotifService.dropPopup(card.notif)
+                else                                   NotifService.dismiss(card.notif)
             }
         }
 

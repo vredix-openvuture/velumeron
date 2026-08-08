@@ -42,18 +42,14 @@ Item {
 
     function dismissRow(row) { for (var i = 0; i < row.items.length; i++) row.items[i].dismiss() }
 
-    // Invoke a notification's default action (freedesktop "default" identifier) — i.e. "open".
-    // No-op when the notification carries no default action. Dismisses it afterwards so the opened
-    // item leaves the history, matching how clicking a real toast behaves.
+    // Go to whatever wants attention: the app's default action if it published one, plus focus on
+    // its window (NotifService.activate). Closing the centre is part of the job, not a courtesy —
+    // it is an overlay, so leaving it up would cover the very window we just brought forward.
+    // Dismisses the entry afterwards, matching how clicking a toast behaves.
     function openNotif(n) {
-        if (!n || !n.actions) return
-        for (var i = 0; i < n.actions.length; i++) {
-            if (n.actions[i].identifier === "default") {
-                n.actions[i].invoke()
-                if (n.dismiss) n.dismiss()
-                return
-            }
-        }
+        if (!NotifService.activate(n)) return
+        UiState.notifCenterOpen = false
+        if (n.dismiss) n.dismiss()
     }
 
     // Which app groups are expanded (clicking a stacked card toggles it). Keyed by app name so
@@ -119,8 +115,9 @@ Item {
                 id: cardMa
                 anchors.fill: parent
                 hoverEnabled: true
-                cursorShape: (item.stacked || (item.n && item.n.actions && item.n.actions.length))
-                             ? Qt.PointingHandCursor : Qt.ArrowCursor
+                // Clickable whenever there is a card: a single one now goes to the sender's window
+                // even without a default action, so keying the cursor on `actions` under-sold it.
+                cursorShape: Qt.PointingHandCursor
                 onClicked: item.stacked ? root.toggleExpand(item.modelData.app)
                                         : root.openNotif(item.n)
             }
