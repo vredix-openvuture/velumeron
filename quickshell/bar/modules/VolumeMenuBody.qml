@@ -183,14 +183,14 @@ Column {
                                 width: parent.width; elide: Text.ElideRight
                                 text:  root._appName(app.modelData)
                                 color: Colors.fgPrimary
-                                font.family: Style.font; font.pixelSize: 12.5
+                                font.family: Style.font; font.pixelSize: 13
                             }
                             // Where it plays — click to send it somewhere else.
                             Text {
                                 width: parent.width; elide: Text.ElideRight
                                 text:  (app.isOut ? "󰓃 " : "󰍬 ") + root._deviceLabelFor(app.devName)
                                 color: devHov.containsMouse || app.pickOpen ? Style.accent : Colors.fgMuted
-                                font.family: Style.font; font.pixelSize: 10.5
+                                font.family: Style.font; font.pixelSize: 11
                                 MouseArea {
                                     id: devHov
                                     anchors.fill: parent; anchors.margins: -3
@@ -369,7 +369,7 @@ Column {
                             elide: Text.ElideRight
                             text:  root._label(row.modelData)
                             color: row.isDef ? Colors.fgBright : Colors.fgPrimary
-                            font.family: Style.font; font.pixelSize: 12.5
+                            font.family: Style.font; font.pixelSize: 13
                         }
                         Text {
                             id: dPct

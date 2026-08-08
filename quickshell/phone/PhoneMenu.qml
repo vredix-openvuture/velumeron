@@ -116,7 +116,7 @@ Flyout {
                                 width: parent.width; elide: Text.ElideRight
                                 text:  card.modelData.name
                                 color: Colors.fgBright
-                                font.family: Style.font; font.pixelSize: 13.5; font.bold: true
+                                font.family: Style.font; font.pixelSize: 14; font.bold: true
                             }
                             Text {
                                 width: parent.width; elide: Text.ElideRight
@@ -126,7 +126,7 @@ Flyout {
                                        ? PhoneService.signalGlyph(card.con.strength) + "  " + card.con.type
                                        : "connected")
                                 color: Colors.fgMuted
-                                font.family: Style.font; font.pixelSize: 10.5
+                                font.family: Style.font; font.pixelSize: 11
                             }
                         }
                         Text {
@@ -206,7 +206,7 @@ Flyout {
             anchors.centerIn: parent
             text:  act.label
             color: act.primary ? Colors.fgBright : Colors.fgPrimary
-            font.family: Style.font; font.pixelSize: 11.5
+            font.family: Style.font; font.pixelSize: 12
         }
         MouseArea {
             id: actHov

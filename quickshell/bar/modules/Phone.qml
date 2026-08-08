@@ -1,10 +1,12 @@
 import "../.."
 import QtQuick
 
-// Phone module: the paired device's state at a glance, click for the popout (PhoneMenu). Shows the
-// battery of the primary reachable device, so the bar answers "is my phone about to die" without
-// being opened. Collapses to zero width when nothing is paired or the daemon isn't there — the
-// module is meant to disappear rather than sit in the bar as a dead icon.
+// Phone module: the paired device's state at a glance, click for the popout (PhoneMenu).
+//
+// It stays in the bar whether or not anything is connected — the answer "no phone right now" is
+// worth as much as the battery reading, and a module that vanishes takes its own click target with
+// it, so there'd be no way back to the popout to find out why. Connected reads as the lit icon with
+// a filled dot and the battery; disconnected as a muted icon with a hollow one.
 Item {
     id: root
     property string barMon:   ""
@@ -12,21 +14,27 @@ Item {
     property string barGroup: "start"
     property bool   vertical: false
 
-    readonly property var  dev:  PhoneService.primary
-    readonly property bool live: root.dev !== null
-    readonly property var  bat:  root.live ? (root.dev.battery ?? ({})) : ({})
+    // The device the module speaks for: the reachable one, else whatever is paired, so the icon
+    // still reflects "phone" vs "tablet" while it's away.
+    readonly property var dev: PhoneService.primary
+                               ?? (PhoneService.devices.length > 0 ? PhoneService.devices[0] : null)
+    readonly property bool connected: PhoneService.hasDevices
+    readonly property var  bat: (root.connected && PhoneService.primary)
+                                ? (PhoneService.primary.battery ?? ({})) : ({})
     readonly property bool showBattery: VtlConfig.moduleSetting("phone", "show_battery", true)
-                                        && root.bat.ok === true && root.bat.charge >= 0
+                                        && root.connected && root.bat.ok === true && root.bat.charge >= 0
+    readonly property bool low: root.showBattery && root.bat.charge <= 15 && !root.bat.charging
 
     readonly property string _font: VtlConfig.moduleFontFor("phone")
     readonly property color  _col:  Colors[VtlConfig.moduleColorName("phone")] ?? Colors.fgPrimary
     readonly property bool   open:  UiState.flyout === "phone" && UiState.flyoutMon === root.barMon
 
-    implicitWidth:  root.live ? content.implicitWidth : 0
+    readonly property int _sz: VtlConfig.moduleIconSizeFor("phone", root.barMon)
+
+    implicitWidth:  content.implicitWidth
     implicitHeight: content.implicitHeight
     width:  implicitWidth
     height: implicitHeight
-    visible: root.live
     Behavior on implicitWidth { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
 
     Row {
@@ -34,24 +42,42 @@ Item {
         anchors.centerIn: parent
         spacing: 5
 
-        Text {
+        Item {
             anchors.verticalCenter: parent.verticalCenter
-            text:  PhoneService.icon(root.dev)
-            color: (mouse.containsMouse || root.open) ? Colors.fgBright
-                 : (root.bat.charge >= 0 && root.bat.charge <= 15 && !root.bat.charging)
-                   ? Colors.fgUrgent : root._col
-            font.family:    root._font
-            font.pixelSize: VtlConfig.moduleIconSizeFor("phone", root.barMon)
-            Behavior on color { ColorAnimation { duration: 100 } }
+            width:  glyph.implicitWidth
+            height: glyph.implicitHeight
+
+            Text {
+                id: glyph
+                text:  PhoneService.icon(root.dev)
+                color: root.low ? Colors.fgUrgent
+                     : (mouse.containsMouse || root.open) ? Colors.fgBright
+                     : root.connected ? root._col : Colors.fgMuted
+                font.family:    root._font
+                font.pixelSize: root._sz
+                opacity: root.connected ? 1.0 : 0.75
+                Behavior on color   { ColorAnimation  { duration: 120 } }
+                Behavior on opacity { NumberAnimation { duration: 120 } }
+            }
+            // Link state, so the two states differ by more than a shade of grey: filled while a
+            // device is reachable, a hollow ring while none is.
+            Rectangle {
+                anchors { right: parent.right; top: parent.top; rightMargin: -1; topMargin: -1 }
+                width: 6; height: 6; radius: 3
+                color:        root.connected ? Style.accent : "transparent"
+                border.width: root.connected ? 0 : 1
+                border.color: Colors.fgMuted
+                Behavior on color { ColorAnimation { duration: 120 } }
+            }
         }
+
         Text {
             visible: root.showBattery
             anchors.verticalCenter: parent.verticalCenter
             text:  (root.bat.charging ? "󰂄" : "") + root.bat.charge + "%"
-            color: root.bat.charging ? Style.accent
-                 : root.bat.charge <= 15 ? Colors.fgUrgent : root._col
+            color: root.bat.charging ? Style.accent : root.low ? Colors.fgUrgent : root._col
             font.family:    root._font
-            font.pixelSize: Math.max(9, VtlConfig.moduleIconSizeFor("phone", root.barMon) - 4)
+            font.pixelSize: Math.max(9, root._sz - 4)
         }
     }
 
