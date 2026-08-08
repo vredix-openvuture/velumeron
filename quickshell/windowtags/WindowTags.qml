@@ -24,11 +24,21 @@ PanelWindow {
     // killed the tags until the next fullscreen toggle.)
     readonly property bool monFullscreen: Compositor.fullscreenOn(root.monId)
 
-    // Every window visible on this monitor (incl. pinned, which live on all workspaces) — the
-    // occlusion test below needs all of them, even ones that don't get a tag themselves.
+    // The special (scratchpad) workspace pulled out on this monitor, 0 when there is none. Its
+    // windows are visible and sit ABOVE everything on the normal workspace, so they belong in the
+    // set below — leaving them out is what let the windows underneath keep their chips and have
+    // them float on top of the scratchpad, labelled with the wrong app.
+    readonly property int specialWs: Hyprwindows.specialWsOn(root.monId)
+
+    // Every window visible on this monitor (incl. pinned, which live on all workspaces, and the
+    // scratchpad's) — the occlusion test below needs all of them, even ones that don't get a tag
+    // themselves. Fullscreen windows stay IN: a real-fullscreen one hides the whole surface via
+    // `enabled` anyway, while a MAXIMIZED one (Hyprland reports both as `fullscreen`) is an ordinary
+    // visible window that must cover the chips of everything it was hiding.
     readonly property var visibleWins: {
         return Hyprwindows.windows.filter(function (w) {
-            return w.monitorId === root.monId && (w.workspace === root.wsId || w.pinned) && !w.fs
+            return w.monitorId === root.monId
+                && (w.workspace === root.wsId || w.workspace === root.specialWs || w.pinned)
         })
     }
     // Windows that get a tag: big enough, and not one of the shell's own dropped terminals
@@ -38,12 +48,18 @@ PanelWindow {
             return w.w > 60 && w.h > 40 && w.cls.indexOf("velumeron-") !== 0
         })
     }
-    // True when window `b` stacks above window `a` (pinned > floating > tiled; among floats the
-    // more recently focused one is on top). Used to hide tags that another window covers — a layer
-    // surface can't sit between windows, so occluded chips must vanish instead.
+    // True when window `b` stacks above window `a` (scratchpad > pinned > floating > maximized >
+    // tiled; among floats the more recently focused one is on top). Used to hide tags that another
+    // window covers — a layer surface can't sit between windows, so occluded chips must vanish.
     function above(b, a) {
+        var bs = b.workspace === root.specialWs, as = a.workspace === root.specialWs
+        if (bs !== as)                 return bs      // the pulled-out scratchpad covers everything
         if (b.pinned   !== a.pinned)   return b.pinned
         if (b.floating !== a.floating) return b.floating
+        // A MAXIMIZED window is still tiled, so nothing above it says so — but it does cover the
+        // rest of its workspace, and every chip under it used to stay on screen with someone else's
+        // name on it. (Real fullscreen never gets here: it hides the whole surface via `enabled`.)
+        if (b.fs       !== a.fs)       return b.fs
         return b.floating && b.fhi < a.fhi
     }
     readonly property bool enabled: VtlConfig.windowTagsEnabledFor(root.mon) && !root.monFullscreen && root.tags.length > 0

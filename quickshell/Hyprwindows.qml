@@ -86,6 +86,45 @@ QtObject {
         root.fsMons = out
     }
     property string _lastFsJson: "{}"
+
+    // ── "Which special workspace is pulled out on this monitor" ──────────────────────────────────
+    // A scratchpad renders ABOVE the normal workspace's windows but keeps its own (negative)
+    // workspace id, and the monitor's activeWorkspace still names the normal one — so anything that
+    // decides what's visible by comparing against activeWorkspace alone misses it entirely. The
+    // window tags did, and the windows underneath kept their chips, which then floated on top of the
+    // scratchpad window with someone else's name on them. Tracked from `hyprctl monitors -j`, which
+    // is the only place the shown special workspace is stated; it changes on activespecial and
+    // nowhere else, so this is event-driven and never polled.
+    property var specialWs: ({})        // { monitorId: wsId } — only monitors with one pulled out
+    function specialWsOn(monId) {
+        var v = root.specialWs[monId]
+        return v === undefined ? 0 : v          // 0 = none (no real window ever has workspace 0)
+    }
+    property string _lastSpecialJson: "{}"
+    readonly property Process _monProc: Process {
+        property string _acc: ""
+        stdout: SplitParser { onRead: line => { _monProc._acc += line } }
+        onRunningChanged: if (!running) { root._parseMonitors(_monProc._acc); _monProc._acc = "" }
+    }
+    function _queryMonitors() {
+        _monProc._acc = ""
+        _monProc.command = ["bash", "-c", "hyprctl monitors -j | tr -d '\\n\\r'"]
+        _monProc.running = false; _monProc.running = true
+    }
+    function _parseMonitors(txt) {
+        var out = {}
+        try {
+            var arr = JSON.parse(("" + txt).trim())
+            for (var i = 0; i < arr.length; i++) {
+                var sw = arr[i].specialWorkspace
+                if (sw && sw.id !== 0) out[arr[i].id] = sw.id
+            }
+        } catch (e) { return }                  // keep the previous map on a garbled read
+        var s = JSON.stringify(out)
+        if (s === root._lastSpecialJson) return
+        root._lastSpecialJson = s
+        root.specialWs = out
+    }
     // A workspace switch changes which windows are visible without changing the client list, and the
     // monitor graph may not have caught up yet when the event lands → re-check now AND after it settles.
     readonly property Timer _fsSettle: Timer { interval: 200; repeat: false; onTriggered: root._recheckFullscreen() }
@@ -102,6 +141,11 @@ QtObject {
                 root._recheckFullscreen()
                 root._fsSettle.restart()
             }
+            // Only the events that can actually change WHICH special workspace is out — notably
+            // not focusedmon, which fires on every cursor crossing between monitors.
+            if (n === "activespecial" || n === "activespecialv2"
+                || n === "monitoraddedv2" || n === "monitorremoved")
+                root._queryMonitors()
             if (n === "activewindowv2") {
                 var a = ("" + event.data).trim()
                 root.activeAddr = (a.indexOf("0x") === 0) ? a : ("0x" + a)
@@ -169,5 +213,5 @@ QtObject {
         root.windows = ws
     }
 
-    Component.onCompleted: { root._query(); root._queryRounding() }
+    Component.onCompleted: { root._query(); root._queryRounding(); root._queryMonitors() }
 }
