@@ -73,6 +73,7 @@ PerformanceGlide  1.0 osd/PerformanceGlide.qml
 UserGlide         1.0 osd/UserGlide.qml
 NetworkGlide      1.0 osd/NetworkGlide.qml
 BtGlide           1.0 osd/BtGlide.qml
+TrayGlide         1.0 osd/TrayGlide.qml
 WorkspaceGlide    1.0 osd/WorkspaceGlide.qml
 NotifPeekGlide    1.0 osd/NotifPeekGlide.qml
 UpdatesGlide      1.0 osd/UpdatesGlide.qml
@@ -162,6 +163,7 @@ Network         1.0 bar/modules/Network.qml
 Bluetooth       1.0 bar/modules/Bluetooth.qml
 VPN             1.0 bar/modules/VPN.qml
 Tray            1.0 bar/modules/Tray.qml
+TrayIcons       1.0 bar/modules/TrayIcons.qml
 NotifButton     1.0 bar/modules/NotifButton.qml
 Updates         1.0 bar/modules/Updates.qml
 LayoutSwitcher  1.0 bar/modules/LayoutSwitcher.qml

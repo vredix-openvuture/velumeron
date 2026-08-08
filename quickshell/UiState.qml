@@ -203,6 +203,12 @@ QtObject {
     property string wsMon:      ""
     property int    wsPreviewId: 0         // Hyprland id of the workspace being hovered
 
+    property bool   trayHover:   false     // tray (collapsed): the SNI icons glide (hover)
+    property real   trayAnchorX: 0
+    property real   trayAnchorY: 0
+    property string trayEdge:    "top"
+    property string trayMon:     ""
+
     property bool   npkHover:   false      // notiftray: recent-notifications peek glide (hover)
     property real   npkAnchorX: 0
     property real   npkAnchorY: 0

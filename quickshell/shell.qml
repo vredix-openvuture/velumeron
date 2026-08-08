@@ -424,6 +424,10 @@ ShellRoot {
     }
     Variants {
         model: Quickshell.screens
+        delegate: TrayGlide { required property var modelData; screen: modelData }
+    }
+    Variants {
+        model: Quickshell.screens
         delegate: WorkspaceGlide { required property var modelData; screen: modelData }
     }
     Variants {
