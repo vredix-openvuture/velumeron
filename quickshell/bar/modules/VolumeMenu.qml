@@ -7,8 +7,8 @@ import QtQuick
 Flyout {
     id: root
     flyoutId: "volume"
-    panelW:   330
-    maxH:     540
+    panelW:   350
+    maxH:     620          // three sections now: output, input, applications
 
     Loader {
         active: root.visible
