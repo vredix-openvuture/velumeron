@@ -442,6 +442,10 @@ ShellRoot {
     }
     Variants {
         model: Quickshell.screens
+        delegate: PhoneMenu { required property var modelData; screen: modelData }
+    }
+    Variants {
+        model: Quickshell.screens
         delegate: MprisMenu { required property var modelData; screen: modelData }
     }
     Variants {

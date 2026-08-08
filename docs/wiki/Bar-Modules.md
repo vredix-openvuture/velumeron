@@ -23,6 +23,7 @@ Add, arrange and remove modules in **Settings → Bar → Modules**. Most module
 | **Temperature** | CPU temp (°C/°F via gear) | — |
 | **Notifications (notiftray)** | Bell + unread count; hover peeks at the recent notifications | Click → notification centre |
 | **Tray** | System tray icons, inline in the bar. Gear → collapse to one glyph that glides them out on hover | Left → activate · middle → secondary · right → the app's menu · wheel → scroll |
+| **Phone** | Paired phone/tablet via KDE Connect: battery at a glance | Click → popout: battery, signal, send files, ring |
 | **User** | Username; hover glides session actions (lock/suspend/…) | — |
 | **Wallpaper** | Opens the wallpaper quick menu | Click |
 | **Vuture icon** | The main menu button | Click → settings menu |

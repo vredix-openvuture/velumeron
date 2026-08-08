@@ -134,6 +134,10 @@ NotifCenter            1.0 notify/NotifCenter.qml
 NotifList              1.0 notify/NotifList.qml
 NotifSettings          1.0 settings/notify/NotifSettings.qml
 
+# Phone (KDE Connect daemon over D-Bus; no KDE window involved)
+singleton PhoneService 1.0 phone/PhoneService.qml
+PhoneMenu             1.0 phone/PhoneMenu.qml
+
 # Bar modules
 BarSeparator    1.0 bar/modules/BarSeparator.qml
 Clock           1.0 bar/modules/Clock.qml
@@ -163,6 +167,7 @@ Network         1.0 bar/modules/Network.qml
 Bluetooth       1.0 bar/modules/Bluetooth.qml
 VPN             1.0 bar/modules/VPN.qml
 Tray            1.0 bar/modules/Tray.qml
+Phone           1.0 bar/modules/Phone.qml
 TrayIcons       1.0 bar/modules/TrayIcons.qml
 NotifButton     1.0 bar/modules/NotifButton.qml
 Updates         1.0 bar/modules/Updates.qml

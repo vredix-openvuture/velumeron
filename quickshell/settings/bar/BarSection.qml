@@ -55,12 +55,13 @@ Item {
         { key: "tasks",       label: "Tasks",         icon: "󱂩" },
         { key: "updates",     label: "Updates",       icon: "󰚰" },
         { key: "layout",      label: "Layout",        icon: "󰕴" },
+        { key: "phone",       label: "Phone",         icon: "󰄜" },
         { key: "__new_group", label: "New group…",    icon: "󰐱" },
     ]
     // Modules grouped by theme/task for the Add-module sub-page.
     readonly property var categories: [
         { title: "Time & status",  keys: ["clock", "performance", "battery", "temperature", "updates"] },
-        { title: "Connectivity",   keys: ["network", "vpn", "bluetooth", "tray"] },
+        { title: "Connectivity",   keys: ["network", "vpn", "bluetooth", "tray", "phone"] },
         { title: "Media & sound",  keys: ["volume", "mpris"] },
         { title: "Workspace",      keys: ["workspaces", "submap", "tasks", "layout"] },
         { title: "System & personal", keys: ["notiftray", "user", "wallpaper-switcher", "vuture-icon"] },

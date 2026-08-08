@@ -536,6 +536,7 @@ PanelWindow {
             case "vpn":          return vpnComp
             case "updates":      return updatesComp
             case "layout":       return layoutComp
+            case "phone":        return phoneComp
             default:             return null
         }
     }
@@ -559,5 +560,6 @@ PanelWindow {
     Component { id: vpnComp;         VPN         {} }
     Component { id: updatesComp;     Updates     {} }
     Component { id: layoutComp;      LayoutSwitcher {} }
+    Component { id: phoneComp;       Phone       {} }
     Component { id: groupComp;       GroupModule {} }
 }

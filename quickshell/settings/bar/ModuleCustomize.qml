@@ -99,6 +99,8 @@ Item {
         case "volume":      return [ { type: "toggle",  name: "show_percent", label: "Show percentage", def: false },
                                      { type: "stepper", name: "scroll_step",  label: "Scroll step %", def: 5, min: 5, max: 25, step: 5 } ]
         case "user":        return [ { type: "toggle", name: "show_username", label: "Show username", def: true } ]
+        case "phone":       return [
+            { type: "toggle", name: "show_battery", label: "Show the device's battery", def: true } ]
         case "tray":        return [
             { type: "toggle", name: "collapse", label: "Collapse to one icon (hover glides them out)", def: false },
             { type: "text",   name: "icon",     label: "Tray icon glyph", def: "󰀻" } ]
