@@ -115,15 +115,7 @@ ShellRoot {
             if (UiState.flyout === "wallpaper") { UiState.flyout = ""; return }
             var m = Hyprland.focusedMonitor
             if (!m) return
-            // Grow from the wallpaper-switcher module if one is placed on this monitor; else the
-            // configured quick position.
-            if (UiState.wpSwitcherMon === m.name) {
-                UiState.toggleFlyout("wallpaper", UiState.wpSwitcherX, UiState.wpSwitcherY,
-                                     UiState.wpSwitcherEdge, UiState.wpSwitcherGroup, m.name)
-            } else {
-                var a = UiState.wallpaperAnchor(m.width, m.height, VtlConfig.wallpaperQuickPos)
-                UiState.toggleFlyout("wallpaper", a.ax, a.ay, a.edge, a.group, m.name)
-            }
+            UiState.openWallpaperQuick(m.name, m.width, m.height)
         }
         function open():  void { if (UiState.flyout !== "wallpaper") toggle() }
         function close(): void { UiState.flyout = "" }

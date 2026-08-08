@@ -69,6 +69,44 @@ PanelWindow {
     }
     onTransitionChanged: if (root.transition !== "random") root._planTransition()
 
+    // ── Live-wallpaper plugin failed to load ───────────────────────────────────────────────────
+    // Velumeron.Mpv is a COMPILED QML module and is not in git — launch-quickshell.sh builds it on
+    // demand. Start the shell any other way (a bare `quickshell -p`, an editor, a session that
+    // doesn't go through the launcher) and a missing or half-built plugin is never noticed:
+    // VideoSurface can't import it, the Loader errors, and the slot simply stays black. Silently,
+    // and identically after every reboot, because each boot repeats the same launch.
+    //
+    // So the shell says so itself and builds it in the background. That cannot rescue the running
+    // process — a failed QML import is cached for the lifetime of the engine — but the next start
+    // has it, which is the difference between "broken forever" and "restart the shell".
+    // flock: one build even though every monitor has its own surface and its own two slots.
+    property bool _mpvRepairTried: false
+    function _videoPluginFailed(path) {
+        if (root._mpvRepairTried) return
+        root._mpvRepairTried = true
+        console.warn("wallpaper: cannot play " + path + " — the Velumeron.Mpv plugin failed to load"
+                     + " (built by assets/scripts/build-mpv-plugin.sh). Building it now.")
+        mpvRepair.running = true
+    }
+    Process {
+        id: mpvRepair
+        command: ["bash", "-c",
+            "flock -n -E 99 /tmp/velumeron-mpv-build.lock bash \"$1\"/assets/scripts/build-mpv-plugin.sh",
+            "vtl", Quickshell.env("VELUMERON_DIR")]
+        onExited: (code) => {
+            if (code === 99) return         // -E 99: another monitor's surface holds the lock
+            console.warn(code === 0
+                ? "wallpaper: Velumeron.Mpv built — restart the shell to get live wallpapers back"
+                : "wallpaper: Velumeron.Mpv build FAILED (run build-mpv-plugin.sh to see why)")
+            notify.command = ["notify-send", "-a", "Velumeron", "-i", "video-x-generic",
+                              code === 0 ? "Live wallpaper repaired" : "Live wallpaper unavailable",
+                              code === 0 ? "The video plugin was missing and has been rebuilt. Restart the shell to use it."
+                                         : "The video plugin is missing and could not be built — run assets/scripts/build-mpv-plugin.sh."]
+            notify.running = true
+        }
+    }
+    Process { id: notify }
+
     WallSlot { id: slotA; anchors.fill: parent; active: root.shown === 0 }
     WallSlot { id: slotB; anchors.fill: parent; active: root.shown === 1 }
 
@@ -130,6 +168,9 @@ PanelWindow {
             active:  slot.everVideo
             visible: slot.item.type === "video"
             source:  Qt.resolvedUrl("wallpaper/VideoSurface.qml")
+            // The isolation is on purpose (a broken plugin must not take the shell down), but it
+            // also swallowed the failure whole — this is where the black surface gets a reason.
+            onStatusChanged: if (vid.status === Loader.Error) root._videoPluginFailed(slot.item.path)
         }
         Binding { target: vid.item; property: "source"; when: vid.status === Loader.Ready
                   value: slot.item.type === "video" ? slot.item.path : "" }

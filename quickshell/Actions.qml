@@ -95,8 +95,7 @@ Singleton {
         case "wallpaper": {
             var hm = root._monitor(m)
             if (!hm) break
-            var an = UiState.wallpaperAnchor(hm.width, hm.height, VtlConfig.wallpaperQuickPos)
-            UiState.toggleFlyout("wallpaper", an.ax, an.ay, an.edge, an.group, hm.name)
+            UiState.openWallpaperQuick(hm.name, hm.width, hm.height)
             break
         }
         case "notifications": UiState.notifMon = m; UiState.notifCenterOpen = true; break

@@ -259,6 +259,23 @@ QtObject {
 
     // Map a wallpaper-quickselect position ("top-center", "center-left", "bottom-right", …) on a
     // monitor (mw × mh) to a flyout anchor { edge, group, ax, ay } the grow-from-bar Flyout uses.
+    // THE answer to "where does the wallpaper quick-menu grow from" — used by every way of opening
+    // it: the bar module, Super+Alt+Space (IPC), a hot corner, a dashboard tile. It used to be
+    // answered in three places that disagreed: the module grew from itself, the IPC handler
+    // preferred the module and fell back to the configured position, and the action path always
+    // took the configured position — so the same panel appeared somewhere else depending on how you
+    // asked for it. Rule: grow from the switcher module when one sits on this monitor's bar,
+    // otherwise from Settings → Wallpaper → Quickselect position.
+    function openWallpaperQuick(monName, mw, mh) {
+        if (ui.wpSwitcherMon === monName && monName !== "") {
+            ui.toggleFlyout("wallpaper", ui.wpSwitcherX, ui.wpSwitcherY,
+                            ui.wpSwitcherEdge, ui.wpSwitcherGroup, monName)
+            return
+        }
+        var a = ui.wallpaperAnchor(mw, mh, VtlConfig.wallpaperQuickPos)
+        ui.toggleFlyout("wallpaper", a.ax, a.ay, a.edge, a.group, monName)
+    }
+
     function wallpaperAnchor(mw, mh, pos) {
         var p = ("" + pos).split("-")
         var v = p[0], h = p[1] || "center"
