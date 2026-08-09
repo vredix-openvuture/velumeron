@@ -384,8 +384,8 @@ Flyout {
         // ══ The other devices — one line each, there to be promoted ═══════════════════════════
         Plate {
             visible: root.others.length > 0
-            label: "Weitere Geräte"
-            value: PhoneService.reachable.length + " von " + PhoneService.devices.length + " erreichbar"
+            label: "Other devices"
+            value: PhoneService.reachable.length + " of " + PhoneService.devices.length + " reachable"
             accent: PhoneService.reachable.length > 1
             pad: Math.round(root.uGap * 1.1)
             gap: Math.round(root.uGap * 0.5)

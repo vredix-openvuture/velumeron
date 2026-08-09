@@ -322,9 +322,9 @@ PanelWindow {
                 // an item cannot have both, and Qt resolves the conflict by looping.
                 anchors { top: header.bottom; left: parent.left; topMargin: 12; leftMargin: 14 }
                 width: Math.max(0, parent.width - 28)
-                label: "Übersicht"
-                value: NotifService.dnd ? "stummgeschaltet"
-                     : root._count === 0 ? "leer" : (root._apps + (root._apps === 1 ? " App" : " Apps"))
+                label: "Overview"
+                value: NotifService.dnd ? "muted"
+                     : root._count === 0 ? "empty" : (root._apps + (root._apps === 1 ? " app" : " apps"))
                 accent: !NotifService.dnd && root._count > 0
                 warn:   NotifService.dnd
 
@@ -347,10 +347,40 @@ PanelWindow {
             }
             }
 
-            // History list (shared component, honours the grouping setting).
-            NotifList {
-                anchors { top: headPlate.bottom; topMargin: 12; left: parent.left; right: parent.right
-                          bottom: parent.bottom; leftMargin: 12; rightMargin: 12; bottomMargin: 12 }
+            // The history gets a plate of its own — otherwise the overview's surface ended and the
+            // cards simply carried on against the panel, which reads as one block, not two.
+            //
+            // Hand-built rather than the Plate component because this one STRETCHES: Plate derives
+            // its height from its content, and the content here is a list that has to fill whatever
+            // is left. Same wash, same caption, opposite sizing.
+            StyledRect {
+                id: listPlate
+                anchors { top: headPlate.bottom; topMargin: 16
+                          left: parent.left; right: parent.right; bottom: parent.bottom
+                          leftMargin: 14; rightMargin: 14; bottomMargin: 14 }
+                radius: Style.rCard
+                color: Style.tint(Colors.bgElement, Style.lift(0.10))
+
+                Text {
+                    id: listCap
+                    anchors { left: parent.left; top: parent.top; leftMargin: 14; topMargin: 14 }
+                    text: "Messages"
+                    color: Colors.fgMuted
+                    font.family: Style.font; font.pixelSize: 10; font.bold: true
+                    font.capitalization: Font.AllUppercase; font.letterSpacing: 0.7
+                }
+                Text {
+                    anchors { right: parent.right; rightMargin: 14; baseline: listCap.baseline }
+                    text: root._count === 0 ? "" : (root._pins > 0 ? (root._pins + " pinned") : "")
+                    color: Style.accent
+                    font.family: Style.font; font.pixelSize: 10
+                }
+
+                NotifList {
+                    anchors { top: listCap.bottom; topMargin: 9
+                              left: parent.left; right: parent.right; bottom: parent.bottom
+                              leftMargin: 10; rightMargin: 10; bottomMargin: 12 }
+                }
             }
         }
     }

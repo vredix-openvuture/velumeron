@@ -168,9 +168,9 @@ Column {
     Plate {
         label: "Adapter"
         value: root.busy !== "" ? root.busy
-             : root.scanning ? "sucht…"
+             : root.scanning ? "scanning…"
              : !root.powered ? "aus"
-             : root._connected.length > 0 ? (root._connected.length + " in Benutzung") : "bereit"
+             : root._connected.length > 0 ? (root._connected.length + " in use") : "ready"
         accent: root.powered && (root._connected.length > 0 || root.scanning)
         warn:   !root.powered
 
@@ -210,11 +210,13 @@ Column {
 
     // ── What is actually in use, as the subject of the panel ───────────────────
     Plate {
-        visible: root.mode === "known" && root.powered
-        label: "In Benutzung"
-        value: root._connected.length === 0 ? "nichts verbunden"
-             : root._lowBat >= 0 ? (root._lowBat + "% Akku") : (root._connected.length + "")
-        accent: root._connected.length > 0
+        // Absent, not empty: a plate headed "In use" with nothing in it states a section that does
+        // not exist. The paired list below already says what to do about that.
+        visible: root.mode === "known" && root.powered && root._connected.length > 0
+        label: "In use"
+        value: root._lowBat >= 0 ? (root._lowBat + "% battery")
+             : root._connected.length > 1 ? (root._connected.length + " devices") : ""
+        accent: true
         warn:   root._lowBat >= 0 && root._lowBat <= 15
         gap: root.uGap
         Repeater {
@@ -293,21 +295,14 @@ Column {
                 }
             }
         }
-        Text {
-            visible: root._connected.length === 0
-            width: parent.width
-            text: "Tippe ein gekoppeltes Gerät an, um es zu verbinden."
-            color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
-            wrapMode: Text.WordWrap
-        }
     }
 
     // ── Known devices (bucketed by group, each bucket fronted by a named divider) ──────────
     Plate {
         visible: root.mode === "known"
-        label: "Gekoppelt"
+        label: "Paired"
         value: root._paired.length + (root._connected.length > 0
-                                      ? (" · " + root._connected.length + " verbunden") : "")
+                                      ? (" · " + root._connected.length + " connected") : "")
         gap: 3
         Repeater {
             model: root._grouped
@@ -541,16 +536,17 @@ Column {
                    color: br.dev && br.dev.connected ? Colors.fgBright : Colors.fgPrimary
                    font.pixelSize: 13; font.family: Style.font }
             Text { width: parent.width; elide: Text.ElideRight
-                   text: br.dev && br.dev.connected ? "verbunden" : (br.dev && br.dev.paired ? "gekoppelt" : "verfügbar")
+                   text: br.dev && br.dev.connected ? "connected"
+                       : (br.dev && br.dev.paired ? "paired" : "available")
                    color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font }
         }
         Rectangle { id: gB
             visible: br.gearVisible
-            anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
+            anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
             width: 28; height: 28; radius: 14; color: gH.containsMouse ? Colors.bgActive : "transparent"
             Text { anchors.centerIn: parent; text: "󰒓"; color: Colors.fgMuted; font.pixelSize: 13; font.family: Style.font }
             MouseArea { id: gH; anchors.fill: parent; hoverEnabled: true; onClicked: br.gear() }
         }
-        MouseArea { id: brH; anchors.fill: parent; anchors.rightMargin: br.gearVisible ? 40 : 0; hoverEnabled: true; onClicked: br.trig() }
+        MouseArea { id: brH; anchors.fill: parent; anchors.rightMargin: br.gearVisible ? 46 : 0; hoverEnabled: true; onClicked: br.trig() }
     }
 }

@@ -211,11 +211,13 @@ Column {
     }
 
     Plate {
-        label: root.wired ? "Verbindung" : "Wi-Fi"
+        // Named for what it IS: on a wire the section is Ethernet and the reading is the interface,
+        // on radio it is Wi-Fi and the reading is the network. "Connection" named neither.
+        label: root.wired ? "Ethernet" : "Wi-Fi"
         value: root.busy !== "" ? root.busy
-             : root.ethStatus !== "" ? ("Ethernet · " + root.ethStatus)
-             : !root.wifiOn ? "aus"
-             : root.wifiScanning ? "sucht…" : (root._cur ? root._cur.ssid : "nicht verbunden")
+             : root.wired ? root.ethStatus
+             : !root.wifiOn ? "off"
+             : root.wifiScanning ? "scanning…" : (root._cur ? root._cur.ssid : "not connected")
         accent: root.wired || root._cur !== null
         warn:   !root.wifiOn && root.ethStatus === ""
 
@@ -271,9 +273,9 @@ Column {
     // ── Wi-Fi networks ──────────────────────────────────────────────────────
     Plate {
         visible: root.wifiOn
-        label: "Netzwerke"
+        label: "Networks"
         // The section's own reading: how many are in reach, and how good the best of them is.
-        value: root.nets.length === 0 ? (root.wifiScanning ? "sucht…" : "keins")
+        value: root.nets.length === 0 ? (root.wifiScanning ? "scanning…" : "none in reach")
              : (root.nets.length + " · " + Math.max.apply(null, root.nets.map(function (n) { return n.signal })) + "%")
         accent: root.nets.length > 0
         gap: 3
@@ -319,12 +321,13 @@ Column {
                                color: nd.modelData.active ? Colors.fgBright : Colors.fgPrimary
                                font.pixelSize: 13; font.family: Style.font }
                         Text { width: parent.width; elide: Text.ElideRight
-                               text: nd.modelData.active ? "verbunden" : (nd.modelData.sec ? "gesichert" : "offen")
+                               text: nd.modelData.active ? "connected"
+                                   : (nd.modelData.sec ? "secured" : "open")
                                color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font }
                     }
                     Row {
                         id: actRow
-                        anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                        anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
                         spacing: 6
                         Text { visible: nd.modelData.sec; anchors.verticalCenter: parent.verticalCenter
                                text: "󰌾"; color: Colors.fgMuted; font.pixelSize: 12; font.family: Style.font }
@@ -369,7 +372,7 @@ Column {
         visible: root.vpns.length > 0
         label: "VPN"
         readonly property int upCount: root.vpns.filter(function (v) { return v.active }).length
-        value: upCount > 0 ? (upCount + " aktiv") : ("0 von " + root.vpns.length)
+        value: upCount > 0 ? (upCount + " up") : ("0 of " + root.vpns.length)
         accent: upCount > 0
         gap: 3
         Repeater {
@@ -406,10 +409,10 @@ Column {
                     Text { width: parent.width; elide: Text.ElideRight; text: modelData.name
                            color: modelData.active ? Colors.fgBright : Colors.fgPrimary
                            font.pixelSize: 13; font.family: Style.font }
-                    Text { text: modelData.active ? "verbunden" : "getrennt"
+                    Text { text: modelData.active ? "connected" : "disconnected"
                            color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font }
                 }
-                Text { id: vState; anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                Text { id: vState; anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
                        text: modelData.active ? "on" : "off"
                        color: modelData.active ? Style.accent : Colors.fgMuted
                        font.pixelSize: 10; font.bold: true; font.family: Style.font }

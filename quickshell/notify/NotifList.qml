@@ -108,9 +108,12 @@ Item {
             // the one row here that is deliberately kept, so it is the one that gets a surface,
             // the way the active strip does on the sound desk and the connected row does in the
             // network list. Everything else is a lighter card.
+            // Lighter than they were: these sit ON a plate now, and a card at full module opacity
+            // inside a surface reads as a box in a box. Pinned still wears the full plate — it is
+            // the one row here you deliberately kept.
             color:       item.pinnedRow ? Style.tint(Colors.bgElement, Style.lift(0.24))
-                       : cardMa.containsMouse ? Style.tint(Colors.bgElement, Style.lift(0.16))
-                       : Style.tint(Colors.bgElement, Style.lift(VtlConfig.barModuleBgOpacity))
+                       : cardMa.containsMouse ? Style.tint(Colors.bgElement, Style.lift(0.13))
+                       : Style.tint(Colors.bgElement, Style.lift(0.06))
             borderWidth: 0
             Behavior on color { ColorAnimation { duration: 110 } }
 
@@ -170,7 +173,7 @@ Item {
             Rectangle {
                 id: iappRule
                 visible: iapp.text !== ""
-                anchors { left: iapp.left; right: parent.right; rightMargin: 16
+                anchors { left: iapp.left; right: parent.right; rightMargin: 18
                           top: iapp.bottom; topMargin: 5 }
                 height: 1
                 color: Style.tint(Colors.boNormal, 0.55)
@@ -240,7 +243,7 @@ Item {
             Rectangle {
                 id: ipin
                 readonly property bool on: item.n ? NotifService.isPinned(item.n) : false
-                anchors { right: idel.left; top: parent.top; rightMargin: 4; topMargin: 8 }
+                anchors { right: idel.left; top: parent.top; rightMargin: 6; topMargin: 10 }
                 width: 20; height: 20; radius: 10
                 color: pHov.containsMouse ? Style.tint(Colors.bgActive, 0.25)
                      : (ipin.on ? Style.tint(Colors.bgActive, 0.18) : "transparent")
@@ -252,7 +255,7 @@ Item {
             }
             Rectangle {
                 id: idel
-                anchors { right: parent.right; top: parent.top; rightMargin: 8; topMargin: 8 }
+                anchors { right: parent.right; top: parent.top; rightMargin: 12; topMargin: 10 }
                 width: 20; height: 20; radius: 10
                 color: dHov.containsMouse ? Style.tint(Colors.fgUrgent, 0.25) : "transparent"
                 Text { anchors.centerIn: parent; text: "✕"; color: Colors.fgMuted; font.pixelSize: 10 }
