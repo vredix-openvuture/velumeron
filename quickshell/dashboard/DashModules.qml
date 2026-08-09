@@ -29,6 +29,11 @@ Singleton {
         { key: "action",   label: "Button",        icon: "󰐱", w: 1, h: 1, minW: 1, minH: 1, multi: true, group: "Buttons" },
         { key: "glance",   label: "System glance", icon: "󰓅", w: 1, h: 1, minW: 1, minH: 1, multi: true, group: "Info" },
         { key: "mpris",    label: "Now playing",   icon: "󰝚", w: 3, h: 2, minW: 1, minH: 1, multi: false, group: "Media" },
+        // Readouts, not shortcuts: they show the link / the connected devices and only OPEN their
+        // settings page when clicked. The plain "Network page" / "Bluetooth page" buttons are still
+        // in the palette below for anyone who wants nothing but the door.
+        { key: "network",  label: "Network",       icon: "󰈀", w: 2, h: 2, minW: 1, minH: 1, multi: false, group: "Info" },
+        { key: "bluetooth", label: "Bluetooth",    icon: "󰂯", w: 2, h: 2, minW: 1, minH: 1, multi: false, group: "Info" },
         // Occupies cells and draws nothing. Two jobs: deliberate breathing room between modules,
         // and — because placement is forward-only — the way to push what follows onto the next page.
         { key: "spacer",   label: "Spacer",        icon: "󰝘", w: 1, h: 1, minW: 1, minH: 1, multi: true,

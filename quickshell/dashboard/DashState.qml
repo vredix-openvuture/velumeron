@@ -88,7 +88,12 @@ Singleton {
         if (root.has("toggle:night"))      { nightGet.running = false; nightGet.running = true }
         if (root.has("toggle:caffeine"))   { cafGet.running = false; cafGet.running = true }
     }
-    onActiveChanged: if (root.active) root.refresh()
+    onActiveChanged: {
+        if (root.active) root.refresh()
+        // Drop the throughput baseline when the hub closes: the next sample would otherwise be a
+        // delta spanning however long it stayed shut, drawn as one enormous spike.
+        else root._netPrev = null
+    }
     // Warm the values once up front too, so the FIRST open doesn't show a default brightness or
     // profile for the moment the helper scripts take to answer. Still one-shot and still gated on
     // what's placed — a dashboard without those modules asks nothing.
@@ -134,6 +139,112 @@ Singleton {
             glUp.running = false;   glUp.running = true
         }
     }
+
+    // ── Network (the network module) ────────────────────────────────────────────
+    property bool   wifiOn:  true
+    property string ssid:    ""
+    property int    wifiSig: 0
+    property string ethDev:  ""
+    property real   rxRate:  0
+    property real   txRate:  0
+    property var    rxHist:  new Array(32).fill(0)
+    property var    txHist:  new Array(32).fill(0)
+    property var    _netPrev: null
+
+    Process {
+        id: netProc
+        // --rescan no: the tile REPORTS the link, it does not go looking for new ones. Asking for a
+        // scan every two seconds would keep the radio busy for a reading nobody asked to refresh.
+        command: ["bash", "-c",
+            "echo w:$(nmcli -t -f WIFI g 2>/dev/null);" +
+            "echo e:$(nmcli -t -f DEVICE,TYPE,STATE dev 2>/dev/null | awk -F: '$2==\"ethernet\"&&$3==\"connected\"{print $1; exit}');" +
+            "echo s:$(nmcli -t -f IN-USE,SIGNAL,SSID dev wifi list --rescan no 2>/dev/null | grep '^\\*' | head -1)"]
+        stdout: SplitParser { onRead: line => {
+            var t = ("" + line).trim()
+            if (t.indexOf("w:") === 0) root.wifiOn = t.slice(2) === "enabled"
+            else if (t.indexOf("e:") === 0) root.ethDev = t.slice(2)
+            else if (t.indexOf("s:") === 0) {
+                var p = t.slice(2).split(":")            // "*:69:VNET - 5G"
+                if (p.length >= 3) {
+                    root.wifiSig = parseInt(p[1]) || 0
+                    // nmcli escapes a colon inside an SSID; put it back.
+                    root.ssid = p.slice(2).join(":").replace(/\\:/g, ":")
+                } else { root.wifiSig = 0; root.ssid = "" }
+            }
+        } }
+    }
+    Process {
+        id: netDev
+        // The colon runs into the counter once it is big enough ("eth0:12345678"), so the line is
+        // de-coloned before awk sees it.
+        command: ["bash", "-c",
+            "sed 's/:/ /' /proc/net/dev | awk 'NR>2 && $1!=\"lo\" {r+=$2; t+=$10} END {printf \"%d %d\\n\", r, t}'"]
+        stdout: SplitParser { onRead: line => {
+            var p = ("" + line).trim().split(/\s+/)
+            if (p.length < 2) return
+            var now = { t: Date.now(), rx: parseFloat(p[0]) || 0, tx: parseFloat(p[1]) || 0 }
+            var pv = root._netPrev
+            root._netPrev = now
+            if (!pv) return
+            var dt = (now.t - pv.t) / 1000
+            // A gap far longer than the poll means the tile was away (hub closed); that delta is an
+            // average over minutes, not a rate, so it is dropped rather than drawn as a spike.
+            if (dt <= 0 || dt > 10) return
+            root.rxRate = Math.max(0, (now.rx - pv.rx) / dt)
+            root.txRate = Math.max(0, (now.tx - pv.tx) / dt)
+            var r = root.rxHist.slice(1); r.push(root.rxRate); root.rxHist = r
+            var x = root.txHist.slice(1); x.push(root.txRate); root.txHist = x
+        } }
+    }
+    readonly property real netPeak: {
+        var m = 1024
+        for (var i = 0; i < root.rxHist.length; i++) m = Math.max(m, root.rxHist[i], root.txHist[i])
+        return m
+    }
+    Timer {
+        interval: 2000; repeat: true; running: root._on("network"); triggeredOnStart: true
+        onTriggered: {
+            netProc.running = false; netProc.running = true
+            netDev.running  = false; netDev.running  = true
+        }
+    }
+    // ── Bluetooth (the bluetooth module) ────────────────────────────────────────
+    property bool btPowered: false
+    property var  btDevices: []          // [{ mac, name, battery }] — connected only
+    Process {
+        id: btProc
+        property var _buf: []
+        command: ["bash", "-c",
+            "echo p:$(bluetoothctl show 2>/dev/null | awk '/Powered:/{print $2; exit}');" +
+            "bluetoothctl devices Connected 2>/dev/null | while read -r _ mac name; do " +
+            // Battery Percentage only exists while connected AND only if the device reports one;
+            // -1 means "no such reading", which is why the ring is hidden rather than drawn empty.
+            "  b=$(bluetoothctl info \"$mac\" 2>/dev/null | sed -n 's/.*Battery Percentage.*(\\([0-9]*\\)).*/\\1/p' | head -1); " +
+            "  echo \"d:$mac|${b:--1}|$name\"; done"]
+        stdout: SplitParser { onRead: line => {
+            var t = ("" + line).trim()
+            if (t.indexOf("p:") === 0) root.btPowered = t.slice(2) === "yes"
+            else if (t.indexOf("d:") === 0) {
+                var p = t.slice(2).split("|")
+                if (p.length >= 3)
+                    btProc._buf.push({ mac: p[0], battery: parseInt(p[1]), name: p.slice(2).join("|") })
+            }
+        } }
+        onRunningChanged: if (!running) { root.btDevices = btProc._buf; btProc._buf = [] }
+    }
+    Timer {
+        interval: 4000; repeat: true; running: root._on("bluetooth"); triggeredOnStart: true
+        onTriggered: { btProc._buf = []; btProc.running = false; btProc.running = true }
+    }
+    function btPower(on) {
+        btAct.command = ["bash", "-c", "bluetoothctl power " + (on ? "on" : "off") + " >/dev/null 2>&1"]
+        btAct.running = false; btAct.running = true
+    }
+    function wifiPower(on) {
+        btAct.command = ["bash", "-c", "nmcli radio wifi " + (on ? "on" : "off") + " >/dev/null 2>&1"]
+        btAct.running = false; btAct.running = true
+    }
+    Process { id: btAct }
 
     // ── Now playing (Mpris) — a playing player with a track, else any with a track ───
     function _hasTitle(p) { return ((p.trackTitle ?? "") + "").trim() !== "" }

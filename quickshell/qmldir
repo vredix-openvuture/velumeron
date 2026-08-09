@@ -139,6 +139,8 @@ DashToggle            1.0 dashboard/DashToggle.qml
 DashAction            1.0 dashboard/DashAction.qml
 DashGlance            1.0 dashboard/DashGlance.qml
 DashMpris             1.0 dashboard/DashMpris.qml
+DashNetwork       1.0 dashboard/DashNetwork.qml
+DashBluetooth     1.0 dashboard/DashBluetooth.qml
 DashSpacer            1.0 dashboard/DashSpacer.qml
 DashSpacer            1.0 dashboard/DashSpacer.qml
 

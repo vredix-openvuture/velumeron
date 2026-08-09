@@ -677,6 +677,8 @@ Item {
         case "action":   return actionComp
         case "glance":   return glanceComp
         case "mpris":    return mprisComp
+        case "network":   return networkComp
+        case "bluetooth": return bluetoothComp
         case "spacer":   return spacerComp
         }
         return null
@@ -688,5 +690,7 @@ Item {
     Component { id: actionComp;   DashAction   {} }
     Component { id: glanceComp;   DashGlance   {} }
     Component { id: mprisComp;    DashMpris    {} }
+    Component { id: networkComp;   DashNetwork   {} }
+    Component { id: bluetoothComp; DashBluetooth {} }
     Component { id: spacerComp;   DashSpacer   {} }
 }
