@@ -213,9 +213,11 @@ Item {
             width: parent.width
             height: 314
             radius: Style.rCard
-            // The plate takes the panel's colour family, so the desk belongs to the bar it grew
-            // out of instead of sitting on it as a dark slab.
-            color:  Style.tint(Colors.bgSecondary, 0.42)
+            // The body surface every menu in this shell uses. NOT a tint() of a dark base:
+            // tint() only sets alpha, so tinting bgPrimary/bgSecondary paints a dark hole on a
+            // light panel — which is exactly how the desk ended up black against a lavender bar.
+            // menuRowFill is liftSolid(bgElement) and follows the surface-contrast knob.
+            color:  Style.menuRowFill
 
             // A plate, not a flat fill. The sheen is a clipped overlay rather than a gradient on
             // the surface itself: StyledRect is an Item wrapping a Loader (so it can be a Shape for
@@ -296,8 +298,8 @@ Item {
                             required property var modelData
                             width: parent.width; height: 32
                             radius: Style.rControl
-                            color: opt.modelData.on ? Style.tint(Colors.bgActive, 0.34)
-                                 : oh.containsMouse ? Style.controlHover : Style.menuRowFill
+                            color: opt.modelData.on ? Style.menuRowActive
+                                 : oh.containsMouse ? Style.menuRowHover : Style.controlFill
                             Behavior on color { ColorAnimation { duration: 90 } }
                             Text {
                                 anchors { left: parent.left; leftMargin: 12; right: parent.right
@@ -467,8 +469,8 @@ Item {
         Rectangle {
             anchors { fill: parent; margins: 3 }
             radius: Style.rControl
-            color: cs.isSel ? Style.tint(Colors.bgActive, 0.20)
-                 : hov.containsMouse ? Style.tint(Colors.bgActive, 0.07) : "transparent"
+            color: cs.isSel ? Style.menuRowActive
+                 : hov.containsMouse ? Style.menuRowHover : "transparent"
             Behavior on color { ColorAnimation { duration: 130 } }
             Rectangle {
                 anchors { left: parent.left; right: parent.right; top: parent.top
@@ -507,6 +509,7 @@ Item {
             visible: !cs.isOff
 
             Row {
+                id: bars
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
                 height: parent.height
                 spacing: 2
@@ -517,11 +520,13 @@ Item {
                         readonly property real v: Math.max(0, Math.min(1, spec.values[index] ?? 0))
                         width: Math.max(1, (cs.width - 6 - 2 * (spec.values.length - 1))
                                            / Math.max(1, spec.values.length))
-                        height: Math.max(2, parent.height * v)
-                        anchors.bottom: parent.bottom
+                        // `bars`, not `parent`: a Repeater delegate has no parent yet when its
+                        // bindings first evaluate, and reading parent.height there throws.
+                        height: Math.max(2, bars.height * v)
+                        anchors.bottom: bars.bottom
                         radius: Math.min(3, width / 2, height / 2)
-                        color: cs.muted ? Colors.fgMuted : Style.tint(Colors.bgSecondary, 0.75)
-                        opacity: cs.muted ? 0.25 : 0.5
+                        color: cs.muted ? Colors.fgMuted : Style.accent
+                        opacity: cs.muted ? 0.18 : 0.30
                         Behavior on height { NumberAnimation { duration: 80; easing.type: Easing.OutCubic } }
                     }
                 }
@@ -543,7 +548,7 @@ Item {
                 anchors.fill: parent
                 preferredRendererType: Shape.CurveRenderer
                 ShapePath {
-                    strokeColor: Style.tint(Colors.bgPrimary, 0.75); strokeWidth: 10
+                    strokeColor: Style.controlFill; strokeWidth: 10
                     fillColor: "transparent"; capStyle: ShapePath.RoundCap
                     PathAngleArc { centerX: knob.r; centerY: knob.r; radiusX: 67; radiusY: 67
                                    startAngle: knob.a0; sweepAngle: knob.sw }
@@ -561,8 +566,8 @@ Item {
                 anchors.centerIn: parent
                 width: 108; height: 108; radius: 54
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: Style.tint(Colors.bgSecondary, 0.55) }
-                    GradientStop { position: 1.0; color: Style.liftSolid(Colors.bgPrimary) }
+                    GradientStop { position: 0.0; color: Style.menuRowHover }
+                    GradientStop { position: 1.0; color: Style.controlFill }
                 }
                 border.width: Style.controlBorderW; border.color: Style.controlBorderColor
             }
@@ -646,7 +651,7 @@ Item {
             Rectangle {
                 anchors.centerIn: parent
                 width: 124; height: 124; radius: 62
-                color: Style.tint(Colors.bgPrimary, 0.7)
+                color: Style.controlFill
                 border.width: Style.controlBorderW; border.color: Style.controlBorderColor
                 Text {
                     anchors.centerIn: parent

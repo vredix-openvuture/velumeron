@@ -189,7 +189,7 @@ Singleton {
         id: proc
         // The script's own output lands the change a beat before the file watcher
         // would, so the UI never shows a stale list between write and reload.
-        stdout: StdioCollector { onStreamFinished: root._parse(text()) }
+        stdout: StdioCollector { onStreamFinished: root._parse(text) }   // a property, not a call
         // Re-point the watcher afterwards: the first write CREATES the store, and a
         // watch armed on a file that didn't exist yet would never fire for the app.
         onExited: { fv.reload(); Qt.callLater(root._pump) }
