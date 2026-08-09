@@ -105,13 +105,14 @@ Column {
     Item {
         width:  parent.width
         height: cover.height
-        RoundedImage {
+        VinylArt {
             id: cover
             anchors.horizontalCenter: parent.horizontalCenter
             width:  Math.round(parent.width * VtlConfig.moduleSetting("mpris", "art_size_pct", 100) / 100)
             height: width
-            radius: Math.max(6, Style.rCard - 4)
+            decode: 512
             source: root.player?.trackArtUrl ?? ""
+            spinning: root.player?.isPlaying ?? false
 
             // Click takes you to the player's own window — the cover is the one thing on this
             // popout that is unambiguously "that app over there". Off by default is wrong for a

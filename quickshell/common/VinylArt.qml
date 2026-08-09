@@ -15,7 +15,7 @@ Item {
     property string source:    ""
     property bool   spinning:  false
     property string fallback:  "󰝚"
-    property real   labelFrac: 0.44          // label diameter as a fraction of the disc
+    property real   labelFrac: 0.60          // label diameter as a fraction of the disc
     property int    decode:    256
 
     readonly property real d: Math.min(v.width, v.height)
@@ -42,12 +42,15 @@ Item {
             radius: width / 2
             color: v.discColor
 
+            // Grooves live in the band OUTSIDE the label, so they move with it: a bigger label
+            // does not swallow them, it just leaves them a narrower rim to sit in.
             Repeater {
-                model: 7
+                model: 5
                 delegate: Rectangle {
                     required property int index
+                    readonly property real gap: (0.985 - v.labelFrac) / 5
                     anchors.centerIn: parent
-                    width: plate.width * (0.53 + index * 0.063); height: width
+                    width: plate.width * (v.labelFrac + gap * (index + 0.6)); height: width
                     radius: width / 2
                     color: "transparent"
                     border.width: 1

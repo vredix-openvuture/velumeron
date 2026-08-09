@@ -203,13 +203,13 @@ Flyout {
                     onTriggered: np.pos = Math.min(hero.med.length ?? 0, np.pos + 1000)
                 }
 
-                RoundedImage {
+                VinylArt {
                     id: art
                     anchors { left: parent.left; top: parent.top; leftMargin: 11; topMargin: 11 }
                     width: 62; height: 62
-                    radius: Style.rTile
                     source: hero.med.art ?? ""
-                    fallback: "󰝚"
+                    // The PHONE's player, so it turns with what the phone is doing.
+                    spinning: hero.med.playing === true
                 }
                 Column {
                     anchors { left: art.right; right: transport.left; top: parent.top
