@@ -81,6 +81,61 @@ Column {
         onRunningChanged: if (!running) { root.vpns = vpnProc._buf; vpnProc._buf = [] }
     }
 
+    // ── Live throughput: the panel's dashboard reading ─────────────────────────
+    // One read of /proc/net/dev a second while the menu is open — every interface but lo, summed.
+    // The colon in "eth0:12345678" runs into the number once the counter is big enough, which is
+    // why the colon is turned into a space BEFORE awk sees the line.
+    property real rxRate: 0
+    property real txRate: 0
+    property var  rxHist: new Array(48).fill(0)
+    property var  txHist: new Array(48).fill(0)
+    property var  _prev:  null                    // { t, rx, tx } of the previous sample
+
+    Timer {
+        interval: 1000; repeat: true; running: root.active; triggeredOnStart: true
+        onTriggered: { devProc.running = false; devProc.running = true }
+    }
+    Process {
+        id: devProc
+        command: ["bash", "-c",
+            "sed 's/:/ /' /proc/net/dev | awk 'NR>2 && $1!=\"lo\" {r+=$2; t+=$10} END {printf \"%d %d\\n\", r, t}'"]
+        stdout: SplitParser { onRead: line => {
+            var p = ("" + line).trim().split(/\s+/)
+            if (p.length < 2) return
+            var now = { t: Date.now(), rx: parseFloat(p[0]) || 0, tx: parseFloat(p[1]) || 0 }
+            var pv = root._prev
+            root._prev = now
+            if (!pv) return
+            var dt = (now.t - pv.t) / 1000
+            if (dt <= 0) return
+            // A counter that went backwards means an interface came or went — skip that sample
+            // rather than draw a spike the size of the whole history.
+            root.rxRate = Math.max(0, (now.rx - pv.rx) / dt)
+            root.txRate = Math.max(0, (now.tx - pv.tx) / dt)
+            var r = root.rxHist.slice(1); r.push(root.rxRate); root.rxHist = r
+            var t = root.txHist.slice(1); t.push(root.txRate); root.txHist = t
+        }}
+    }
+    // Both curves share one scale, so "down is bigger than up" is true on the picture too.
+    readonly property real _peak: {
+        var m = 1024
+        for (var i = 0; i < root.rxHist.length; i++)
+            m = Math.max(m, root.rxHist[i], root.txHist[i])
+        return m
+    }
+    readonly property var _rxN: root.rxHist.map(function (v) { return v / root._peak })
+    readonly property var _txN: root.txHist.map(function (v) { return v / root._peak })
+
+    function fmtRate(b) {
+        if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB/s"
+        if (b >= 1024)    return Math.round(b / 1024) + " kB/s"
+        return Math.max(0, Math.round(b)) + " B/s"
+    }
+    readonly property var _cur: {
+        for (var i = 0; i < root.nets.length; i++) if (root.nets[i].active) return root.nets[i]
+        return null
+    }
+
     function sigIcon(s) { return s >= 80 ? "󰤨" : s >= 55 ? "󰤥" : s >= 30 ? "󰤢" : s >= 10 ? "󰤟" : "󰤯" }
     function connect(n) {
         if (n.sec && !root.saved[n.ssid]) { root.pwFor = (root.pwFor === n.ssid ? "" : n.ssid); return }
@@ -92,7 +147,9 @@ Column {
     function vpnToggle(v)        { root.run("nmcli con " + (v.active ? "down" : "up") + " id " + _q(v.name),
                                             (v.active ? "Disconnecting " : "Connecting ") + v.name + "…") }
 
-    // Header.
+    // ── Head: what this machine's link is doing, before any list ───────────────
+    // Four figures and a curve. It answers "am I on, on what, how well and how much" without the
+    // list being read at all — which is the difference between a settings page and a dashboard.
     Item {
         width: parent.width; height: 26
         Text { anchors { left: parent.left; verticalCenter: parent.verticalCenter }
@@ -105,16 +162,68 @@ Column {
         }
     }
 
-    Text { visible: root.busy !== "" || root.ethStatus !== "" || !root.wifiOn
-           text: root.busy !== "" ? root.busy
-               : root.ethStatus !== "" ? ("Ethernet connected (" + root.ethStatus + ")")
-               : "Wi-Fi off"
-           color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font }
+    Item {
+        width: parent.width
+        height: stats.height + spark.height + 8
+
+        Row {
+            id: stats
+            width: parent.width
+            height: 34
+            readonly property int cellW: Math.floor((width - 3 * 10) / 4)
+            spacing: 10
+            StatCell {
+                width: stats.cellW
+                glyph:   root.ethStatus !== "" ? "󰈀" : root.wifiOn ? root.sigIcon(root._cur ? root._cur.signal : 0) : "󰤮"
+                value:   root.ethStatus !== "" ? "Wired"
+                       : !root.wifiOn ? "Off" : root._cur ? root._cur.ssid : "—"
+                caption: "Link"
+                good:    root.ethStatus !== "" || root._cur !== null
+                dim:     !root.wifiOn && root.ethStatus === ""
+            }
+            StatCell {
+                width: stats.cellW
+                value:   root.ethStatus !== "" ? "—" : root._cur ? (root._cur.signal + "%") : "—"
+                caption: "Signal"
+                warn:    root._cur !== null && root._cur.signal < 30
+                dim:     root._cur === null
+            }
+            StatCell {
+                width: stats.cellW
+                glyph: "󰇚"; value: root.fmtRate(root.rxRate); caption: "Down"
+                good: root.rxRate > 1024
+            }
+            StatCell {
+                width: stats.cellW
+                glyph: "󰕒"; value: root.fmtRate(root.txRate); caption: "Up"
+                good: root.txRate > 1024
+            }
+        }
+
+        // Down over up, one shared scale, full panel width — the strip that makes the head a
+        // readout rather than four numbers in a row.
+        Item {
+            id: spark
+            anchors { left: parent.left; right: parent.right; top: stats.bottom; topMargin: 8 }
+            height: 34
+            Sparkline { anchors.fill: parent; values: root._rxN; lineColor: Style.accent }
+            Sparkline { anchors.fill: parent; values: root._txN; lineColor: Colors.bgActive
+                        floorLine: false; dim: true }
+        }
+    }
+
+    MetaTag {
+        text: root.busy !== "" ? root.busy
+            : root.ethStatus !== "" ? ("Ethernet on " + root.ethStatus)
+            : !root.wifiOn ? "Wi-Fi off" : ""
+        warn: root.busy === "" && !root.wifiOn && root.ethStatus === ""
+    }
 
     // ── Wi-Fi networks ──────────────────────────────────────────────────────
     Column {
         visible: root.wifiOn
         width: parent.width; spacing: 3
+        SectionRule { text: "Networks"; trailing: root.nets.length + "" }
         Repeater {
             model: root.nets
             delegate: Column {
@@ -122,17 +231,28 @@ Column {
                 required property var modelData
                 width: root.width; spacing: 4
                 StyledRect {
-                    width: parent.width; height: 40; radius: Style.rControl
-                    // Airy list row: transparent at rest, only hover / active get a light tint — no
-                    // solid fill, no border, so the list breathes instead of stacking blocks.
-                    color: nd.modelData.active ? Style.tint(Style.accent, 0.16)
-                         : (rHov.containsMouse ? Style.tint(Colors.bgActive, 0.14) : "transparent")
+                    width: parent.width; height: 44; radius: Style.rControl
+                    clip: true
+                    // The plate travels with the row you are connected to; everything else is a
+                    // line on the panel with nothing behind it. Same rule as the sound desk.
+                    color: nd.modelData.active ? Style.tint(Colors.bgElement, Style.lift(0.22))
+                         : (rHov.containsMouse ? Style.tint(Colors.bgElement, Style.lift(0.10)) : "transparent")
                     Behavior on color { ColorAnimation { duration: 100 } }
+                    // A row is wide, so its mark is a bar down the left rather than a rule across
+                    // the top — the same statement, turned ninety degrees.
+                    Rectangle {
+                        anchors { left: parent.left; top: parent.top; bottom: parent.bottom
+                                  topMargin: 8; bottomMargin: 8 }
+                        width: 3; radius: 2
+                        color: Style.accent
+                        opacity: nd.modelData.active ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 130 } }
+                    }
                     // Signal as the shared arc rather than a glyph: it is the same shape the phone
                     // popout uses for cellular, so "how good is this link" reads the same everywhere.
                     SignalArc {
                         id: wTile
-                        anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+                        anchors { left: parent.left; leftMargin: 11; verticalCenter: parent.verticalCenter }
                         width: 28; height: 28
                         value: Math.max(0, Math.min(1, (nd.modelData.signal ?? 0) / 100))
                         dim: !nd.modelData.active
@@ -195,26 +315,30 @@ Column {
     Column {
         visible: root.vpns.length > 0
         width: parent.width; spacing: 3
-        Item {
-            width: parent.width; height: 16
-            Rectangle { anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                        width: 12; height: 1; color: Colors.bgActive }
-            Text { id: vpnLbl; anchors { left: parent.left; leftMargin: 20; verticalCenter: parent.verticalCenter }
-                   text: "VPN"; color: Colors.fgMuted; font.pixelSize: 10; font.bold: true; font.family: Style.font }
-            Rectangle { anchors { left: vpnLbl.right; leftMargin: 8; right: parent.right; verticalCenter: parent.verticalCenter }
-                        height: 1; color: Colors.bgActive }
+        SectionRule {
+            text: "VPN"
+            trailing: root.vpns.filter(function (v) { return v.active }).length + " up"
         }
         Repeater {
             model: root.vpns
             delegate: StyledRect {
                 required property var modelData
-                width: parent.width; height: 40; radius: Style.rControl
-                color: modelData.active ? Style.tint(Style.accent, 0.16)
-                     : (vHov.containsMouse ? Style.tint(Colors.bgActive, 0.14) : "transparent")
+                width: parent.width; height: 44; radius: Style.rControl
+                clip: true
+                color: modelData.active ? Style.tint(Colors.bgElement, Style.lift(0.22))
+                     : (vHov.containsMouse ? Style.tint(Colors.bgElement, Style.lift(0.10)) : "transparent")
                 Behavior on color { ColorAnimation { duration: 100 } }
                 Rectangle {
+                    anchors { left: parent.left; top: parent.top; bottom: parent.bottom
+                              topMargin: 8; bottomMargin: 8 }
+                    width: 3; radius: 2
+                    color: Style.accent
+                    opacity: modelData.active ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 130 } }
+                }
+                Rectangle {
                     id: vTile
-                    anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+                    anchors { left: parent.left; leftMargin: 11; verticalCenter: parent.verticalCenter }
                     width: 28; height: 28; radius: 14
                     color: modelData.active ? Style.accent : "transparent"
                     Behavior on color { ColorAnimation { duration: 120 } }
@@ -245,7 +369,9 @@ Column {
     component IconBtn: StyledRect {
         property string icon: ""
         signal trig()
-        width: 28; height: 28; radius: Style.rTile; color: iHov.containsMouse ? Colors.bgActive : Style.menuRowFill
+        width: 28; height: 28; radius: Style.rTile
+        color: iHov.containsMouse ? Style.tint(Colors.bgActive, Style.lift(0.30))
+                                  : Style.tint(Colors.bgElement, Style.lift(0.14))
         Behavior on color { ColorAnimation { duration: 100 } }
         Text { anchors.centerIn: parent; text: parent.icon; color: Colors.fgPrimary; font.pixelSize: 13; font.family: Style.font }
         MouseArea { id: iHov; anchors.fill: parent; hoverEnabled: true; onClicked: parent.trig() }

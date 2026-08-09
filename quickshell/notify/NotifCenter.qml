@@ -21,6 +21,26 @@ PanelWindow {
     readonly property bool isOpen: UiState.notifCenterOpen
     readonly property bool active: isOpen && onActiveMonitor
     onIsOpenChanged: if (isOpen) NotifService.unread = 0   // opening the centre clears the bell badge
+
+    // ── The head's figures. Plain index loops on purpose: `model.values` is a QVariantList
+    // sequence, and .concat()/.slice() on one of those is quadratic (it froze velora for seconds
+    // on a few hundred items) — the same trap lives here.
+    readonly property var _all: NotifService.model ? NotifService.model.values : []
+    readonly property int _count: root._all.length
+    readonly property int _apps: {
+        var seen = ({}), c = 0
+        for (var i = 0; i < root._all.length; i++) {
+            var a = root._all[i].appName || ""
+            if (!seen[a]) { seen[a] = true; c++ }
+        }
+        return c
+    }
+    readonly property int _pins: {
+        var _touch = NotifService.pinned          // rebind the moment a pin is toggled
+        var c = 0
+        for (var i = 0; i < root._all.length; i++) if (NotifService.isPinned(root._all[i])) c++
+        return c
+    }
     // Morph progress on this screen (other screens stay collapsed so the close morph still plays).
     readonly property real reveal: root.onActiveMonitor ? UiState.notifReveal : 0
 
@@ -250,24 +270,31 @@ PanelWindow {
             anchors.bottomMargin: root.vert ? root.sideEnd   : 0
             opacity: panel.contentReveal
 
+            // ── Head: what the history holds, as figures, before a single card is read ──
             Item {
                 id: header
                 anchors { top: parent.top; left: parent.left; right: parent.right; margins: 14 }
-                height: 28
+                height: 28 + 6 + 34 + 8 + 16
 
                 Text {
-                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    id: hTitle
+                    anchors { left: parent.left; top: parent.top }
+                    height: 28; verticalAlignment: Text.AlignVCenter
                     text: Wording.s("notif.title"); color: Colors.fgBright
                     font.pixelSize: 15; font.bold: true; font.family: Style.font
                 }
                 Row {
-                    anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                    anchors { right: parent.right; top: parent.top }
+                    height: 28
                     spacing: 6
                     // DND toggle
                     Rectangle {
-                        width: 30; height: 24; radius: 7
-                        color: NotifService.dnd ? Colors.bgActive
-                             : (dndHov.containsMouse ? Style.tint(Colors.bgActive, 0.18) : Colors.bgElement)
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 30; height: 24; radius: Style.rTile
+                        color: NotifService.dnd ? Style.tint(Style.accent, Style.lift(0.34))
+                             : (dndHov.containsMouse ? Style.tint(Colors.bgActive, Style.lift(0.24))
+                                                     : Style.tint(Colors.bgElement, Style.lift(0.14)))
+                        Behavior on color { ColorAnimation { duration: 110 } }
                         Text { anchors.centerIn: parent; text: NotifService.dnd ? "󰂛" : "󰂚"
                                color: NotifService.dnd ? Colors.fgBright : Colors.fgPrimary
                                font.pixelSize: 13; font.family: Style.font }
@@ -275,18 +302,45 @@ PanelWindow {
                     }
                     // Clear all
                     Rectangle {
-                        width: 30; height: 24; radius: 7
-                        color: clrHov.containsMouse ? Colors.bgActive : Colors.bgElement
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 30; height: 24; radius: Style.rTile
+                        color: clrHov.containsMouse ? Style.tint(Colors.bgActive, Style.lift(0.24))
+                                                    : Style.tint(Colors.bgElement, Style.lift(0.14))
+                        Behavior on color { ColorAnimation { duration: 110 } }
                         Text { anchors.centerIn: parent; text: "󰎟"; color: Colors.fgPrimary
                                font.pixelSize: 13; font.family: Style.font }
                         MouseArea { id: clrHov; anchors.fill: parent; hoverEnabled: true; onClicked: NotifService.clearAll() }
                     }
                 }
+
+                Row {
+                    id: nStats
+                    anchors { left: parent.left; right: parent.right; top: hTitle.bottom; topMargin: 6 }
+                    height: 34
+                    readonly property int cellW: Math.floor((width - 3 * 10) / 4)
+                    spacing: 10
+                    StatCell { width: nStats.cellW; value: root._count + ""; caption: "In history"
+                               dim: root._count === 0 }
+                    StatCell { width: nStats.cellW; value: root._apps + "";  caption: "Apps"
+                               dim: root._apps === 0 }
+                    StatCell { width: nStats.cellW; glyph: root._pins > 0 ? "󰐃" : ""
+                               value: root._pins + ""; caption: "Pinned"
+                               good: root._pins > 0; dim: root._pins === 0 }
+                    StatCell { width: nStats.cellW; glyph: NotifService.dnd ? "󰂛" : "󰂚"
+                               value: NotifService.dnd ? "On" : "Off"; caption: "Do not disturb"
+                               warn: NotifService.dnd; dim: !NotifService.dnd }
+                }
+
+                SectionRule {
+                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                    text: "History"
+                    trailing: NotifService.dnd ? "muted" : ""
+                }
             }
 
             // History list (shared component, honours the grouping setting).
             NotifList {
-                anchors { top: header.bottom; topMargin: 10; left: parent.left; right: parent.right
+                anchors { top: header.bottom; topMargin: 8; left: parent.left; right: parent.right
                           bottom: parent.bottom; leftMargin: 12; rightMargin: 12; bottomMargin: 12 }
             }
         }

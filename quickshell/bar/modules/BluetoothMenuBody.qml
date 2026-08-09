@@ -22,6 +22,18 @@ Column {
     readonly property var _paired:    devices.filter(function (d) { return d.paired })
     readonly property var _available: devices.filter(function (d) { return !d.paired })
     readonly property var _sel: devices.filter(function (d) { return d.mac === openMac })[0] || null
+    readonly property var _connected: devices.filter(function (d) { return d.connected })
+    // The lowest charge among the connected devices that report one. One figure for the whole
+    // adapter is the useful reading here: what you want to know is whether ANYTHING is about to
+    // die, not the charge of each in turn. -1 = nothing reports a battery.
+    readonly property int _lowBat: {
+        var m = -1
+        for (var i = 0; i < root._connected.length; i++) {
+            var b = root._connected[i].battery
+            if (b >= 0 && (m < 0 || b < m)) m = b
+        }
+        return m
+    }
     function dispName(d) { var a = VtlConfig.btAlias(d.mac); return a !== "" ? a : d.name }
 
     // Paired devices bucketed by their assigned group; named groups first (alpha), ungrouped ("") last.
@@ -120,7 +132,7 @@ Column {
     }
     Process { id: grpProc }
 
-    // Header
+    // ── Head: the adapter's state as figures, before any device list ───────────
     Item {
         width: parent.width; height: 26
         Text { anchors { left: parent.left; verticalCenter: parent.verticalCenter }
@@ -129,9 +141,41 @@ Column {
                  on: root.powered; onToggled: root.run("bluetoothctl power " + (root.powered ? "off" : "on"), "") }
     }
 
-    Text { visible: root.busy !== "" || root.scanning
-           text: root.busy !== "" ? root.busy : Wording.s("bt.scanning"); color: Colors.fgMuted
-           font.pixelSize: 11; font.family: Style.font }
+    Row {
+        id: btStats
+        width: parent.width
+        height: 34
+        readonly property int cellW: Math.floor((width - 3 * 10) / 4)
+        spacing: 10
+        StatCell {
+            width: btStats.cellW
+            glyph: root.powered ? "󰂯" : "󰂲"
+            value: root.powered ? "On" : "Off"; caption: "Adapter"
+            good: root.powered; dim: !root.powered
+        }
+        StatCell {
+            width: btStats.cellW
+            value: root._connected.length + ""; caption: "Connected"
+            good: root._connected.length > 0; dim: root._connected.length === 0
+        }
+        StatCell {
+            width: btStats.cellW
+            value: root._paired.length + ""; caption: "Paired"
+            dim: root._paired.length === 0
+        }
+        StatCell {
+            width: btStats.cellW
+            glyph: root._lowBat >= 0 ? "󰁹" : ""
+            value: root._lowBat >= 0 ? (root._lowBat + "%") : "—"; caption: "Lowest"
+            warn: root._lowBat >= 0 && root._lowBat <= 15
+            dim:  root._lowBat < 0
+        }
+    }
+
+    MetaTag {
+        text: root.busy !== "" ? root.busy : root.scanning ? Wording.s("bt.scanning") : ""
+        good: root.scanning && root.busy === ""
+    }
 
     // ── Known devices (bucketed by group, each bucket fronted by a named divider) ──────────
     Column {
@@ -144,17 +188,11 @@ Column {
                 required property var modelData
                 width: root.width; spacing: 3
                 // Group divider — shown for named groups, or for "Ungrouped" when groups coexist.
-                Item {
+                SectionRule {
                     visible: gsec.modelData.group !== "" || root._grouped.length > 1
-                    width: parent.width; height: 16
-                    Rectangle { anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                                width: 12; height: 1; color: Colors.bgActive }
-                    Text { id: gName
-                           anchors { left: parent.left; leftMargin: 20; verticalCenter: parent.verticalCenter }
-                           text: gsec.modelData.group !== "" ? gsec.modelData.group : "Ungrouped"
-                           color: Colors.fgMuted; font.pixelSize: 10; font.bold: true; font.family: Style.font }
-                    Rectangle { anchors { left: gName.right; leftMargin: 8; right: parent.right; verticalCenter: parent.verticalCenter }
-                                height: 1; color: Colors.bgActive }
+                    height: visible ? 16 : 0
+                    text: gsec.modelData.group !== "" ? gsec.modelData.group : "Ungrouped"
+                    trailing: gsec.modelData.devices.length + ""
                 }
                 Repeater {
                     model: gsec.modelData.devices
@@ -305,13 +343,22 @@ Column {
         signal trig()
         signal gear()
         width:  parent ? parent.width : 0
-        height: 40; radius: Style.rControl
+        height: 44; radius: Style.rControl
         clip: true
-        // Airy list row: transparent at rest, only hover / connected get a light tint — no solid
-        // fill, no border, so the device list breathes instead of stacking blocks.
-        color: dev && dev.connected ? Style.tint(Style.accent, 0.16)
-             : (brH.containsMouse ? Style.tint(Colors.bgActive, 0.14) : "transparent")
+        // The plate travels with the connected device; everything else is a line on the panel with
+        // nothing behind it. Same rule as the sound desk and the network list.
+        color: dev && dev.connected ? Style.tint(Colors.bgElement, Style.lift(0.22))
+             : (brH.containsMouse ? Style.tint(Colors.bgElement, Style.lift(0.10)) : "transparent")
         Behavior on color { ColorAnimation { duration: 100 } }
+        // A row is wide, so its mark is a bar down the left rather than a rule across the top.
+        Rectangle {
+            anchors { left: parent.left; top: parent.top; bottom: parent.bottom
+                      topMargin: 8; bottomMargin: 8 }
+            width: 3; radius: 2
+            color: Style.accent
+            opacity: br.dev && br.dev.connected ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 130 } }
+        }
         // Connecting wave — an accent glow sweeps left→right across the card while an action runs.
         Rectangle {
             visible: br.busy
@@ -331,7 +378,7 @@ Column {
         // ring is absent rather than drawn empty.
         Item {
             id: bTile
-            anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+            anchors { left: parent.left; leftMargin: 11; verticalCenter: parent.verticalCenter }
             width: 30; height: 30
             readonly property int charge: br.dev ? (br.dev.battery ?? -1) : -1
 

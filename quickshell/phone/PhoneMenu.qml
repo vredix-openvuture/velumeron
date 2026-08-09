@@ -36,9 +36,65 @@ Flyout {
         }
     }
 
+    // Lowest charge across the reachable devices — the one figure worth putting in the head,
+    // because what you want from a glance is "is anything about to die", not each in turn.
+    readonly property int _lowBat: {
+        var ds = PhoneService.reachable, m = -1
+        for (var i = 0; i < ds.length; i++) {
+            var b = ds[i].battery ?? ({})
+            if (b.ok === true && b.charge >= 0 && (m < 0 || b.charge < m)) m = b.charge
+        }
+        return m
+    }
+    readonly property bool _anyCharging: {
+        var ds = PhoneService.reachable
+        for (var i = 0; i < ds.length; i++) if ((ds[i].battery ?? ({})).charging === true) return true
+        return false
+    }
+
     Column {
         anchors { left: parent.left; right: parent.right; top: parent.top }
         spacing: 10
+
+        // ── Head: the fleet as figures, before any device card ─────────────────
+        Row {
+            id: phStats
+            visible: PhoneService.available && PhoneService.devices.length > 0
+            width: parent.width
+            height: 34
+            readonly property int cellW: Math.floor((width - 2 * 10) / 3)
+            spacing: 10
+            StatCell {
+                width: phStats.cellW
+                glyph: "󰄜"
+                value: PhoneService.reachable.length + "/" + PhoneService.devices.length
+                caption: "Online"
+                good: PhoneService.hasDevices; dim: !PhoneService.hasDevices
+            }
+            StatCell {
+                width: phStats.cellW
+                glyph: root._anyCharging ? "󰂄" : root._lowBat >= 0 ? "󰁹" : ""
+                value: root._lowBat >= 0 ? (root._lowBat + "%") : "—"
+                caption: "Lowest"
+                warn: root._lowBat >= 0 && root._lowBat <= 15 && !root._anyCharging
+                good: root._anyCharging
+                dim:  root._lowBat < 0
+            }
+            StatCell {
+                width: phStats.cellW
+                value: PhoneService.primary && (PhoneService.primary.connectivity ?? ({})).ok === true
+                       && PhoneService.primary.connectivity.type !== ""
+                       ? PhoneService.primary.connectivity.type : "—"
+                caption: "Cellular"
+                dim: !PhoneService.hasDevices
+            }
+        }
+        SectionRule {
+            visible: PhoneService.available && PhoneService.devices.length > 0
+            height: visible ? 16 : 0
+            text: "Devices"
+            trailing: "drop files to send"
+        }
 
         // Nothing paired / no daemon → say which, and don't pretend there are actions.
         StyledRect {
@@ -80,6 +136,7 @@ Flyout {
                                              && card.bat.charge <= 15 && !card.bat.charging
 
                 interactive: true
+                active:  card.live
                 opacity: card.live ? 1.0 : 0.55
                 // A drop lands on whichever card the cursor is over.
                 onHoveredChanged: if (card.hovered && card.live) root.dropTarget = card.modelData.id
@@ -174,11 +231,5 @@ Flyout {
             }
         }
 
-        Text {
-            visible: PhoneService.hasDevices
-            width: parent.width; wrapMode: Text.WordWrap
-            text:  "Drop files onto a device to send them."
-            color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font
-        }
     }
 }

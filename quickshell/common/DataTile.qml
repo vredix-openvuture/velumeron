@@ -20,9 +20,13 @@ StyledRect {
     width:  parent ? parent.width : 0
     height: col.implicitHeight + t.pad * 2
     radius: Style.rCard
-    color:  t.active ? Style.tint(Colors.bgActive, 0.24)
-          : (t.interactive && hov.containsMouse) ? Style.controlHover
-          : Style.menuRowFill
+    // Translucent, never a solid fill — the bar and the settings menu let the panel through, and
+    // one solid slab inside a frosted popout reads as a foreign object glued on top of it. The
+    // active tile wears the plate; everything else gets a wash faint enough to be an edge, not a
+    // box. Same rule the sound desk settled on.
+    color:  t.active ? Style.tint(Colors.bgElement, Style.lift(0.24))
+          : (t.interactive && hov.containsMouse) ? Style.tint(Colors.bgElement, Style.lift(0.14))
+          : Style.tint(Colors.bgElement, Style.lift(0.07))
     borderWidth: t.highlight ? 1 : 0
     borderColor: Style.accent
     Behavior on color { ColorAnimation { duration: 110 } }

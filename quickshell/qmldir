@@ -55,6 +55,8 @@ Sparkline   1.0 common/Sparkline.qml
 ValueRing   1.0 common/ValueRing.qml
 ValueGauge  1.0 common/ValueGauge.qml
 SignalArc   1.0 common/SignalArc.qml
+StatCell    1.0 common/StatCell.qml
+SectionRule 1.0 common/SectionRule.qml
 
 # Native wallpaper engine (per-monitor background surface)
 WallpaperWindow   1.0 WallpaperWindow.qml

@@ -100,12 +100,29 @@ Item {
             readonly property var n: modelData.latest
             readonly property bool stacked:  modelData.count > 1
             readonly property bool expanded: stacked && root.expandedApps[modelData.app] === true
+            readonly property bool pinnedRow: item.modelData.pinned === true
             width:  parent.width
             radius:      Style.rControl
-            // Match the notification popups / bar modules — the module-pill fill (bgElement at the
-            // module-bg opacity), borderless (the fill alone defines the card).
-            color:       cardMa.containsMouse && item.stacked ? Style.controlHover : Style.tint(Colors.bgElement, Style.lift(VtlConfig.barModuleBgOpacity))
+            clip:        true
+            // The module-pill fill, translucent like the bar. A PINNED card wears the plate — it is
+            // the one row here that is deliberately kept, so it is the one that gets a surface,
+            // the way the active strip does on the sound desk and the connected row does in the
+            // network list. Everything else is a lighter card.
+            color:       item.pinnedRow ? Style.tint(Colors.bgElement, Style.lift(0.24))
+                       : cardMa.containsMouse ? Style.tint(Colors.bgElement, Style.lift(0.16))
+                       : Style.tint(Colors.bgElement, Style.lift(VtlConfig.barModuleBgOpacity))
             borderWidth: 0
+            Behavior on color { ColorAnimation { duration: 110 } }
+
+            // A row is wide, so its mark is a bar down the left rather than a rule across the top.
+            Rectangle {
+                anchors { left: parent.left; top: parent.top; bottom: parent.bottom
+                          topMargin: 8; bottomMargin: 8 }
+                width: 3; radius: 2
+                color: Style.accent
+                opacity: item.pinnedRow ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: 130 } }
+            }
             implicitHeight: item.expanded ? igroup.y + igroup.implicitHeight + 14
                                           : Math.max(54, ibody.y + ibody.implicitHeight + 14)
 
