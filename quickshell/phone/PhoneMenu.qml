@@ -184,7 +184,7 @@ Flyout {
             StyledRect {
                 id: np
                 width: parent.width
-                height: 104
+                height: 122
                 radius: Style.rTile
                 visible: hero.med.ok === true
                 color: Style.tint(Colors.bgElement, Style.lift(0.14))
@@ -206,14 +206,14 @@ Flyout {
                 VinylArt {
                     id: art
                     anchors { left: parent.left; top: parent.top; leftMargin: 11; topMargin: 11 }
-                    width: 62; height: 62
+                    width: 82; height: 82
                     source: hero.med.art ?? ""
                     // The PHONE's player, so it turns with what the phone is doing.
                     spinning: hero.med.playing === true
                 }
                 Column {
-                    anchors { left: art.right; right: transport.left; top: parent.top
-                              leftMargin: 13; rightMargin: 13; topMargin: 13 }
+                    anchors { left: art.right; right: transport.left; verticalCenter: art.verticalCenter
+                              leftMargin: 15; rightMargin: 13 }
                     spacing: 2
                     Text {
                         width: parent.width; elide: Text.ElideRight
@@ -240,7 +240,7 @@ Flyout {
                 }
                 Row {
                     id: transport
-                    anchors { right: parent.right; top: parent.top; rightMargin: 11; topMargin: 18 }
+                    anchors { right: parent.right; verticalCenter: art.verticalCenter; rightMargin: 11 }
                     spacing: 7
                     RoundBtn { icon: "󰒮"; onTrig: PhoneService.media(hero.d.id, "Previous") }
                     RoundBtn {

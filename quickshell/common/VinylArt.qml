@@ -16,7 +16,7 @@ Item {
     property bool   spinning:  false
     property string fallback:  "󰝚"
     property real   labelFrac: 0.60          // label diameter as a fraction of the disc
-    property int    decode:    256
+    property int    decode:    512
 
     readonly property real d: Math.min(v.width, v.height)
     // Near-black whatever the scheme is — a record is not a palette surface. Derived from the
@@ -65,6 +65,11 @@ Item {
             width: Math.round(v.d * v.labelFrac); height: width
             radius: width / 2
             decode: v.decode
+            // THE reason RoundedImage has this knob (its own comment says so): the layer is built
+            // once at item size and then resampled every single frame while the disc turns, which
+            // is what made every cover look chewed. Rendered at 3× and scaled down by the GPU it
+            // stays crisp all the way round.
+            supersample: 3
             source: v.source
             fallback: v.fallback
         }
