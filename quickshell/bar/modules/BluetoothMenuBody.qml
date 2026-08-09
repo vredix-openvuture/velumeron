@@ -309,7 +309,9 @@ Column {
             delegate: Column {
                 id: gsec
                 required property var modelData
-                width: root.width; spacing: 3
+                // parent.width, NOT root.width — see the network list: root is the panel, and a row
+                // sized to it overhangs the plate it sits in by the plate's own padding.
+                width: parent.width; spacing: 3
                 // Group divider — shown for named groups, or for "Ungrouped" when groups coexist.
                 SectionRule {
                     visible: gsec.modelData.group !== "" || root._grouped.length > 1

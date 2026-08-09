@@ -284,7 +284,11 @@ Column {
             delegate: Column {
                 id: nd
                 required property var modelData
-                width: root.width; spacing: 4
+                // parent.width, NOT root.width. root is the whole panel; these rows live inside a
+                // plate that is inset by its padding, and taking the panel's width made every row
+                // 28px too wide — it hung 14px past the plate on each side, which is why the
+                // buttons looked glued to the edge no matter how much margin they were given.
+                width: parent.width; spacing: 4
                 StyledRect {
                     width: parent.width; height: 44; radius: Style.rControl
                     clip: true
