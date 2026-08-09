@@ -213,11 +213,11 @@ Item {
             width: parent.width
             height: 314
             radius: Style.rCard
-            // The body surface every menu in this shell uses. NOT a tint() of a dark base:
-            // tint() only sets alpha, so tinting bgPrimary/bgSecondary paints a dark hole on a
-            // light panel — which is exactly how the desk ended up black against a lavender bar.
-            // menuRowFill is liftSolid(bgElement) and follows the surface-contrast knob.
-            color:  Style.menuRowFill
+            // Built exactly like a bar module pill: a TRANSLUCENT tint of bgElement scaled by
+            // the surface-contrast knob (Style.lift). Nothing in this shell's chrome is a solid
+            // fill — the bar and the settings menu let the wallpaper through, and a solid slab
+            // inside a frosted panel reads as a foreign object glued on top of it.
+            color:  Style.tint(Colors.bgElement, Style.lift(0.14))
 
             // A plate, not a flat fill. The sheen is a clipped overlay rather than a gradient on
             // the surface itself: StyledRect is an Item wrapping a Loader (so it can be a Shape for
@@ -278,7 +278,7 @@ Item {
                 visible: root.sheet !== null
                 // The panel's own colour at near-opacity, never a black scrim: the menu sits on
                 // a wallust-tinted surface and black reads as a hole punched through it.
-                color: Style.tint(Style.panelColor(VtlConfig.menuColorful), 0.94)
+                color: Style.tint(Style.panelColor(VtlConfig.menuColorful), 0.90)
                 MouseArea { anchors.fill: parent; onClicked: root.sheet = null }
 
                 Column {
@@ -298,8 +298,9 @@ Item {
                             required property var modelData
                             width: parent.width; height: 32
                             radius: Style.rControl
-                            color: opt.modelData.on ? Style.menuRowActive
-                                 : oh.containsMouse ? Style.menuRowHover : Style.controlFill
+                            color: opt.modelData.on ? Style.tint(Colors.bgActive, Style.lift(0.30))
+                                 : oh.containsMouse ? Style.tint(Colors.bgActive, Style.lift(0.14))
+                                                    : Style.tint(Colors.bgElement, Style.lift(0.16))
                             Behavior on color { ColorAnimation { duration: 90 } }
                             Text {
                                 anchors { left: parent.left; leftMargin: 12; right: parent.right
@@ -330,7 +331,7 @@ Item {
             width: parent.width
             height: 46
             radius: Style.rControl
-            color: Style.menuRowFill
+            color: Style.tint(Colors.bgElement, Style.lift(0.18))
             visible: root.sel !== null
 
             readonly property var  ch:    root.sel
@@ -469,8 +470,8 @@ Item {
         Rectangle {
             anchors { fill: parent; margins: 3 }
             radius: Style.rControl
-            color: cs.isSel ? Style.menuRowActive
-                 : hov.containsMouse ? Style.menuRowHover : "transparent"
+            color: cs.isSel ? Style.tint(Colors.bgActive, Style.lift(0.26))
+                 : hov.containsMouse ? Style.tint(Colors.bgActive, Style.lift(0.10)) : "transparent"
             Behavior on color { ColorAnimation { duration: 130 } }
             Rectangle {
                 anchors { left: parent.left; right: parent.right; top: parent.top
@@ -548,7 +549,7 @@ Item {
                 anchors.fill: parent
                 preferredRendererType: Shape.CurveRenderer
                 ShapePath {
-                    strokeColor: Style.controlFill; strokeWidth: 10
+                    strokeColor: Style.tint(Colors.bgElement, Style.lift(0.34)); strokeWidth: 10
                     fillColor: "transparent"; capStyle: ShapePath.RoundCap
                     PathAngleArc { centerX: knob.r; centerY: knob.r; radiusX: 67; radiusY: 67
                                    startAngle: knob.a0; sweepAngle: knob.sw }
@@ -566,8 +567,8 @@ Item {
                 anchors.centerIn: parent
                 width: 108; height: 108; radius: 54
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: Style.menuRowHover }
-                    GradientStop { position: 1.0; color: Style.controlFill }
+                    GradientStop { position: 0.0; color: Style.tint(Colors.bgElement, Style.lift(0.26)) }
+                    GradientStop { position: 1.0; color: Style.tint(Colors.bgElement, Style.lift(0.12)) }
                 }
                 border.width: Style.controlBorderW; border.color: Style.controlBorderColor
             }
@@ -651,7 +652,7 @@ Item {
             Rectangle {
                 anchors.centerIn: parent
                 width: 124; height: 124; radius: 62
-                color: Style.controlFill
+                color: Style.tint(Colors.bgElement, Style.lift(0.22))
                 border.width: Style.controlBorderW; border.color: Style.controlBorderColor
                 Text {
                     anchors.centerIn: parent
@@ -686,7 +687,8 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: 46; height: 24; radius: 12
                 color: cs.muted ? Style.tint(Colors.fgUrgent, 0.30)
-                     : mh.containsMouse ? Style.controlHover : Style.controlFill
+                     : mh.containsMouse ? Style.tint(Colors.bgActive, Style.lift(0.20))
+                                        : Style.tint(Colors.bgElement, Style.lift(0.22))
                 Behavior on color { ColorAnimation { duration: 90 } }
                 Text {
                     anchors.centerIn: parent
