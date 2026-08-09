@@ -13,8 +13,8 @@ import QtQuick
 Flyout {
     id: root
     flyoutId: "phone"
-    panelW:   400
-    maxH:     680
+    panelW:   500
+    maxH:     760
 
     // Keep the service on its brisk refresh only while this is up.
     onIsOpenChanged: {
@@ -44,7 +44,7 @@ Flyout {
 
     Column {
         anchors { left: parent.left; right: parent.right; top: parent.top }
-        spacing: 10
+        spacing: 13
 
         // Nothing paired / no daemon → say which, and don't pretend there are actions.
         StyledRect {
@@ -79,8 +79,8 @@ Flyout {
             id: hero
             visible: root.main !== null
             active:  true
-            pad:     14
-            spacing: 11
+            pad:     18
+            spacing: 14
 
             readonly property var  d:      root.main ?? ({})
             readonly property bool live:   hero.d.reachable === true && hero.d.paired === true
@@ -93,7 +93,7 @@ Flyout {
             // ── Identity. The device's own glyph, big, wearing its charge as the ring around it.
             Row {
                 width: parent.width
-                spacing: 14
+                spacing: 18
                 Item {
                     id: idn
                     anchors.verticalCenter: parent.verticalCenter
@@ -160,7 +160,7 @@ Flyout {
             Row {
                 id: facts
                 width: parent.width
-                spacing: 7
+                spacing: 9
                 readonly property int cellW: Math.floor((width - spacing) / 2)
                 StatCell {
                     width: facts.cellW
@@ -184,7 +184,7 @@ Flyout {
             StyledRect {
                 id: np
                 width: parent.width
-                height: 92
+                height: 104
                 radius: Style.rTile
                 visible: hero.med.ok === true
                 color: Style.tint(Colors.bgElement, Style.lift(0.14))
@@ -205,15 +205,15 @@ Flyout {
 
                 RoundedImage {
                     id: art
-                    anchors { left: parent.left; top: parent.top; leftMargin: 8; topMargin: 8 }
-                    width: 54; height: 54
+                    anchors { left: parent.left; top: parent.top; leftMargin: 11; topMargin: 11 }
+                    width: 62; height: 62
                     radius: Style.rTile
                     source: hero.med.art ?? ""
                     fallback: "󰝚"
                 }
                 Column {
                     anchors { left: art.right; right: transport.left; top: parent.top
-                              leftMargin: 10; rightMargin: 10; topMargin: 10 }
+                              leftMargin: 13; rightMargin: 13; topMargin: 13 }
                     spacing: 2
                     Text {
                         width: parent.width; elide: Text.ElideRight
@@ -240,8 +240,8 @@ Flyout {
                 }
                 Row {
                     id: transport
-                    anchors { right: parent.right; top: parent.top; rightMargin: 8; topMargin: 15 }
-                    spacing: 5
+                    anchors { right: parent.right; top: parent.top; rightMargin: 11; topMargin: 18 }
+                    spacing: 7
                     RoundBtn { icon: "󰒮"; onTrig: PhoneService.media(hero.d.id, "Previous") }
                     RoundBtn {
                         big: true
@@ -255,7 +255,7 @@ Flyout {
                 Item {
                     id: prog
                     anchors { left: parent.left; right: parent.right; bottom: parent.bottom
-                              leftMargin: 10; rightMargin: 10; bottomMargin: 8 }
+                              leftMargin: 13; rightMargin: 13; bottomMargin: 11 }
                     height: 20
                     readonly property real frac: Math.max(0, Math.min(1, np.pos / Math.max(1, hero.med.length ?? 1)))
 
@@ -336,7 +336,7 @@ Flyout {
             // ── Everything it can be asked to do.
             Flow {
                 width: parent.width
-                spacing: 5
+                spacing: 7
                 visible: hero.live
                 DataChip {
                     label: "󰅧  Send files"; on: true
@@ -382,7 +382,7 @@ Flyout {
                 readonly property bool hasBat: orow.bat.ok === true && orow.bat.charge >= 0
 
                 width: parent.width
-                height: 52
+                height: 60
                 radius: Style.rTile
                 clip: true
                 color: oh.containsMouse ? Style.tint(Colors.bgElement, Style.lift(0.16))
@@ -396,8 +396,8 @@ Flyout {
 
                 Item {
                     id: oidn
-                    anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
-                    width: 40; height: 40
+                    anchors { left: parent.left; leftMargin: 11; verticalCenter: parent.verticalCenter }
+                    width: 44; height: 44
                     ValueRing {
                         anchors.fill: parent
                         visible: orow.hasBat
@@ -411,12 +411,12 @@ Flyout {
                         anchors.centerIn: parent
                         text: PhoneService.icon(orow.modelData)
                         color: orow.live ? Colors.fgBright : Colors.fgMuted
-                        font.family: Style.font; font.pixelSize: 20
+                        font.family: Style.font; font.pixelSize: 22
                     }
                 }
                 Column {
                     anchors { left: oidn.right; right: opin.left; verticalCenter: parent.verticalCenter
-                              leftMargin: 10; rightMargin: 8 }
+                              leftMargin: 13; rightMargin: 10 }
                     spacing: 1
                     Text {
                         width: parent.width; elide: Text.ElideRight
@@ -437,7 +437,7 @@ Flyout {
                 // Choose: this device becomes the one tracked at the top.
                 SelectDot {
                     id: opin
-                    anchors { right: parent.right; rightMargin: 11; verticalCenter: parent.verticalCenter }
+                    anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
                     on: false
                     onPick: PhoneService.setMain(orow.modelData.id)
                 }

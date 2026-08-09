@@ -37,9 +37,12 @@ DashTile {
         visible: root.player === null
         anchors.centerIn: parent
         spacing: 8
-        Text { anchors.horizontalCenter: parent.horizontalCenter
-               text: "󰝛"; color: Colors.fgMuted
-               font.pixelSize: root.big ? 56 : 30; font.family: Style.font }
+        VinylArt {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: root.big ? 96 : 48; height: width
+            source: ""; spinning: false
+            opacity: 0.5
+        }
         Text { anchors.horizontalCenter: parent.horizontalCenter
                text: "Nothing playing"; color: Colors.fgMuted
                font.pixelSize: 12; font.family: Style.font }
@@ -52,12 +55,11 @@ DashTile {
                   left: parent.left; leftMargin: root.pad
                   right: parent.right; rightMargin: root.pad }
         spacing: 12
-        RoundedImage {
+        VinylArt {
             width: root.cover; height: root.cover
-            radius: Math.max(4, Style.rControl - 2)
-            decode: 256
             anchors.verticalCenter: parent.verticalCenter
             source: root.player?.trackArtUrl ?? ""
+            spinning: root.player?.isPlaying ?? false
 
             // Click goes to the player's own window (Settings → Bar → Media).
             MouseArea {
@@ -106,13 +108,13 @@ DashTile {
         Item {
             width: parent.width
             height: Math.max(0, parent.height - info.height - prog.height - bigCtl.height - 3 * parent.spacing)
-            RoundedImage {
-                // Equal air on three sides. The cover is a square inside a box that is rarely
+            VinylArt {
+                // Equal air on three sides. The record is a circle inside a box that is rarely
                 // square itself, so whichever side is short decides its size and the other one
                 // is left with the difference. Centring it horizontally splits that difference
                 // into two side gaps — so the top gets exactly the same amount as a margin, and
                 // left, right and top end up identical whatever the tile's proportions are.
-                // Whatever remains falls below the cover, where the title follows anyway.
+                // Whatever remains falls below the disc, where the title follows anyway.
                 anchors {
                     top: parent.top
                     topMargin: Math.round((parent.width - width) / 2)
@@ -120,11 +122,9 @@ DashTile {
                 }
                 width: Math.max(52, Math.min(parent.width, parent.height))
                 height: width
-                // A notch tighter than the card it sits in. Nested corners of the SAME radius
-                // read wrong — the inner one has less material around it, so it looks blown
-                // out next to its frame.
-                radius: Math.max(6, Style.rCard - 6)
+                decode: 512
                 source: root.player?.trackArtUrl ?? ""
+                spinning: root.player?.isPlaying ?? false
 
                 // Click goes to the player's own window (Settings → Bar → Media).
                 MouseArea {
