@@ -13,7 +13,7 @@ import QtQuick
 Flyout {
     id: root
     flyoutId: "phone"
-    panelW:   500
+    panelW:   580
     maxH:     760
 
     // Keep the service on its brisk refresh only while this is up.
@@ -184,7 +184,7 @@ Flyout {
             StyledRect {
                 id: np
                 width: parent.width
-                height: 122
+                height: 154
                 radius: Style.rTile
                 visible: hero.med.ok === true
                 color: Style.tint(Colors.bgElement, Style.lift(0.14))
@@ -206,7 +206,7 @@ Flyout {
                 VinylArt {
                     id: art
                     anchors { left: parent.left; top: parent.top; leftMargin: 11; topMargin: 11 }
-                    width: 82; height: 82
+                    width: 104; height: 104
                     source: hero.med.art ?? ""
                     // The PHONE's player, so it turns with what the phone is doing.
                     spinning: hero.med.playing === true
