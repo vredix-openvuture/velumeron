@@ -207,35 +207,14 @@ Item {
             onPicked: key => { root.tab = key; root.selId = ""; root.sheet = null }
         }
 
-        // ── The face plate: strips side by side, as wide as the room allows.
-        StyledRect {
+        // ── The strips, side by side, as wide as the room allows. There is deliberately NO
+        //    plate under them: one surface behind all three said nothing about any of them. The
+        //    surface travels with the channel you are on instead — see ChannelStrip — so the desk
+        //    is knobs on the panel, and the one wearing a plate is the one you are holding.
+        Item {
             id: face
             width: parent.width
             height: 314
-            radius: Style.rCard
-            // Built exactly like a bar module pill: a TRANSLUCENT tint of bgElement scaled by
-            // the surface-contrast knob (Style.lift). Nothing in this shell's chrome is a solid
-            // fill — the bar and the settings menu let the wallpaper through, and a solid slab
-            // inside a frosted panel reads as a foreign object glued on top of it.
-            color:  Style.tint(Colors.bgElement, Style.lift(0.14))
-
-            // A plate, not a flat fill. The sheen is a clipped overlay rather than a gradient on
-            // the surface itself: StyledRect is an Item wrapping a Loader (so it can be a Shape for
-            // the chamfer / scallop / wobbly styles) and has no `gradient` — only a flat `color`.
-            ClippingRectangle {
-                anchors.fill: parent
-                radius: Style.rCard
-                color: "transparent"
-                Rectangle {
-                    anchors.fill: parent
-                    gradient: Gradient {
-                        // The palette's bright tone, not pure white: a warm wallust scheme should
-                        // get a warm sheen, and #fff is the one colour that never belongs to it.
-                        GradientStop { position: 0.0; color: Style.tint(Colors.fgBright, 0.06) }
-                        GradientStop { position: 0.55; color: "transparent" }
-                    }
-                }
-            }
 
             readonly property int inner: face.width - 24
             readonly property int count: Math.max(1, root.channels.length)
@@ -467,17 +446,35 @@ Item {
             NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
         }
 
-        // Nothing behind the knob. The selected channel is marked by a rule at the head of its
-        // strip, not by a filled box: a box is the one thing that turns a desk back into a form,
-        // and it sat on top of this channel's own spectrum — which is the thing worth seeing.
+        // The plate the whole desk used to wear, scoped to ONE strip: the same translucent
+        // bgElement wash with the same sheen down its top edge, on the active channel only.
+        // Everything else is knobs standing on the panel with nothing behind them.
         Item {
-            anchors { fill: parent; margins: 3 }
+            anchors { fill: parent; margins: 4 }
+            ClippingRectangle {
+                anchors.fill: parent
+                radius: Style.rCard
+                color: cs.isSel ? Style.tint(Colors.bgElement, Style.lift(0.20))
+                     : hov.containsMouse ? Style.tint(Colors.bgElement, Style.lift(0.07))
+                                         : "transparent"
+                Behavior on color { ColorAnimation { duration: 140 } }
+                Rectangle {
+                    anchors.fill: parent
+                    visible: cs.isSel
+                    gradient: Gradient {
+                        // The palette's bright tone, not pure white: a warm wallust scheme should
+                        // get a warm sheen, and #fff is the one colour that never belongs to it.
+                        GradientStop { position: 0.0; color: Style.tint(Colors.fgBright, 0.06) }
+                        GradientStop { position: 0.55; color: "transparent" }
+                    }
+                }
+            }
             Rectangle {
                 anchors { left: parent.left; right: parent.right; top: parent.top
-                          leftMargin: 10; rightMargin: 10 }
+                          leftMargin: 12; rightMargin: 12 }
                 height: 2; radius: 1
                 color: Style.accent
-                opacity: cs.isSel ? 1 : hov.containsMouse ? 0.35 : 0
+                opacity: cs.isSel ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: 130 } }
             }
         }
