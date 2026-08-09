@@ -696,6 +696,11 @@ Item {
         return fancyZonesResolved
     }
 
+    // The phone the panel tracks at the top. Empty = whichever device answers first; the id is a
+    // KDE Connect device id, and one that no longer pairs simply falls back rather than blanking
+    // the head (PhoneService.mainDevice).
+    readonly property string phoneMainDevice: _data.phone_main_device ?? ""
+
     // Custom Bluetooth device names (rename in the BT menu) — bt_aliases.<mac> → display name.
     function btAlias(mac) { var a = _data.bt_aliases; return (a && a[mac]) ? a[mac] : "" }
 

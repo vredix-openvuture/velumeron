@@ -12,11 +12,17 @@ state as one JSON line, actions are quiet and exit 0/1.
 Commands:
   list                          {available, devices:[{id,name,type,reachable,paired,
                                                       battery{charge,charging,ok},
-                                                      connectivity{type,strength,ok},plugins}]}
+                                                      connectivity{type,strength,ok},
+                                                      media{…}, notifs{…}, plugins}]}
   share <id> <path…>            send files (AirDrop-style; paths become file:// urls)
   share-text <id> <text>        send text / a link to the device's clipboard-share
   ring <id>                     make it ring (findmyphone)
   ping <id> [message]           a plain notification on the device
+  media <id> <action>           PlayPause | Next | Previous | Stop on the phone's player
+  media-player <id> <name>      switch which of the phone's players is being controlled
+  media-volume <id> <0-100>     set the phone player's volume
+  notif-dismiss <id> <nid>      dismiss one of the phone's notifications
+  clipboard <id>                push this machine's clipboard to the device
   pair <id> | unpair <id>
   pick                          run a file chooser, print the chosen paths (one per line)
 
@@ -28,6 +34,21 @@ D-Bus layout, all verified against a live daemon:
   …/devices/<id>/share                      …device.share                    shareUrl(s), shareUrls(as), shareText(s)
   …/devices/<id>/findmyphone                …device.findmyphone              ring()
   …/devices/<id>/ping                       …device.ping                     sendPing() / sendPing(s)
+  …/devices/<id>/mprisremote                …device.mprisremote              player, title, artist, album,
+                                                                             isPlaying, position, length,
+                                                                             canSeek, volume,
+                                                                             localAlbumArtUrl (a real file
+                                                                             the daemon already cached, so
+                                                                             the shell can just show it);
+                                                                             sendAction(s), seek(x)
+  …/devices/<id>/notifications              …device.notifications            activeNotifications()
+  …/devices/<id>/notifications/<nid>        ….notifications.notification     appName, title, text, ticker,
+                                                                             dismissable; dismiss()
+  …/devices/<id>/clipboard                  …device.clipboard                sendClipboard()
+
+Every one of those is optional: the plugin can be unloaded, and the object path then does not exist
+at all (checked — it raises UnknownObject rather than returning empty properties). So each block is
+guarded and reports ok=false rather than failing the whole listing.
 """
 
 import json
@@ -79,6 +100,78 @@ def _plain(v, default=None):
     return v
 
 
+def _media(bus, path):
+    """What the phone is playing, if anything. `player` empty = a plugin with no player attached,
+    which is the normal state and not worth a card."""
+    m = _props(bus, path + "/mprisremote", "org.kde.kdeconnect.device.mprisremote")
+    if not m:
+        return {"ok": False}
+    player = _plain(m.get("player"), "") or ""
+    title  = _plain(m.get("title"), "") or ""
+    if player == "" and title == "":
+        return {"ok": False}
+    art = _plain(m.get("localAlbumArtUrl"), "") or ""
+    # The daemon caches the cover as a real file; hand over only one that is actually there, so the
+    # shell never has to reason about a broken image source.
+    if art.startswith("file://") and not os.path.exists(art[7:]):
+        art = ""
+    players = []
+    try:
+        players = [str(x) for x in m.get("playerList") or []]
+    except TypeError:
+        pass
+    return {
+        "ok":       True,
+        "player":   player,
+        "players":  players,
+        "title":    title,
+        "artist":   _plain(m.get("artist"), "") or "",
+        "album":    _plain(m.get("album"), "") or "",
+        "playing":  bool(_plain(m.get("isPlaying"), False)),
+        "canSeek":  bool(_plain(m.get("canSeek"), False)),
+        "position": int(_plain(m.get("position"), 0) or 0),
+        "length":   int(_plain(m.get("length"), 0) or 0),
+        "volume":   int(_plain(m.get("volume"), -1) or -1),
+        "art":      art,
+    }
+
+
+NOTIF_CAP = 8
+
+
+def _notifs(bus, path):
+    """The phone's own notifications. Capped: this is polled while the panel is open, and a phone
+    with sixty of them would turn every refresh into sixty D-Bus round trips for rows nobody can
+    see anyway. `total` still reports the honest number."""
+    p = path + "/notifications"
+    try:
+        obj = bus.get_object(SERVICE, p)
+        ids = [str(i) for i in dbus.Interface(
+            obj, "org.kde.kdeconnect.device.notifications").activeNotifications()]
+    except dbus.DBusException:
+        return {"ok": False, "total": 0, "items": []}
+
+    items = []
+    for nid in ids[:NOTIF_CAP]:
+        n = _props(bus, p + "/" + nid, "org.kde.kdeconnect.device.notifications.notification")
+        if not n:
+            continue
+        title = _plain(n.get("title"), "") or ""
+        text  = _plain(n.get("text"), "") or ""
+        # Some senders fill only `ticker` ("Title: body") — better that than an empty row.
+        if title == "" and text == "":
+            title = _plain(n.get("ticker"), "") or ""
+        items.append({
+            "id":    nid,
+            "app":   _plain(n.get("appName"), "") or "",
+            "title": title,
+            "text":  text,
+            "icon":  _plain(n.get("iconPath"), "") or "",
+            "dismissable": bool(_plain(n.get("dismissable"), False)),
+        })
+    return {"ok": True, "total": len(ids), "items": items}
+
+
 def list_devices():
     bus = _bus()
     if bus is None:
@@ -122,6 +215,8 @@ def list_devices():
                 "type":     _plain(con.get("cellularNetworkType"), "") if con else "",
                 "strength": _plain(con.get("cellularNetworkStrength"), -1) if con else -1,
             },
+            "media":   _media(bus, path),
+            "notifs":  _notifs(bus, path),
             "plugins": plugins,
         })
     out.sort(key=lambda x: (not x["reachable"], x["name"].lower()))
@@ -196,6 +291,34 @@ def main():
     if cmd == "share-text":
         return 0 if _call(dev, "share", "org.kde.kdeconnect.device.share",
                           "shareText", " ".join(rest)) else 1
+    if cmd == "media" and rest:
+        return 0 if _call(dev, "mprisremote", "org.kde.kdeconnect.device.mprisremote",
+                          "sendAction", rest[0]) else 1
+    if cmd in ("media-player", "media-volume") and rest:
+        # `player` and `volume` are writable properties, not methods.
+        bus = _bus()
+        try:
+            obj = bus.get_object(SERVICE, _dev_path(dev) + "/mprisremote")
+            key = "player" if cmd == "media-player" else "volume"
+            val = " ".join(rest) if key == "player" else dbus.Int32(int(rest[0]))
+            dbus.Interface(obj, "org.freedesktop.DBus.Properties").Set(
+                "org.kde.kdeconnect.device.mprisremote", key, val)
+            return 0
+        except (AttributeError, ValueError, dbus.DBusException) as e:
+            sys.stderr.write(str(e).split("\n")[0] + "\n")
+            return 1
+    if cmd == "notif-dismiss" and rest:
+        bus = _bus()
+        try:
+            obj = bus.get_object(SERVICE, _dev_path(dev) + "/notifications/" + rest[0])
+            dbus.Interface(obj, "org.kde.kdeconnect.device.notifications.notification").dismiss()
+            return 0
+        except (AttributeError, dbus.DBusException) as e:
+            sys.stderr.write(str(e).split("\n")[0] + "\n")
+            return 1
+    if cmd == "clipboard":
+        return 0 if _call(dev, "clipboard", "org.kde.kdeconnect.device.clipboard",
+                          "sendClipboard") else 1
     if cmd == "ring":
         return 0 if _call(dev, "findmyphone", "org.kde.kdeconnect.device.findmyphone", "ring") else 1
     if cmd == "ping":

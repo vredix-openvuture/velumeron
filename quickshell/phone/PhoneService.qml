@@ -33,6 +33,18 @@ Singleton {
         return rs.length > 0 ? rs[0] : null
     }
 
+    // The device the panel tracks at the top. A pinned id that no longer pairs falls back to
+    // `primary` rather than blanking the head — a phone you replaced should not leave a hole.
+    readonly property var mainDevice: {
+        var id = VtlConfig.phoneMainDevice
+        if (id !== "") {
+            var d = root.deviceById(id)
+            if (d) return d
+        }
+        return root.primary
+    }
+    function setMain(id) { SettingsStore.set("phone_main_device", id) }
+
     function deviceById(id) {
         var ds = root.devices
         for (var i = 0; i < ds.length; i++) if (ds[i].id === id) return ds[i]
@@ -97,6 +109,16 @@ Singleton {
         actProc.running = true
     }
     function ring(id)          { root._act(["ring", id]) }
+    // Media on the PHONE, not on this machine: PlayPause / Next / Previous / Stop.
+    function media(id, action)  { root._act(["media", id, action]) }
+    function mediaPlayer(id, p) { root._act(["media-player", id, p]) }
+    function mediaVolume(id, v) { root._act(["media-volume", id, "" + Math.round(v)]) }
+    function dismissNotif(id, nid) { root._act(["notif-dismiss", id, nid]) }
+    function pushClipboard(id)  { root._act(["clipboard", id]) }
+    function fmtTime(ms) {
+        var t = Math.max(0, Math.round(ms / 1000))
+        return Math.floor(t / 60) + ":" + ("0" + (t % 60)).slice(-2)
+    }
     function ping(id)          { root._act(["ping", id, "Velumeron"]) }
     function shareText(id, t)  { root._act(["share-text", id, t]) }
     function share(id, paths) {
