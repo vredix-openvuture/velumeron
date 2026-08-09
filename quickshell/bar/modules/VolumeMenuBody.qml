@@ -73,6 +73,8 @@ Item {
            : root.tab === "in"  ? c.kind === "IN"
                                 : (c.kind === "APP" || c.kind === "REC"))
 
+    // The source whose "send to" sheet is open, or null.
+    property var routeFor: null
     property string selId: ""
     readonly property var sel: {
         var c = root.channels
@@ -175,14 +177,14 @@ Item {
             segments: [{ label: "Output "  + root._sinks().length,   key: "out" },
                        { label: "Input "   + root._sources().length, key: "in" },
                        { label: "Sources " + root._streams().length, key: "src" }]
-            onPicked: key => { root.tab = key; root.selId = "" }
+            onPicked: key => { root.tab = key; root.selId = ""; root.routeFor = null }
         }
 
         // ── The face plate: strips side by side, as wide as the room allows.
         StyledRect {
             id: face
             width: parent.width
-            height: 268
+            height: 288
             radius: Style.rCard
             color:  Style.tint(Colors.bgPrimary, 0.55)
 
@@ -232,6 +234,60 @@ Item {
                 visible: root.channels.length === 0
                 text: root.tab === "src" ? "nothing playing" : "no devices"
                 color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 12
+            }
+
+            // Tapping a source's knob asks where it should play. It takes over the plate rather
+            // than unfolding inside a 200px strip, which is the only place with room to read
+            // device names.
+            Rectangle {
+                anchors.fill: parent
+                radius: Style.rCard
+                visible: root.routeFor !== null
+                color: Qt.rgba(0, 0, 0, 0.55)
+                MouseArea { anchors.fill: parent; onClicked: root.routeFor = null }
+
+                Column {
+                    anchors { left: parent.left; right: parent.right; top: parent.top
+                              leftMargin: 18; rightMargin: 18; topMargin: 16 }
+                    spacing: 7
+                    Text {
+                        width: parent.width; elide: Text.ElideRight
+                        text: "Send " + (root.routeFor ? ("" + root.routeFor.name) : "") + " to"
+                        color: Colors.fgBright
+                        font.family: Style.font; font.pixelSize: 13; font.bold: true
+                    }
+                    Repeater {
+                        model: root.routeFor === null ? []
+                             : (root.routeFor.isSink ? root._sinks() : root._sources())
+                        delegate: StyledRect {
+                            id: tgt
+                            required property var modelData
+                            readonly property bool on: root.routeFor
+                                                       && tgt.modelData.name === root._devOf(root.routeFor)
+                            width: parent.width; height: 34
+                            radius: Style.rControl
+                            color: tgt.on ? Style.tint(Colors.bgActive, 0.34)
+                                 : th.containsMouse ? Style.controlHover : Style.menuRowFill
+                            Behavior on color { ColorAnimation { duration: 90 } }
+                            Text {
+                                anchors { left: parent.left; leftMargin: 12; right: parent.right
+                                          rightMargin: 12; verticalCenter: parent.verticalCenter }
+                                elide: Text.ElideRight
+                                text: (tgt.on ? "󰄬  " : "") + root._label(tgt.modelData)
+                                color: tgt.on ? Colors.fgBright : Colors.fgPrimary
+                                font.family: Style.font; font.pixelSize: 12
+                            }
+                            MouseArea {
+                                id: th
+                                anchors.fill: parent; hoverEnabled: true
+                                onClicked: {
+                                    root.moveStream(root.routeFor, tgt.modelData.name)
+                                    root.routeFor = null
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -330,7 +386,14 @@ Item {
         }
     }
 
+
     // ══ One channel of the desk ════════════════════════════════════════════════════════════════
+    //
+    // The knob does NOT ride the house spring. Style.elSpring/elDamping is deliberately bouncy —
+    // damping 0.36 overshoots a 50% target to 62% before settling — which is right for a panel
+    // emerging and wrong for a control: the arc visibly ran PAST the value and came back, so the
+    // knob appeared to turn the wrong way, and while dragging it fought the hand. It now tracks
+    // the pointer exactly while held, and eases without overshoot when something else moves it.
     component ChannelStrip: Item {
         id: cs
         property var ch: null
@@ -342,7 +405,6 @@ Item {
         readonly property bool isDef: root.isDefault(cs.ch)
         readonly property bool isApp: cs.ch && (cs.ch.kind === "APP" || cs.ch.kind === "REC")
 
-        // Live level — fast attack, decaying fall, the way a meter reads as motion not flicker.
         property real lvl: 0
         PwNodePeakMonitor { id: mon; node: cs.node; enabled: root.active }
         Connections {
@@ -353,11 +415,15 @@ Item {
                 cs.lvl = p > cs.lvl ? p : cs.lvl * 0.88
             }
         }
+
+        property bool dragging: false
         property real shown: cs.vol
         onVolChanged: cs.shown = cs.vol
-        Behavior on shown { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: .002 } }
+        Behavior on shown {
+            enabled: !cs.dragging          // held → follow the hand, frame for frame
+            NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
+        }
 
-        // Selected: a lit bed, so the detail strip below is obviously about THIS channel.
         Rectangle {
             anchors { fill: parent; margins: 3 }
             radius: Style.rControl
@@ -380,36 +446,31 @@ Item {
             onClicked: root.selId = cs.node ? "" + cs.node.id : ""
         }
 
-        // ── Meter well: an inset trough with the lamps in it.
+        // ── Meter well
         Rectangle {
             id: well
-            anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 12 }
-            width: 40; height: 104
+            anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 11 }
+            width: 38; height: 78
             radius: 8
             color: Qt.darker(Colors.bgPrimary, 1.35)
-            Rectangle {   // the inner lip that makes it read as sunken
-                anchors.fill: parent
-                radius: parent.radius
-                color: "transparent"
-                border.width: 1
-                border.color: Qt.rgba(0, 0, 0, 0.35)
+            Rectangle {
+                anchors.fill: parent; radius: parent.radius; color: "transparent"
+                border.width: 1; border.color: Qt.rgba(0, 0, 0, 0.35)
             }
             Column {
                 anchors.centerIn: parent
                 spacing: 3
-                readonly property int count: 14
                 Repeater {
-                    model: 14
+                    model: 11
                     delegate: Item {
                         required property int index
-                        // Index 0 is the TOP lamp, so it stands for the loudest step.
-                        readonly property real step: (14 - index) / 14
+                        readonly property real step: (11 - index) / 11
                         readonly property bool on:   cs.lvl >= step - 0.001
-                        readonly property color lamp: step > 0.86 ? Colors.fgUrgent
-                                                    : step > 0.66 ? Style.tint(Colors.fgUrgent, 0.55)
+                        readonly property color lamp: step > 0.85 ? Colors.fgUrgent
+                                                    : step > 0.64 ? Style.tint(Colors.fgUrgent, 0.55)
                                                                   : Colors.bgActive
-                        width: 26; height: 4
-                        Rectangle {          // the glow a lit lamp casts
+                        width: 24; height: 4
+                        Rectangle {
                             anchors.centerIn: parent
                             width: parent.width + 8; height: parent.height + 6; radius: 5
                             color: parent.lamp
@@ -417,8 +478,7 @@ Item {
                             Behavior on opacity { NumberAnimation { duration: 90 } }
                         }
                         Rectangle {
-                            anchors.fill: parent
-                            radius: 2
+                            anchors.fill: parent; radius: 2
                             color: parent.on ? parent.lamp : Qt.darker(Colors.bgPrimary, 1.1)
                             opacity: parent.on ? 1 : 0.6
                             Behavior on opacity { NumberAnimation { duration: 90 } }
@@ -428,11 +488,12 @@ Item {
             }
         }
 
-        // ── Knob: a real cap with a ring around it and a notch on top.
+        // ── Knob
         Item {
             id: knob
             anchors { horizontalCenter: parent.horizontalCenter; top: well.bottom; topMargin: 14 }
-            width: 78; height: 78
+            width: 112; height: 112
+            readonly property real r:  56
             readonly property real a0: 135
             readonly property real sw: 270
             readonly property real ang: (knob.a0 + knob.sw * cs.shown) * Math.PI / 180
@@ -441,44 +502,61 @@ Item {
                 anchors.fill: parent
                 preferredRendererType: Shape.CurveRenderer
                 ShapePath {
-                    strokeColor: Qt.darker(Colors.bgPrimary, 1.3); strokeWidth: 6
+                    strokeColor: Qt.darker(Colors.bgPrimary, 1.3); strokeWidth: 8
                     fillColor: "transparent"; capStyle: ShapePath.RoundCap
-                    PathAngleArc { centerX: 39; centerY: 39; radiusX: 35; radiusY: 35
+                    PathAngleArc { centerX: knob.r; centerY: knob.r; radiusX: 50; radiusY: 50
                                    startAngle: knob.a0; sweepAngle: knob.sw }
                 }
                 ShapePath {
                     strokeColor: cs.muted ? Colors.fgMuted
                                : cs.vol > 0.9 ? Colors.fgUrgent
                                : cs.isApp ? Style.accent : Colors.bgActive
-                    strokeWidth: 6; fillColor: "transparent"; capStyle: ShapePath.RoundCap
-                    PathAngleArc { centerX: 39; centerY: 39; radiusX: 35; radiusY: 35
+                    strokeWidth: 8; fillColor: "transparent"; capStyle: ShapePath.RoundCap
+                    PathAngleArc { centerX: knob.r; centerY: knob.r; radiusX: 50; radiusY: 50
                                    startAngle: knob.a0; sweepAngle: knob.sw * cs.shown }
                 }
             }
-            // The cap — two circles, the upper one lighter, so it reads as a turned dial rather
-            // than a hole in the plate.
             Rectangle {
                 anchors.centerIn: parent
-                width: 56; height: 56; radius: 28
+                width: 80; height: 80; radius: 40
                 gradient: Gradient {
                     GradientStop { position: 0.0; color: Style.tint(Colors.bgSecondary, 0.55) }
                     GradientStop { position: 1.0; color: Qt.darker(Colors.bgPrimary, 1.15) }
                 }
-                border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.06)
+                border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.06)
+            }
+
+            // A source channel wears its app's icon on the cap; tapping it is how you send it
+            // somewhere else. A device channel shows its level instead — it has nowhere to go.
+            IconImage {
+                anchors { horizontalCenter: parent.horizontalCenter; verticalCenter: parent.verticalCenter
+                          verticalCenterOffset: -8 }
+                visible: cs.isApp
+                width: 30; height: 30; implicitSize: 30
+                source: cs.isApp ? root._appIcon(cs.node) : ""
+                opacity: cs.muted ? 0.45 : 1.0
             }
             Text {
                 anchors.centerIn: parent
+                visible: !cs.isApp
                 text: Math.round(cs.vol * 100) + ""
                 color: cs.muted ? Colors.fgMuted : Colors.fgBright
-                font.family: Style.font; font.pixelSize: 18; font.bold: true
+                font.family: Style.font; font.pixelSize: 22; font.bold: true
             }
-            // The notch, riding the cap's edge.
-            Rectangle {
-                width: 3; height: 10; radius: 1
+            Text {
+                anchors { horizontalCenter: parent.horizontalCenter; verticalCenter: parent.verticalCenter
+                          verticalCenterOffset: 16 }
+                visible: cs.isApp
+                text: Math.round(cs.vol * 100) + ""
                 color: cs.muted ? Colors.fgMuted : Colors.fgBright
-                x: 39 + Math.cos(knob.ang) * 22 - width / 2
-                y: 39 + Math.sin(knob.ang) * 22 - height / 2
+                font.family: Style.font; font.pixelSize: 15; font.bold: true
+            }
+
+            Rectangle {
+                width: 3; height: 11; radius: 1
+                color: cs.muted ? Colors.fgMuted : Colors.fgBright
+                x: knob.r + Math.cos(knob.ang) * 32 - width / 2
+                y: knob.r + Math.sin(knob.ang) * 32 - height / 2
                 rotation: knob.a0 + knob.sw * cs.shown + 90
                 antialiasing: true
             }
@@ -487,26 +565,41 @@ Item {
                 anchors.fill: parent
                 property real y0: 0
                 property real v0: 0
-                onPressed: e => { y0 = e.y; v0 = cs.vol; root.selId = cs.node ? "" + cs.node.id : "" }
+                property bool moved: false
+                onPressed: e => {
+                    y0 = e.y; v0 = cs.vol; moved = false
+                    cs.dragging = true
+                    root.selId = cs.node ? "" + cs.node.id : ""
+                }
                 onPositionChanged: e => {
                     if (!pressed || !cs.au) return
+                    var dy = e.y - y0
+                    if (Math.abs(dy) > 3) moved = true
+                    if (!moved) return
                     cs.au.muted = false
-                    cs.au.volume = Math.max(0, Math.min(1, Math.round((v0 - (e.y - y0) / 150) * 20) / 20))
+                    // 160px of travel for the whole range: 8px per 5% step, which is the
+                    // distance a hand can actually aim at.
+                    cs.au.volume = Math.max(0, Math.min(1, Math.round((v0 - dy / 160) * 20) / 20))
                 }
+                onReleased: {
+                    cs.dragging = false
+                    if (!moved && cs.isApp) root.routeFor = cs.node
+                }
+                onCanceled: cs.dragging = false
                 onWheel: e => { if (cs.au) cs.au.volume =
                     Math.max(0, Math.min(1, cs.au.volume + (e.angleDelta.y > 0 ? .05 : -.05))) }
             }
         }
 
-        // ── Foot: mute, name, kind.
+        // ── Foot
         Column {
-            anchors { horizontalCenter: parent.horizontalCenter; top: knob.bottom; topMargin: 12 }
+            anchors { horizontalCenter: parent.horizontalCenter; top: knob.bottom; topMargin: 10 }
             width: parent.width - 16
             spacing: 5
 
             StyledRect {
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: 44; height: 24; radius: 12
+                width: 46; height: 24; radius: 12
                 color: cs.muted ? Style.tint(Colors.fgUrgent, 0.30)
                      : mh.containsMouse ? Style.controlHover : Style.controlFill
                 Behavior on color { ColorAnimation { duration: 90 } }
@@ -519,33 +612,24 @@ Item {
                 MouseArea { id: mh; anchors.fill: parent; hoverEnabled: true
                             onClicked: if (cs.au) cs.au.muted = !cs.au.muted }
             }
-
-            Row {
-                anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 5
-                IconImage {
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: cs.isApp
-                    width: 15; height: 15; implicitSize: 15
-                    source: cs.isApp ? root._appIcon(cs.node) : ""
-                    opacity: cs.muted ? 0.45 : 1.0
-                }
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Math.min(implicitWidth, cs.width - 40)
-                    elide: Text.ElideRight
-                    text: root._short(cs.ch)
-                    color: cs.isSel ? Colors.fgBright : Colors.fgPrimary
-                    font.family: Style.font; font.pixelSize: 11; font.bold: cs.isSel
-                }
+            Text {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+                text: root._short(cs.ch)
+                color: cs.isSel ? Colors.fgBright : Colors.fgPrimary
+                font.family: Style.font; font.pixelSize: 11; font.bold: cs.isSel
             }
             Text {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
-                text: cs.isDef ? "DEFAULT" : (cs.ch ? cs.ch.kind : "")
+                elide: Text.ElideRight
+                text: cs.isDef ? "DEFAULT"
+                    : cs.isApp ? "󰓃 " + root._deviceLabelFor(root._devOf(cs.node))
+                               : (cs.ch ? cs.ch.kind : "")
                 color: cs.isDef ? Style.accent : Colors.fgMuted
                 font.family: Style.font; font.pixelSize: 8
-                font.bold: cs.isDef; font.letterSpacing: 1
+                font.bold: cs.isDef; font.letterSpacing: cs.isApp ? 0 : 1
             }
         }
     }
