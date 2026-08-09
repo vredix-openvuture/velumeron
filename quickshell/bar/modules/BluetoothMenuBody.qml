@@ -23,6 +23,9 @@ Column {
     readonly property var _available: devices.filter(function (d) { return !d.paired })
     readonly property var _sel: devices.filter(function (d) { return d.mac === openMac })[0] || null
     readonly property var _connected: devices.filter(function (d) { return d.connected })
+    // Fractions of the panel, not pixels — see the phone panel for the same treatment.
+    readonly property int uRing: Math.max(34, Math.round(root.width * 0.155))
+    readonly property int uGap:  Math.max(6,  Math.round(root.width * 0.028))
     // The lowest charge among the connected devices that report one. One figure for the whole
     // adapter is the useful reading here: what you want to know is whether ANYTHING is about to
     // die, not the charge of each in turn. -1 = nothing reports a battery.
@@ -39,10 +42,14 @@ Column {
     // Paired devices bucketed by their assigned group; named groups first (alpha), ungrouped ("") last.
     readonly property var _grouped: {
         var map = {}, order = []
-        for (var i = 0; i < _paired.length; i++) {
-            var g = VtlConfig.btGroup(_paired[i].mac)
+        // Connected devices are lifted out into the head, so the list below is what is NOT in use —
+        // otherwise the thing you are listening on appears twice and the list stops being a list of
+        // choices.
+        var rest = _paired.filter(function (d) { return !d.connected })
+        for (var i = 0; i < rest.length; i++) {
+            var g = VtlConfig.btGroup(rest[i].mac)
             if (!(g in map)) { map[g] = []; order.push(g) }
-            map[g].push(_paired[i])
+            map[g].push(rest[i])
         }
         order.sort(function (a, b) { if (a === "") return 1; if (b === "") return -1
                                      return a.toLowerCase() < b.toLowerCase() ? -1 : 1 })
@@ -64,6 +71,18 @@ Column {
     Process { id: listProc
         property var _buf: []
         command: ["bash", "-c",
+            // The negotiated codec is the one fact about a live audio link that actually matters,
+            // and bluetoothctl does not know it — PipeWire does, as api.bluez5.codec on the sink.
+            // Read once per refresh into a MAC→codec table rather than once per device.
+            "cod=$(pactl -f json list sinks 2>/dev/null | python3 -c '" +
+            "import json,sys\n" +
+            "try: d=json.load(sys.stdin)\n" +
+            "except Exception: d=[]\n" +
+            "for s in d:\n" +
+            "    n=s.get(\"name\") or \"\"\n" +
+            "    c=(s.get(\"properties\") or {}).get(\"api.bluez5.codec\") or \"\"\n" +
+            "    if c and \"bluez\" in n and \".\" in n: print(n.split(\".\")[1].upper(), c)" +
+            "' 2>/dev/null); " +
             "bluetoothctl devices 2>/dev/null | while read -r _ mac name; do " +
             "  i=$(bluetoothctl info \"$mac\" 2>/dev/null); " +
             "  c=$(grep -q 'Connected: yes' <<<\"$i\" && echo 1 || echo 0); " +
@@ -73,11 +92,12 @@ Column {
             // headphones do, a mouse usually does, a speaker never. -1 means "no such reading",
             // which is why the ring is hidden rather than drawn at zero.
             "  b=$(grep -m1 'Battery Percentage' <<<\"$i\" | sed -n 's/.*(\\([0-9]*\\)).*/\\1/p'); " +
-            "  echo \"$mac|$c|$p|$ic|${b:--1}|$name\"; done"]
+            "  cc=$(awk -v m=\"${mac//:/_}\" '$1==m{print $2; exit}' <<<\"$cod\"); " +
+            "  echo \"$mac|$c|$p|$ic|${b:--1}|$cc|$name\"; done"]
         stdout: SplitParser { onRead: line => {
-            var p = ("" + line).split("|"); if (p.length < 6) return
+            var p = ("" + line).split("|"); if (p.length < 7) return
             listProc._buf.push({ mac: p[0], connected: p[1] === "1", paired: p[2] === "1", icon: p[3],
-                                 battery: parseInt(p[4]), name: p.slice(5).join("|") })
+                                 battery: parseInt(p[4]), codec: p[5], name: p.slice(6).join("|") })
         }}
         onRunningChanged: if (!running) {
             listProc._buf.sort(function (a, b) { return (b.connected - a.connected) || (b.paired - a.paired) })
@@ -155,7 +175,7 @@ Column {
         }
         StatCell {
             width: btStats.cellW
-            value: root._connected.length + ""; caption: "Connected"
+            value: root._connected.length + ""; caption: "Live"
             good: root._connected.length > 0; dim: root._connected.length === 0
         }
         StatCell {
@@ -166,7 +186,7 @@ Column {
         StatCell {
             width: btStats.cellW
             glyph: root._lowBat >= 0 ? "󰁹" : ""
-            value: root._lowBat >= 0 ? (root._lowBat + "%") : "—"; caption: "Lowest"
+            value: root._lowBat >= 0 ? (root._lowBat + "%") : "—"; caption: "Battery"
             warn: root._lowBat >= 0 && root._lowBat <= 15
             dim:  root._lowBat < 0
         }
@@ -177,10 +197,112 @@ Column {
         good: root.scanning && root.busy === ""
     }
 
+    // ── What is actually in use, as the subject of the panel ───────────────────
+    Column {
+        visible: root.mode === "known" && root.powered
+        width: parent.width
+        spacing: root.uGap
+
+        SectionRule {
+            visible: root._connected.length > 0
+            height:  visible ? 16 : 0
+            text: "In use"
+            trailing: root._connected.length > 1 ? (root._connected.length + "") : ""
+        }
+        Repeater {
+            model: root._connected
+            delegate: DataTile {
+                id: hero
+                required property var modelData
+                readonly property int charge: hero.modelData.battery ?? -1
+                active:  true
+                pad:     Math.round(root.uGap * 1.3)
+                spacing: Math.round(root.uGap * 0.9)
+
+                Row {
+                    width: parent.width
+                    spacing: Math.round(root.uGap * 1.2)
+                    Item {
+                        id: hidn
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: root.uRing; height: root.uRing
+                        ValueRing {
+                            anchors.fill: parent
+                            visible: hero.charge >= 0
+                            value: Math.max(0, Math.min(1, hero.charge / 100))
+                            thickness: 4
+                            ringColor: hero.charge <= 15 ? Colors.fgUrgent : Style.accent
+                        }
+                        // Nothing reports a charge on plenty of devices (a speaker never does), so
+                        // the bare track keeps the slot and the row cannot jump between refreshes.
+                        Rectangle {
+                            anchors.centerIn: parent
+                            visible: hero.charge < 0
+                            width: Math.round(root.uRing * 0.9); height: width; radius: width / 2
+                            color: "transparent"
+                            border.width: 4
+                            border.color: Style.tint(Colors.bgElement, Style.lift(0.34))
+                        }
+                        Text {
+                            anchors.centerIn: parent
+                            text: root.devIcon(hero.modelData.icon)
+                            color: Colors.fgBright
+                            font.family: Style.font; font.pixelSize: Math.round(root.uRing * 0.44)
+                        }
+                    }
+                    Column {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.max(0, parent.width - hidn.width - parent.spacing)
+                        spacing: 3
+                        Text {
+                            width: parent.width; elide: Text.ElideRight
+                            text: root.dispName(hero.modelData)
+                            color: Colors.fgBright
+                            font.family: Style.font; font.pixelSize: 15; font.bold: true
+                        }
+                        Row {
+                            spacing: 8
+                            MetaTag { text: "connected"; good: true }
+                            // The negotiated codec — the one fact about a live audio link worth
+                            // knowing, and the reason a headset sounds different day to day.
+                            MetaTag { text: hero.modelData.codec ?? ""; good: true }
+                            MetaTag { text: hero.charge >= 0 ? (hero.charge + "%") : ""
+                                      warn: hero.charge >= 0 && hero.charge <= 15 }
+                        }
+                    }
+                }
+                Row {
+                    width: parent.width
+                    spacing: Math.round(root.uGap * 0.55)
+                    DataChip {
+                        label: "󰂲  Disconnect"; on: true
+                        onTap: root.tap(hero.modelData)
+                    }
+                    DataChip {
+                        label: "󰒓  Settings"
+                        onTap: root.openDevice(hero.modelData.mac)
+                    }
+                }
+            }
+        }
+        Text {
+            visible: root._connected.length === 0
+            width: parent.width
+            text: "Nothing connected"
+            color: Colors.fgMuted; font.pixelSize: 12; font.family: Style.font
+        }
+    }
+
     // ── Known devices (bucketed by group, each bucket fronted by a named divider) ──────────
     Column {
         visible: root.mode === "known"
         width: parent.width; spacing: 3
+        SectionRule {
+            visible: root._grouped.length > 0
+            height:  visible ? 16 : 0
+            text: "Paired"
+            trailing: root._paired.length + ""
+        }
         Repeater {
             model: root._grouped
             delegate: Column {
@@ -343,7 +465,7 @@ Column {
         signal trig()
         signal gear()
         width:  parent ? parent.width : 0
-        height: 44; radius: Style.rControl
+        height: Math.max(40, Math.round(root.width * 0.115)); radius: Style.rControl
         clip: true
         // The plate travels with the connected device; everything else is a line on the panel with
         // nothing behind it. Same rule as the sound desk and the network list.
@@ -378,8 +500,9 @@ Column {
         // ring is absent rather than drawn empty.
         Item {
             id: bTile
-            anchors { left: parent.left; leftMargin: 11; verticalCenter: parent.verticalCenter }
-            width: 30; height: 30
+            anchors { left: parent.left; leftMargin: Math.round(root.uGap * 0.9)
+                      verticalCenter: parent.verticalCenter }
+            width: Math.max(26, Math.round(root.width * 0.082)); height: width
             readonly property int charge: br.dev ? (br.dev.battery ?? -1) : -1
 
             Rectangle {
@@ -401,7 +524,8 @@ Column {
                 anchors.centerIn: parent
                 text: br.dev ? root.devIcon(br.dev.icon) : ""
                 color: br.dev && br.dev.connected ? Colors.fgBright : Colors.fgMuted
-                font.pixelSize: bTile.charge >= 0 ? 13 : 16; font.family: Style.font
+                font.pixelSize: Math.round(bTile.width * (bTile.charge >= 0 ? 0.43 : 0.53))
+                font.family: Style.font
             }
         }
         Column {
