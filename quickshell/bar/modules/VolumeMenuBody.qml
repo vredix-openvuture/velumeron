@@ -1,60 +1,80 @@
 pragma ComponentBehavior: Bound
 import "../.."
 import QtQuick
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 import Quickshell.Widgets
 import Quickshell.Services.Pipewire
 
-// The sound dashboard, composed from the shared data kit (DataTile / Sparkline / ValueRing /
-// DataChip / ChipPicker) rather than drawn by hand — the first version was hand-drawn and drifted
-// away from every other popout, which is exactly what the kit exists to prevent.
+// The sound rack — a hardware face, not a list.
 //
-// Every level is the area curve of the REAL signal, and every application sits inside the device it
-// plays through as its own icon with its volume as the ring around it. Routing is a place, not a
-// label: carry a puck to another device tile and the stream moves.
+// Four earlier attempts were all the same architecture underneath: a column of rectangular tiles
+// with rectangular bars inside them. Swapping what went in the boxes could never fix that. This is
+// the shape a mixing desk actually has, and it is built around the one thing a desk is good at:
+//
+//   · a METER BRIDGE across the top showing every channel at once — outputs, inputs, apps, all of
+//     them, so "what is making noise" is answered by looking rather than by opening something
+//   · a KNOB per channel underneath it
+//   · one DETAIL STRIP at the foot for the channel you selected — ports, profile, routing, format
+//     get one place instead of one tile each. That strip is why there are no tiles at all now.
 //
 // Three sources feed it, because no single one has everything:
-//   · Quickshell's Pipewire   live volume / mute / peaks / spectrum, and the node list
+//   · Quickshell's Pipewire   live volume / mute / peaks, and the node list
 //   · audio-route.py streams  which device each stream plays on + its media title (not exposed)
 //   · audio-route.py devices  ports, card profiles, sample format, Bluetooth codec (not exposed)
 // The script feeds are polled only while the panel is open and refreshed the moment an action
 // lands, so a closed panel costs nothing.
-//
-// Card profiles go behind ONE picker. Laid out as chips they produced thirteen pills across four
-// rows on a single device here and the tile stopped being readable — a long list of alternatives is
-// a picker, and only a short meaningful set (a device's two or three ports) belongs on the surface.
-Column {
+Item {
     id: root
     property bool active: false
-    spacing: 10
+    implicitHeight: frame.implicitHeight
 
     PwObjectTracker { objects: Pipewire.nodes.values }
 
     readonly property string script: Quickshell.env("VELUMERON_DIR") + "/assets/scripts/audio-route.py"
 
-    // One tick drives every curve — a timer per tile would be a wake-up per tile for the same job.
+    // One tick drives every meter — a timer per channel would be a wake-up per channel.
     property int tick: 0
-    Timer { interval: 60; repeat: true; running: root.active; onTriggered: root.tick++ }
+    Timer { interval: 55; repeat: true; running: root.active; onTriggered: root.tick++ }
 
-    property string tab: "out"          // out | in | apps | rec
-    // The shell's own capture (cava feeds the bar's wave) is not an app anyone mixes.
     readonly property var _ownStreams: ["cava", "quickshell", "noctalia-qs"]
     function _isOwn(n) { return root._ownStreams.indexOf(("" + ((n && n.name) ?? "")).toLowerCase()) >= 0 }
 
-    // ── Node lists ─────────────────────────────────────────────────────────────────────────────
     function _sinks()   { return Pipewire.nodes.values.filter(n => n && n.isSink && !n.isStream && n.audio) }
     function _sources() { return Pipewire.nodes.values.filter(n => n && !n.isSink && !n.isStream && n.audio
                                                                 && ("" + (n.name ?? "")).indexOf("monitor") < 0) }
-    function _apps()      { return Pipewire.nodes.values.filter(n => n && n.isStream && n.audio && n.isSink && !root._isOwn(n)) }
-    function _recorders() { return Pipewire.nodes.values.filter(n => n && n.isStream && n.audio && !n.isSink) }
+    function _apps()    { return Pipewire.nodes.values.filter(n => n && n.isStream && n.audio && n.isSink && !root._isOwn(n)) }
+    function _recs()    { return Pipewire.nodes.values.filter(n => n && n.isStream && n.audio && !n.isSink) }
+
+    // Every channel on the desk, in desk order: outputs, inputs, then what is running through them.
+    readonly property var channels: {
+        var out = []
+        var s = root._sinks();   for (var i = 0; i < s.length; i++) out.push({ node: s[i], kind: "OUT" })
+        var p = root._sources(); for (var j = 0; j < p.length; j++) out.push({ node: p[j], kind: "IN" })
+        var a = root._apps();    for (var k = 0; k < a.length; k++) out.push({ node: a[k], kind: "APP" })
+        var r = root._recs();    for (var m = 0; m < r.length; m++) out.push({ node: r[m], kind: "REC" })
+        return out
+    }
+    property string selId: ""
+    readonly property var sel: {
+        var c = root.channels
+        for (var i = 0; i < c.length; i++) if ("" + c[i].node.id === root.selId) return c[i]
+        return c.length > 0 ? c[0] : null
+    }
 
     function _label(n) {
-        if (!n) return "device"
-        return (n.description && n.description !== "") ? n.description : (n.nickname || n.name || "device")
+        if (!n) return "—"
+        return (n.description && n.description !== "") ? n.description : (n.nickname || n.name || "—")
     }
-    function _appName(n) { return (n && n.name && n.name !== "") ? n.name : ((n && n.description) || "audio") }
-    // The ACTIVE icon theme, through the desktop entry — not a font glyph.
+    function _short(ch) {
+        if (!ch) return ""
+        var n = ch.node
+        if (ch.kind === "APP" || ch.kind === "REC") return "" + (n.name ?? "")
+        var l = root._label(n)
+        // A desk strip is 60px wide: "Built-in Audio Analog Stereo" has to become "Built-in".
+        return l.split(/[ (]/)[0]
+    }
     function _appIcon(n) {
         var nm = ("" + ((n && n.name) ?? "")).trim()
         if (nm === "") return ""
@@ -67,11 +87,15 @@ Column {
         return null
     }
     function _deviceLabelFor(nm) { var n = root._nodeByName(nm); return n ? root._label(n) : (nm === "" ? "—" : nm) }
+    function isDefault(ch) {
+        if (!ch) return false
+        return ch.kind === "OUT" ? ch.node === Pipewire.defaultAudioSink
+             : ch.kind === "IN"  ? ch.node === Pipewire.defaultAudioSource : false
+    }
 
     // ── Script feeds ───────────────────────────────────────────────────────────────────────────
-    property var _routes:  ({})       // node id → { deviceName, media }
-    property var _devInfo: ({})       // device node name → { format, codec, ports, profiles, card }
-
+    property var _routes:  ({})
+    property var _devInfo: ({})
     Process {
         id: streamProc
         property string _acc: ""
@@ -112,507 +136,321 @@ Column {
         actProc.command = ["python3", root.script].concat(args)
         actProc.running = false; actProc.running = true
     }
-    function setDefault(kind, name)    { root._act([kind === "sink" ? "default-sink" : "default-source", name]) }
+    function setDefault(kind, name)    { root._act([kind === "OUT" ? "default-sink" : "default-source", name]) }
     function setPort(devName, port)    { root._act(["set-port", devName, port]) }
     function setProfile(card, profile) { root._act(["set-profile", card, profile]) }
-    function moveStream(node, deviceName) {
-        if (!node || !deviceName) return
-        root._act([node.isSink ? "move" : "move-source", "" + node.id, deviceName])
+    function moveStream(node, devName) {
+        if (!node || !devName) return
+        root._act([node.isSink ? "move" : "move-source", "" + node.id, devName])
     }
-
     function _info(n)  { return (n && root._routes[n.id]) ? root._routes[n.id] : null }
     function _media(n) { var i = root._info(n); return i ? ("" + (i.media ?? "")) : "" }
     function _devOf(n) { var i = root._info(n); return i ? ("" + (i.deviceName ?? "")) : "" }
     function _dev(n)   { return (n && root._devInfo[n.name]) ? root._devInfo[n.name] : null }
-    function _fmt(n)   { var d = root._dev(n); return d ? ("" + (d.format ?? "")) : "" }
-    function _codec(n) { var d = root._dev(n); return d ? ("" + (d.codec ?? "")) : "" }
 
-    // ── Master ─────────────────────────────────────────────────────────────────────────────────
-    DataTile {
-        id: master
-        readonly property var  node:  Pipewire.defaultAudioSink
-        readonly property var  au:    master.node ? master.node.audio : null
-        readonly property bool muted: !!(master.au && master.au.muted)
-        readonly property real vol:   master.au ? Math.max(0, Math.min(1, master.au.volume)) : 0
-        active: true
-        pad: 14
-
-        PwAudioSpectrum {
-            id: spectrum
-            node: master.node; enabled: root.active && !master.muted
-            barCount: 44; smoothing: true
-        }
-
-        Row {
-            width: parent.width
-            spacing: 10
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                text: master.muted ? "󰝟" : "󰕾"
-                color: Colors.fgBright; font.family: Style.font; font.pixelSize: 18
-                MouseArea { anchors.fill: parent; anchors.margins: -6
-                            onClicked: if (master.au) master.au.muted = !master.au.muted }
-            }
-            Column {
-                anchors.verticalCenter: parent.verticalCenter
-                width: Math.max(0, parent.width - 34 - mPct.implicitWidth - 20)
-                spacing: 2
-                Text {
-                    width: parent.width; elide: Text.ElideRight
-                    text: root._label(master.node)
-                    color: Colors.fgBright; font.family: Style.font; font.pixelSize: 14; font.bold: true
-                }
-                Row {
-                    spacing: 8
-                    MetaTag { text: root._fmt(master.node) }
-                    MetaTag { text: root._codec(master.node); good: true }
-                }
-            }
-            Text {
-                id: mPct
-                anchors.verticalCenter: parent.verticalCenter
-                text: Math.round(master.vol * 100) + "%"
-                color: Colors.fgBright; font.family: Style.font; font.pixelSize: 19; font.bold: true
-            }
-        }
-
-        // The spectrum as the master's floor — a texture the name sits on, not a chart.
-        Row {
-            width: parent.width
-            height: 34
-            spacing: 3
-            Repeater {
-                model: spectrum.values.length
-                delegate: Rectangle {
-                    required property int index
-                    readonly property real v: Math.max(0, Math.min(1, spectrum.values[index] ?? 0))
-                    width:  Math.max(1, (master.width - 28 - 3 * (spectrum.values.length - 1))
-                                        / Math.max(1, spectrum.values.length))
-                    height: Math.max(2, parent.height * v)
-                    anchors.bottom: parent.bottom
-                    radius: Math.min(3, width / 2, height / 2)
-                    color: Style.tint(Colors.bgSecondary, 0.75)
-                    opacity: 0.6
-                    Behavior on height { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
-                }
-            }
-        }
-
-        VolBar  { width: parent.width; au: master.au; big: true }
-        Balance { width: parent.width; au: master.au }
-    }
-
-    // ── Tabs ───────────────────────────────────────────────────────────────────────────────────
-    Segmented {
-        width: parent.width
-        equal: true
-        current: root.tab
-        segments: [{ label: "Output "    + root._sinks().length,     key: "out" },
-                   { label: "Input "     + root._sources().length,   key: "in" },
-                   { label: "Apps "      + root._apps().length,      key: "apps" },
-                   { label: "Recording " + root._recorders().length, key: "rec" }]
-        onPicked: key => root.tab = key
-    }
-
-    // ── Body ───────────────────────────────────────────────────────────────────────────────────
+    // ── The unit ───────────────────────────────────────────────────────────────────────────────
     Column {
-        width: parent.width
-        spacing: 8
-        Repeater {
-            model: root.tab === "out" ? root._sinks() : root.tab === "in" ? root._sources() : []
-            delegate: DeviceTile { required property var modelData; node: modelData }
-        }
-        Repeater {
-            model: root.tab === "apps" ? root._apps() : root.tab === "rec" ? root._recorders() : []
-            delegate: StreamTile { required property var modelData; node: modelData }
-        }
-        Text {
-            visible: (root.tab === "out"  ? root._sinks().length
-                    : root.tab === "in"   ? root._sources().length
-                    : root.tab === "apps" ? root._apps().length : root._recorders().length) === 0
-            text: root.tab === "rec" ? "nothing is listening"
-                : root.tab === "apps" ? "nothing playing" : "no devices"
-            color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
-        }
-    }
+        id: frame
+        anchors { left: parent.left; right: parent.right; top: parent.top }
+        spacing: 12
 
-    // ══ Parts that only the sound panel needs ══════════════════════════════════════════════════
+        // ── Meter bridge + knob row: one strip per channel, scrolling sideways if there are many
+        StyledRect {
+            width: parent.width
+            height: 232
+            radius: Style.rCard
+            color: Style.tint(Colors.bgPrimary, 0.55)
 
-    // Volume as a capsule you drag. Steps of 5% — the snap IS the stepping; nothing draws it.
-    component VolBar: Item {
-        id: vb
-        property var  au: null
-        property bool big: false
-        readonly property real vol:   vb.au ? Math.max(0, Math.min(1, vb.au.volume)) : 0
-        readonly property bool muted: !!(vb.au && vb.au.muted)
-        property real shown: vb.vol
-        onVolChanged: vb.shown = vb.vol
-        Behavior on shown { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: .002 } }
-        width: parent ? parent.width : 0
-        height: vb.big ? 8 : 6
+            Flickable {
+                anchors { fill: parent; leftMargin: 12; rightMargin: 12; topMargin: 12; bottomMargin: 10 }
+                contentWidth: strips.width
+                clip: true
+                flickableDirection: Flickable.HorizontalFlick
+                boundsBehavior: Flickable.StopAtBounds
 
-        Rectangle {
-            id: rail
-            anchors.fill: parent
-            radius: height / 2
-            color: Style.tint(Colors.bgPrimary, 0.85)
-            Rectangle {
-                width: Math.max(parent.height, parent.width * vb.shown)
-                height: parent.height; radius: parent.radius
-                color: vb.muted ? Colors.fgMuted : vb.vol > 0.9 ? Colors.fgUrgent : Colors.bgActive
-                Behavior on color { ColorAnimation { duration: 140 } }
-            }
-        }
-        MouseArea {
-            anchors.fill: parent; anchors.margins: -7
-            function apply(mx) {
-                if (!vb.au) return
-                vb.au.muted = false
-                vb.au.volume = Math.max(0, Math.min(1, Math.round(((mx - 7) / rail.width) / 0.05) * 0.05))
-            }
-            onPressed:         e => apply(e.x)
-            onPositionChanged: e => { if (pressed) apply(e.x) }
-            onWheel: e => { if (vb.au) vb.au.volume =
-                Math.max(0, Math.min(1, vb.au.volume + (e.angleDelta.y > 0 ? .05 : -.05))) }
-        }
-    }
-
-    // Left / right, from the per-channel volumes PipeWire carries and nothing ever showed.
-    component Balance: Item {
-        id: bal
-        property var au: null
-        readonly property var  vols:   (bal.au && bal.au.volumes) ? bal.au.volumes : []
-        readonly property bool stereo: bal.vols.length === 2
-        readonly property real value: {
-            if (!bal.stereo) return 0
-            var l = bal.vols[0], r = bal.vols[1], m = Math.max(l, r)
-            return m <= 0 ? 0 : (r - l) / m
-        }
-        visible: bal.stereo
-        width: parent ? parent.width : 0
-        height: bal.stereo ? 16 : 0
-
-        Text { anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-               text: "L"; color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 9 }
-        Text { anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-               text: "R"; color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 9 }
-        Rectangle {
-            id: btrack
-            anchors { left: parent.left; right: parent.right; leftMargin: 13; rightMargin: 13
-                      verticalCenter: parent.verticalCenter }
-            height: 3; radius: 1.5
-            color: Style.tint(Colors.bgPrimary, 0.85)
-            Rectangle { anchors.centerIn: parent; width: 1; height: 7; color: Colors.fgMuted; opacity: .5 }
-            Rectangle {
-                width: 9; height: 9; radius: 4.5
-                anchors.verticalCenter: parent.verticalCenter
-                x: (btrack.width - width) / 2 * (1 + bal.value)
-                color: Colors.fgBright
-                Behavior on x { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: .3 } }
-            }
-            MouseArea {
-                anchors.fill: parent; anchors.margins: -8
-                function apply(mx) {
-                    if (!bal.stereo) return
-                    var v = Math.round(Math.max(-1, Math.min(1, ((mx - 8) / btrack.width) * 2 - 1)) * 10) / 10
-                    var peak = Math.max(bal.vols[0], bal.vols[1])
-                    bal.au.volumes = [peak * (v > 0 ? 1 - v : 1), peak * (v < 0 ? 1 + v : 1)]
+                Row {
+                    id: strips
+                    height: parent.height
+                    spacing: 2
+                    Repeater {
+                        model: root.channels
+                        delegate: ChannelStrip { required property var modelData; ch: modelData }
+                    }
                 }
-                onPressed:         e => apply(e.x)
-                onPositionChanged: e => { if (pressed) apply(e.x) }
+            }
+            Text {
+                anchors.centerIn: parent
+                visible: root.channels.length === 0
+                text: "no audio devices"
+                color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 11
+            }
+        }
+
+        // ── The selected channel, in full. One strip instead of a tile per channel.
+        StyledRect {
+            width: parent.width
+            height: detail.implicitHeight + 24
+            radius: Style.rCard
+            color: Style.menuRowFill
+            visible: root.sel !== null
+
+            Column {
+                id: detail
+                anchors { left: parent.left; right: parent.right; top: parent.top
+                          leftMargin: 14; rightMargin: 14; topMargin: 12 }
+                spacing: 8
+
+                readonly property var  ch:   root.sel
+                readonly property var  node: detail.ch ? detail.ch.node : null
+                readonly property var  au:   detail.node ? detail.node.audio : null
+                readonly property bool isDev: detail.ch && (detail.ch.kind === "OUT" || detail.ch.kind === "IN")
+                readonly property var  info: root._dev(detail.node)
+
+                Row {
+                    width: parent.width
+                    spacing: 10
+                    IconImage {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: !detail.isDev
+                        width: 24; height: 24; implicitSize: 24
+                        source: detail.isDev ? "" : root._appIcon(detail.node)
+                    }
+                    Column {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.max(0, parent.width - (detail.isDev ? 0 : 34) - dMute.width - 12)
+                        spacing: 2
+                        Text {
+                            width: parent.width; elide: Text.ElideRight
+                            text: detail.isDev ? root._label(detail.node) : ("" + (detail.node ? detail.node.name : ""))
+                            color: Colors.fgBright
+                            font.family: Style.font; font.pixelSize: 14; font.bold: true
+                        }
+                        Row {
+                            spacing: 9
+                            MetaTag { text: detail.info ? ("" + (detail.info.format ?? "")) : "" }
+                            MetaTag { text: detail.info ? ("" + (detail.info.codec ?? "")) : ""; good: true }
+                            MetaTag { text: root.isDefault(detail.ch) ? "default" : ""; good: true }
+                            MetaTag {
+                                text: detail.isDev ? "" : root._deviceLabelFor(root._devOf(detail.node))
+                            }
+                            MetaTag { text: detail.isDev ? "" : root._media(detail.node) }
+                        }
+                    }
+                    MuteBtn { id: dMute; anchors.verticalCenter: parent.verticalCenter; au: detail.au }
+                }
+
+                // Ports on the surface (a real two- or three-way choice); profiles behind a picker,
+                // because one card here offers thirteen and a row of chips buried the panel.
+                Flow {
+                    width: parent.width
+                    spacing: 5
+                    visible: detail.isDev
+                    Repeater {
+                        model: (detail.info && detail.info.ports && detail.info.ports.length > 1)
+                               ? detail.info.ports : []
+                        delegate: DataChip {
+                            required property var modelData
+                            label: modelData.label; on: modelData.active === true
+                            onTap: if (detail.node) root.setPort(detail.node.name, modelData.name)
+                        }
+                    }
+                    DataChip {
+                        visible: detail.isDev && !root.isDefault(detail.ch)
+                        label: "Make default"
+                        onTap: if (detail.node) root.setDefault(detail.ch.kind, detail.node.name)
+                    }
+                }
+                ChipPicker {
+                    width: parent.width
+                    visible: !!(detail.isDev && detail.info && detail.info.profiles
+                                && detail.info.profiles.length > 1)
+                    options: (detail.info && detail.info.profiles) ? detail.info.profiles.map(
+                                 p => ({ label: p.label, key: p.name, on: p.active === true })) : []
+                    onPicked: key => { if (detail.info) root.setProfile(detail.info.card, key) }
+                }
+                // A stream's channel: where it goes.
+                ChipPicker {
+                    width: parent.width
+                    visible: !!(detail.ch && !detail.isDev)
+                    options: {
+                        if (!detail.node) return []
+                        var t = detail.node.isSink ? root._sinks() : root._sources()
+                        var cur = root._devOf(detail.node)
+                        return t.map(d => ({ label: root._label(d), key: d.name, on: d.name === cur }))
+                    }
+                    onPicked: key => root.moveStream(detail.node, key)
+                }
             }
         }
     }
 
-    // A node's live level, fed into the shared Sparkline. Fast attack, decaying fall — the way a
-    // level reads as motion rather than flicker.
-    component Level: Sparkline {
-        id: lv
-        property var node: null
-        property bool muted: false
-        property var _h: new Array(56).fill(0)
-        values: lv._h
-        dim: lv.muted
-        implicitHeight: 32
-
-        PwNodePeakMonitor { id: mon; node: lv.node; enabled: root.active }
-        property real disp: 0
-        Connections {
-            target: root
-            function onTickChanged() {
-                var ps = mon.peaks ?? [], p = 0
-                for (var i = 0; i < ps.length; i++) p = Math.max(p, Math.max(0, Math.min(1, ps[i])))
-                lv.disp = p > lv.disp ? p : lv.disp * 0.84
-                var h = lv._h.slice(1); h.push(lv.muted ? 0 : lv.disp)
-                lv._h = h
-            }
-        }
-    }
+    // ══ Parts ══════════════════════════════════════════════════════════════════════════════════
 
     component MuteBtn: StyledRect {
         property var au: null
         readonly property bool muted: !!(au && au.muted)
-        width: 28; height: 22; radius: 11
+        width: 30; height: 24; radius: 12
         color: muted ? Style.tint(Colors.fgUrgent, 0.28)
              : mh.containsMouse ? Style.controlHover : Style.controlFill
         Behavior on color { ColorAnimation { duration: 90 } }
         Text { anchors.centerIn: parent; text: parent.muted ? "󰝟" : "󰕾"
                color: parent.muted ? Colors.fgUrgent : Colors.fgPrimary
-               font.family: Style.font; font.pixelSize: 11 }
+               font.family: Style.font; font.pixelSize: 12 }
         MouseArea { id: mh; anchors.fill: parent; hoverEnabled: true
                     onClicked: if (parent.au) parent.au.muted = !parent.au.muted }
     }
 
-    // An application inside the device it plays through: its own icon from the active icon theme,
-    // its volume as the ring, and a halo that swells with what it is playing. Drag up/down for the
-    // level, sideways to carry it to another device, tap to mute.
-    component Puck: Item {
-        id: pk
-        property var node: null
-        readonly property var  au:    pk.node ? pk.node.audio : null
-        readonly property bool muted: !!(pk.au && pk.au.muted)
-        readonly property real vol:   pk.au ? Math.max(0, Math.min(1, pk.au.volume)) : 0
-        property real shown: pk.vol
-        onVolChanged: pk.shown = pk.vol
-        Behavior on shown { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: .002 } }
+    // One channel of the desk: LED meter, knob, name, kind.
+    component ChannelStrip: Item {
+        id: cs
+        property var ch: null
+        readonly property var  node:  cs.ch ? cs.ch.node : null
+        readonly property var  au:    cs.node ? cs.node.audio : null
+        readonly property bool muted: !!(cs.au && cs.au.muted)
+        readonly property real vol:   cs.au ? Math.max(0, Math.min(1, cs.au.volume)) : 0
+        readonly property bool isSel: cs.node && ("" + cs.node.id) === (root.sel ? "" + root.sel.node.id : "")
+        readonly property bool isDef: root.isDefault(cs.ch)
 
+        width: 64; height: 210
+
+        // Live level, fast attack / slow decay — the way a meter reads as motion, not flicker.
         property real lvl: 0
-        PwNodePeakMonitor { id: pmon; node: pk.node; enabled: root.active }
+        PwNodePeakMonitor { id: mon; node: cs.node; enabled: root.active }
         Connections {
             target: root
             function onTickChanged() {
-                var ps = pmon.peaks ?? [], p = 0
+                var ps = mon.peaks ?? [], p = 0
                 for (var i = 0; i < ps.length; i++) p = Math.max(p, Math.max(0, Math.min(1, ps[i])))
-                pk.lvl = p > pk.lvl ? p : pk.lvl * 0.84
+                cs.lvl = p > cs.lvl ? p : cs.lvl * 0.86
             }
         }
+        property real shown: cs.vol
+        onVolChanged: cs.shown = cs.vol
+        Behavior on shown { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: .002 } }
 
-        width: 62; height: 70
-
-        ValueRing {
-            id: vr
-            anchors { horizontalCenter: parent.horizontalCenter; top: parent.top }
-            width: 48; height: 48
-            value: pk.shown
-            halo:  pk.muted ? 0 : pk.lvl
-            dim:   pk.muted
-            ringColor: pk.vol > 0.9 ? Colors.fgUrgent : Colors.bgActive
-            IconImage {
-                anchors.centerIn: parent
-                width: 22; height: 22; implicitSize: 22
-                source: root._appIcon(pk.node)
-                opacity: pk.muted ? 0.45 : 1.0
-                Behavior on opacity { NumberAnimation { duration: 120 } }
-            }
-        }
-        Text {
-            anchors { horizontalCenter: parent.horizontalCenter; top: vr.bottom; topMargin: 3 }
-            width: pk.width; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
-            text: root._appName(pk.node)
-            color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 9
-        }
-
-        // One gesture, three meanings — decided by the first direction, the way a file manager
-        // tells a drag from a click.
-        MouseArea {
-            id: pma
+        Rectangle {
             anchors.fill: parent
-            property string mode: ""
-            property real x0: 0
-            property real y0: 0
-            property real v0: 0
-            onPressed: e => { pma.mode = "?"; pma.x0 = e.x; pma.y0 = e.y; pma.v0 = pk.vol }
-            onPositionChanged: e => {
-                if (!pressed) return
-                var dx = e.x - pma.x0, dy = e.y - pma.y0
-                if (pma.mode === "?") {
-                    if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) { pma.mode = "carry"; root.carrying = pk.node }
-                    else if (Math.abs(dy) > 4) pma.mode = "vol"
-                }
-                if (pma.mode === "vol" && pk.au) {
-                    pk.au.muted = false
-                    pk.au.volume = Math.max(0, Math.min(1, Math.round((pma.v0 - dy / 110) * 20) / 20))
-                }
-            }
-            onReleased: e => {
-                if (pma.mode === "carry") {
-                    var g = pk.mapToItem(null, e.x, e.y)
-                    root.dropCarry(g.x, g.y)
-                } else if (pma.mode === "?" && pk.au) {
-                    pk.au.muted = !pk.au.muted
-                }
-                pma.mode = ""; root.carrying = null
-            }
-            onCanceled: { pma.mode = ""; root.carrying = null }
-            onWheel: e => { if (pk.au) pk.au.volume =
-                Math.max(0, Math.min(1, pk.au.volume + (e.angleDelta.y > 0 ? .05 : -.05))) }
-        }
-    }
-
-    // Which puck is in the air, so device tiles can light up as targets.
-    property var carrying: null
-    property var _dropZones: ({})
-    function registerZone(name, item) { root._dropZones[name] = item }
-    function dropCarry(gx, gy) {
-        var z = root._dropZones
-        for (var name in z) {
-            var it = z[name]
-            if (!it || !it.visible) continue
-            var p = it.mapFromItem(null, gx, gy)
-            if (p.x >= 0 && p.y >= 0 && p.x <= it.width && p.y <= it.height) {
-                if (root.carrying) root.moveStream(root.carrying, name)
-                return
-            }
-        }
-    }
-
-    // ── Tiles ──────────────────────────────────────────────────────────────────────────────────
-    component DeviceTile: DataTile {
-        id: dt
-        property var node: null
-        readonly property var  au:    dt.node ? dt.node.audio : null
-        readonly property bool isOut: root.tab === "out"
-        readonly property bool isDef: dt.node !== null && dt.node ===
-                                      (dt.isOut ? Pipewire.defaultAudioSink : Pipewire.defaultAudioSource)
-        readonly property var  info:  root._dev(dt.node)
-        readonly property var  mine:  (dt.isOut && dt.node)
-                                      ? root._apps().filter(a => root._devOf(a) === dt.node.name) : []
-        readonly property bool isTarget: root.carrying !== null && dt.isOut && dt.node
-                                         && root._devOf(root.carrying) !== dt.node.name
-
-        active:      dt.isDef
-        interactive: true
-        highlight:   dt.isTarget
-        Component.onCompleted: if (dt.node) root.registerZone(dt.node.name, dt)
-
-        Row {
-            width: parent.width
-            spacing: 8
-            Column {
-                anchors.verticalCenter: parent.verticalCenter
-                width: Math.max(0, parent.width - dPct.implicitWidth - dMute.width - 24)
-                spacing: 2
-                Text {
-                    width: parent.width; elide: Text.ElideRight
-                    text: root._label(dt.node)
-                    color: dt.isDef ? Colors.fgBright : Colors.fgPrimary
-                    font.family: Style.font; font.pixelSize: 13; font.bold: dt.isDef
-                }
-                Row {
-                    spacing: 8
-                    MetaTag { text: root._fmt(dt.node) }
-                    MetaTag { text: root._codec(dt.node); good: true }
-                    MetaTag { text: dt.isDef ? "default" : ""; good: true }
-                }
-            }
-            Text {
-                id: dPct
-                anchors.verticalCenter: parent.verticalCenter
-                text: Math.round(dt.au ? Math.max(0, Math.min(1, dt.au.volume)) * 100 : 0) + "%"
-                color: (dt.au && dt.au.muted) ? Colors.fgMuted : Colors.fgPrimary
-                font.family: Style.font; font.pixelSize: 12
-            }
-            MuteBtn { id: dMute; anchors.verticalCenter: parent.verticalCenter; au: dt.au }
+            anchors.margins: 1
+            radius: Style.rTile
+            color: cs.isSel ? Style.tint(Colors.bgActive, 0.16) : "transparent"
+            Behavior on color { ColorAnimation { duration: 110 } }
         }
 
-        Level  { width: parent.width; node: dt.node; muted: !!(dt.au && dt.au.muted) }
-        VolBar { width: parent.width; au: dt.au }
-
-        // Ports on the surface (two or three, a real choice), profiles behind a picker.
-        Flow {
-            width: parent.width
-            spacing: 5
-            visible: (dt.info && dt.info.ports && dt.info.ports.length > 1) || !dt.isDef
+        // ── LED meter
+        Column {
+            id: leds
+            anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 6 }
+            spacing: 2
+            readonly property int count: 16
             Repeater {
-                model: (dt.info && dt.info.ports && dt.info.ports.length > 1) ? dt.info.ports : []
-                delegate: DataChip {
-                    required property var modelData
-                    label: modelData.label; on: modelData.active === true
-                    onTap: if (dt.node) root.setPort(dt.node.name, modelData.name)
+                model: leds.count
+                delegate: Rectangle {
+                    required property int index
+                    // Index 0 is the TOP lamp, so it stands for the loudest step.
+                    readonly property real step: (leds.count - index) / leds.count
+                    readonly property bool on:   cs.lvl >= step - 0.001
+                    width: 22; height: 4; radius: 2
+                    color: !on ? Style.tint(Colors.bgPrimary, 0.8)
+                         : step > 0.86 ? Colors.fgUrgent
+                         : step > 0.68 ? Style.tint(Colors.fgUrgent, 0.5)
+                                       : Colors.bgActive
+                    opacity: on ? 1.0 : 0.55
                 }
             }
-            DataChip {
-                visible: !dt.isDef
-                label: "Make default"
-                onTap: if (dt.node) root.setDefault(dt.isOut ? "sink" : "source", dt.node.name)
-            }
-        }
-        ChipPicker {
-            width: parent.width
-            visible: !!(dt.info && dt.info.profiles && dt.info.profiles.length > 1)
-            options: (dt.info && dt.info.profiles) ? dt.info.profiles.map(
-                         p => ({ label: p.label, key: p.name, on: p.active === true })) : []
-            onPicked: key => { if (dt.info) root.setProfile(dt.info.card, key) }
         }
 
-        // The apps playing through this device.
+        // ── Knob
         Item {
-            visible: dt.isOut
-            width: parent.width
-            height: visible ? hereCol.implicitHeight + 9 : 0
-            Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top }
-                        height: 1; color: Style.tint(Colors.boNormal, 0.45) }
-            Column {
-                id: hereCol
-                anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: 9 }
-                spacing: 5
-                Text {
-                    text: dt.mine.length > 0 ? "PLAYING HERE"
-                        : dt.isTarget ? "DROP TO MOVE HERE" : "NOTHING PLAYING HERE"
-                    color: dt.isTarget ? Style.accent : Colors.fgMuted
-                    font.family: Style.font; font.pixelSize: 9; font.bold: true; font.letterSpacing: 0.5
-                }
-                Flow {
-                    width: parent.width
-                    spacing: 4
-                    Repeater { model: dt.mine; delegate: Puck { required property var modelData; node: modelData } }
-                }
-            }
-        }
-    }
+            id: knob
+            anchors { horizontalCenter: parent.horizontalCenter; top: leds.bottom; topMargin: 10 }
+            width: 46; height: 46
+            readonly property real a0: 135
+            readonly property real sw: 270
 
-    // A stream on its own — the Apps and Recording tabs, where there is room for the track title.
-    component StreamTile: DataTile {
-        id: st
-        property var node: null
-        readonly property var  au:  st.node ? st.node.audio : null
-        readonly property bool rec: root.tab === "rec"
-        interactive: true
-
-        Row {
-            width: parent.width
-            spacing: 10
-            IconImage {
-                anchors.verticalCenter: parent.verticalCenter
-                width: 24; height: 24; implicitSize: 24
-                source: root._appIcon(st.node)
-            }
-            Column {
-                anchors.verticalCenter: parent.verticalCenter
-                width: Math.max(0, parent.width - 34 - sPct.implicitWidth - sMute.width - 24)
-                spacing: 2
-                Text {
-                    width: parent.width; elide: Text.ElideRight
-                    text: root._appName(st.node)
-                    color: Colors.fgPrimary; font.family: Style.font; font.pixelSize: 13
+            Shape {
+                anchors.fill: parent
+                preferredRendererType: Shape.CurveRenderer
+                ShapePath {
+                    strokeColor: Style.tint(Colors.bgPrimary, 0.8); strokeWidth: 5
+                    fillColor: "transparent"; capStyle: ShapePath.RoundCap
+                    PathAngleArc { centerX: 23; centerY: 23; radiusX: 20; radiusY: 20
+                                   startAngle: knob.a0; sweepAngle: knob.sw }
                 }
-                Text {
-                    width: parent.width; elide: Text.ElideRight
-                    text: (st.rec ? "󰍬 " : "󰓃 ") + root._deviceLabelFor(root._devOf(st.node))
-                          + (root._media(st.node) !== "" ? "   " + root._media(st.node) : "")
-                    color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 10
+                ShapePath {
+                    strokeColor: cs.muted ? Colors.fgMuted
+                               : cs.vol > 0.9 ? Colors.fgUrgent
+                               : cs.ch && cs.ch.kind === "OUT" ? Colors.bgActive : Style.accent
+                    strokeWidth: 5; fillColor: "transparent"; capStyle: ShapePath.RoundCap
+                    PathAngleArc { centerX: 23; centerY: 23; radiusX: 20; radiusY: 20
+                                   startAngle: knob.a0; sweepAngle: knob.sw * cs.shown }
                 }
             }
             Text {
-                id: sPct
-                anchors.verticalCenter: parent.verticalCenter
-                text: Math.round(st.au ? Math.max(0, Math.min(1, st.au.volume)) * 100 : 0) + "%"
-                color: (st.au && st.au.muted) ? Colors.fgMuted : Colors.fgPrimary
-                font.family: Style.font; font.pixelSize: 12
+                anchors.centerIn: parent
+                text: Math.round(cs.vol * 100) + ""
+                color: cs.muted ? Colors.fgMuted : Colors.fgBright
+                font.family: Style.font; font.pixelSize: 13; font.bold: true
             }
-            MuteBtn { id: sMute; anchors.verticalCenter: parent.verticalCenter; au: st.au }
+            // Pointer, so the knob reads as turned rather than merely filled.
+            Rectangle {
+                readonly property real ang: (knob.a0 + knob.sw * cs.shown) * Math.PI / 180
+                width: 2; height: 7; radius: 1
+                color: cs.muted ? Colors.fgMuted : Colors.fgBright
+                x: 23 + Math.cos(ang) * 15 - width / 2
+                y: 23 + Math.sin(ang) * 15 - height / 2
+                rotation: (knob.a0 + knob.sw * cs.shown) + 90
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: -5
+                property real y0: 0
+                property real v0: 0
+                onPressed: e => { y0 = e.y; v0 = cs.vol; root.selId = cs.node ? "" + cs.node.id : "" }
+                onPositionChanged: e => {
+                    if (!pressed || !cs.au) return
+                    cs.au.muted = false
+                    cs.au.volume = Math.max(0, Math.min(1, Math.round((v0 - (e.y - y0) / 120) * 20) / 20))
+                }
+                onWheel: e => { if (cs.au) cs.au.volume =
+                    Math.max(0, Math.min(1, cs.au.volume + (e.angleDelta.y > 0 ? .05 : -.05))) }
+            }
         }
-        Level  { width: parent.width; node: st.node; muted: !!(st.au && st.au.muted) }
-        VolBar { width: parent.width; au: st.au }
+
+        // ── Name + kind
+        Column {
+            anchors { horizontalCenter: parent.horizontalCenter; top: knob.bottom; topMargin: 8 }
+            width: parent.width - 4
+            spacing: 3
+            IconImage {
+                anchors.horizontalCenter: parent.horizontalCenter
+                visible: cs.ch && (cs.ch.kind === "APP" || cs.ch.kind === "REC")
+                width: 16; height: 16; implicitSize: 16
+                source: visible ? root._appIcon(cs.node) : ""
+                opacity: cs.muted ? 0.45 : 1.0
+            }
+            Text {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+                text: root._short(cs.ch)
+                color: cs.isSel ? Colors.fgBright : Colors.fgPrimary
+                font.family: Style.font; font.pixelSize: 10; font.bold: cs.isSel
+            }
+            Text {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                text: cs.ch ? cs.ch.kind : ""
+                color: cs.isDef ? Style.accent : Colors.fgMuted
+                font.family: Style.font; font.pixelSize: 8; font.bold: cs.isDef; font.letterSpacing: 0.5
+            }
+        }
+
+        // Selecting a channel is what fills the detail strip; the knob's own press does it too.
+        MouseArea {
+            anchors.fill: parent
+            z: -1
+            onClicked: root.selId = cs.node ? "" + cs.node.id : ""
+        }
     }
 }
