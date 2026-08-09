@@ -23,9 +23,7 @@ Flyout {
     // rail / list / agenda columns scroll individually inside it.
     readonly property int contentH: maxH - 2 * inPad - 30 /*tabs*/ - 18 /*footer*/ - 36 /*gaps*/
 
-    // Text input (quick-add) + the Escape shortcut need the keyboard while open.
-    WlrLayershell.keyboardFocus: isOpen && !UiState.pickerOpen
-                                 ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    // Keyboard while open (quick-add typing, Escape) comes from Flyout now.
 
     property string tab:        "calendar"       // calendar | tasks
     property var    today:      new Date()

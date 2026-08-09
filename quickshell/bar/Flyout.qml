@@ -155,6 +155,19 @@ PanelWindow {
     mask: root.anyOpen ? lockRegion : emptyRegion
     visible: root.anyOpen || panel.reveal > 0.01
 
+    // The Escape shortcut below has been here all along and could never fire: a Shortcut only
+    // reaches a layer surface that HOLDS the keyboard, and this one never asked for it. Every
+    // popout built on Flyout was therefore un-closable by keyboard, while the settings menu, the
+    // notification centre and the cheatsheet — which do take focus — worked fine. CalendarMenu had
+    // already worked around it locally for its quick-add field, with a comment saying exactly this.
+    //
+    // Taken only while OPEN, and dropped again on close, so nothing is stolen from the focused
+    // window at rest. `pickerOpen` yields it to a colour / glyph picker that needs typing.
+    // isOpen, NOT anyOpen: anyOpen is "this flyout is open on SOME monitor", so on a two-screen
+    // setup both instances would have demanded exclusive keyboard focus at once.
+    WlrLayershell.keyboardFocus: root.isOpen && !UiState.pickerOpen
+                                 ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+
     Shortcut { sequence: "Escape"; onActivated: if (root.anyOpen) UiState.flyout = "" }
 
     // Click-outside (within the locked lockRect) closes — on any monitor, since every screen grabs

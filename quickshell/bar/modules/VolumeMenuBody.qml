@@ -72,15 +72,12 @@ Item {
     // simply isn't in the graph — so they can only come from the script, and without them the tab
     // showed nothing at all while every card here sat on `off` and PipeWire was down to auto_null.
     readonly property var offChannels: {
-        var out = [], m = root._devInfo
-        for (var k in m) {
-            var d = m[k]
-            if (!d || d.off !== true) continue
-            if (root.tab === "out" && d.kind !== "sink")   continue
-            if (root.tab === "in"  && d.kind !== "source") continue
-            if (root.tab === "src") continue
-            out.push({ node: null, kind: root.tab === "out" ? "OUT" : "IN", off: true, dev: d })
-        }
+        if (root.tab === "src") return []
+        var want = root.tab === "out" ? "sink" : "source"
+        var out = [], o = root._offDevs
+        for (var i = 0; i < o.length; i++)
+            if (o[i] && o[i].kind === want)
+                out.push({ node: null, kind: root.tab === "out" ? "OUT" : "IN", off: true, dev: o[i] })
         return out
     }
     readonly property var channels: root.allChannels.filter(
@@ -97,7 +94,10 @@ Item {
     property string selId: ""
     readonly property var sel: {
         var c = root.channels
-        for (var i = 0; i < c.length; i++) if ("" + c[i].node.id === root.selId) return c[i]
+        // An off channel has no node — reading c[i].node.id on it threw and took the whole
+        // selection binding (and with it the patch bay) down.
+        for (var i = 0; i < c.length; i++)
+            if (c[i].node && ("" + c[i].node.id) === root.selId) return c[i]
         return c.length > 0 ? c[0] : null
     }
 
@@ -130,7 +130,11 @@ Item {
 
     // ── Script feeds ───────────────────────────────────────────────────────────────────────────
     property var _routes:  ({})
-    property var _devInfo: ({})
+    property var _devInfo: ({})      // LIVE devices, keyed by node name
+    // Switched-off cards live in a list, not that map: a card that can give BOTH an output and an
+    // input emits two entries under the same CARD name, so a name-keyed map kept only the last —
+    // always the source. That is why no off output ever appeared, however many the script emitted.
+    property var _offDevs: []
     Process {
         id: streamProc
         property string _acc: ""
@@ -152,9 +156,13 @@ Item {
         stdout: SplitParser { onRead: line => { devProc._acc += line } }
         onRunningChanged: if (!running) {
             try {
-                var a = JSON.parse(devProc._acc.trim()), m = {}
-                for (var i = 0; i < a.length; i++) m[a[i].name] = a[i]
+                var a = JSON.parse(devProc._acc.trim()), m = {}, off = []
+                for (var i = 0; i < a.length; i++) {
+                    if (a[i].off === true) off.push(a[i])
+                    else                   m[a[i].name] = a[i]
+                }
                 root._devInfo = m
+                root._offDevs = off
             } catch (e) { /* keep the last good map */ }
             devProc._acc = ""
         }
@@ -203,7 +211,7 @@ Item {
         StyledRect {
             id: face
             width: parent.width
-            height: 288
+            height: 236
             radius: Style.rCard
             color:  Style.tint(Colors.bgPrimary, 0.55)
 
@@ -472,44 +480,43 @@ Item {
             onClicked: root.selId = cs.node ? "" + cs.node.id : ""
         }
 
-        // ── Meter well
-        Rectangle {
-            id: well
+        // ── The level IS the strip. Its own spectrum, full width and full height, behind
+        //    everything — a channel that is playing lights up as an object rather than showing a
+        //    small gauge in a corner. Per channel, so each one answers for itself.
+        //
+        //    Colour follows CavaWave's rule: a SURFACE tone, never the accent. This sits behind the
+        //    knob and the name, and an accent-bright spectrum turns both into something you read
+        //    twice. Gated on the panel being open, and absent entirely for an off card.
+        PwAudioSpectrum {
+            id: spec
+            node: cs.node
+            enabled: root.active && !cs.isOff
+            barCount: 13
+            smoothing: true
+        }
+        ClippingRectangle {
+            anchors { fill: parent; margins: 3 }
+            radius: Style.rControl
+            color: "transparent"
             visible: !cs.isOff
-            anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 11 }
-            width: 38; height: 78
-            radius: 8
-            color: Qt.darker(Colors.bgPrimary, 1.35)
-            Rectangle {
-                anchors.fill: parent; radius: parent.radius; color: "transparent"
-                border.width: 1; border.color: Qt.rgba(0, 0, 0, 0.35)
-            }
-            Column {
-                anchors.centerIn: parent
-                spacing: 3
+
+            Row {
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                height: parent.height
+                spacing: 2
                 Repeater {
-                    model: 11
-                    delegate: Item {
+                    model: spec.values.length
+                    delegate: Rectangle {
                         required property int index
-                        readonly property real step: (11 - index) / 11
-                        readonly property bool on:   cs.lvl >= step - 0.001
-                        readonly property color lamp: step > 0.85 ? Colors.fgUrgent
-                                                    : step > 0.64 ? Style.tint(Colors.fgUrgent, 0.55)
-                                                                  : Colors.bgActive
-                        width: 24; height: 4
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: parent.width + 8; height: parent.height + 6; radius: 5
-                            color: parent.lamp
-                            opacity: parent.on ? 0.22 : 0
-                            Behavior on opacity { NumberAnimation { duration: 90 } }
-                        }
-                        Rectangle {
-                            anchors.fill: parent; radius: 2
-                            color: parent.on ? parent.lamp : Qt.darker(Colors.bgPrimary, 1.1)
-                            opacity: parent.on ? 1 : 0.6
-                            Behavior on opacity { NumberAnimation { duration: 90 } }
-                        }
+                        readonly property real v: Math.max(0, Math.min(1, spec.values[index] ?? 0))
+                        width: Math.max(1, (cs.width - 6 - 2 * (spec.values.length - 1))
+                                           / Math.max(1, spec.values.length))
+                        height: Math.max(2, parent.height * v)
+                        anchors.bottom: parent.bottom
+                        radius: Math.min(3, width / 2, height / 2)
+                        color: cs.muted ? Colors.fgMuted : Style.tint(Colors.bgSecondary, 0.75)
+                        opacity: cs.muted ? 0.25 : 0.5
+                        Behavior on height { NumberAnimation { duration: 80; easing.type: Easing.OutCubic } }
                     }
                 }
             }
@@ -519,7 +526,7 @@ Item {
         Item {
             id: knob
             visible: !cs.isOff
-            anchors { horizontalCenter: parent.horizontalCenter; top: well.bottom; topMargin: 14 }
+            anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 28 }
             width: 112; height: 112
             readonly property real r:  56
             readonly property real a0: 135
@@ -629,7 +636,7 @@ Item {
             id: offFace
             visible: cs.isOff
             anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 11 }
-            width: 112; height: 204
+            width: 112; height: 168
             Rectangle {
                 anchors.centerIn: parent
                 width: 96; height: 96; radius: 48
@@ -659,7 +666,7 @@ Item {
         // ── Foot
         Column {
             anchors { horizontalCenter: parent.horizontalCenter
-                      top: cs.isOff ? offFace.bottom : knob.bottom; topMargin: 10 }
+                      top: cs.isOff ? offFace.bottom : knob.bottom; topMargin: 14 }
             width: parent.width - 16
             spacing: 5
 
