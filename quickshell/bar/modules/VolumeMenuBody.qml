@@ -467,18 +467,17 @@ Item {
             NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
         }
 
-        Rectangle {
+        // Nothing behind the knob. The selected channel is marked by a rule at the head of its
+        // strip, not by a filled box: a box is the one thing that turns a desk back into a form,
+        // and it sat on top of this channel's own spectrum — which is the thing worth seeing.
+        Item {
             anchors { fill: parent; margins: 3 }
-            radius: Style.rControl
-            color: cs.isSel ? Style.tint(Colors.bgActive, Style.lift(0.26))
-                 : hov.containsMouse ? Style.tint(Colors.bgActive, Style.lift(0.10)) : "transparent"
-            Behavior on color { ColorAnimation { duration: 130 } }
             Rectangle {
                 anchors { left: parent.left; right: parent.right; top: parent.top
                           leftMargin: 10; rightMargin: 10 }
                 height: 2; radius: 1
                 color: Style.accent
-                opacity: cs.isSel ? 1 : 0
+                opacity: cs.isSel ? 1 : hov.containsMouse ? 0.35 : 0
                 Behavior on opacity { NumberAnimation { duration: 130 } }
             }
         }
@@ -540,39 +539,36 @@ Item {
             visible: !cs.isOff
             anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 40 }
             width: 148; height: 148
-            readonly property real r:  74
-            readonly property real a0: 135
-            readonly property real sw: 270
+            readonly property real r:    74
+            readonly property real ring: 67
+            readonly property real a0:   135
+            readonly property real sw:   270
             readonly property real ang: (knob.a0 + knob.sw * cs.shown) * Math.PI / 180
 
             Shape {
                 anchors.fill: parent
                 preferredRendererType: Shape.CurveRenderer
+                // ONE ring, stroked twice at the SAME radius: the dim pass is the whole 270° of
+                // travel, the bright pass is how much of it you are using. These were at radius 67
+                // and 50 — two separate circles, so the inner one never filled the outer one and
+                // read as decoration. Concentric, the ring simply fills, which is the whole point.
                 ShapePath {
-                    strokeColor: Style.tint(Colors.bgElement, Style.lift(0.34)); strokeWidth: 10
+                    strokeColor: Style.tint(Colors.bgElement, Style.lift(0.34)); strokeWidth: 9
                     fillColor: "transparent"; capStyle: ShapePath.RoundCap
-                    PathAngleArc { centerX: knob.r; centerY: knob.r; radiusX: 67; radiusY: 67
+                    PathAngleArc { centerX: knob.r; centerY: knob.r
+                                   radiusX: knob.ring; radiusY: knob.ring
                                    startAngle: knob.a0; sweepAngle: knob.sw }
                 }
                 ShapePath {
                     strokeColor: cs.muted ? Colors.fgMuted
                                : cs.vol > 0.9 ? Colors.fgUrgent
                                : cs.isApp ? Style.accent : Colors.bgActive
-                    strokeWidth: 10; fillColor: "transparent"; capStyle: ShapePath.RoundCap
-                    PathAngleArc { centerX: knob.r; centerY: knob.r; radiusX: 50; radiusY: 50
+                    strokeWidth: 9; fillColor: "transparent"; capStyle: ShapePath.RoundCap
+                    PathAngleArc { centerX: knob.r; centerY: knob.r
+                                   radiusX: knob.ring; radiusY: knob.ring
                                    startAngle: knob.a0; sweepAngle: knob.sw * cs.shown }
                 }
             }
-            Rectangle {
-                anchors.centerIn: parent
-                width: 108; height: 108; radius: 54
-                gradient: Gradient {
-                    GradientStop { position: 0.0; color: Style.tint(Colors.bgElement, Style.lift(0.26)) }
-                    GradientStop { position: 1.0; color: Style.tint(Colors.bgElement, Style.lift(0.12)) }
-                }
-                border.width: Style.controlBorderW; border.color: Style.controlBorderColor
-            }
-
             // A source channel wears its app's icon on the cap; tapping it is how you send it
             // somewhere else. A device channel shows its level instead — it has nowhere to go.
             IconImage {
@@ -602,8 +598,8 @@ Item {
             Rectangle {
                 width: 4; height: 14; radius: 2
                 color: cs.muted ? Colors.fgMuted : Colors.fgBright
-                x: knob.r + Math.cos(knob.ang) * 44 - width / 2
-                y: knob.r + Math.sin(knob.ang) * 44 - height / 2
+                x: knob.r + Math.cos(knob.ang) * 54 - width / 2
+                y: knob.r + Math.sin(knob.ang) * 54 - height / 2
                 rotation: knob.a0 + knob.sw * cs.shown + 90
                 antialiasing: true
             }
@@ -651,9 +647,14 @@ Item {
             width: 148; height: 204
             Rectangle {
                 anchors.centerIn: parent
-                width: 124; height: 124; radius: 62
-                color: Style.tint(Colors.bgElement, Style.lift(0.22))
-                border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+                // The live knob's ring with nothing in it — an output that is there but gives
+                // you nothing to turn.
+                width: 144; height: 144; radius: 72
+                color: "transparent"
+                border.width: 9
+                border.color: offHov.containsMouse ? Style.tint(Style.accent, 0.55)
+                                                   : Style.tint(Colors.bgElement, Style.lift(0.34))
+                Behavior on border.color { ColorAnimation { duration: 120 } }
                 Text {
                     anchors.centerIn: parent
                     text: "󰐥"
