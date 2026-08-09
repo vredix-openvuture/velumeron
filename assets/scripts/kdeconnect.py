@@ -23,6 +23,8 @@ Commands:
   media-volume <id> <0-100>     set the phone player's volume
   notif-dismiss <id> <nid>      dismiss one of the phone's notifications
   clipboard <id>                push this machine's clipboard to the device
+  mount <id> | unmount <id>     mount the phone's filesystem over sftp
+  storage <id>                  {mounted,path,total,used} — statvfs of the mount point
   pair <id> | unpair <id>
   pick                          run a file chooser, print the chosen paths (one per line)
 
@@ -45,6 +47,8 @@ D-Bus layout, all verified against a live daemon:
   …/devices/<id>/notifications/<nid>        ….notifications.notification     appName, title, text, ticker,
                                                                              dismissable; dismiss()
   …/devices/<id>/clipboard                  …device.clipboard                sendClipboard()
+  …/devices/<id>/sftp                       …device.sftp                     isMounted(), mountPoint(),
+                                                                             mount(), unmount()
 
 Every one of those is optional: the plugin can be unloaded, and the object path then does not exist
 at all (checked — it raises UnknownObject rather than returning empty properties). So each block is
@@ -136,6 +140,18 @@ def _media(bus, path):
     }
 
 
+def _storage(bus, path):
+    """Whether the phone's filesystem is mounted, and where. Both calls are D-Bus round trips to the
+    daemon and cheap. The CAPACITY is deliberately NOT read here: statvfs on an sshfs whose phone
+    walked out of range blocks, and this runs every 5 s while the panel is open — one dead mount
+    would stall the whole listing. `storage` is a separate command for that reason."""
+    try:
+        i = dbus.Interface(bus.get_object(SERVICE, path + "/sftp"), "org.kde.kdeconnect.device.sftp")
+        return {"ok": True, "mounted": bool(i.isMounted()), "path": str(i.mountPoint())}
+    except dbus.DBusException:
+        return {"ok": False, "mounted": False, "path": ""}
+
+
 NOTIF_CAP = 8
 
 
@@ -216,6 +232,7 @@ def list_devices():
                 "strength": _plain(con.get("cellularNetworkStrength"), -1) if con else -1,
             },
             "media":   _media(bus, path),
+            "storage": _storage(bus, path),
             "notifs":  _notifs(bus, path),
             "plugins": plugins,
         })
@@ -316,6 +333,25 @@ def main():
         except (AttributeError, dbus.DBusException) as e:
             sys.stderr.write(str(e).split("\n")[0] + "\n")
             return 1
+    if cmd in ("mount", "unmount"):
+        return 0 if _call(dev, "sftp", "org.kde.kdeconnect.device.sftp", cmd) else 1
+    if cmd == "storage":
+        bus = _bus()
+        out = {"mounted": False, "path": "", "total": 0, "used": 0}
+        try:
+            i = dbus.Interface(bus.get_object(SERVICE, _dev_path(dev) + "/sftp"),
+                               "org.kde.kdeconnect.device.sftp")
+            out["mounted"] = bool(i.isMounted())
+            out["path"] = str(i.mountPoint())
+            if out["mounted"]:
+                st = os.statvfs(out["path"])
+                out["total"] = st.f_blocks * st.f_frsize
+                out["used"] = (st.f_blocks - st.f_bfree) * st.f_frsize
+        except (AttributeError, OSError, dbus.DBusException):
+            pass
+        json.dump(out, sys.stdout)
+        sys.stdout.write("\n")
+        return 0
     if cmd == "clipboard":
         return 0 if _call(dev, "clipboard", "org.kde.kdeconnect.device.clipboard",
                           "sendClipboard") else 1

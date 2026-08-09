@@ -262,7 +262,23 @@ PanelWindow {
                 id: body
                 width: scroller.width
                 height: implicitHeight
-                implicitHeight: childrenRect.height
+                // NOT childrenRect. That counts two kinds of child nobody can see the height of:
+                //   · invisible ones — proven: an invisible sibling parked at y=400 still made
+                //     childrenRect 450 (children inside a Column are fine, positioners skip those)
+                //   · ones anchored to fill this item, whose height IS ours, so the two feed each
+                //     other and the taller of the pair wins forever
+                // The phone panel had both (a hidden "nothing paired" block that word-wraps to
+                // dozens of lines while the panel is still 0 wide, and a DropArea over the whole
+                // surface), so it opened at maxH with a third of it blank.
+                implicitHeight: {
+                    var h = 0
+                    for (var i = 0; i < body.children.length; i++) {
+                        var c = body.children[i]
+                        if (!c.visible || c.anchors.fill === body) continue
+                        h = Math.max(h, c.y + c.height)
+                    }
+                    return h
+                }
             }
         }
     }

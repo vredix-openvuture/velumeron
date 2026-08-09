@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import ".."
 import QtQuick
+import Quickshell.Io
 
 // Phone popout. One device is the MAIN one and gets tracked at the top with everything it can do —
 // charge, cellular, what it is playing, what is on its screen — and the rest are one line each,
@@ -29,6 +30,27 @@ Flyout {
     // Drop files anywhere on the panel → they go to the device under the cursor, else the main one.
     property string dropTarget: ""
     readonly property string _dropDev: root.dropTarget !== "" ? root.dropTarget : root.mainId
+
+    // Capacity is polled on its own, slower schedule and NEVER inside the main listing: statvfs on
+    // an sshfs whose phone has walked out of range blocks, and the listing runs every 5 s while the
+    // panel is open — one dead mount would stall everything else the panel shows.
+    property var storage: ({ mounted: false, path: "", total: 0, used: 0 })
+    Process {
+        id: stProc
+        stdout: StdioCollector { onStreamFinished: {
+            try { var d = JSON.parse(text); if (d && typeof d === "object") root.storage = d }
+            catch (e) { /* keep the last good reading */ }
+        } }
+    }
+    function pollStorage() {
+        if (root.mainId === "" || stProc.running) return
+        stProc.command = ["python3", PhoneService.script, "storage", root.mainId]
+        stProc.running = true
+    }
+    Timer {
+        interval: 15000; repeat: true; running: root.isOpen; triggeredOnStart: true
+        onTriggered: root.pollStorage()
+    }
 
     DropArea {
         anchors.fill: parent
@@ -126,7 +148,7 @@ Flyout {
                 }
                 Column {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: Math.max(0, parent.width - idn.width - parent.spacing)
+                    width: Math.max(0, parent.width - idn.width - mainDot.width - 2 * parent.spacing)
                     spacing: 4
                     Text {
                         width: parent.width; elide: Text.ElideRight
@@ -148,6 +170,12 @@ Flyout {
                         width: parent.width; elide: Text.ElideRight
                         text: PhoneService.devices.length > 1 ? "main device" : ""
                     }
+                }
+                SelectDot {
+                    id: mainDot
+                    anchors.verticalCenter: parent.verticalCenter
+                    opacity: PhoneService.devices.length > 1 ? 1 : 0
+                    on: true
                 }
             }
 
@@ -187,7 +215,7 @@ Flyout {
             StyledRect {
                 id: np
                 width: parent.width
-                height: 62
+                height: 92
                 radius: Style.rTile
                 visible: hero.med.ok === true
                 color: Style.tint(Colors.bgElement, Style.lift(0.14))
@@ -208,15 +236,15 @@ Flyout {
 
                 RoundedImage {
                     id: art
-                    anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: 8 }
-                    width: 46; height: 46
+                    anchors { left: parent.left; top: parent.top; leftMargin: 8; topMargin: 8 }
+                    width: 54; height: 54
                     radius: Style.rTile
                     source: hero.med.art ?? ""
                     fallback: "󰝚"
                 }
                 Column {
-                    anchors { left: art.right; right: transport.left; verticalCenter: parent.verticalCenter
-                              leftMargin: 10; rightMargin: 10 }
+                    anchors { left: art.right; right: transport.left; top: parent.top
+                              leftMargin: 10; rightMargin: 10; topMargin: 10 }
                     spacing: 2
                     Text {
                         width: parent.width; elide: Text.ElideRight
@@ -231,33 +259,19 @@ Flyout {
                         color: Colors.fgMuted
                         font.family: Style.font; font.pixelSize: 10
                     }
-                    // A progress bar when the track has a length; otherwise the player's name, since
-                    // the phone can have several and which one you are driving matters.
-                    Item {
-                        width: parent.width; height: 9
-                        Rectangle {
-                            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
-                            height: 3; radius: 2
-                            visible: (hero.med.length ?? 0) > 0
-                            color: Style.tint(Colors.bgElement, Style.lift(0.34))
-                            Rectangle {
-                                anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
-                                width: parent.width * Math.max(0, Math.min(1, np.pos / Math.max(1, hero.med.length ?? 1)))
-                                radius: 2
-                                color: Style.accent
-                            }
-                        }
-                        Text {
-                            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                            visible: (hero.med.length ?? 0) <= 0
-                            text: hero.med.player ?? ""
-                            color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 9
-                        }
+                    // Which of the phone's players is being driven — it can have several, and
+                    // pressing pause on the wrong one is a puzzle nobody enjoys.
+                    Text {
+                        width: parent.width; elide: Text.ElideRight
+                        text: hero.med.player ?? ""
+                        color: Style.accent
+                        font.family: Style.font; font.pixelSize: 9
+                        font.capitalization: Font.AllUppercase; font.letterSpacing: 0.6
                     }
                 }
                 Row {
                     id: transport
-                    anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 8 }
+                    anchors { right: parent.right; top: parent.top; rightMargin: 8; topMargin: 15 }
                     spacing: 5
                     RoundBtn { icon: "󰒮"; onTrig: PhoneService.media(hero.d.id, "Previous") }
                     RoundBtn {
@@ -266,6 +280,149 @@ Flyout {
                         onTrig: PhoneService.media(hero.d.id, "PlayPause")
                     }
                     RoundBtn { icon: "󰒭"; onTrig: PhoneService.media(hero.d.id, "Next") }
+                }
+
+                // ── Elapsed / total, full width under the lot.
+                Item {
+                    id: prog
+                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom
+                              leftMargin: 10; rightMargin: 10; bottomMargin: 8 }
+                    height: 20
+                    readonly property real frac: Math.max(0, Math.min(1, np.pos / Math.max(1, hero.med.length ?? 1)))
+
+                    Text {
+                        id: tNow
+                        anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                        text: (hero.med.length ?? 0) > 0 ? PhoneService.fmtTime(np.pos) : ""
+                        color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 9
+                    }
+                    Text {
+                        id: tEnd
+                        anchors { right: volume.left; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                        text: (hero.med.length ?? 0) > 0 ? PhoneService.fmtTime(hero.med.length) : ""
+                        color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 9
+                    }
+                    Rectangle {
+                        anchors { left: tNow.right; right: tEnd.left; leftMargin: 8; rightMargin: 8
+                                  verticalCenter: parent.verticalCenter }
+                        height: 3; radius: 2
+                        visible: (hero.med.length ?? 0) > 0
+                        color: Style.tint(Colors.bgElement, Style.lift(0.34))
+                        Rectangle {
+                            anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+                            width: parent.width * prog.frac
+                            radius: 2
+                            color: Style.accent
+                        }
+                    }
+
+                    // The PHONE's player volume. Tracked locally while dragging and written once on
+                    // release: mprisremote's volume is a D-Bus property set, and firing one per
+                    // mouse move would be a round trip per frame.
+                    Item {
+                        id: volume
+                        anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                        width: 84; height: 20
+                        visible: (hero.med.volume ?? -1) >= 0
+                        property real v: hero.med.volume ?? 0
+                        property bool dragging: false
+                        Connections {
+                            target: hero
+                            function onMedChanged() { if (!volume.dragging) volume.v = hero.med.volume ?? 0 }
+                        }
+                        Text {
+                            id: vGlyph
+                            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                            text: volume.v <= 0 ? "󰝟" : volume.v < 50 ? "󰖀" : "󰕾"
+                            color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 11
+                        }
+                        Rectangle {
+                            id: vTrack
+                            anchors { left: vGlyph.right; right: parent.right; leftMargin: 7
+                                      verticalCenter: parent.verticalCenter }
+                            height: 3; radius: 2
+                            color: Style.tint(Colors.bgElement, Style.lift(0.34))
+                            Rectangle {
+                                anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+                                width: parent.width * Math.max(0, Math.min(1, volume.v / 100))
+                                radius: 2
+                                color: Style.accent
+                            }
+                        }
+                        MouseArea {
+                            anchors { left: vTrack.left; right: vTrack.right; top: parent.top; bottom: parent.bottom }
+                            function apply(x) { volume.v = Math.max(0, Math.min(100, Math.round(x / width * 100))) }
+                            onPressed: e => { volume.dragging = true; apply(e.x) }
+                            onPositionChanged: e => { if (pressed) apply(e.x) }
+                            onReleased: {
+                                volume.dragging = false
+                                PhoneService.mediaVolume(hero.d.id, volume.v)
+                            }
+                            onCanceled: volume.dragging = false
+                        }
+                    }
+                }
+            }
+
+            // ── The phone's own filesystem. Mounting starts an sshfs, so it happens when asked;
+            //    once it is up, the capacity is a real reading rather than a claim.
+            StyledRect {
+                id: store
+                width: parent.width
+                height: 48
+                radius: Style.rTile
+                visible: (hero.d.storage ?? ({})).ok === true && hero.live
+                color: Style.tint(Colors.bgElement, Style.lift(0.14))
+                readonly property bool mounted: (hero.d.storage ?? ({})).mounted === true
+                readonly property real total: root.storage.total ?? 0
+                readonly property real used:  root.storage.used ?? 0
+
+                Text {
+                    id: stGlyph
+                    anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                    text: store.mounted ? "󰉋" : "󰋙"
+                    color: store.mounted ? Style.accent : Colors.fgMuted
+                    font.family: Style.font; font.pixelSize: 18
+                }
+                Column {
+                    anchors { left: stGlyph.right; right: stBtn.left; verticalCenter: parent.verticalCenter
+                              leftMargin: 11; rightMargin: 10 }
+                    spacing: 3
+                    Text {
+                        width: parent.width; elide: Text.ElideRight
+                        text: !store.mounted ? "Phone storage"
+                            : store.total > 0 ? (PhoneService.fmtBytes(store.used) + " of "
+                                                 + PhoneService.fmtBytes(store.total) + " used")
+                            : "Mounted"
+                        color: Colors.fgBright
+                        font.family: Style.font; font.pixelSize: 11; font.bold: true
+                    }
+                    Rectangle {
+                        width: parent.width; height: 3; radius: 2
+                        visible: store.mounted && store.total > 0
+                        color: Style.tint(Colors.bgElement, Style.lift(0.34))
+                        Rectangle {
+                            anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+                            width: parent.width * Math.max(0, Math.min(1, store.used / Math.max(1, store.total)))
+                            radius: 2
+                            color: store.used / Math.max(1, store.total) > 0.9 ? Colors.fgUrgent : Style.accent
+                        }
+                    }
+                    MetaTag {
+                        width: parent.width; elide: Text.ElideRight
+                        text: store.mounted ? (root.storage.path ?? "") : "not mounted"
+                    }
+                }
+                DataChip {
+                    id: stBtn
+                    anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                    label: store.mounted ? "Unmount" : "Mount"
+                    on: !store.mounted
+                    onTap: {
+                        if (store.mounted) PhoneService.unmountStorage(hero.d.id)
+                        else               PhoneService.mountStorage(hero.d.id)
+                        root.pollStorage()
+                    }
                 }
             }
 
@@ -430,18 +587,46 @@ Flyout {
                         MetaTag { text: orow.hasBat ? (orow.bat.charge + "%") : "" }
                     }
                 }
-                // Promote: this device becomes the one tracked at the top.
-                RoundBtn {
+                // Choose: this device becomes the one tracked at the top.
+                SelectDot {
                     id: opin
-                    anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                    icon: "󰐃"
-                    onTrig: PhoneService.setMain(orow.modelData.id)
+                    anchors { right: parent.right; rightMargin: 11; verticalCenter: parent.verticalCenter }
+                    on: false
+                    onPick: PhoneService.setMain(orow.modelData.id)
                 }
             }
         }
     }
 
-    // A round button — the transport keys and the promote pin are one object at two sizes.
+    // Which device the panel is about. A radio, not a pin: a pin says "keep this", and what this
+    // actually does is pick one of a set — so it should look like the thing that picks one of a set.
+    component SelectDot: Item {
+        id: sd
+        property bool on: false
+        signal pick()
+        width: 22; height: 22
+        Rectangle {
+            anchors.fill: parent
+            radius: width / 2
+            color: sd.on ? Style.tint(Style.accent, 0.20)
+                 : sdH.containsMouse ? Style.tint(Colors.bgActive, Style.lift(0.24)) : "transparent"
+            border.width: 2
+            border.color: sd.on ? Style.accent
+                        : sdH.containsMouse ? Style.tint(Style.accent, 0.65)
+                                            : Style.tint(Colors.bgElement, Style.lift(0.40))
+            Behavior on color { ColorAnimation { duration: 120 } }
+            Behavior on border.color { ColorAnimation { duration: 120 } }
+        }
+        Rectangle {
+            anchors.centerIn: parent
+            width: sd.on ? 10 : 0; height: width; radius: width / 2
+            color: Style.accent
+            Behavior on width { NumberAnimation { duration: 150; easing.type: Easing.OutBack } }
+        }
+        MouseArea { id: sdH; anchors.fill: parent; hoverEnabled: true; onClicked: sd.pick() }
+    }
+
+    // A round button — the transport keys.
     component RoundBtn: StyledRect {
         id: rb
         property string icon: ""

@@ -115,6 +115,13 @@ Singleton {
     function mediaVolume(id, v) { root._act(["media-volume", id, "" + Math.round(v)]) }
     function dismissNotif(id, nid) { root._act(["notif-dismiss", id, nid]) }
     function pushClipboard(id)  { root._act(["clipboard", id]) }
+    function mountStorage(id)   { root._act(["mount", id]) }
+    function unmountStorage(id) { root._act(["unmount", id]) }
+    function fmtBytes(b) {
+        if (b >= 1073741824) return (b / 1073741824).toFixed(b >= 10737418240 ? 0 : 1) + " GB"
+        if (b >= 1048576)    return Math.round(b / 1048576) + " MB"
+        return Math.max(0, Math.round(b / 1024)) + " kB"
+    }
     function fmtTime(ms) {
         var t = Math.max(0, Math.round(ms / 1000))
         return Math.floor(t / 60) + ":" + ("0" + (t % 60)).slice(-2)
