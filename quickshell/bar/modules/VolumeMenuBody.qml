@@ -7,24 +7,24 @@ import Quickshell.Io
 import Quickshell.Widgets
 import Quickshell.Services.Pipewire
 
-// The sound rack — a hardware face, not a list.
+// The sound desk. Three tabs — Output, Input, Sources — and each shows that group's channels as
+// full-size strips: an inset meter well, a real knob, a mute, and one detail strip at the foot for
+// whichever channel is selected. The detail strip is the piece that lets the tiles go: ports,
+// profile, routing and format get ONE place instead of one card per channel.
 //
-// Four earlier attempts were all the same architecture underneath: a column of rectangular tiles
-// with rectangular bars inside them. Swapping what went in the boxes could never fix that. This is
-// the shape a mixing desk actually has, and it is built around the one thing a desk is good at:
+// Splitting into tabs is what makes the knobs big. All channels at once meant six 64px strips in a
+// 636px window and controls too small to aim at; two or three per tab means 200px strips.
 //
-//   · a METER BRIDGE across the top showing every channel at once — outputs, inputs, apps, all of
-//     them, so "what is making noise" is answered by looking rather than by opening something
-//   · a KNOB per channel underneath it
-//   · one DETAIL STRIP at the foot for the channel you selected — ports, profile, routing, format
-//     get one place instead of one tile each. That strip is why there are no tiles at all now.
+// The model is MEMOISED, and that is a bug fix rather than an optimisation: `Pipewire.nodes.values`
+// re-emits as node properties change, so a plain binding handed the Repeater a fresh array many
+// times a second, which destroyed and rebuilt every strip — every PwNodePeakMonitor restarting and
+// every meter snapping back to zero. That was the flicker. `channels` is now only reassigned when
+// the SET of channels actually changes, keyed by node id.
 //
 // Three sources feed it, because no single one has everything:
 //   · Quickshell's Pipewire   live volume / mute / peaks, and the node list
 //   · audio-route.py streams  which device each stream plays on + its media title (not exposed)
 //   · audio-route.py devices  ports, card profiles, sample format, Bluetooth codec (not exposed)
-// The script feeds are polled only while the panel is open and refreshed the moment an action
-// lands, so a closed panel costs nothing.
 Item {
     id: root
     property bool active: false
@@ -38,24 +38,41 @@ Item {
     property int tick: 0
     Timer { interval: 55; repeat: true; running: root.active; onTriggered: root.tick++ }
 
+    property string tab: "out"                 // out | in | src
     readonly property var _ownStreams: ["cava", "quickshell", "noctalia-qs"]
     function _isOwn(n) { return root._ownStreams.indexOf(("" + ((n && n.name) ?? "")).toLowerCase()) >= 0 }
 
     function _sinks()   { return Pipewire.nodes.values.filter(n => n && n.isSink && !n.isStream && n.audio) }
     function _sources() { return Pipewire.nodes.values.filter(n => n && !n.isSink && !n.isStream && n.audio
                                                                 && ("" + (n.name ?? "")).indexOf("monitor") < 0) }
-    function _apps()    { return Pipewire.nodes.values.filter(n => n && n.isStream && n.audio && n.isSink && !root._isOwn(n)) }
-    function _recs()    { return Pipewire.nodes.values.filter(n => n && n.isStream && n.audio && !n.isSink) }
+    // "Sources" in the desk sense: the things PRODUCING sound, i.e. the application streams.
+    function _streams() { return Pipewire.nodes.values.filter(n => n && n.isStream && n.audio && !root._isOwn(n)) }
 
-    // Every channel on the desk, in desk order: outputs, inputs, then what is running through them.
-    readonly property var channels: {
+    // ── The model, memoised (see the header) ───────────────────────────────────────────────────
+    readonly property var _raw: {
         var out = []
         var s = root._sinks();   for (var i = 0; i < s.length; i++) out.push({ node: s[i], kind: "OUT" })
         var p = root._sources(); for (var j = 0; j < p.length; j++) out.push({ node: p[j], kind: "IN" })
-        var a = root._apps();    for (var k = 0; k < a.length; k++) out.push({ node: a[k], kind: "APP" })
-        var r = root._recs();    for (var m = 0; m < r.length; m++) out.push({ node: r[m], kind: "REC" })
+        var a = root._streams(); for (var k = 0; k < a.length; k++)
+            out.push({ node: a[k], kind: a[k].isSink ? "APP" : "REC" })
         return out
     }
+    property var    allChannels: []
+    property string _key: ""
+    on_RawChanged: {
+        var k = ""
+        for (var i = 0; i < root._raw.length; i++) k += root._raw[i].node.id + root._raw[i].kind + "|"
+        if (k === root._key) return              // same set — keep the delegates and their meters
+        root._key = k
+        root.allChannels = root._raw
+    }
+    Component.onCompleted: root.allChannels = root._raw
+
+    readonly property var channels: root.allChannels.filter(
+        c => root.tab === "out" ? c.kind === "OUT"
+           : root.tab === "in"  ? c.kind === "IN"
+                                : (c.kind === "APP" || c.kind === "REC"))
+
     property string selId: ""
     readonly property var sel: {
         var c = root.channels
@@ -69,11 +86,8 @@ Item {
     }
     function _short(ch) {
         if (!ch) return ""
-        var n = ch.node
-        if (ch.kind === "APP" || ch.kind === "REC") return "" + (n.name ?? "")
-        var l = root._label(n)
-        // A desk strip is 60px wide: "Built-in Audio Analog Stereo" has to become "Built-in".
-        return l.split(/[ (]/)[0]
+        if (ch.kind === "APP" || ch.kind === "REC") return "" + (ch.node.name ?? "")
+        return root._label(ch.node).replace(/\s*\(.*\)$/, "")
     }
     function _appIcon(n) {
         var nm = ("" + ((n && n.name) ?? "")).trim()
@@ -154,39 +168,74 @@ Item {
         anchors { left: parent.left; right: parent.right; top: parent.top }
         spacing: 12
 
-        // ── Meter bridge + knob row: one strip per channel, scrolling sideways if there are many
-        StyledRect {
+        Segmented {
             width: parent.width
-            height: 232
+            equal: true
+            current: root.tab
+            segments: [{ label: "Output "  + root._sinks().length,   key: "out" },
+                       { label: "Input "   + root._sources().length, key: "in" },
+                       { label: "Sources " + root._streams().length, key: "src" }]
+            onPicked: key => { root.tab = key; root.selId = "" }
+        }
+
+        // ── The face plate: strips side by side, as wide as the room allows.
+        StyledRect {
+            id: face
+            width: parent.width
+            height: 268
             radius: Style.rCard
-            color: Style.tint(Colors.bgPrimary, 0.55)
+            color:  Style.tint(Colors.bgPrimary, 0.55)
+
+            // A plate, not a flat fill. The sheen is a clipped overlay rather than a gradient on
+            // the surface itself: StyledRect is an Item wrapping a Loader (so it can be a Shape for
+            // the chamfer / scallop / wobbly styles) and has no `gradient` — only a flat `color`.
+            ClippingRectangle {
+                anchors.fill: parent
+                radius: Style.rCard
+                color: "transparent"
+                Rectangle {
+                    anchors.fill: parent
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.05) }
+                        GradientStop { position: 0.55; color: "transparent" }
+                    }
+                }
+            }
+
+            readonly property int inner: face.width - 24
+            readonly property int count: Math.max(1, root.channels.length)
+            // Wide when there is room, never below a size you can aim at; past that it scrolls.
+            readonly property int stripW: Math.max(132, Math.min(210, Math.floor(face.inner / face.count)))
 
             Flickable {
-                anchors { fill: parent; leftMargin: 12; rightMargin: 12; topMargin: 12; bottomMargin: 10 }
+                anchors { fill: parent; margins: 12 }
                 contentWidth: strips.width
                 clip: true
                 flickableDirection: Flickable.HorizontalFlick
                 boundsBehavior: Flickable.StopAtBounds
-
                 Row {
                     id: strips
                     height: parent.height
-                    spacing: 2
                     Repeater {
                         model: root.channels
-                        delegate: ChannelStrip { required property var modelData; ch: modelData }
+                        delegate: ChannelStrip {
+                            required property var modelData
+                            ch: modelData
+                            width: face.stripW
+                            height: strips.height
+                        }
                     }
                 }
             }
             Text {
                 anchors.centerIn: parent
                 visible: root.channels.length === 0
-                text: "no audio devices"
-                color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 11
+                text: root.tab === "src" ? "nothing playing" : "no devices"
+                color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 12
             }
         }
 
-        // ── The selected channel, in full. One strip instead of a tile per channel.
+        // ── The selected channel, in full — one strip instead of a card per channel.
         StyledRect {
             width: parent.width
             height: detail.implicitHeight + 24
@@ -200,11 +249,11 @@ Item {
                           leftMargin: 14; rightMargin: 14; topMargin: 12 }
                 spacing: 8
 
-                readonly property var  ch:   root.sel
-                readonly property var  node: detail.ch ? detail.ch.node : null
-                readonly property var  au:   detail.node ? detail.node.audio : null
+                readonly property var  ch:    root.sel
+                readonly property var  node:  detail.ch ? detail.ch.node : null
+                readonly property var  au:    detail.node ? detail.node.audio : null
                 readonly property bool isDev: detail.ch && (detail.ch.kind === "OUT" || detail.ch.kind === "IN")
-                readonly property var  info: root._dev(detail.node)
+                readonly property var  info:  root._dev(detail.node)
 
                 Row {
                     width: parent.width
@@ -217,26 +266,24 @@ Item {
                     }
                     Column {
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Math.max(0, parent.width - (detail.isDev ? 0 : 34) - dMute.width - 12)
-                        spacing: 2
+                        width: Math.max(0, parent.width - (detail.isDev ? 0 : 34) - 12)
+                        spacing: 3
                         Text {
                             width: parent.width; elide: Text.ElideRight
-                            text: detail.isDev ? root._label(detail.node) : ("" + (detail.node ? detail.node.name : ""))
+                            text: detail.isDev ? root._label(detail.node)
+                                               : ("" + (detail.node ? detail.node.name : ""))
                             color: Colors.fgBright
-                            font.family: Style.font; font.pixelSize: 14; font.bold: true
+                            font.family: Style.font; font.pixelSize: 15; font.bold: true
                         }
                         Row {
                             spacing: 9
                             MetaTag { text: detail.info ? ("" + (detail.info.format ?? "")) : "" }
                             MetaTag { text: detail.info ? ("" + (detail.info.codec ?? "")) : ""; good: true }
                             MetaTag { text: root.isDefault(detail.ch) ? "default" : ""; good: true }
-                            MetaTag {
-                                text: detail.isDev ? "" : root._deviceLabelFor(root._devOf(detail.node))
-                            }
+                            MetaTag { text: detail.isDev ? "" : root._deviceLabelFor(root._devOf(detail.node)) }
                             MetaTag { text: detail.isDev ? "" : root._media(detail.node) }
                         }
                     }
-                    MuteBtn { id: dMute; anchors.verticalCenter: parent.verticalCenter; au: detail.au }
                 }
 
                 // Ports on the surface (a real two- or three-way choice); profiles behind a picker,
@@ -268,7 +315,6 @@ Item {
                                  p => ({ label: p.label, key: p.name, on: p.active === true })) : []
                     onPicked: key => { if (detail.info) root.setProfile(detail.info.card, key) }
                 }
-                // A stream's channel: where it goes.
                 ChipPicker {
                     width: parent.width
                     visible: !!(detail.ch && !detail.isDev)
@@ -284,23 +330,7 @@ Item {
         }
     }
 
-    // ══ Parts ══════════════════════════════════════════════════════════════════════════════════
-
-    component MuteBtn: StyledRect {
-        property var au: null
-        readonly property bool muted: !!(au && au.muted)
-        width: 30; height: 24; radius: 12
-        color: muted ? Style.tint(Colors.fgUrgent, 0.28)
-             : mh.containsMouse ? Style.controlHover : Style.controlFill
-        Behavior on color { ColorAnimation { duration: 90 } }
-        Text { anchors.centerIn: parent; text: parent.muted ? "󰝟" : "󰕾"
-               color: parent.muted ? Colors.fgUrgent : Colors.fgPrimary
-               font.family: Style.font; font.pixelSize: 12 }
-        MouseArea { id: mh; anchors.fill: parent; hoverEnabled: true
-                    onClicked: if (parent.au) parent.au.muted = !parent.au.muted }
-    }
-
-    // One channel of the desk: LED meter, knob, name, kind.
+    // ══ One channel of the desk ════════════════════════════════════════════════════════════════
     component ChannelStrip: Item {
         id: cs
         property var ch: null
@@ -308,12 +338,11 @@ Item {
         readonly property var  au:    cs.node ? cs.node.audio : null
         readonly property bool muted: !!(cs.au && cs.au.muted)
         readonly property real vol:   cs.au ? Math.max(0, Math.min(1, cs.au.volume)) : 0
-        readonly property bool isSel: cs.node && ("" + cs.node.id) === (root.sel ? "" + root.sel.node.id : "")
+        readonly property bool isSel: cs.node && root.sel && cs.node === root.sel.node
         readonly property bool isDef: root.isDefault(cs.ch)
+        readonly property bool isApp: cs.ch && (cs.ch.kind === "APP" || cs.ch.kind === "REC")
 
-        width: 64; height: 210
-
-        // Live level, fast attack / slow decay — the way a meter reads as motion, not flicker.
+        // Live level — fast attack, decaying fall, the way a meter reads as motion not flicker.
         property real lvl: 0
         PwNodePeakMonitor { id: mon; node: cs.node; enabled: root.active }
         Connections {
@@ -321,136 +350,203 @@ Item {
             function onTickChanged() {
                 var ps = mon.peaks ?? [], p = 0
                 for (var i = 0; i < ps.length; i++) p = Math.max(p, Math.max(0, Math.min(1, ps[i])))
-                cs.lvl = p > cs.lvl ? p : cs.lvl * 0.86
+                cs.lvl = p > cs.lvl ? p : cs.lvl * 0.88
             }
         }
         property real shown: cs.vol
         onVolChanged: cs.shown = cs.vol
         Behavior on shown { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: .002 } }
 
+        // Selected: a lit bed, so the detail strip below is obviously about THIS channel.
         Rectangle {
+            anchors { fill: parent; margins: 3 }
+            radius: Style.rControl
+            color: cs.isSel ? Style.tint(Colors.bgActive, 0.20)
+                 : hov.containsMouse ? Style.tint(Colors.bgActive, 0.07) : "transparent"
+            Behavior on color { ColorAnimation { duration: 130 } }
+            Rectangle {
+                anchors { left: parent.left; right: parent.right; top: parent.top
+                          leftMargin: 10; rightMargin: 10 }
+                height: 2; radius: 1
+                color: Style.accent
+                opacity: cs.isSel ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: 130 } }
+            }
+        }
+        MouseArea {
+            id: hov
             anchors.fill: parent
-            anchors.margins: 1
-            radius: Style.rTile
-            color: cs.isSel ? Style.tint(Colors.bgActive, 0.16) : "transparent"
-            Behavior on color { ColorAnimation { duration: 110 } }
+            hoverEnabled: true
+            onClicked: root.selId = cs.node ? "" + cs.node.id : ""
         }
 
-        // ── LED meter
-        Column {
-            id: leds
-            anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 6 }
-            spacing: 2
-            readonly property int count: 16
-            Repeater {
-                model: leds.count
-                delegate: Rectangle {
-                    required property int index
-                    // Index 0 is the TOP lamp, so it stands for the loudest step.
-                    readonly property real step: (leds.count - index) / leds.count
-                    readonly property bool on:   cs.lvl >= step - 0.001
-                    width: 22; height: 4; radius: 2
-                    color: !on ? Style.tint(Colors.bgPrimary, 0.8)
-                         : step > 0.86 ? Colors.fgUrgent
-                         : step > 0.68 ? Style.tint(Colors.fgUrgent, 0.5)
-                                       : Colors.bgActive
-                    opacity: on ? 1.0 : 0.55
+        // ── Meter well: an inset trough with the lamps in it.
+        Rectangle {
+            id: well
+            anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 12 }
+            width: 40; height: 104
+            radius: 8
+            color: Qt.darker(Colors.bgPrimary, 1.35)
+            Rectangle {   // the inner lip that makes it read as sunken
+                anchors.fill: parent
+                radius: parent.radius
+                color: "transparent"
+                border.width: 1
+                border.color: Qt.rgba(0, 0, 0, 0.35)
+            }
+            Column {
+                anchors.centerIn: parent
+                spacing: 3
+                readonly property int count: 14
+                Repeater {
+                    model: 14
+                    delegate: Item {
+                        required property int index
+                        // Index 0 is the TOP lamp, so it stands for the loudest step.
+                        readonly property real step: (14 - index) / 14
+                        readonly property bool on:   cs.lvl >= step - 0.001
+                        readonly property color lamp: step > 0.86 ? Colors.fgUrgent
+                                                    : step > 0.66 ? Style.tint(Colors.fgUrgent, 0.55)
+                                                                  : Colors.bgActive
+                        width: 26; height: 4
+                        Rectangle {          // the glow a lit lamp casts
+                            anchors.centerIn: parent
+                            width: parent.width + 8; height: parent.height + 6; radius: 5
+                            color: parent.lamp
+                            opacity: parent.on ? 0.22 : 0
+                            Behavior on opacity { NumberAnimation { duration: 90 } }
+                        }
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 2
+                            color: parent.on ? parent.lamp : Qt.darker(Colors.bgPrimary, 1.1)
+                            opacity: parent.on ? 1 : 0.6
+                            Behavior on opacity { NumberAnimation { duration: 90 } }
+                        }
+                    }
                 }
             }
         }
 
-        // ── Knob
+        // ── Knob: a real cap with a ring around it and a notch on top.
         Item {
             id: knob
-            anchors { horizontalCenter: parent.horizontalCenter; top: leds.bottom; topMargin: 10 }
-            width: 46; height: 46
+            anchors { horizontalCenter: parent.horizontalCenter; top: well.bottom; topMargin: 14 }
+            width: 78; height: 78
             readonly property real a0: 135
             readonly property real sw: 270
+            readonly property real ang: (knob.a0 + knob.sw * cs.shown) * Math.PI / 180
 
             Shape {
                 anchors.fill: parent
                 preferredRendererType: Shape.CurveRenderer
                 ShapePath {
-                    strokeColor: Style.tint(Colors.bgPrimary, 0.8); strokeWidth: 5
+                    strokeColor: Qt.darker(Colors.bgPrimary, 1.3); strokeWidth: 6
                     fillColor: "transparent"; capStyle: ShapePath.RoundCap
-                    PathAngleArc { centerX: 23; centerY: 23; radiusX: 20; radiusY: 20
+                    PathAngleArc { centerX: 39; centerY: 39; radiusX: 35; radiusY: 35
                                    startAngle: knob.a0; sweepAngle: knob.sw }
                 }
                 ShapePath {
                     strokeColor: cs.muted ? Colors.fgMuted
                                : cs.vol > 0.9 ? Colors.fgUrgent
-                               : cs.ch && cs.ch.kind === "OUT" ? Colors.bgActive : Style.accent
-                    strokeWidth: 5; fillColor: "transparent"; capStyle: ShapePath.RoundCap
-                    PathAngleArc { centerX: 23; centerY: 23; radiusX: 20; radiusY: 20
+                               : cs.isApp ? Style.accent : Colors.bgActive
+                    strokeWidth: 6; fillColor: "transparent"; capStyle: ShapePath.RoundCap
+                    PathAngleArc { centerX: 39; centerY: 39; radiusX: 35; radiusY: 35
                                    startAngle: knob.a0; sweepAngle: knob.sw * cs.shown }
                 }
+            }
+            // The cap — two circles, the upper one lighter, so it reads as a turned dial rather
+            // than a hole in the plate.
+            Rectangle {
+                anchors.centerIn: parent
+                width: 56; height: 56; radius: 28
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: Style.tint(Colors.bgSecondary, 0.55) }
+                    GradientStop { position: 1.0; color: Qt.darker(Colors.bgPrimary, 1.15) }
+                }
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.06)
             }
             Text {
                 anchors.centerIn: parent
                 text: Math.round(cs.vol * 100) + ""
                 color: cs.muted ? Colors.fgMuted : Colors.fgBright
-                font.family: Style.font; font.pixelSize: 13; font.bold: true
+                font.family: Style.font; font.pixelSize: 18; font.bold: true
             }
-            // Pointer, so the knob reads as turned rather than merely filled.
+            // The notch, riding the cap's edge.
             Rectangle {
-                readonly property real ang: (knob.a0 + knob.sw * cs.shown) * Math.PI / 180
-                width: 2; height: 7; radius: 1
+                width: 3; height: 10; radius: 1
                 color: cs.muted ? Colors.fgMuted : Colors.fgBright
-                x: 23 + Math.cos(ang) * 15 - width / 2
-                y: 23 + Math.sin(ang) * 15 - height / 2
-                rotation: (knob.a0 + knob.sw * cs.shown) + 90
+                x: 39 + Math.cos(knob.ang) * 22 - width / 2
+                y: 39 + Math.sin(knob.ang) * 22 - height / 2
+                rotation: knob.a0 + knob.sw * cs.shown + 90
+                antialiasing: true
             }
 
             MouseArea {
                 anchors.fill: parent
-                anchors.margins: -5
                 property real y0: 0
                 property real v0: 0
                 onPressed: e => { y0 = e.y; v0 = cs.vol; root.selId = cs.node ? "" + cs.node.id : "" }
                 onPositionChanged: e => {
                     if (!pressed || !cs.au) return
                     cs.au.muted = false
-                    cs.au.volume = Math.max(0, Math.min(1, Math.round((v0 - (e.y - y0) / 120) * 20) / 20))
+                    cs.au.volume = Math.max(0, Math.min(1, Math.round((v0 - (e.y - y0) / 150) * 20) / 20))
                 }
                 onWheel: e => { if (cs.au) cs.au.volume =
                     Math.max(0, Math.min(1, cs.au.volume + (e.angleDelta.y > 0 ? .05 : -.05))) }
             }
         }
 
-        // ── Name + kind
+        // ── Foot: mute, name, kind.
         Column {
-            anchors { horizontalCenter: parent.horizontalCenter; top: knob.bottom; topMargin: 8 }
-            width: parent.width - 4
-            spacing: 3
-            IconImage {
-                anchors.horizontalCenter: parent.horizontalCenter
-                visible: cs.ch && (cs.ch.kind === "APP" || cs.ch.kind === "REC")
-                width: 16; height: 16; implicitSize: 16
-                source: visible ? root._appIcon(cs.node) : ""
-                opacity: cs.muted ? 0.45 : 1.0
-            }
-            Text {
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideRight
-                text: root._short(cs.ch)
-                color: cs.isSel ? Colors.fgBright : Colors.fgPrimary
-                font.family: Style.font; font.pixelSize: 10; font.bold: cs.isSel
-            }
-            Text {
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                text: cs.ch ? cs.ch.kind : ""
-                color: cs.isDef ? Style.accent : Colors.fgMuted
-                font.family: Style.font; font.pixelSize: 8; font.bold: cs.isDef; font.letterSpacing: 0.5
-            }
-        }
+            anchors { horizontalCenter: parent.horizontalCenter; top: knob.bottom; topMargin: 12 }
+            width: parent.width - 16
+            spacing: 5
 
-        // Selecting a channel is what fills the detail strip; the knob's own press does it too.
-        MouseArea {
-            anchors.fill: parent
-            z: -1
-            onClicked: root.selId = cs.node ? "" + cs.node.id : ""
+            StyledRect {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 44; height: 24; radius: 12
+                color: cs.muted ? Style.tint(Colors.fgUrgent, 0.30)
+                     : mh.containsMouse ? Style.controlHover : Style.controlFill
+                Behavior on color { ColorAnimation { duration: 90 } }
+                Text {
+                    anchors.centerIn: parent
+                    text: cs.muted ? "󰝟" : "󰕾"
+                    color: cs.muted ? Colors.fgUrgent : Colors.fgPrimary
+                    font.family: Style.font; font.pixelSize: 12
+                }
+                MouseArea { id: mh; anchors.fill: parent; hoverEnabled: true
+                            onClicked: if (cs.au) cs.au.muted = !cs.au.muted }
+            }
+
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 5
+                IconImage {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: cs.isApp
+                    width: 15; height: 15; implicitSize: 15
+                    source: cs.isApp ? root._appIcon(cs.node) : ""
+                    opacity: cs.muted ? 0.45 : 1.0
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.min(implicitWidth, cs.width - 40)
+                    elide: Text.ElideRight
+                    text: root._short(cs.ch)
+                    color: cs.isSel ? Colors.fgBright : Colors.fgPrimary
+                    font.family: Style.font; font.pixelSize: 11; font.bold: cs.isSel
+                }
+            }
+            Text {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                text: cs.isDef ? "DEFAULT" : (cs.ch ? cs.ch.kind : "")
+                color: cs.isDef ? Style.accent : Colors.fgMuted
+                font.family: Style.font; font.pixelSize: 8
+                font.bold: cs.isDef; font.letterSpacing: 1
+            }
         }
     }
 }
