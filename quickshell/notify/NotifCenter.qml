@@ -274,7 +274,7 @@ PanelWindow {
             Item {
                 id: header
                 anchors { top: parent.top; left: parent.left; right: parent.right; margins: 14 }
-                height: 28 + 6 + 34 + 8 + 16
+                height: 28 + 6 + 44 + 8 + 16
 
                 Text {
                     id: hTitle
@@ -316,7 +316,7 @@ PanelWindow {
                 Row {
                     id: nStats
                     anchors { left: parent.left; right: parent.right; top: hTitle.bottom; topMargin: 6 }
-                    height: 34
+                    height: 44
                     readonly property int cellW: Math.floor((width - 3 * 10) / 4)
                     spacing: 10
                     StatCell { width: nStats.cellW; value: root._count + ""; caption: "In history"

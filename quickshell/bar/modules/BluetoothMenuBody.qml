@@ -144,7 +144,7 @@ Column {
     Row {
         id: btStats
         width: parent.width
-        height: 34
+        height: 44
         readonly property int cellW: Math.floor((width - 3 * 10) / 4)
         spacing: 10
         StatCell {

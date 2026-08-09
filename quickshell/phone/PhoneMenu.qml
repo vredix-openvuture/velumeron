@@ -61,7 +61,7 @@ Flyout {
             id: phStats
             visible: PhoneService.available && PhoneService.devices.length > 0
             width: parent.width
-            height: 34
+            height: 44
             readonly property int cellW: Math.floor((width - 2 * 10) / 3)
             spacing: 10
             StatCell {
@@ -132,8 +132,8 @@ Flyout {
                 readonly property bool live: card.modelData.reachable && card.modelData.paired
                 readonly property var  bat:  card.modelData.battery ?? ({})
                 readonly property var  con:  card.modelData.connectivity ?? ({})
-                readonly property bool low:  card.bat.ok === true && card.bat.charge >= 0
-                                             && card.bat.charge <= 15 && !card.bat.charging
+                readonly property bool hasBat: card.bat.ok === true && card.bat.charge >= 0
+                readonly property bool low:  card.hasBat && card.bat.charge <= 15 && !card.bat.charging
 
                 interactive: true
                 active:  card.live
@@ -141,41 +141,46 @@ Flyout {
                 // A drop lands on whichever card the cursor is over.
                 onHoveredChanged: if (card.hovered && card.live) root.dropTarget = card.modelData.id
 
+                // ── Identity: the device's OWN icon, wearing its charge as the ring around it.
+                //    A bare percentage said nothing about what the thing IS; the glyph does, and it
+                //    is the same construction the bluetooth list uses, so a device reads the same
+                //    wherever you meet it.
                 Row {
                     width: parent.width
-                    spacing: 12
-
-                    // Charge as a ring — the same shape a volume puck uses, so a device and a
-                    // stream read as the same kind of thing across the two panels.
-                    ValueRing {
+                    spacing: 11
+                    Item {
+                        id: idn
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 46; height: 46
-                        visible: card.bat.ok === true && card.bat.charge >= 0
-                        value: Math.max(0, Math.min(1, (card.bat.charge ?? 0) / 100))
-                        halo:  card.bat.charging ? 0.55 : 0
-                        dim:   !card.live
-                        ringColor: card.low ? Colors.fgUrgent : Style.accent
+                        width: 44; height: 44
+                        ValueRing {
+                            anchors.fill: parent
+                            visible: card.hasBat
+                            value: Math.max(0, Math.min(1, (card.bat.charge ?? 0) / 100))
+                            halo:  card.bat.charging ? 0.55 : 0
+                            thickness: 3
+                            dim:   !card.live
+                            ringColor: card.low ? Colors.fgUrgent : Style.accent
+                        }
+                        // No battery plugin → the bare track, so the row never jumps.
+                        Rectangle {
+                            anchors.centerIn: parent
+                            visible: !card.hasBat
+                            width: 40; height: 40; radius: 20
+                            color: "transparent"
+                            border.width: 3
+                            border.color: Style.tint(Colors.bgElement, Style.lift(0.34))
+                        }
                         Text {
                             anchors.centerIn: parent
-                            text: card.bat.charge + ""
-                            color: card.low ? Colors.fgUrgent : Colors.fgBright
-                            font.family: Style.font; font.pixelSize: 13; font.bold: true
+                            text: PhoneService.icon(card.modelData)
+                            color: card.live ? Colors.fgBright : Colors.fgMuted
+                            font.family: Style.font; font.pixelSize: 19
                         }
                     }
-                    // No battery plugin → the device icon keeps the slot, so the row never jumps.
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: !(card.bat.ok === true && card.bat.charge >= 0)
-                        width: 46; horizontalAlignment: Text.AlignHCenter
-                        text: PhoneService.icon(card.modelData)
-                        color: card.live ? Style.accent : Colors.fgMuted
-                        font.family: Style.font; font.pixelSize: 22
-                    }
-
                     Column {
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Math.max(0, parent.width - 58 - sig.width - 12)
-                        spacing: 2
+                        width: Math.max(0, parent.width - idn.width - parent.spacing)
+                        spacing: 3
                         Text {
                             width: parent.width; elide: Text.ElideRight
                             text: card.modelData.name
@@ -186,26 +191,42 @@ Flyout {
                             spacing: 8
                             MetaTag {
                                 text: !card.modelData.paired ? "not paired"
-                                    : !card.modelData.reachable ? "offline"
-                                    : (card.con.ok && card.con.type !== "" ? card.con.type : "connected")
+                                    : !card.modelData.reachable ? "offline" : "connected"
                                 good: card.live
+                                warn: !card.live
                             }
                             MetaTag { text: card.bat.charging ? "charging" : ""; good: true }
                         }
                     }
+                }
 
-                    SignalArc {
-                        id: sig
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 30; height: 30
-                        visible: card.con.ok === true && card.con.strength >= 0
-                        value: Math.max(0, Math.min(1, (card.con.strength ?? 0) / 4))
-                        dim: !card.live
-                        arcColor: Style.accent
+                // ── The facts as two light cards, side by side. This is the half of the tile that
+                //    used to be nothing but air.
+                Row {
+                    id: facts
+                    width: parent.width
+                    spacing: 7
+                    readonly property int cellW: Math.floor((width - spacing) / 2)
+                    StatCell {
+                        width: facts.cellW
+                        glyph:   card.bat.charging ? "󰂄" : card.hasBat ? "󰁹" : ""
+                        value:   card.hasBat ? (card.bat.charge + "%") : "—"
+                        caption: card.bat.charging ? "Charging" : "Battery"
+                        warn: card.low
+                        good: card.bat.charging === true
+                        dim:  !card.hasBat
+                    }
+                    StatCell {
+                        width: facts.cellW
+                        glyph:   PhoneService.signalGlyph(card.con.strength)
+                        value:   card.con.ok === true && card.con.type !== "" ? card.con.type : "—"
+                        caption: "Cellular"
+                        good: card.con.ok === true && (card.con.strength ?? 0) >= 3
+                        dim:  card.con.ok !== true
                     }
                 }
 
-                Flow {
+                Row {
                     width: parent.width
                     spacing: 5
                     visible: card.live

@@ -25,7 +25,30 @@ Column {
         savedProc.running = false; savedProc.running = true
         scanProc.running  = false; scanProc.running  = true
         vpnProc.running   = false; vpnProc.running   = true
+        root.rescan()
     }
+
+    // ── Scanning, without you asking for it ────────────────────────────────────
+    // `dev wifi list --rescan auto` reuses NetworkManager's cache, and by the time a panel is
+    // opened that cache is minutes old — which is why the list only ever filled in after refresh
+    // was pressed by hand. So ask for a REAL scan on open and every 12 s while the panel stays
+    // open, then re-list a beat later: `dev wifi rescan` returns when the request is accepted,
+    // not when results are in, so listing immediately after it would read the same stale cache.
+    property bool wifiScanning: rescanProc.running || relist.running
+    function rescan() {
+        if (!root.wifiOn || rescanProc.running) return
+        rescanProc.running = false; rescanProc.running = true
+    }
+    Process {
+        id: rescanProc
+        // A rescan too soon after the last one is refused; that is not an error worth surfacing.
+        command: ["bash", "-c", "nmcli dev wifi rescan >/dev/null 2>&1 || true"]
+        onRunningChanged: if (!running) relist.restart()
+    }
+    Timer { id: relist; interval: 2500
+            onTriggered: { scanProc.running = false; scanProc.running = true } }
+    Timer { interval: 12000; repeat: true; running: root.active && root.wifiOn
+            onTriggered: root.rescan() }
 
     function _q(s) { return "'" + ("" + s).replace(/'/g, "'\\''") + "'" }
     function run(cmd, status) {
@@ -169,7 +192,7 @@ Column {
         Row {
             id: stats
             width: parent.width
-            height: 34
+            height: 44
             readonly property int cellW: Math.floor((width - 3 * 10) / 4)
             spacing: 10
             StatCell {
@@ -214,8 +237,10 @@ Column {
 
     MetaTag {
         text: root.busy !== "" ? root.busy
-            : root.ethStatus !== "" ? ("Ethernet on " + root.ethStatus)
-            : !root.wifiOn ? "Wi-Fi off" : ""
+            : !root.wifiOn ? (root.ethStatus !== "" ? ("Wi-Fi off · ethernet on " + root.ethStatus) : "Wi-Fi off")
+            : root.wifiScanning ? "scanning…"
+            : root.ethStatus !== "" ? ("Ethernet on " + root.ethStatus) : ""
+        good: root.wifiScanning && root.busy === ""
         warn: root.busy === "" && !root.wifiOn && root.ethStatus === ""
     }
 
