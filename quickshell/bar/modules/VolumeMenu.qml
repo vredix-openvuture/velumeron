@@ -10,8 +10,8 @@ import QtQuick
 Flyout {
     id: root
     flyoutId: "volume"
-    panelW:   660          // a desk: the meter bridge wants channels side by side
-    maxH:     560
+    panelW:   820          // a desk: the strips want room, and the knob is the control
+    maxH:     680
 
     Loader {
         active: root.visible

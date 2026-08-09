@@ -211,9 +211,11 @@ Item {
         StyledRect {
             id: face
             width: parent.width
-            height: 236
+            height: 314
             radius: Style.rCard
-            color:  Style.tint(Colors.bgPrimary, 0.55)
+            // The plate takes the panel's colour family, so the desk belongs to the bar it grew
+            // out of instead of sitting on it as a dark slab.
+            color:  Style.tint(Colors.bgSecondary, 0.42)
 
             // A plate, not a flat fill. The sheen is a clipped overlay rather than a gradient on
             // the surface itself: StyledRect is an Item wrapping a Loader (so it can be a Shape for
@@ -225,7 +227,9 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     gradient: Gradient {
-                        GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.05) }
+                        // The palette's bright tone, not pure white: a warm wallust scheme should
+                        // get a warm sheen, and #fff is the one colour that never belongs to it.
+                        GradientStop { position: 0.0; color: Style.tint(Colors.fgBright, 0.06) }
                         GradientStop { position: 0.55; color: "transparent" }
                     }
                 }
@@ -234,7 +238,7 @@ Item {
             readonly property int inner: face.width - 24
             readonly property int count: Math.max(1, root.channels.length)
             // Wide when there is room, never below a size you can aim at; past that it scrolls.
-            readonly property int stripW: Math.max(132, Math.min(210, Math.floor(face.inner / face.count)))
+            readonly property int stripW: Math.max(150, Math.min(260, Math.floor(face.inner / face.count)))
 
             Flickable {
                 anchors { fill: parent; margins: 12 }
@@ -270,7 +274,9 @@ Item {
                 anchors.fill: parent
                 radius: Style.rCard
                 visible: root.sheet !== null
-                color: Qt.rgba(0, 0, 0, 0.62)
+                // The panel's own colour at near-opacity, never a black scrim: the menu sits on
+                // a wallust-tinted surface and black reads as a hole punched through it.
+                color: Style.tint(Style.panelColor(VtlConfig.menuColorful), 0.94)
                 MouseArea { anchors.fill: parent; onClicked: root.sheet = null }
 
                 Column {
@@ -322,7 +328,7 @@ Item {
             width: parent.width
             height: 46
             radius: Style.rControl
-            color: Qt.darker(Colors.bgPrimary, 1.25)
+            color: Style.menuRowFill
             visible: root.sel !== null
 
             readonly property var  ch:    root.sel
@@ -526,9 +532,9 @@ Item {
         Item {
             id: knob
             visible: !cs.isOff
-            anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 28 }
-            width: 112; height: 112
-            readonly property real r:  56
+            anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 40 }
+            width: 148; height: 148
+            readonly property real r:  74
             readonly property real a0: 135
             readonly property real sw: 270
             readonly property real ang: (knob.a0 + knob.sw * cs.shown) * Math.PI / 180
@@ -537,37 +543,37 @@ Item {
                 anchors.fill: parent
                 preferredRendererType: Shape.CurveRenderer
                 ShapePath {
-                    strokeColor: Qt.darker(Colors.bgPrimary, 1.3); strokeWidth: 8
+                    strokeColor: Style.tint(Colors.bgPrimary, 0.75); strokeWidth: 10
                     fillColor: "transparent"; capStyle: ShapePath.RoundCap
-                    PathAngleArc { centerX: knob.r; centerY: knob.r; radiusX: 50; radiusY: 50
+                    PathAngleArc { centerX: knob.r; centerY: knob.r; radiusX: 67; radiusY: 67
                                    startAngle: knob.a0; sweepAngle: knob.sw }
                 }
                 ShapePath {
                     strokeColor: cs.muted ? Colors.fgMuted
                                : cs.vol > 0.9 ? Colors.fgUrgent
                                : cs.isApp ? Style.accent : Colors.bgActive
-                    strokeWidth: 8; fillColor: "transparent"; capStyle: ShapePath.RoundCap
+                    strokeWidth: 10; fillColor: "transparent"; capStyle: ShapePath.RoundCap
                     PathAngleArc { centerX: knob.r; centerY: knob.r; radiusX: 50; radiusY: 50
                                    startAngle: knob.a0; sweepAngle: knob.sw * cs.shown }
                 }
             }
             Rectangle {
                 anchors.centerIn: parent
-                width: 80; height: 80; radius: 40
+                width: 108; height: 108; radius: 54
                 gradient: Gradient {
                     GradientStop { position: 0.0; color: Style.tint(Colors.bgSecondary, 0.55) }
-                    GradientStop { position: 1.0; color: Qt.darker(Colors.bgPrimary, 1.15) }
+                    GradientStop { position: 1.0; color: Style.liftSolid(Colors.bgPrimary) }
                 }
-                border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.06)
+                border.width: Style.controlBorderW; border.color: Style.controlBorderColor
             }
 
             // A source channel wears its app's icon on the cap; tapping it is how you send it
             // somewhere else. A device channel shows its level instead — it has nowhere to go.
             IconImage {
                 anchors { horizontalCenter: parent.horizontalCenter; verticalCenter: parent.verticalCenter
-                          verticalCenterOffset: -8 }
+                          verticalCenterOffset: -11 }
                 visible: cs.isApp
-                width: 30; height: 30; implicitSize: 30
+                width: 40; height: 40; implicitSize: 40
                 source: cs.isApp ? root._appIcon(cs.node) : ""
                 opacity: cs.muted ? 0.45 : 1.0
             }
@@ -576,22 +582,22 @@ Item {
                 visible: !cs.isApp
                 text: Math.round(cs.vol * 100) + ""
                 color: cs.muted ? Colors.fgMuted : Colors.fgBright
-                font.family: Style.font; font.pixelSize: 22; font.bold: true
+                font.family: Style.font; font.pixelSize: 30; font.bold: true
             }
             Text {
                 anchors { horizontalCenter: parent.horizontalCenter; verticalCenter: parent.verticalCenter
-                          verticalCenterOffset: 16 }
+                          verticalCenterOffset: 22 }
                 visible: cs.isApp
                 text: Math.round(cs.vol * 100) + ""
                 color: cs.muted ? Colors.fgMuted : Colors.fgBright
-                font.family: Style.font; font.pixelSize: 15; font.bold: true
+                font.family: Style.font; font.pixelSize: 19; font.bold: true
             }
 
             Rectangle {
-                width: 3; height: 11; radius: 1
+                width: 4; height: 14; radius: 2
                 color: cs.muted ? Colors.fgMuted : Colors.fgBright
-                x: knob.r + Math.cos(knob.ang) * 32 - width / 2
-                y: knob.r + Math.sin(knob.ang) * 32 - height / 2
+                x: knob.r + Math.cos(knob.ang) * 44 - width / 2
+                y: knob.r + Math.sin(knob.ang) * 44 - height / 2
                 rotation: knob.a0 + knob.sw * cs.shown + 90
                 antialiasing: true
             }
@@ -636,17 +642,17 @@ Item {
             id: offFace
             visible: cs.isOff
             anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 11 }
-            width: 112; height: 168
+            width: 148; height: 204
             Rectangle {
                 anchors.centerIn: parent
-                width: 96; height: 96; radius: 48
-                color: Qt.darker(Colors.bgPrimary, 1.28)
-                border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.05)
+                width: 124; height: 124; radius: 62
+                color: Style.tint(Colors.bgPrimary, 0.7)
+                border.width: Style.controlBorderW; border.color: Style.controlBorderColor
                 Text {
                     anchors.centerIn: parent
                     text: "󰐥"
                     color: offHov.containsMouse ? Style.accent : Colors.fgMuted
-                    font.family: Style.font; font.pixelSize: 34
+                    font.family: Style.font; font.pixelSize: 44
                     Behavior on color { ColorAnimation { duration: 120 } }
                 }
                 MouseArea {
@@ -666,7 +672,7 @@ Item {
         // ── Foot
         Column {
             anchors { horizontalCenter: parent.horizontalCenter
-                      top: cs.isOff ? offFace.bottom : knob.bottom; topMargin: 14 }
+                      top: cs.isOff ? offFace.bottom : knob.bottom; topMargin: 16 }
             width: parent.width - 16
             spacing: 5
 
