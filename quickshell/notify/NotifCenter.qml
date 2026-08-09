@@ -274,7 +274,7 @@ PanelWindow {
             Item {
                 id: header
                 anchors { top: parent.top; left: parent.left; right: parent.right; margins: 14 }
-                height: 28 + 6 + 44 + 8 + 16
+                height: 28
 
                 Text {
                     id: hTitle
@@ -313,34 +313,43 @@ PanelWindow {
                     }
                 }
 
-                Row {
-                    id: nStats
-                    anchors { left: parent.left; right: parent.right; top: hTitle.bottom; topMargin: 6 }
-                    height: 44
-                    readonly property int cellW: Math.floor((width - 3 * 10) / 4)
-                    spacing: 10
-                    StatCell { width: nStats.cellW; value: root._count + ""; caption: "In history"
-                               dim: root._count === 0 }
-                    StatCell { width: nStats.cellW; value: root._apps + "";  caption: "Apps"
-                               dim: root._apps === 0 }
-                    StatCell { width: nStats.cellW; glyph: root._pins > 0 ? "󰐃" : ""
-                               value: root._pins + ""; caption: "Pinned"
-                               good: root._pins > 0; dim: root._pins === 0 }
-                    StatCell { width: nStats.cellW; glyph: NotifService.dnd ? "󰂛" : "󰂚"
-                               value: NotifService.dnd ? "On" : "Off"; caption: "Do not disturb"
-                               warn: NotifService.dnd; dim: !NotifService.dnd }
-                }
+            }
 
-                SectionRule {
-                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                    text: "History"
-                    trailing: NotifService.dnd ? "muted" : ""
-                }
+
+            Plate {
+                id: headPlate
+                // left+right anchors would fight Plate's own `width: parent.width` binding —
+                // an item cannot have both, and Qt resolves the conflict by looping.
+                anchors { top: header.bottom; left: parent.left; topMargin: 12; leftMargin: 14 }
+                width: Math.max(0, parent.width - 28)
+                label: "Übersicht"
+                value: NotifService.dnd ? "stummgeschaltet"
+                     : root._count === 0 ? "leer" : (root._apps + (root._apps === 1 ? " App" : " Apps"))
+                accent: !NotifService.dnd && root._count > 0
+                warn:   NotifService.dnd
+
+                Grid {
+                id: nStats
+                width: parent.width
+                columns: width >= 420 ? 4 : 2
+                spacing: 10
+                readonly property int cellW: Math.floor((width - (columns - 1) * spacing) / columns)
+                StatCell { width: nStats.cellW; value: root._count + ""; caption: "In history"
+                           dim: root._count === 0 }
+                StatCell { width: nStats.cellW; value: root._apps + "";  caption: "Apps"
+                           dim: root._apps === 0 }
+                StatCell { width: nStats.cellW; glyph: root._pins > 0 ? "󰐃" : ""
+                           value: root._pins + ""; caption: "Pinned"
+                           good: root._pins > 0; dim: root._pins === 0 }
+                StatCell { width: nStats.cellW; glyph: NotifService.dnd ? "󰂛" : "󰂚"
+                           value: NotifService.dnd ? "On" : "Off"; caption: "Do not disturb"
+                           warn: NotifService.dnd; dim: !NotifService.dnd }
+            }
             }
 
             // History list (shared component, honours the grouping setting).
             NotifList {
-                anchors { top: header.bottom; topMargin: 8; left: parent.left; right: parent.right
+                anchors { top: headPlate.bottom; topMargin: 12; left: parent.left; right: parent.right
                           bottom: parent.bottom; leftMargin: 12; rightMargin: 12; bottomMargin: 12 }
             }
         }

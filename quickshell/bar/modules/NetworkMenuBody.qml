@@ -9,7 +9,8 @@ import Quickshell.Io
 Column {
     id: root
     property bool active: false
-    spacing: 8
+    // Plates want air between them; 8 made three surfaces look like one striped one.
+    spacing: 13
 
     property bool   wifiOn:    true
     property string ethStatus: ""
@@ -177,6 +178,7 @@ Column {
         if (b >= 1024)    return Math.round(b / 1024) + " kB/s"
         return Math.max(0, Math.round(b)) + " B/s"
     }
+    readonly property bool wired: root.ethStatus !== ""
     readonly property var _cur: {
         for (var i = 0; i < root.nets.length; i++) if (root.nets[i].active) return root.nets[i]
         return null
@@ -208,9 +210,14 @@ Column {
         }
     }
 
-    Item {
-        width: parent.width
-        height: stats.height + spark.height + 8
+    Plate {
+        label: root.wired ? "Verbindung" : "Wi-Fi"
+        value: root.busy !== "" ? root.busy
+             : root.ethStatus !== "" ? ("Ethernet · " + root.ethStatus)
+             : !root.wifiOn ? "aus"
+             : root.wifiScanning ? "sucht…" : (root._cur ? root._cur.ssid : "nicht verbunden")
+        accent: root.wired || root._cur !== null
+        warn:   !root.wifiOn && root.ethStatus === ""
 
         // A Grid, not a Row: on a narrow panel four readings side by side each get a third of the
         // room a rate needs and every one of them elides. Two rows of two is the same information
@@ -253,7 +260,7 @@ Column {
         // readout rather than four numbers in a row.
         Item {
             id: spark
-            anchors { left: parent.left; right: parent.right; top: stats.bottom; topMargin: 8 }
+            width: parent.width
             height: 34
             Sparkline { anchors.fill: parent; values: root._rxN; lineColor: Style.accent }
             Sparkline { anchors.fill: parent; values: root._txN; lineColor: Colors.bgActive
@@ -261,20 +268,15 @@ Column {
         }
     }
 
-    MetaTag {
-        text: root.busy !== "" ? root.busy
-            : !root.wifiOn ? (root.ethStatus !== "" ? ("Wi-Fi off · ethernet on " + root.ethStatus) : "Wi-Fi off")
-            : root.wifiScanning ? "scanning…"
-            : root.ethStatus !== "" ? ("Ethernet on " + root.ethStatus) : ""
-        good: root.wifiScanning && root.busy === ""
-        warn: root.busy === "" && !root.wifiOn && root.ethStatus === ""
-    }
-
     // ── Wi-Fi networks ──────────────────────────────────────────────────────
-    Column {
+    Plate {
         visible: root.wifiOn
-        width: parent.width; spacing: 3
-        SectionRule { text: "Networks"; trailing: root.nets.length + "" }
+        label: "Netzwerke"
+        // The section's own reading: how many are in reach, and how good the best of them is.
+        value: root.nets.length === 0 ? (root.wifiScanning ? "sucht…" : "keins")
+             : (root.nets.length + " · " + Math.max.apply(null, root.nets.map(function (n) { return n.signal })) + "%")
+        accent: root.nets.length > 0
+        gap: 3
         Repeater {
             model: root.nets
             delegate: Column {
@@ -363,13 +365,13 @@ Column {
     }
 
     // ── VPN ─────────────────────────────────────────────────────────────────
-    Column {
+    Plate {
         visible: root.vpns.length > 0
-        width: parent.width; spacing: 3
-        SectionRule {
-            text: "VPN"
-            trailing: root.vpns.filter(function (v) { return v.active }).length + " up"
-        }
+        label: "VPN"
+        readonly property int upCount: root.vpns.filter(function (v) { return v.active }).length
+        value: upCount > 0 ? (upCount + " aktiv") : ("0 von " + root.vpns.length)
+        accent: upCount > 0
+        gap: 3
         Repeater {
             model: root.vpns
             delegate: StyledRect {

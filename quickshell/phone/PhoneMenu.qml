@@ -382,15 +382,16 @@ Flyout {
         }
 
         // ══ The other devices — one line each, there to be promoted ═══════════════════════════
-        SectionRule {
+        Plate {
             visible: root.others.length > 0
-            height:  visible ? 16 : 0
-            text: "Other devices"
-            trailing: "drop files to send"
-        }
-        Repeater {
+            label: "Weitere Geräte"
+            value: PhoneService.reachable.length + " von " + PhoneService.devices.length + " erreichbar"
+            accent: PhoneService.reachable.length > 1
+            pad: Math.round(root.uGap * 1.1)
+            gap: Math.round(root.uGap * 0.5)
+            Repeater {
             model: root.others
-            delegate: StyledRect {
+                delegate: StyledRect {
                 id: orow
                 required property var modelData
                 readonly property bool live:   orow.modelData.reachable && orow.modelData.paired
@@ -460,6 +461,7 @@ Flyout {
                     onPick: PhoneService.setMain(orow.modelData.id)
                 }
             }
+        }
         }
     }
 

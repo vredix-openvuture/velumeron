@@ -9,7 +9,8 @@ import Quickshell.Io
 Column {
     id: root
     property bool active: false
-    spacing: 8
+    // Plates want air between them.
+    spacing: 13
 
     property bool   powered: true
     property var    devices: []          // [{ mac, name, icon, connected, paired }]
@@ -164,12 +165,23 @@ Column {
                  on: root.powered; onToggled: root.run("bluetoothctl power " + (root.powered ? "off" : "on"), "") }
     }
 
-    Row {
-        id: btStats
-        width: parent.width
-        height: 44
-        readonly property int cellW: Math.floor((width - 3 * 10) / 4)
-        spacing: 10
+    Plate {
+        label: "Adapter"
+        value: root.busy !== "" ? root.busy
+             : root.scanning ? "sucht…"
+             : !root.powered ? "aus"
+             : root._connected.length > 0 ? (root._connected.length + " in Benutzung") : "bereit"
+        accent: root.powered && (root._connected.length > 0 || root.scanning)
+        warn:   !root.powered
+
+        // A Grid, not a Row: four readings across a narrow panel each get a quarter of the room a
+        // word needs, and every one of them elides.
+        Grid {
+            id: btStats
+            width: parent.width
+            columns: width >= 380 ? 4 : 2
+            spacing: 10
+            readonly property int cellW: Math.floor((width - (columns - 1) * spacing) / columns)
         StatCell {
             width: btStats.cellW
             glyph: root.powered ? "󰂯" : "󰂲"
@@ -193,25 +205,18 @@ Column {
             warn: root._lowBat >= 0 && root._lowBat <= 15
             dim:  root._lowBat < 0
         }
-    }
-
-    MetaTag {
-        text: root.busy !== "" ? root.busy : root.scanning ? Wording.s("bt.scanning") : ""
-        good: root.scanning && root.busy === ""
+        }
     }
 
     // ── What is actually in use, as the subject of the panel ───────────────────
-    Column {
+    Plate {
         visible: root.mode === "known" && root.powered
-        width: parent.width
-        spacing: root.uGap
-
-        SectionRule {
-            visible: root._connected.length > 0
-            height:  visible ? 16 : 0
-            text: "In use"
-            trailing: root._connected.length > 1 ? (root._connected.length + "") : ""
-        }
+        label: "In Benutzung"
+        value: root._connected.length === 0 ? "nichts verbunden"
+             : root._lowBat >= 0 ? (root._lowBat + "% Akku") : (root._connected.length + "")
+        accent: root._connected.length > 0
+        warn:   root._lowBat >= 0 && root._lowBat <= 15
+        gap: root.uGap
         Repeater {
             model: root._connected
             delegate: DataTile {
@@ -291,21 +296,19 @@ Column {
         Text {
             visible: root._connected.length === 0
             width: parent.width
-            text: "Nothing connected"
-            color: Colors.fgMuted; font.pixelSize: 12; font.family: Style.font
+            text: "Tippe ein gekoppeltes Gerät an, um es zu verbinden."
+            color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
+            wrapMode: Text.WordWrap
         }
     }
 
     // ── Known devices (bucketed by group, each bucket fronted by a named divider) ──────────
-    Column {
+    Plate {
         visible: root.mode === "known"
-        width: parent.width; spacing: 3
-        SectionRule {
-            visible: root._grouped.length > 0
-            height:  visible ? 16 : 0
-            text: "Paired"
-            trailing: root._paired.length + ""
-        }
+        label: "Gekoppelt"
+        value: root._paired.length + (root._connected.length > 0
+                                      ? (" · " + root._connected.length + " verbunden") : "")
+        gap: 3
         Repeater {
             model: root._grouped
             delegate: Column {
