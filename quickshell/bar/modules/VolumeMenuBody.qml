@@ -68,13 +68,32 @@ Item {
     }
     Component.onCompleted: root.allChannels = root._raw
 
+    // Cards that are switched off entirely. They have NO PipeWire node — a card on profile `off`
+    // simply isn't in the graph — so they can only come from the script, and without them the tab
+    // showed nothing at all while every card here sat on `off` and PipeWire was down to auto_null.
+    readonly property var offChannels: {
+        var out = [], m = root._devInfo
+        for (var k in m) {
+            var d = m[k]
+            if (!d || d.off !== true) continue
+            if (root.tab === "out" && d.kind !== "sink")   continue
+            if (root.tab === "in"  && d.kind !== "source") continue
+            if (root.tab === "src") continue
+            out.push({ node: null, kind: root.tab === "out" ? "OUT" : "IN", off: true, dev: d })
+        }
+        return out
+    }
     readonly property var channels: root.allChannels.filter(
         c => root.tab === "out" ? c.kind === "OUT"
            : root.tab === "in"  ? c.kind === "IN"
-                                : (c.kind === "APP" || c.kind === "REC"))
+                                : (c.kind === "APP" || c.kind === "REC")).concat(root.offChannels)
 
-    // The source whose "send to" sheet is open, or null.
-    property var routeFor: null
+    // A generic chooser that takes over the plate: { title, options:[{label,key,on}], act(key) }.
+    // Everything that used to stack pickers under the desk goes through this instead — device
+    // names need the full width, and a column of unfolding rows is what made the foot look like a
+    // settings form bolted onto a console.
+    property var sheet: null
+    function openSheet(title, options, act) { root.sheet = { title: title, options: options, act: act } }
     property string selId: ""
     readonly property var sel: {
         var c = root.channels
@@ -177,7 +196,7 @@ Item {
             segments: [{ label: "Output "  + root._sinks().length,   key: "out" },
                        { label: "Input "   + root._sources().length, key: "in" },
                        { label: "Sources " + root._streams().length, key: "src" }]
-            onPicked: key => { root.tab = key; root.selId = ""; root.routeFor = null }
+            onPicked: key => { root.tab = key; root.selId = ""; root.sheet = null }
         }
 
         // ── The face plate: strips side by side, as wide as the room allows.
@@ -236,53 +255,50 @@ Item {
                 color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 12
             }
 
-            // Tapping a source's knob asks where it should play. It takes over the plate rather
-            // than unfolding inside a 200px strip, which is the only place with room to read
-            // device names.
+            // Whatever chooser is open takes over the plate. Nothing unfolds inside a 200px
+            // strip — device names are too long to read there, and stacking pickers under the desk
+            // is what made the foot look like a form.
             Rectangle {
                 anchors.fill: parent
                 radius: Style.rCard
-                visible: root.routeFor !== null
-                color: Qt.rgba(0, 0, 0, 0.55)
-                MouseArea { anchors.fill: parent; onClicked: root.routeFor = null }
+                visible: root.sheet !== null
+                color: Qt.rgba(0, 0, 0, 0.62)
+                MouseArea { anchors.fill: parent; onClicked: root.sheet = null }
 
                 Column {
                     anchors { left: parent.left; right: parent.right; top: parent.top
-                              leftMargin: 18; rightMargin: 18; topMargin: 16 }
-                    spacing: 7
+                              leftMargin: 18; rightMargin: 18; topMargin: 15 }
+                    spacing: 6
                     Text {
                         width: parent.width; elide: Text.ElideRight
-                        text: "Send " + (root.routeFor ? ("" + root.routeFor.name) : "") + " to"
+                        text: root.sheet ? ("" + root.sheet.title) : ""
                         color: Colors.fgBright
                         font.family: Style.font; font.pixelSize: 13; font.bold: true
                     }
                     Repeater {
-                        model: root.routeFor === null ? []
-                             : (root.routeFor.isSink ? root._sinks() : root._sources())
+                        model: root.sheet ? root.sheet.options : []
                         delegate: StyledRect {
-                            id: tgt
+                            id: opt
                             required property var modelData
-                            readonly property bool on: root.routeFor
-                                                       && tgt.modelData.name === root._devOf(root.routeFor)
-                            width: parent.width; height: 34
+                            width: parent.width; height: 32
                             radius: Style.rControl
-                            color: tgt.on ? Style.tint(Colors.bgActive, 0.34)
-                                 : th.containsMouse ? Style.controlHover : Style.menuRowFill
+                            color: opt.modelData.on ? Style.tint(Colors.bgActive, 0.34)
+                                 : oh.containsMouse ? Style.controlHover : Style.menuRowFill
                             Behavior on color { ColorAnimation { duration: 90 } }
                             Text {
                                 anchors { left: parent.left; leftMargin: 12; right: parent.right
                                           rightMargin: 12; verticalCenter: parent.verticalCenter }
                                 elide: Text.ElideRight
-                                text: (tgt.on ? "󰄬  " : "") + root._label(tgt.modelData)
-                                color: tgt.on ? Colors.fgBright : Colors.fgPrimary
+                                text: (opt.modelData.on ? "󰄬  " : "") + opt.modelData.label
+                                color: opt.modelData.on ? Colors.fgBright : Colors.fgPrimary
                                 font.family: Style.font; font.pixelSize: 12
                             }
                             MouseArea {
-                                id: th
+                                id: oh
                                 anchors.fill: parent; hoverEnabled: true
                                 onClicked: {
-                                    root.moveStream(root.routeFor, tgt.modelData.name)
-                                    root.routeFor = null
+                                    if (root.sheet && root.sheet.act) root.sheet.act("" + opt.modelData.key)
+                                    root.sheet = null
                                 }
                             }
                         }
@@ -291,101 +307,108 @@ Item {
             }
         }
 
-        // ── The selected channel, in full — one strip instead of a card per channel.
+        // ── Patch bay: one line under the plate. Name and facts on the left, actions on the
+        //    right, and every chooser opens as a sheet over the plate instead of unfolding here —
+        //    a column of expanding pickers is what made this look like a form bolted to a console.
         StyledRect {
             width: parent.width
-            height: detail.implicitHeight + 24
-            radius: Style.rCard
-            color: Style.menuRowFill
+            height: 46
+            radius: Style.rControl
+            color: Qt.darker(Colors.bgPrimary, 1.25)
             visible: root.sel !== null
 
-            Column {
-                id: detail
-                anchors { left: parent.left; right: parent.right; top: parent.top
-                          leftMargin: 14; rightMargin: 14; topMargin: 12 }
-                spacing: 8
+            readonly property var  ch:    root.sel
+            readonly property var  node:  bay.ch ? bay.ch.node : null
+            readonly property bool isDev: bay.ch && (bay.ch.kind === "OUT" || bay.ch.kind === "IN")
+            readonly property bool isOff: !!(bay.ch && bay.ch.off)
+            readonly property var  info:  bay.isOff ? bay.ch.dev : root._dev(bay.node)
+            id: bay
 
-                readonly property var  ch:    root.sel
-                readonly property var  node:  detail.ch ? detail.ch.node : null
-                readonly property var  au:    detail.node ? detail.node.audio : null
-                readonly property bool isDev: detail.ch && (detail.ch.kind === "OUT" || detail.ch.kind === "IN")
-                readonly property var  info:  root._dev(detail.node)
-
-                Row {
-                    width: parent.width
-                    spacing: 10
-                    IconImage {
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: !detail.isDev
-                        width: 24; height: 24; implicitSize: 24
-                        source: detail.isDev ? "" : root._appIcon(detail.node)
+            Row {
+                anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter
+                          right: bayActs.left; rightMargin: 10 }
+                spacing: 9
+                IconImage {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: !bay.isDev
+                    width: 20; height: 20; implicitSize: 20
+                    source: bay.isDev ? "" : root._appIcon(bay.node)
+                }
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.max(0, parent.width - (bay.isDev ? 0 : 29))
+                    spacing: 1
+                    Text {
+                        width: parent.width; elide: Text.ElideRight
+                        text: bay.isOff ? ("" + (bay.info ? bay.info.label : ""))
+                            : bay.isDev ? root._label(bay.node)
+                                        : ("" + (bay.node ? bay.node.name : ""))
+                        color: Colors.fgBright
+                        font.family: Style.font; font.pixelSize: 13; font.bold: true
                     }
-                    Column {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Math.max(0, parent.width - (detail.isDev ? 0 : 34) - 12)
-                        spacing: 3
-                        Text {
-                            width: parent.width; elide: Text.ElideRight
-                            text: detail.isDev ? root._label(detail.node)
-                                               : ("" + (detail.node ? detail.node.name : ""))
-                            color: Colors.fgBright
-                            font.family: Style.font; font.pixelSize: 15; font.bold: true
-                        }
-                        Row {
-                            spacing: 9
-                            MetaTag { text: detail.info ? ("" + (detail.info.format ?? "")) : "" }
-                            MetaTag { text: detail.info ? ("" + (detail.info.codec ?? "")) : ""; good: true }
-                            MetaTag { text: root.isDefault(detail.ch) ? "default" : ""; good: true }
-                            MetaTag { text: detail.isDev ? "" : root._deviceLabelFor(root._devOf(detail.node)) }
-                            MetaTag { text: detail.isDev ? "" : root._media(detail.node) }
-                        }
+                    Row {
+                        spacing: 9
+                        MetaTag { text: bay.isOff ? "switched off" : ""; warn: true }
+                        MetaTag { text: bay.info && !bay.isOff ? ("" + (bay.info.format ?? "")) : "" }
+                        MetaTag { text: bay.info && !bay.isOff ? ("" + (bay.info.codec ?? "")) : ""; good: true }
+                        MetaTag { text: root.isDefault(bay.ch) ? "default" : ""; good: true }
+                        MetaTag { text: bay.isDev ? "" : root._media(bay.node) }
                     }
                 }
+            }
 
-                // Ports on the surface (a real two- or three-way choice); profiles behind a picker,
-                // because one card here offers thirteen and a row of chips buried the panel.
-                Flow {
-                    width: parent.width
-                    spacing: 5
-                    visible: detail.isDev
-                    Repeater {
-                        model: (detail.info && detail.info.ports && detail.info.ports.length > 1)
-                               ? detail.info.ports : []
-                        delegate: DataChip {
-                            required property var modelData
-                            label: modelData.label; on: modelData.active === true
-                            onTap: if (detail.node) root.setPort(detail.node.name, modelData.name)
-                        }
-                    }
-                    DataChip {
-                        visible: detail.isDev && !root.isDefault(detail.ch)
-                        label: "Make default"
-                        onTap: if (detail.node) root.setDefault(detail.ch.kind, detail.node.name)
-                    }
+            Row {
+                id: bayActs
+                anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                spacing: 5
+
+                DataChip {
+                    visible: bay.isOff
+                    label: "Switch on"; on: true
+                    onTap: root.openSheet("Switch on " + (bay.info ? bay.info.label : ""),
+                        (bay.info && bay.info.profiles) ? bay.info.profiles.map(
+                            pr => ({ label: pr.label, key: pr.name, on: false })) : [],
+                        key => { if (bay.info) root.setProfile(bay.info.card, key) })
                 }
-                ChipPicker {
-                    width: parent.width
-                    visible: !!(detail.isDev && detail.info && detail.info.profiles
-                                && detail.info.profiles.length > 1)
-                    options: (detail.info && detail.info.profiles) ? detail.info.profiles.map(
-                                 p => ({ label: p.label, key: p.name, on: p.active === true })) : []
-                    onPicked: key => { if (detail.info) root.setProfile(detail.info.card, key) }
-                }
-                ChipPicker {
-                    width: parent.width
-                    visible: !!(detail.ch && !detail.isDev)
-                    options: {
-                        if (!detail.node) return []
-                        var t = detail.node.isSink ? root._sinks() : root._sources()
-                        var cur = root._devOf(detail.node)
-                        return t.map(d => ({ label: root._label(d), key: d.name, on: d.name === cur }))
+                DataChip {
+                    visible: !bay.isOff && bay.isDev
+                            && !!(bay.info && bay.info.ports && bay.info.ports.length > 1)
+                    label: {
+                        if (!bay.info || !bay.info.ports) return "Port"
+                        for (var i = 0; i < bay.info.ports.length; i++)
+                            if (bay.info.ports[i].active) return "" + bay.info.ports[i].label
+                        return "Port"
                     }
-                    onPicked: key => root.moveStream(detail.node, key)
+                    trailing: "󰅀"
+                    onTap: root.openSheet("Port", bay.info.ports.map(
+                            pt => ({ label: pt.label, key: pt.name, on: pt.active === true })),
+                        key => { if (bay.node) root.setPort(bay.node.name, key) })
+                }
+                DataChip {
+                    visible: !bay.isOff && bay.isDev
+                            && !!(bay.info && bay.info.profiles && bay.info.profiles.length > 1)
+                    label: "Profile"; trailing: "󰅀"; ghost: true
+                    onTap: root.openSheet("Profile", bay.info.profiles.map(
+                            pr => ({ label: pr.label, key: pr.name, on: pr.active === true })),
+                        key => { if (bay.info) root.setProfile(bay.info.card, key) })
+                }
+                DataChip {
+                    visible: !bay.isOff && !bay.isDev
+                    label: "Send to"; trailing: "󰅀"
+                    onTap: root.openSheet("Send " + bay.node.name + " to",
+                        (bay.node.isSink ? root._sinks() : root._sources()).map(
+                            d => ({ label: root._label(d), key: d.name,
+                                    on: d.name === root._devOf(bay.node) })),
+                        key => root.moveStream(bay.node, key))
+                }
+                DataChip {
+                    visible: !bay.isOff && bay.isDev && !root.isDefault(bay.ch)
+                    label: "Make default"; ghost: true
+                    onTap: if (bay.node) root.setDefault(bay.ch.kind, bay.node.name)
                 }
             }
         }
     }
-
 
     // ══ One channel of the desk ════════════════════════════════════════════════════════════════
     //
@@ -404,9 +427,12 @@ Item {
         readonly property bool isSel: cs.node && root.sel && cs.node === root.sel.node
         readonly property bool isDef: root.isDefault(cs.ch)
         readonly property bool isApp: cs.ch && (cs.ch.kind === "APP" || cs.ch.kind === "REC")
+        // A card on profile `off` has no node at all — nothing to meter, nothing to turn. It is
+        // here so it can be switched back on, which is the only thing it can do.
+        readonly property bool isOff: !!(cs.ch && cs.ch.off)
 
         property real lvl: 0
-        PwNodePeakMonitor { id: mon; node: cs.node; enabled: root.active }
+        PwNodePeakMonitor { id: mon; node: cs.node; enabled: root.active && !cs.isOff }
         Connections {
             target: root
             function onTickChanged() {
@@ -449,6 +475,7 @@ Item {
         // ── Meter well
         Rectangle {
             id: well
+            visible: !cs.isOff
             anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 11 }
             width: 38; height: 78
             radius: 8
@@ -491,6 +518,7 @@ Item {
         // ── Knob
         Item {
             id: knob
+            visible: !cs.isOff
             anchors { horizontalCenter: parent.horizontalCenter; top: well.bottom; topMargin: 14 }
             width: 112; height: 112
             readonly property real r:  56
@@ -583,7 +611,12 @@ Item {
                 }
                 onReleased: {
                     cs.dragging = false
-                    if (!moved && cs.isApp) root.routeFor = cs.node
+                    if (!moved && cs.isApp) root.openSheet(
+                        "Send " + cs.node.name + " to",
+                        (cs.node.isSink ? root._sinks() : root._sources()).map(
+                            d => ({ label: root._label(d), key: d.name,
+                                    on: d.name === root._devOf(cs.node) })),
+                        key => root.moveStream(cs.node, key))
                 }
                 onCanceled: cs.dragging = false
                 onWheel: e => { if (cs.au) cs.au.volume =
@@ -591,13 +624,47 @@ Item {
             }
         }
 
+        // ── An off card wears a power symbol where the knob would be.
+        Item {
+            id: offFace
+            visible: cs.isOff
+            anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 11 }
+            width: 112; height: 204
+            Rectangle {
+                anchors.centerIn: parent
+                width: 96; height: 96; radius: 48
+                color: Qt.darker(Colors.bgPrimary, 1.28)
+                border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.05)
+                Text {
+                    anchors.centerIn: parent
+                    text: "󰐥"
+                    color: offHov.containsMouse ? Style.accent : Colors.fgMuted
+                    font.family: Style.font; font.pixelSize: 34
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                }
+                MouseArea {
+                    id: offHov
+                    anchors.fill: parent; hoverEnabled: true
+                    onClicked: {
+                        root.selId = ""
+                        var d = cs.ch.dev
+                        root.openSheet("Switch on " + d.label,
+                            (d.profiles ?? []).map(pr => ({ label: pr.label, key: pr.name, on: false })),
+                            key => root.setProfile(d.card, key))
+                    }
+                }
+            }
+        }
+
         // ── Foot
         Column {
-            anchors { horizontalCenter: parent.horizontalCenter; top: knob.bottom; topMargin: 10 }
+            anchors { horizontalCenter: parent.horizontalCenter
+                      top: cs.isOff ? offFace.bottom : knob.bottom; topMargin: 10 }
             width: parent.width - 16
             spacing: 5
 
             StyledRect {
+                visible: !cs.isOff
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: 46; height: 24; radius: 12
                 color: cs.muted ? Style.tint(Colors.fgUrgent, 0.30)
@@ -616,7 +683,7 @@ Item {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideRight
-                text: root._short(cs.ch)
+                text: cs.isOff ? ("" + (cs.ch.dev ? cs.ch.dev.label : "")) : root._short(cs.ch)
                 color: cs.isSel ? Colors.fgBright : Colors.fgPrimary
                 font.family: Style.font; font.pixelSize: 11; font.bold: cs.isSel
             }
@@ -624,10 +691,11 @@ Item {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideRight
-                text: cs.isDef ? "DEFAULT"
+                text: cs.isOff ? "OFF"
+                    : cs.isDef ? "DEFAULT"
                     : cs.isApp ? "󰓃 " + root._deviceLabelFor(root._devOf(cs.node))
                                : (cs.ch ? cs.ch.kind : "")
-                color: cs.isDef ? Style.accent : Colors.fgMuted
+                color: cs.isOff ? Colors.fgUrgent : cs.isDef ? Style.accent : Colors.fgMuted
                 font.family: Style.font; font.pixelSize: 8
                 font.bold: cs.isDef; font.letterSpacing: cs.isApp ? 0 : 1
             }

@@ -112,20 +112,60 @@ def _cards():
                     continue
                 items.append({"name": pname,
                               "label": p.get("description") or pname,
-                              "active": pname == active})
+                              "active": pname == active,
+                              "sinks": p.get("sinks", 0),
+                              "sources": p.get("sources", 0)})
         # A card's own name carries the device id its sinks/sources also carry:
         #   alsa_card.pci-0000_00_1f.3   ↔ alsa_output.pci-0000_00_1f.3.analog-stereo
         #   bluez_card.E8_EE_CC_F9_58_8D ↔ bluez_output.E8_EE_CC_F9_58_8D.1
         # pactl reports NO card field on a sink (checked: it is null), and the properties name the
         # ALSA card but never the pulse card, so the shared id is the only reliable link.
-        out[name] = {"profiles": items, "activeProfile": active,
-                     "key": name.split(".", 1)[1] if "." in name else name}
+        props = c.get("properties") or {}
+        out[name] = {
+            "profiles": items, "activeProfile": active,
+            "label": props.get("device.description") or props.get("api.bluez5.alias")
+                     or props.get("alsa.card_name") or name,
+            "key": name.split(".", 1)[1] if "." in name else name,
+        }
+    return out
+
+
+def _off_devices(cards, live_names):
+    """Cards that could give you an output (or an input) but currently give none.
+
+    A card on profile `off` has NO node in PipeWire at all, so Quickshell cannot see it and neither
+    could the desk — the outputs simply were not there. Checked on this machine with all three cards
+    off: PipeWire was down to the `auto_null` dummy. These are emitted as devices with off=true and
+    no ports, carrying the profiles that would switch them back on.
+    """
+    out = []
+    for cname, cd in cards.items():
+        key = cd["key"]
+        if any(key and key in n for n in live_names):
+            continue                                  # this card already provides a node
+        for kind, want in (("sink", "sinks"), ("source", "sources")):
+            usable = [p for p in cd["profiles"] if p.get(want, 0) > 0]
+            if not usable:
+                continue
+            out.append({
+                "kind":     kind,
+                "name":     cname,                    # a card name, not a node name
+                "label":    cd["label"] or cname,
+                "format":   "",
+                "codec":    "",
+                "ports":    [],
+                "card":     cname,
+                "profiles": usable,
+                "monitor":  False,
+                "off":      True,
+            })
     return out
 
 
 def devices():
     """Everything about a sink/source that Quickshell does NOT expose: its ports, its card's
-    profiles, the negotiated format and (on Bluetooth) the codec."""
+    profiles, the negotiated format and (on Bluetooth) the codec — plus the cards that are switched
+    off entirely and therefore have no node to expose anything about."""
     cards = _cards()
     out = []
     for kind, what in (("sink", "sinks"), ("source", "sources")):
@@ -150,7 +190,10 @@ def devices():
                 "card":     card_name,
                 "profiles": (cards.get(card_name) or {}).get("profiles", []),
                 "monitor":  dname.endswith(".monitor"),
+                "off":      False,
             })
+    live = [d["name"] for d in out]
+    out += _off_devices(cards, live)
     return out
 
 
