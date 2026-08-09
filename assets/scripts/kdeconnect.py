@@ -13,7 +13,7 @@ Commands:
   list                          {available, devices:[{id,name,type,reachable,paired,
                                                       battery{charge,charging,ok},
                                                       connectivity{type,strength,ok},
-                                                      media{…}, notifs{…}, plugins}]}
+                                                      media{…}, plugins}]}
   share <id> <path…>            send files (AirDrop-style; paths become file:// urls)
   share-text <id> <text>        send text / a link to the device's clipboard-share
   ring <id>                     make it ring (findmyphone)
@@ -21,10 +21,8 @@ Commands:
   media <id> <action>           PlayPause | Next | Previous | Stop on the phone's player
   media-player <id> <name>      switch which of the phone's players is being controlled
   media-volume <id> <0-100>     set the phone player's volume
-  notif-dismiss <id> <nid>      dismiss one of the phone's notifications
   clipboard <id>                push this machine's clipboard to the device
-  mount <id> | unmount <id>     mount the phone's filesystem over sftp
-  storage <id>                  {mounted,path,total,used} — statvfs of the mount point
+  transfer <path…>              how far the daemon has got sending those files (JSON)
   pair <id> | unpair <id>
   pick                          run a file chooser, print the chosen paths (one per line)
 
@@ -43,12 +41,7 @@ D-Bus layout, all verified against a live daemon:
                                                                              the daemon already cached, so
                                                                              the shell can just show it);
                                                                              sendAction(s), seek(x)
-  …/devices/<id>/notifications              …device.notifications            activeNotifications()
-  …/devices/<id>/notifications/<nid>        ….notifications.notification     appName, title, text, ticker,
-                                                                             dismissable; dismiss()
   …/devices/<id>/clipboard                  …device.clipboard                sendClipboard()
-  …/devices/<id>/sftp                       …device.sftp                     isMounted(), mountPoint(),
-                                                                             mount(), unmount()
 
 Every one of those is optional: the plugin can be unloaded, and the object path then does not exist
 at all (checked — it raises UnknownObject rather than returning empty properties). So each block is
@@ -140,54 +133,6 @@ def _media(bus, path):
     }
 
 
-def _storage(bus, path):
-    """Whether the phone's filesystem is mounted, and where. Both calls are D-Bus round trips to the
-    daemon and cheap. The CAPACITY is deliberately NOT read here: statvfs on an sshfs whose phone
-    walked out of range blocks, and this runs every 5 s while the panel is open — one dead mount
-    would stall the whole listing. `storage` is a separate command for that reason."""
-    try:
-        i = dbus.Interface(bus.get_object(SERVICE, path + "/sftp"), "org.kde.kdeconnect.device.sftp")
-        return {"ok": True, "mounted": bool(i.isMounted()), "path": str(i.mountPoint())}
-    except dbus.DBusException:
-        return {"ok": False, "mounted": False, "path": ""}
-
-
-NOTIF_CAP = 8
-
-
-def _notifs(bus, path):
-    """The phone's own notifications. Capped: this is polled while the panel is open, and a phone
-    with sixty of them would turn every refresh into sixty D-Bus round trips for rows nobody can
-    see anyway. `total` still reports the honest number."""
-    p = path + "/notifications"
-    try:
-        obj = bus.get_object(SERVICE, p)
-        ids = [str(i) for i in dbus.Interface(
-            obj, "org.kde.kdeconnect.device.notifications").activeNotifications()]
-    except dbus.DBusException:
-        return {"ok": False, "total": 0, "items": []}
-
-    items = []
-    for nid in ids[:NOTIF_CAP]:
-        n = _props(bus, p + "/" + nid, "org.kde.kdeconnect.device.notifications.notification")
-        if not n:
-            continue
-        title = _plain(n.get("title"), "") or ""
-        text  = _plain(n.get("text"), "") or ""
-        # Some senders fill only `ticker` ("Title: body") — better that than an empty row.
-        if title == "" and text == "":
-            title = _plain(n.get("ticker"), "") or ""
-        items.append({
-            "id":    nid,
-            "app":   _plain(n.get("appName"), "") or "",
-            "title": title,
-            "text":  text,
-            "icon":  _plain(n.get("iconPath"), "") or "",
-            "dismissable": bool(_plain(n.get("dismissable"), False)),
-        })
-    return {"ok": True, "total": len(ids), "items": items}
-
-
 def list_devices():
     bus = _bus()
     if bus is None:
@@ -232,12 +177,77 @@ def list_devices():
                 "strength": _plain(con.get("cellularNetworkStrength"), -1) if con else -1,
             },
             "media":   _media(bus, path),
-            "storage": _storage(bus, path),
-            "notifs":  _notifs(bus, path),
             "plugins": plugins,
         })
     out.sort(key=lambda x: (not x["reachable"], x["name"].lower()))
     return {"available": True, "error": "", "devices": out}
+
+
+DAEMON_COMM = "kdeconnectd"
+
+
+def _daemon_pids():
+    out = []
+    for d in os.listdir("/proc"):
+        if not d.isdigit():
+            continue
+        try:
+            with open("/proc/%s/comm" % d) as f:
+                if f.read().strip() == DAEMON_COMM:
+                    out.append(d)
+        except OSError:                              # it exited between listdir and open
+            continue
+    return out
+
+
+def _progress(pids, paths):
+    """How far the daemon has got READING the files we handed it.
+
+    KDE Connect publishes no progress for an outgoing transfer: the share interface has one signal
+    and it is for incoming files, and the daemon does not even link KJobWidgets, so nothing reaches
+    a JobViewServer either (both checked against the installed binary). But it has to read the file,
+    and the kernel says exactly how far it got — /proc/<pid>/fdinfo/<fd> carries the offset. That
+    read position IS the progress, and it is a truer number than a guess.
+
+    `paths` is in send order, so once an fd is found on file i, every file before it is finished.
+    """
+    sizes = []
+    for p in paths:
+        try:
+            sizes.append(os.path.getsize(p))
+        except OSError:
+            sizes.append(0)
+    total = sum(sizes)
+    by_path = {os.path.realpath(p): i for i, p in enumerate(paths)}
+
+    for pid in pids:
+        fddir = "/proc/%s/fd" % pid
+        try:
+            fds = os.listdir(fddir)
+        except OSError:
+            continue
+        for fd in fds:
+            try:
+                idx = by_path.get(os.path.realpath(os.readlink(os.path.join(fddir, fd))))
+            except OSError:
+                continue
+            if idx is None:
+                continue
+            pos = 0
+            try:
+                with open("/proc/%s/fdinfo/%s" % (pid, fd)) as f:
+                    for line in f:
+                        if line.startswith("pos:"):
+                            pos = int(line.split()[1])
+                            break
+            except (OSError, ValueError):
+                pass
+            return {"active": True, "total": total, "index": idx,
+                    "file": os.path.basename(paths[idx]),
+                    "sent": sum(sizes[:idx]) + min(pos, sizes[idx])}
+    # No open descriptor: either it has not started yet or it is over. The caller knows which,
+    # because it knows whether it ever saw one.
+    return {"active": False, "total": total, "index": -1, "file": "", "sent": 0}
 
 
 def _call(dev_id, plugin, iface, method, *args):
@@ -298,6 +308,10 @@ def main():
         return 0
     if cmd == "pick":
         return pick()
+    if cmd == "transfer":
+        json.dump(_progress(_daemon_pids(), args), sys.stdout)
+        sys.stdout.write("\n")
+        return 0
     if not args:
         sys.stderr.write("%s needs a device id\n" % cmd)
         return 2
@@ -324,34 +338,6 @@ def main():
         except (AttributeError, ValueError, dbus.DBusException) as e:
             sys.stderr.write(str(e).split("\n")[0] + "\n")
             return 1
-    if cmd == "notif-dismiss" and rest:
-        bus = _bus()
-        try:
-            obj = bus.get_object(SERVICE, _dev_path(dev) + "/notifications/" + rest[0])
-            dbus.Interface(obj, "org.kde.kdeconnect.device.notifications.notification").dismiss()
-            return 0
-        except (AttributeError, dbus.DBusException) as e:
-            sys.stderr.write(str(e).split("\n")[0] + "\n")
-            return 1
-    if cmd in ("mount", "unmount"):
-        return 0 if _call(dev, "sftp", "org.kde.kdeconnect.device.sftp", cmd) else 1
-    if cmd == "storage":
-        bus = _bus()
-        out = {"mounted": False, "path": "", "total": 0, "used": 0}
-        try:
-            i = dbus.Interface(bus.get_object(SERVICE, _dev_path(dev) + "/sftp"),
-                               "org.kde.kdeconnect.device.sftp")
-            out["mounted"] = bool(i.isMounted())
-            out["path"] = str(i.mountPoint())
-            if out["mounted"]:
-                st = os.statvfs(out["path"])
-                out["total"] = st.f_blocks * st.f_frsize
-                out["used"] = (st.f_blocks - st.f_bfree) * st.f_frsize
-        except (AttributeError, OSError, dbus.DBusException):
-            pass
-        json.dump(out, sys.stdout)
-        sys.stdout.write("\n")
-        return 0
     if cmd == "clipboard":
         return 0 if _call(dev, "clipboard", "org.kde.kdeconnect.device.clipboard",
                           "sendClipboard") else 1

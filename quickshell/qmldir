@@ -90,6 +90,7 @@ TrayGlide         1.0 osd/TrayGlide.qml
 WorkspaceGlide    1.0 osd/WorkspaceGlide.qml
 NotifPeekGlide    1.0 osd/NotifPeekGlide.qml
 UpdatesGlide      1.0 osd/UpdatesGlide.qml
+ShareGlide        1.0 osd/ShareGlide.qml
 WallpaperQuick    1.0 osd/WallpaperQuick.qml
 Taskbar           1.0 osd/Taskbar.qml
 TaskbarReserve    1.0 osd/TaskbarReserve.qml

@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import ".."
 import QtQuick
-import Quickshell.Io
 
 // Phone popout. One device is the MAIN one and gets tracked at the top with everything it can do —
 // charge, cellular, what it is playing, what is on its screen — and the rest are one line each,
@@ -30,27 +29,6 @@ Flyout {
     // Drop files anywhere on the panel → they go to the device under the cursor, else the main one.
     property string dropTarget: ""
     readonly property string _dropDev: root.dropTarget !== "" ? root.dropTarget : root.mainId
-
-    // Capacity is polled on its own, slower schedule and NEVER inside the main listing: statvfs on
-    // an sshfs whose phone has walked out of range blocks, and the listing runs every 5 s while the
-    // panel is open — one dead mount would stall everything else the panel shows.
-    property var storage: ({ mounted: false, path: "", total: 0, used: 0 })
-    Process {
-        id: stProc
-        stdout: StdioCollector { onStreamFinished: {
-            try { var d = JSON.parse(text); if (d && typeof d === "object") root.storage = d }
-            catch (e) { /* keep the last good reading */ }
-        } }
-    }
-    function pollStorage() {
-        if (root.mainId === "" || stProc.running) return
-        stProc.command = ["python3", PhoneService.script, "storage", root.mainId]
-        stProc.running = true
-    }
-    Timer {
-        interval: 15000; repeat: true; running: root.isOpen; triggeredOnStart: true
-        onTriggered: root.pollStorage()
-    }
 
     DropArea {
         anchors.fill: parent
@@ -109,7 +87,6 @@ Flyout {
             readonly property var  bat:    hero.d.battery ?? ({})
             readonly property var  con:    hero.d.connectivity ?? ({})
             readonly property var  med:    hero.d.media ?? ({})
-            readonly property var  ntf:    hero.d.notifs ?? ({})
             readonly property bool hasBat: hero.bat.ok === true && hero.bat.charge >= 0
             readonly property bool low:    hero.hasBat && hero.bat.charge <= 15 && !hero.bat.charging
 
@@ -184,7 +161,7 @@ Flyout {
                 id: facts
                 width: parent.width
                 spacing: 7
-                readonly property int cellW: Math.floor((width - 2 * spacing) / 3)
+                readonly property int cellW: Math.floor((width - spacing) / 2)
                 StatCell {
                     width: facts.cellW
                     glyph:   hero.bat.charging ? "󰂄" : hero.hasBat ? "󰁹" : ""
@@ -199,14 +176,6 @@ Flyout {
                     caption: "Cellular"
                     good: hero.con.ok === true && (hero.con.strength ?? 0) >= 3
                     dim:  hero.con.ok !== true
-                }
-                StatCell {
-                    width: facts.cellW
-                    glyph:   "󰂚"
-                    value:   hero.ntf.ok === true ? (hero.ntf.total + "") : "—"
-                    caption: "On screen"
-                    good: hero.ntf.ok === true && hero.ntf.total > 0
-                    dim:  hero.ntf.ok !== true || hero.ntf.total === 0
                 }
             }
 
@@ -364,68 +333,6 @@ Flyout {
                 }
             }
 
-            // ── The phone's own filesystem. Mounting starts an sshfs, so it happens when asked;
-            //    once it is up, the capacity is a real reading rather than a claim.
-            StyledRect {
-                id: store
-                width: parent.width
-                height: 48
-                radius: Style.rTile
-                visible: (hero.d.storage ?? ({})).ok === true && hero.live
-                color: Style.tint(Colors.bgElement, Style.lift(0.14))
-                readonly property bool mounted: (hero.d.storage ?? ({})).mounted === true
-                readonly property real total: root.storage.total ?? 0
-                readonly property real used:  root.storage.used ?? 0
-
-                Text {
-                    id: stGlyph
-                    anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                    text: store.mounted ? "󰉋" : "󰋙"
-                    color: store.mounted ? Style.accent : Colors.fgMuted
-                    font.family: Style.font; font.pixelSize: 18
-                }
-                Column {
-                    anchors { left: stGlyph.right; right: stBtn.left; verticalCenter: parent.verticalCenter
-                              leftMargin: 11; rightMargin: 10 }
-                    spacing: 3
-                    Text {
-                        width: parent.width; elide: Text.ElideRight
-                        text: !store.mounted ? "Phone storage"
-                            : store.total > 0 ? (PhoneService.fmtBytes(store.used) + " of "
-                                                 + PhoneService.fmtBytes(store.total) + " used")
-                            : "Mounted"
-                        color: Colors.fgBright
-                        font.family: Style.font; font.pixelSize: 11; font.bold: true
-                    }
-                    Rectangle {
-                        width: parent.width; height: 3; radius: 2
-                        visible: store.mounted && store.total > 0
-                        color: Style.tint(Colors.bgElement, Style.lift(0.34))
-                        Rectangle {
-                            anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
-                            width: parent.width * Math.max(0, Math.min(1, store.used / Math.max(1, store.total)))
-                            radius: 2
-                            color: store.used / Math.max(1, store.total) > 0.9 ? Colors.fgUrgent : Style.accent
-                        }
-                    }
-                    MetaTag {
-                        width: parent.width; elide: Text.ElideRight
-                        text: store.mounted ? (root.storage.path ?? "") : "not mounted"
-                    }
-                }
-                DataChip {
-                    id: stBtn
-                    anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                    label: store.mounted ? "Unmount" : "Mount"
-                    on: !store.mounted
-                    onTap: {
-                        if (store.mounted) PhoneService.unmountStorage(hero.d.id)
-                        else               PhoneService.mountStorage(hero.d.id)
-                        root.pollStorage()
-                    }
-                }
-            }
-
             // ── Everything it can be asked to do.
             Flow {
                 width: parent.width
@@ -454,66 +361,6 @@ Flyout {
                     enabled: PhoneService.hasPlugin(hero.d, "ping")
                     opacity: enabled ? 1 : 0.4
                     onTap: PhoneService.ping(hero.d.id)
-                }
-            }
-        }
-
-        // ══ What is on the phone's screen ═════════════════════════════════════════════════════
-        // Only devices that MIRROR their notifications to the desktop expose these; one set up the
-        // other way round (it receives ours) has no such object at all, and then the whole block is
-        // absent rather than sitting there empty.
-        SectionRule {
-            visible: hero.visible && (hero.ntf.total ?? 0) > 0
-            height:  visible ? 16 : 0
-            text: "On the phone"
-            trailing: (hero.ntf.total ?? 0) > (hero.ntf.items ?? []).length
-                      ? ((hero.ntf.items ?? []).length + " of " + hero.ntf.total) : ""
-        }
-        Repeater {
-            model: hero.visible ? (hero.ntf.items ?? []) : []
-            delegate: StyledRect {
-                id: nrow
-                required property var modelData
-                width: parent.width
-                height: 44
-                radius: Style.rTile
-                color: nh.containsMouse ? Style.tint(Colors.bgElement, Style.lift(0.16))
-                                        : Style.tint(Colors.bgElement, Style.lift(0.07))
-                Behavior on color { ColorAnimation { duration: 110 } }
-                MouseArea { id: nh; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
-
-                Column {
-                    anchors { left: parent.left; right: ndel.left; verticalCenter: parent.verticalCenter
-                              leftMargin: 11; rightMargin: 8 }
-                    spacing: 1
-                    Text {
-                        width: parent.width; elide: Text.ElideRight
-                        text: nrow.modelData.app
-                        color: Colors.bgActive
-                        font.family: Style.font; font.pixelSize: 9; font.bold: true
-                        font.capitalization: Font.AllUppercase; font.letterSpacing: 0.6
-                    }
-                    Text {
-                        width: parent.width; elide: Text.ElideRight
-                        text: nrow.modelData.text !== ""
-                              ? (nrow.modelData.title + " · " + nrow.modelData.text)
-                              : nrow.modelData.title
-                        color: Colors.fgPrimary
-                        font.family: Style.font; font.pixelSize: 11
-                    }
-                }
-                Rectangle {
-                    id: ndel
-                    anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 7 }
-                    visible: nrow.modelData.dismissable === true
-                    width: 22; height: 22; radius: 11
-                    color: dh.containsMouse ? Style.tint(Colors.fgUrgent, 0.25) : "transparent"
-                    Text { anchors.centerIn: parent; text: "✕"; color: Colors.fgMuted
-                           font.family: Style.font; font.pixelSize: 10 }
-                    MouseArea {
-                        id: dh; anchors.fill: parent; hoverEnabled: true
-                        onClicked: PhoneService.dismissNotif(hero.d.id, nrow.modelData.id)
-                    }
                 }
             }
         }

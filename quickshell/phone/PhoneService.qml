@@ -113,10 +113,7 @@ Singleton {
     function media(id, action)  { root._act(["media", id, action]) }
     function mediaPlayer(id, p) { root._act(["media-player", id, p]) }
     function mediaVolume(id, v) { root._act(["media-volume", id, "" + Math.round(v)]) }
-    function dismissNotif(id, nid) { root._act(["notif-dismiss", id, nid]) }
     function pushClipboard(id)  { root._act(["clipboard", id]) }
-    function mountStorage(id)   { root._act(["mount", id]) }
-    function unmountStorage(id) { root._act(["unmount", id]) }
     function fmtBytes(b) {
         if (b >= 1073741824) return (b / 1073741824).toFixed(b >= 10737418240 ? 0 : 1) + " GB"
         if (b >= 1048576)    return Math.round(b / 1048576) + " MB"
@@ -128,9 +125,66 @@ Singleton {
     }
     function ping(id)          { root._act(["ping", id, "Velumeron"]) }
     function shareText(id, t)  { root._act(["share-text", id, t]) }
+    // ── Sending, and watching it go ────────────────────────────────────────────────────────────
+    // KDE Connect tells nobody how an outgoing transfer is doing: the share interface has exactly
+    // one signal and it is for INCOMING files, and the daemon does not link KJobWidgets, so nothing
+    // reaches a JobViewServer either (both checked against the installed binary). What it cannot
+    // hide is that it has to read the file — so the progress here is the daemon's own read offset,
+    // straight out of /proc/<pid>/fdinfo. See kdeconnect.py's `transfer`.
+    property var xfer: ({ on: false, done: false, dev: "", file: "", sent: 0, total: 0, files: 0 })
+    property bool _xSeen: false          // have we ever caught a descriptor for this batch?
+    property int  _xTicks: 0
+    property var  _xPaths: []
+
     function share(id, paths) {
         if (!paths || paths.length === 0) return
+        var d = root.deviceById(id)
+        root._xPaths = paths.map(function (p) {
+            return ("" + p).indexOf("file://") === 0 ? decodeURIComponent(("" + p).slice(7)) : "" + p
+        })
+        root._xSeen = false
+        root._xTicks = 0
+        root.xfer = { on: true, done: false, dev: d ? d.name : "", file: "",
+                      sent: 0, total: 0, files: root._xPaths.length }
         root._act(["share"].concat([id]).concat(paths))
+    }
+
+    Process {
+        id: xProc
+        stdout: StdioCollector { onStreamFinished: {
+            var r
+            try { r = JSON.parse(text) } catch (e) { return }
+            if (!r || !root.xfer.on) return
+            var x = root.xfer
+            if (r.active) {
+                root._xSeen = true
+                root.xfer = { on: true, done: false, dev: x.dev, file: r.file,
+                              sent: r.sent, total: r.total, files: x.files }
+                return
+            }
+            // No descriptor open. Either it is finished, or it is a file small enough that the
+            // daemon swallowed it between two polls — after a second and a half of nothing, that
+            // is the same outcome as far as anyone watching is concerned.
+            if (root._xSeen || root._xTicks > 5)
+                root.xfer = { on: true, done: true, dev: x.dev, file: x.file,
+                              sent: r.total, total: r.total, files: x.files }
+        } }
+    }
+    Timer {
+        interval: 300; repeat: true
+        running: root.xfer.on && !root.xfer.done
+        onTriggered: {
+            root._xTicks++
+            if (xProc.running) return
+            xProc.command = ["python3", root.script, "transfer"].concat(root._xPaths)
+            xProc.running = true
+        }
+    }
+    // Hold the finished card up briefly, then clear it.
+    Timer {
+        interval: 2200; running: root.xfer.done
+        onTriggered: root.xfer = { on: false, done: false, dev: "", file: "",
+                                   sent: 0, total: 0, files: 0 }
     }
 
     // Pick files and send them — the AirDrop gesture, without a KDE window anywhere in it. The
@@ -140,7 +194,12 @@ Singleton {
         id: pickProc
         property string _acc: ""
         stdout: SplitParser { onRead: line => { pickProc._acc += line + "\n" } }
-        onRunningChanged: if (!running) {
+        // The chooser is a window of its own and the popout is a layer-shell surface above it with
+        // the keyboard grabbed — you could see the dialog and not use it. So the panel gets out of
+        // the way for as long as the chooser is up.
+        onRunningChanged: {
+            UiState.externalPicker = running
+            if (running) return
             var lines = pickProc._acc.split("\n").filter(s => s.trim() !== "")
             pickProc._acc = ""
             if (lines.length > 0 && root._pickFor !== "") root.share(root._pickFor, lines)

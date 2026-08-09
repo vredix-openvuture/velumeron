@@ -418,6 +418,12 @@ ShellRoot {
         model: Quickshell.screens
         delegate: TrayGlide { required property var modelData; screen: modelData }
     }
+    // The file-transfer card. Not gated on the phone module being placed in the bar: a transfer can
+    // only start from the popout, and if you got that far you want to see where the file went.
+    Variants {
+        model: Quickshell.screens
+        delegate: ShareGlide { required property var modelData; screen: modelData }
+    }
     Variants {
         model: Quickshell.screens
         delegate: WorkspaceGlide { required property var modelData; screen: modelData }

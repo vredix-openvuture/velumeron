@@ -72,6 +72,11 @@ QtObject {
     // corner menu drops its full-screen input grab + keyboard focus so the dialog
     // underneath is interactive, but stays visually open.
     property bool   pickerOpen:     false
+    // A dialog belonging to ANOTHER process is up (the file chooser behind "Send files"). Distinct
+    // from pickerOpen, which is an in-shell picker that only needs the keyboard: a foreign window
+    // needs the panel out of its way entirely, and hiding the settings menu for a colour picker
+    // that lives INSIDE it would be nonsense.
+    property bool   externalPicker: false
 
     // Where the corner menu should attach: the edge the vuture-icon sits on, and the
     // icon's position along that edge (window/screen coords). Set by VutureIcon on open.

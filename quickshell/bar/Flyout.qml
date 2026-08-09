@@ -153,7 +153,7 @@ PanelWindow {
     Region { id: emptyRegion }
     Region { id: lockRegion; x: root._lr[0]; y: root._lr[1]; width: root._lr[2]; height: root._lr[3] }
     mask: root.anyOpen ? lockRegion : emptyRegion
-    visible: root.anyOpen || panel.reveal > 0.01
+    visible: (root.anyOpen || panel.reveal > 0.01) && !UiState.externalPicker
 
     // The Escape shortcut below has been here all along and could never fire: a Shortcut only
     // reaches a layer surface that HOLDS the keyboard, and this one never asked for it. Every
@@ -165,7 +165,7 @@ PanelWindow {
     // window at rest. `pickerOpen` yields it to a colour / glyph picker that needs typing.
     // isOpen, NOT anyOpen: anyOpen is "this flyout is open on SOME monitor", so on a two-screen
     // setup both instances would have demanded exclusive keyboard focus at once.
-    WlrLayershell.keyboardFocus: root.isOpen && !UiState.pickerOpen
+    WlrLayershell.keyboardFocus: root.isOpen && !UiState.pickerOpen && !UiState.externalPicker
                                  ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
     Shortcut { sequence: "Escape"; onActivated: if (root.anyOpen) UiState.flyout = "" }
