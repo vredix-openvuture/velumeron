@@ -13,8 +13,19 @@ import QtQuick
 Flyout {
     id: root
     flyoutId: "phone"
-    panelW:   580
-    maxH:     760
+    // Percent of the screen, never a pixel count — the same proportion on a 1080p laptop as on the
+    // 1440p desktop this was tuned on, and overridable per user like the media menu's width is.
+    // The floor IS absolute on purpose: below roughly 440 the record and the transport stop fitting
+    // beside each other, and that is a fact about glyphs and hands rather than about the screen.
+    panelW: Math.max(440, Math.round(root.sw * VtlConfig.moduleSetting("phone", "menu_width_pct", 23) / 100))
+    maxH:   Math.round(root.sh * VtlConfig.moduleSetting("phone", "menu_height_pct", 53) / 100)
+
+    // Everything inside is a fraction of the panel, so widening it widens the whole thing instead
+    // of leaving a bigger card with the same small parts rattling around in it.
+    readonly property int uArt:  Math.round(root.panelW * 0.18)     // the record
+    readonly property int uRing: Math.round(root.panelW * 0.131)    // the main device's charge ring
+    readonly property int uRow:  Math.round(root.panelW * 0.076)    // a device row's ring
+    readonly property int uGap:  Math.max(6, Math.round(root.panelW * 0.0225))
 
     // Keep the service on its brisk refresh only while this is up.
     onIsOpenChanged: {
@@ -44,7 +55,7 @@ Flyout {
 
     Column {
         anchors { left: parent.left; right: parent.right; top: parent.top }
-        spacing: 13
+        spacing: root.uGap
 
         // Nothing paired / no daemon → say which, and don't pretend there are actions.
         StyledRect {
@@ -79,8 +90,8 @@ Flyout {
             id: hero
             visible: root.main !== null
             active:  true
-            pad:     18
-            spacing: 14
+            pad:     Math.round(root.uGap * 1.4)
+            spacing: Math.round(root.uGap * 1.1)
 
             readonly property var  d:      root.main ?? ({})
             readonly property bool live:   hero.d.reachable === true && hero.d.paired === true
@@ -93,11 +104,11 @@ Flyout {
             // ── Identity. The device's own glyph, big, wearing its charge as the ring around it.
             Row {
                 width: parent.width
-                spacing: 18
+                spacing: Math.round(root.uGap * 1.4)
                 Item {
                     id: idn
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 76; height: 76
+                    width: root.uRing; height: root.uRing
                     ValueRing {
                         anchors.fill: parent
                         visible: hero.hasBat
@@ -111,7 +122,7 @@ Flyout {
                     Rectangle {
                         anchors.centerIn: parent
                         visible: !hero.hasBat
-                        width: 70; height: 70; radius: 35
+                        width: Math.round(root.uRing * 0.92); height: width; radius: width / 2
                         color: "transparent"
                         border.width: 4
                         border.color: Style.tint(Colors.bgElement, Style.lift(0.34))
@@ -120,7 +131,7 @@ Flyout {
                         anchors.centerIn: parent
                         text: PhoneService.icon(hero.d)
                         color: hero.live ? Colors.fgBright : Colors.fgMuted
-                        font.family: Style.font; font.pixelSize: 34
+                        font.family: Style.font; font.pixelSize: Math.round(root.uRing * 0.45)
                     }
                 }
                 Column {
@@ -160,7 +171,7 @@ Flyout {
             Row {
                 id: facts
                 width: parent.width
-                spacing: 9
+                spacing: Math.round(root.uGap * 0.7)
                 readonly property int cellW: Math.floor((width - spacing) / 2)
                 StatCell {
                     width: facts.cellW
@@ -184,7 +195,9 @@ Flyout {
             StyledRect {
                 id: np
                 width: parent.width
-                height: 154
+                // Art, its margins, the air under it and the elapsed row — composed, not measured,
+                // so the strip follows the record whatever the panel width makes it.
+                height: root.uArt + Math.round(root.uGap * 2.3) + 20
                 radius: Style.rTile
                 visible: hero.med.ok === true
                 color: Style.tint(Colors.bgElement, Style.lift(0.14))
@@ -205,15 +218,16 @@ Flyout {
 
                 VinylArt {
                     id: art
-                    anchors { left: parent.left; top: parent.top; leftMargin: 11; topMargin: 11 }
-                    width: 104; height: 104
+                    anchors { left: parent.left; top: parent.top
+                              leftMargin: Math.round(root.uGap * 0.85); topMargin: Math.round(root.uGap * 0.85) }
+                    width: root.uArt; height: root.uArt
                     source: hero.med.art ?? ""
                     // The PHONE's player, so it turns with what the phone is doing.
                     spinning: hero.med.playing === true
                 }
                 Column {
                     anchors { left: art.right; right: transport.left; verticalCenter: art.verticalCenter
-                              leftMargin: 15; rightMargin: 13 }
+                              leftMargin: Math.round(root.uGap * 1.15); rightMargin: root.uGap }
                     spacing: 2
                     Text {
                         width: parent.width; elide: Text.ElideRight
@@ -240,8 +254,9 @@ Flyout {
                 }
                 Row {
                     id: transport
-                    anchors { right: parent.right; verticalCenter: art.verticalCenter; rightMargin: 11 }
-                    spacing: 7
+                    anchors { right: parent.right; verticalCenter: art.verticalCenter
+                              rightMargin: Math.round(root.uGap * 0.85) }
+                    spacing: Math.round(root.uGap * 0.55)
                     RoundBtn { icon: "󰒮"; onTrig: PhoneService.media(hero.d.id, "Previous") }
                     RoundBtn {
                         big: true
@@ -255,7 +270,8 @@ Flyout {
                 Item {
                     id: prog
                     anchors { left: parent.left; right: parent.right; bottom: parent.bottom
-                              leftMargin: 13; rightMargin: 13; bottomMargin: 11 }
+                              leftMargin: root.uGap; rightMargin: root.uGap
+                              bottomMargin: Math.round(root.uGap * 0.85) }
                     height: 20
                     readonly property real frac: Math.max(0, Math.min(1, np.pos / Math.max(1, hero.med.length ?? 1)))
 
@@ -336,7 +352,7 @@ Flyout {
             // ── Everything it can be asked to do.
             Flow {
                 width: parent.width
-                spacing: 7
+                spacing: Math.round(root.uGap * 0.55)
                 visible: hero.live
                 DataChip {
                     label: "󰅧  Send files"; on: true
@@ -382,7 +398,7 @@ Flyout {
                 readonly property bool hasBat: orow.bat.ok === true && orow.bat.charge >= 0
 
                 width: parent.width
-                height: 60
+                height: root.uRow + Math.round(root.uGap * 1.2)
                 radius: Style.rTile
                 clip: true
                 color: oh.containsMouse ? Style.tint(Colors.bgElement, Style.lift(0.16))
@@ -396,8 +412,9 @@ Flyout {
 
                 Item {
                     id: oidn
-                    anchors { left: parent.left; leftMargin: 11; verticalCenter: parent.verticalCenter }
-                    width: 44; height: 44
+                    anchors { left: parent.left; leftMargin: Math.round(root.uGap * 0.85)
+                              verticalCenter: parent.verticalCenter }
+                    width: root.uRow; height: root.uRow
                     ValueRing {
                         anchors.fill: parent
                         visible: orow.hasBat
@@ -411,12 +428,12 @@ Flyout {
                         anchors.centerIn: parent
                         text: PhoneService.icon(orow.modelData)
                         color: orow.live ? Colors.fgBright : Colors.fgMuted
-                        font.family: Style.font; font.pixelSize: 22
+                        font.family: Style.font; font.pixelSize: Math.round(root.uRow * 0.5)
                     }
                 }
                 Column {
                     anchors { left: oidn.right; right: opin.left; verticalCenter: parent.verticalCenter
-                              leftMargin: 13; rightMargin: 10 }
+                              leftMargin: root.uGap; rightMargin: Math.round(root.uGap * 0.8) }
                     spacing: 1
                     Text {
                         width: parent.width; elide: Text.ElideRight
@@ -437,7 +454,8 @@ Flyout {
                 // Choose: this device becomes the one tracked at the top.
                 SelectDot {
                     id: opin
-                    anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+                    anchors { right: parent.right; rightMargin: Math.round(root.uGap * 1.1)
+                              verticalCenter: parent.verticalCenter }
                     on: false
                     onPick: PhoneService.setMain(orow.modelData.id)
                 }
