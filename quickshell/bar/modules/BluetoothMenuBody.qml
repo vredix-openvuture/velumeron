@@ -57,6 +57,9 @@ Column {
     }
 
     onActiveChanged: if (active) { mode = "known"; openMac = ""; refresh() }
+    // Loaded lazily by the host, so `active` can already be true when this is built — and a
+    // property that starts true never emits a change.
+    Component.onCompleted: if (root.active) root.refresh()
     function refresh() { stateProc.running = false; stateProc.running = true
                          listProc.running = false; listProc.running = true }
 

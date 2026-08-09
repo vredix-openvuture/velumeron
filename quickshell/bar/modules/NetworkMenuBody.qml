@@ -19,12 +19,22 @@ Column {
     property string busy:      ""
     property string pwFor:     ""          // ssid currently showing the password field
 
-    onActiveChanged: if (active) { root.pwFor = ""; root.refresh() }
+    onActiveChanged: {
+        if (!active) { root._prev = null; return }
+        root.pwFor = ""
+        root.refresh()
+    }
+    // The host loads this lazily, so `active` can already be true when the object is built — and a
+    // property that starts true never emits a change. Without this the first open showed an empty
+    // panel until something else happened to poke it.
+    Component.onCompleted: if (root.active) root.refresh()
     function refresh() {
         stateProc.running = false; stateProc.running = true
         savedProc.running = false; savedProc.running = true
-        scanProc.running  = false; scanProc.running  = true
         vpnProc.running   = false; vpnProc.running   = true
+        // Cached list first so the panel has something the instant it opens, then ask for a real
+        // scan whose result the relist timer folds in a couple of seconds later.
+        if (!scanProc.running) { scanProc._buf = []; scanProc.running = true }
         root.rescan()
     }
 
@@ -45,8 +55,13 @@ Column {
         command: ["bash", "-c", "nmcli dev wifi rescan >/dev/null 2>&1 || true"]
         onRunningChanged: if (!running) relist.restart()
     }
-    Timer { id: relist; interval: 2500
-            onTriggered: { scanProc.running = false; scanProc.running = true } }
+    Timer {
+        id: relist; interval: 2500
+        // Never interrupt a listing in flight: killing it fires onRunningChanged with a
+        // half-filled buffer, and that buffer becomes the model.
+        onTriggered: { if (scanProc.running) { relist.restart(); return }
+                       scanProc.running = true }
+    }
     Timer { interval: 12000; repeat: true; running: root.active && root.wifiOn
             onTriggered: root.rescan() }
 
@@ -76,7 +91,13 @@ Column {
     }
     Process { id: scanProc
         property var _buf: []
-        command: ["bash", "-c", "nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID dev wifi list --rescan auto 2>/dev/null"]
+        // --rescan NO. `auto` lets nmcli decide, and when it decides the cache is stale it performs
+        // a full scan inline and blocks — measured at 4.3 s on this machine, during which the panel
+        // has nothing to show. Worse, the relist timer would then kill that in-flight scan and
+        // publish its empty buffer, which is why the list read "No networks found" until you hit
+        // reload. Listing from the cache answers in 9 ms; the scan is rescanProc's job, and the
+        // relist below picks up what it found.
+        command: ["bash", "-c", "nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID dev wifi list --rescan no 2>/dev/null"]
         stdout: SplitParser { onRead: line => {
             var p = ("" + line).split(":")
             if (p.length < 4) return
@@ -130,7 +151,9 @@ Column {
             root._prev = now
             if (!pv) return
             var dt = (now.t - pv.t) / 1000
-            if (dt <= 0) return
+            // A gap far longer than the poll means the panel was shut; that delta is an average
+            // over minutes, not a rate, and drawing it puts one enormous spike in the history.
+            if (dt <= 0 || dt > 5) return
             // A counter that went backwards means an interface came or went — skip that sample
             // rather than draw a spike the size of the whole history.
             root.rxRate = Math.max(0, (now.rx - pv.rx) / dt)
@@ -189,12 +212,15 @@ Column {
         width: parent.width
         height: stats.height + spark.height + 8
 
-        Row {
+        // A Grid, not a Row: on a narrow panel four readings side by side each get a third of the
+        // room a rate needs and every one of them elides. Two rows of two is the same information
+        // and all of it legible.
+        Grid {
             id: stats
             width: parent.width
-            height: 44
-            readonly property int cellW: Math.floor((width - 3 * 10) / 4)
+            columns: width >= 400 ? 4 : 2
             spacing: 10
+            readonly property int cellW: Math.floor((width - (columns - 1) * spacing) / columns)
             StatCell {
                 width: stats.cellW
                 glyph:   root.ethStatus !== "" ? "󰈀" : root.wifiOn ? root.sigIcon(root._cur ? root._cur.signal : 0) : "󰤮"

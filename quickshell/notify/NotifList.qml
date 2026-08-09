@@ -189,7 +189,11 @@ Item {
                 visible: !item.expanded && text !== ""
                 text: item.n ? item.n.body : ""; color: Colors.fgPrimary
                 font.pixelSize: 12; font.family: Style.font
-                wrapMode: Text.WordWrap; textFormat: Text.PlainText
+                // StyledText, not PlainText: the notification spec lets a body carry a small markup
+                // subset (<b> <i> <u> <a>), and PlainText printed the tags themselves — the
+                // screenshot notification read "saved in <i>/home/…</i>". Rendering it is what the
+                // sender asked for.
+                wrapMode: Text.WordWrap; textFormat: Text.StyledText
                 maximumLineCount: 5; elide: Text.ElideRight
             }
             // Expanded stack: every notification of the group, newest first.
@@ -215,7 +219,7 @@ Item {
                             visible: text !== ""
                             text: modelData.body; color: Colors.fgPrimary
                             font.pixelSize: 12; font.family: Style.font
-                            wrapMode: Text.WordWrap; textFormat: Text.PlainText
+                            wrapMode: Text.WordWrap; textFormat: Text.StyledText
                             maximumLineCount: 5; elide: Text.ElideRight
                         }
                     }

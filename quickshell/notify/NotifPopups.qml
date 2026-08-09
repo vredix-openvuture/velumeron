@@ -305,7 +305,7 @@ PanelWindow {
             text:  card.notif ? card.notif.body : ""
             color: Colors.fgPrimary
             font.pixelSize: 12; font.family: Style.font
-            wrapMode: Text.Wrap; textFormat: Text.PlainText; maximumLineCount: 12; elide: Text.ElideRight
+            wrapMode: Text.Wrap; textFormat: Text.StyledText; maximumLineCount: 12; elide: Text.ElideRight
         }
         Rectangle {
             id: closeBtn
