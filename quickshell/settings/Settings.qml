@@ -46,10 +46,16 @@ PanelWindow {
     // separately: two independent numbers could never divide evenly, and the remainder
     // showed as dead space under the last row. Still clamped to the monitor — a big raster
     // on a small screen must not grow a menu that does not fit.
-    readonly property int menuW:  screen
-        ? Math.min(Math.round(screen.width  * 0.94), Style.menuContentW + root.railW) : 300
-    readonly property int menuH:  screen
-        ? Math.min(Math.round(screen.height * 0.94), Style.dashGridH + Style.dashChromeH) : 540
+    //
+    // A FLOATING page is sized by neither of those. It stopped being a bar surface the moment it
+    // left the bar, so the raster that fits the dashboard has no say over it: half the monitor,
+    // both ways, whatever the dashboard happens to be.
+    readonly property int menuW:  !screen ? 300
+        : root.floatOff ? Math.round(screen.width * 0.5)
+        : Math.min(Math.round(screen.width  * 0.94), Style.menuContentW + root.railW)
+    readonly property int menuH:  !screen ? 540
+        : root.floatOff ? Math.round(screen.height * 0.5)
+        : Math.min(Math.round(screen.height * 0.94), Style.dashGridH + Style.dashChromeH)
 
     // ── How the menu merges into the bar ─────────────────────────────────────────
     // The menu butts against its anchored edge (mEdge) and, on an L-bar, also blends into the
@@ -298,7 +304,10 @@ PanelWindow {
     // actual settings page opens as a centred window instead. So the dashboard stays a bar surface
     // and the settings stop pretending to be one.
     readonly property bool pageNav:  root.navMode === "page" || root.navMode === "float"
-    readonly property bool floatOff: root.navMode === "float" && root.activeSection !== "home"
+    // `navPage` counts as off-Home: the page list IS the menu opening, and leaving it stuck to the
+    // bar while the page it leads to floats made the gear feel like it opened two different things.
+    readonly property bool floatOff: root.navMode === "float"
+                                     && (root.activeSection !== "home" || root.navPage)
 
     // The menu is opened globally (one instance per screen) but shows on a single monitor. It LATCHES
     // to the monitor focused at open time (UiState.menuMon) and stays there — it does NOT follow the
@@ -405,6 +414,12 @@ PanelWindow {
                         NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
         Behavior on y { enabled: root.navMode === "float" && menu.reveal > 0.98
                         NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+        // Same gate, same reason: the panel changes size as it leaves the bar, and that has to be a
+        // move rather than a jump — but never during the open, where `sizeF` is already driving it.
+        Behavior on width  { enabled: root.navMode === "float" && menu.reveal > 0.98
+                             NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+        Behavior on height { enabled: root.navMode === "float" && menu.reveal > 0.98
+                             NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
 
         // Block click-through to the desktop, but stay BELOW the rail/content widgets
         // (declared first + z:0) so their MouseAreas still receive clicks.
