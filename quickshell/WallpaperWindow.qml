@@ -35,13 +35,37 @@ PanelWindow {
     }
 
     // ── Dual-slot transition ───────────────────────────────────────────────────────────────────
+    // The transition used to begin the instant a new path arrived — while the Image was still
+    // decoding, because it loads asynchronously. So for the first frames the incoming slot held
+    // NOTHING: you saw the window's black background through it, and the picture only appeared once
+    // the decode finished. That is the "black screen, then the two swap places" you were seeing;
+    // with a slide or push it looks especially wrong, because the empty slot slides in on cue.
+    //
+    // Now the idle slot loads first and the transition starts when it has something to show.
     property int shown: 0
+    property int _pending: -1
     function _swap(path, type) {
         root._planTransition()
         var idle = (root.shown === 0) ? slotB : slotA
         idle.set(path, type)
-        root.shown = (root.shown === 0) ? 1 : 0
+        root._pending = (root.shown === 0) ? 1 : 0
+        preloadGuard.restart()
+        root._maybeFlip()
     }
+    function _maybeFlip() {
+        if (root._pending < 0) return
+        if (!((root._pending === 1) ? slotB : slotA).ready) return
+        root._flip()
+    }
+    function _flip() {
+        if (root._pending < 0) return
+        preloadGuard.stop()
+        root.shown = root._pending
+        root._pending = -1
+    }
+    // A file that never becomes ready — a truncated image, a codec mpv cannot open — must not leave
+    // the wallpaper stuck on the old one forever. Go anyway; a botched transition beats a dead one.
+    Timer { id: preloadGuard; interval: 3000; onTriggered: root._flip() }
     property string _lastPath: ""
     function _apply() {
         var e = root.all[root.mon]
@@ -107,16 +131,36 @@ PanelWindow {
     }
     Process { id: notify }
 
-    WallSlot { id: slotA; anchors.fill: parent; active: root.shown === 0 }
-    WallSlot { id: slotB; anchors.fill: parent; active: root.shown === 1 }
+    WallSlot { id: slotA; slotIndex: 0; anchors.fill: parent; active: root.shown === 0 }
+    WallSlot { id: slotB; slotIndex: 1; anchors.fill: parent; active: root.shown === 1 }
 
     component WallSlot: Item {
         id: slot
+        property int  slotIndex: 0
         property var  item: ({ path: "", type: "image" })
         property bool active: false
         property bool everVideo: false
         function set(p, t) { slot.item = { path: p, type: t } }
-        onItemChanged: if (slot.item.type === "video") slot.everVideo = true
+
+        // This slot is loading the wallpaper that is about to be shown.
+        readonly property bool preloading: root._pending === slot.slotIndex
+
+        // Does it have something to put on screen? An empty slot trivially does. An image when it
+        // has decoded. A video after mpv has had a moment with it — the plugin exposes no
+        // first-frame signal, so this is a settle time and not a promise (the guard above covers
+        // the case where it was a lie).
+        property bool videoSettled: false
+        Timer { id: vSettle; interval: 450; onTriggered: slot.videoSettled = true }
+        readonly property bool ready: slot.item.path === "" ? true
+                                    : slot.item.type === "video" ? slot.videoSettled
+                                    : img.status === Image.Ready
+        onReadyChanged: root._maybeFlip()
+
+        onItemChanged: {
+            if (slot.item.type === "video") slot.everVideo = true
+            slot.videoSettled = false
+            if (slot.item.type === "video") vSettle.restart()
+        }
 
         readonly property var    plan: root.effPlan
         readonly property string tt:   plan.type
@@ -148,6 +192,7 @@ PanelWindow {
 
         // Static image — source gated on type so it never tries to decode a video file.
         Image {
+            id: img
             anchors.fill: parent
             visible:  slot.item.type === "image"
             source:   (slot.item.type === "image" && slot.item.path !== "") ? "file://" + slot.item.path : ""
@@ -174,7 +219,9 @@ PanelWindow {
         }
         Binding { target: vid.item; property: "source"; when: vid.status === Loader.Ready
                   value: slot.item.type === "video" ? slot.item.path : "" }
+        // Unpaused while PRELOADING as well as while shown — a paused mpv never renders a frame, so
+        // waiting for one on a paused surface would wait forever.
         Binding { target: vid.item; property: "paused"; when: vid.status === Loader.Ready
-                  value: !(slot.item.type === "video" && slot.active) }
+                  value: !(slot.item.type === "video" && (slot.active || slot.preloading)) }
     }
 }
