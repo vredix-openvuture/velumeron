@@ -117,6 +117,8 @@ Item {
     readonly property real windowBlurNoise:  _data.window_blur_noise  ?? 0.025
 
     // Settings menu navigation: "sidebar" (icon rail) or "page" (full-page nav list).
+    // sidebar | page | float. "float" is page navigation PLUS a detached window: Home still grows
+    // out of the bar, every settings page opens centred and free-floating instead.
     readonly property string settingsNavMode: _data.settings_nav_mode ?? "sidebar"
 
     // ── Public properties (with sane defaults) ────────────────────────────────

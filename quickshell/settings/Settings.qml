@@ -74,7 +74,8 @@ PanelWindow {
     // A floating bar gets a floating menu: no merges, fully-rounded free outline, offset by the
     // same gap — docking into a bar that itself floats reads as glued-on. Cupertino detaches
     // ALWAYS: macOS menus are free dropdowns under the strip.
-    readonly property bool detached:  root.edgeBar && (VtlConfig.barFloatingFor(root.mon) || Style.isCupertino)
+    readonly property bool detached:  root.floatOff
+                                      || (root.edgeBar && (VtlConfig.barFloatingFor(root.mon) || Style.isCupertino))
     readonly property int  detachGap: detached ? Math.max(6, VtlConfig.barFloatingFor(root.mon)
                                                              ? VtlConfig.barFloatGapFor(root.mon) : 8) : 0
     // The perpendicular (corner) merge is suppressed by the "origin edge only" transition style.
@@ -292,6 +293,12 @@ PanelWindow {
     // Style. `navPage` is the page-mode state: true = the nav list is showing.
     readonly property string navMode: VtlConfig.settingsNavMode
     property bool navPage: false
+    // "float" navigates like "page" — the dashboard is Home, a gear on it opens the page list — and
+    // additionally detaches: Home keeps growing out of the bar exactly as it does today, and every
+    // actual settings page opens as a centred window instead. So the dashboard stays a bar surface
+    // and the settings stop pretending to be one.
+    readonly property bool pageNav:  root.navMode === "page" || root.navMode === "float"
+    readonly property bool floatOff: root.navMode === "float" && root.activeSection !== "home"
 
     // The menu is opened globally (one instance per screen) but shows on a single monitor. It LATCHES
     // to the monitor focused at open time (UiState.menuMon) and stays there — it does NOT follow the
@@ -383,12 +390,21 @@ PanelWindow {
         readonly property real along: root.mergeStart ? 0
                                     : root.mergeEnd   ? alongMax
                                     : Math.max(0, Math.min(root.mStart - collapsed / 2, alongMax))
-        x: root.mEdge === "left"  ? root.barT + root.detachGap
+        x: root.floatOff ? Math.round((root.sw - width) / 2)
+         : root.mEdge === "left"  ? root.barT + root.detachGap
          : root.mEdge === "right" ? root.sw - root.barT - root.detachGap - width
          : along
-        y: root.mEdge === "top"    ? root.barT + root.detachGap
+        y: root.floatOff ? Math.round((root.sh - height) / 2)
+         : root.mEdge === "top"    ? root.barT + root.detachGap
          : root.mEdge === "bottom" ? root.sh - root.barT - root.detachGap - height
          : along
+        // Only while the panel is already up: leaving Home should GLIDE off the bar to the centre
+        // and slide back when you return. Gated on `reveal`, or the open animation would fight it —
+        // the panel would drift in from wherever it last sat instead of growing out of the icon.
+        Behavior on x { enabled: root.navMode === "float" && menu.reveal > 0.98
+                        NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+        Behavior on y { enabled: root.navMode === "float" && menu.reveal > 0.98
+                        NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
 
         // Block click-through to the desktop, but stay BELOW the rail/content widgets
         // (declared first + z:0) so their MouseAreas still receive clicks.
@@ -541,7 +557,7 @@ PanelWindow {
             anchors { top: parent.top; bottom: parent.bottom; right: parent.right; left: parent.left
                       leftMargin: root.navMode === "sidebar" ? root.railW + 1 : 0 }
 
-            readonly property bool pageMode: root.navMode === "page"
+            readonly property bool pageMode: root.pageNav
             // The active section's page, straight from the registry.
             readonly property var activeMeta: root.sectionMeta(root.activeSection)
             // section key → component-register key, for the à-la-carte on/off pinned atop a feature's page.

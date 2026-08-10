@@ -595,12 +595,22 @@ Item {
             // ── Settings-menu navigation mode (experimental) ──────────────────
             Card {
                 CardLabel { text: "MENU NAVIGATION"
-                            hint: "How this settings menu is navigated — the classic icon sidebar, or full-page navigation (a gear on Home opens a scrollable list of every page)." }
+                            hint: "How this settings menu is navigated, and where the pages appear." }
                 Segmented {
                     equal: true
                     current: VtlConfig.settingsNavMode
-                    segments: [{ label: "Sidebar", key: "sidebar" }, { label: "Pages", key: "page" }]
+                    segments: [{ label: "Sidebar", key: "sidebar" },
+                               { label: "Pages", key: "page" },
+                               { label: "Float", key: "float" }]
                     onPicked: SettingsStore.set("settings_nav_mode", key)
+                }
+                SubLabel {
+                    text: VtlConfig.settingsNavMode === "sidebar"
+                          ? "The classic icon rail down the side; every page opens beside it."
+                        : VtlConfig.settingsNavMode === "page"
+                          ? "A gear on Home opens a scrollable list of every page. Everything stays on the bar."
+                          : "Same page navigation — but the dashboard keeps the bar and the settings "
+                          + "pages open as a window in the middle of the screen."
                 }
             }
 
