@@ -25,9 +25,12 @@ StyledRect {
     width:  parent ? parent.width : 0
     height: col.implicitHeight + p.pad * 2
     radius: Style.rCard
+    // A cut panel takes its definition from the edge rather than the fill — see Style.plateFill.
+    borderWidth: Style.plateBorderW
+    borderColor: Style.plateBorderColor
     // A wash, not a fill — the same translucent bgElement every surface in this shell is made of,
     // one step lighter than the panel it sits on so the edge reads without a border.
-    color:  Style.tint(Colors.bgElement, Style.lift(0.10))
+    color:  Style.plateFill
 
     Column {
         id: col

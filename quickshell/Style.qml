@@ -326,6 +326,46 @@ QtObject {
     readonly property color menuRowHover:  isCupertino ? Qt.rgba(1, 1, 1, 0.13) : root.tint(Colors.bgActive, root.lift(0.16))
     readonly property color menuRowActive: isCupertino ? root.tint(root.accent, 0.40) : root.tint(Colors.bgActive, root.lift(0.28))
 
+    // ── Popout surfaces ────────────────────────────────────────────────────────────────────────
+    // The washes every popout is built from, named ONCE. They used to be written out longhand as
+    // tint(bgElement, lift(x)) at 47 call sites across twelve files, which meant a variant could
+    // restyle the OUTLINE of a panel and never a thing inside it — the shell chamfered its panels
+    // and kept a stack of soft round washes in them.
+    //
+    // Named here, a variant restyles a popout whole. The cut variants take the fills right down and
+    // put the definition in a line instead: a hard-cut panel wants edges, not upholstery.
+    readonly property bool _hardCut: root.chamfer || isStraight || isOutlined
+
+    readonly property color plateFill: root._hardCut ? root.tint(Colors.bgElement, root.lift(0.05))
+                                     : isCupertino   ? Qt.rgba(1, 1, 1, 0.06)
+                                                     : root.tint(Colors.bgElement, root.lift(0.10))
+    readonly property int   plateBorderW: root._hardCut ? Math.max(1, root.chromeBorderWidth) : 0
+    readonly property color plateBorderColor: root.chamfer ? root.tint(root.accent, 0.45)
+                                                           : root.tint(Colors.boNormal, 0.7)
+
+    // An inset readout (StatCell): a well in the plate, so one step further in than the plate is out.
+    readonly property color wellFill:  root._hardCut ? root.tint(root.accent, root.lift(0.09))
+                                                     : root.tint(Colors.bgElement, root.lift(0.10))
+    readonly property int   wellBorderW: root._hardCut ? 1 : 0
+
+    // List rows on a plate.
+    readonly property color rowFill:   root._hardCut ? "transparent" : root.tint(Colors.bgElement, root.lift(0.07))
+    readonly property color rowHover:  root._hardCut ? root.tint(root.accent, root.lift(0.16))
+                                                     : root.tint(Colors.bgElement, root.lift(0.16))
+    readonly property color rowActive: root._hardCut ? root.tint(root.accent, root.lift(0.24))
+                                                     : root.tint(Colors.bgElement, root.lift(0.24))
+
+    // The groove behind a value — a ring's track, a progress bar, a level bed.
+    readonly property color trackFill: root._hardCut ? root.tint(root.accent, root.lift(0.20))
+                                                     : root.tint(Colors.bgElement, root.lift(0.34))
+    // A raised control that is neither plate nor row: a mute pill, a round button, an off disc.
+    readonly property color knobFill:  root._hardCut ? root.tint(root.accent, root.lift(0.14))
+                                                     : root.tint(Colors.bgElement, root.lift(0.22))
+    readonly property color knobHover: root.tint(Colors.bgActive, root.lift(0.30))
+    // The highlight down a plate's top edge. A cut panel does not get one — a chamfered surface with
+    // a soft sheen on it reads as two different materials arguing.
+    readonly property color sheen:     root._hardCut ? "transparent" : root.tint(Colors.fgBright, 0.06)
+
     // ── Chrome outline (bar / flyout / OSD / notification Shape strokes) ──────────
     // Colour, width and free-corner shape all follow the variant, so the bar and every panel
     // outline restyle with the shell. (Corner CUTS/BITES already flow through cornerSeg; here the

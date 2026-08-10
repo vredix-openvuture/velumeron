@@ -91,7 +91,7 @@ PanelWindow {
             }
             Rectangle {
                 width: parent.width; height: 4; radius: 2
-                color: Style.tint(Colors.bgElement, Style.lift(0.34))
+                color: Style.trackFill
                 Rectangle {
                     anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
                     width: parent.width * (root.x.done === true ? 1 : root.frac)

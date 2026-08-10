@@ -292,8 +292,8 @@ PanelWindow {
                         anchors.verticalCenter: parent.verticalCenter
                         width: 30; height: 24; radius: Style.rTile
                         color: NotifService.dnd ? Style.tint(Style.accent, Style.lift(0.34))
-                             : (dndHov.containsMouse ? Style.tint(Colors.bgActive, Style.lift(0.24))
-                                                     : Style.tint(Colors.bgElement, Style.lift(0.14)))
+                             : (dndHov.containsMouse ? Style.knobHover
+                                                     : Style.knobFill)
                         Behavior on color { ColorAnimation { duration: 110 } }
                         Text { anchors.centerIn: parent; text: NotifService.dnd ? "󰂛" : "󰂚"
                                color: NotifService.dnd ? Colors.fgBright : Colors.fgPrimary
@@ -304,8 +304,8 @@ PanelWindow {
                     Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
                         width: 30; height: 24; radius: Style.rTile
-                        color: clrHov.containsMouse ? Style.tint(Colors.bgActive, Style.lift(0.24))
-                                                    : Style.tint(Colors.bgElement, Style.lift(0.14))
+                        color: clrHov.containsMouse ? Style.knobHover
+                                                    : Style.knobFill
                         Behavior on color { ColorAnimation { duration: 110 } }
                         Text { anchors.centerIn: parent; text: "󰎟"; color: Colors.fgPrimary
                                font.pixelSize: 13; font.family: Style.font }
@@ -359,7 +359,7 @@ PanelWindow {
                           left: parent.left; right: parent.right; bottom: parent.bottom
                           leftMargin: 14; rightMargin: 14; bottomMargin: 14 }
                 radius: Style.rCard
-                color: Style.tint(Colors.bgElement, Style.lift(0.10))
+                color: Style.plateFill
 
                 Text {
                     id: listCap

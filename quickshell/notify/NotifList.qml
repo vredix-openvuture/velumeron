@@ -111,9 +111,9 @@ Item {
             // Lighter than they were: these sit ON a plate now, and a card at full module opacity
             // inside a surface reads as a box in a box. Pinned still wears the full plate — it is
             // the one row here you deliberately kept.
-            color:       item.pinnedRow ? Style.tint(Colors.bgElement, Style.lift(0.24))
-                       : cardMa.containsMouse ? Style.tint(Colors.bgElement, Style.lift(0.13))
-                       : Style.tint(Colors.bgElement, Style.lift(0.06))
+            color:       item.pinnedRow ? Style.rowActive
+                       : cardMa.containsMouse ? Style.rowHover
+                       : Style.rowFill
             borderWidth: 0
             Behavior on color { ColorAnimation { duration: 110 } }
 
@@ -229,7 +229,7 @@ Item {
                 }
             }
             // Group count badge — doubles as the expand hint on stacked cards
-            Rectangle {
+            StyledRect {
                 id: badge
                 visible: item.stacked
                 anchors { right: ipin.left; rightMargin: 6; verticalCenter: iapp.verticalCenter }
@@ -240,7 +240,7 @@ Item {
                        color: Colors.fgBright; font.pixelSize: 9; font.bold: true; font.family: Style.font }
             }
             // Pin toggle — pinned rows float to the top and survive "clear all".
-            Rectangle {
+            StyledRect {
                 id: ipin
                 readonly property bool on: item.n ? NotifService.isPinned(item.n) : false
                 anchors { right: idel.left; top: parent.top; rightMargin: 6; topMargin: 10 }
@@ -253,7 +253,7 @@ Item {
                 MouseArea { id: pHov; anchors.fill: parent; hoverEnabled: true
                             onClicked: NotifService.togglePin(item.n) }
             }
-            Rectangle {
+            StyledRect {
                 id: idel
                 anchors { right: parent.right; top: parent.top; rightMargin: 12; topMargin: 10 }
                 width: 20; height: 20; radius: 10

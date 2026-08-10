@@ -277,9 +277,9 @@ Item {
                             required property var modelData
                             width: parent.width; height: 32
                             radius: Style.rControl
-                            color: opt.modelData.on ? Style.tint(Colors.bgActive, Style.lift(0.30))
-                                 : oh.containsMouse ? Style.tint(Colors.bgActive, Style.lift(0.14))
-                                                    : Style.tint(Colors.bgElement, Style.lift(0.16))
+                            color: opt.modelData.on ? Style.knobHover
+                                 : oh.containsMouse ? Style.rowHover
+                                                    : Style.rowHover
                             Behavior on color { ColorAnimation { duration: 90 } }
                             Text {
                                 anchors { left: parent.left; leftMargin: 12; right: parent.right
@@ -310,7 +310,7 @@ Item {
             width: parent.width
             height: 46
             radius: Style.rControl
-            color: Style.tint(Colors.bgElement, Style.lift(0.18))
+            color: Style.plateFill
             visible: root.sel !== null
 
             readonly property var  ch:    root.sel
@@ -454,8 +454,8 @@ Item {
             ClippingRectangle {
                 anchors.fill: parent
                 radius: Style.rCard
-                color: cs.isSel ? Style.tint(Colors.bgElement, Style.lift(0.20))
-                     : hov.containsMouse ? Style.tint(Colors.bgElement, Style.lift(0.07))
+                color: cs.isSel ? Style.rowActive
+                     : hov.containsMouse ? Style.rowFill
                                          : "transparent"
                 Behavior on color { ColorAnimation { duration: 140 } }
                 Rectangle {
@@ -464,7 +464,7 @@ Item {
                     gradient: Gradient {
                         // The palette's bright tone, not pure white: a warm wallust scheme should
                         // get a warm sheen, and #fff is the one colour that never belongs to it.
-                        GradientStop { position: 0.0; color: Style.tint(Colors.fgBright, 0.06) }
+                        GradientStop { position: 0.0; color: Style.sheen }
                         GradientStop { position: 0.55; color: "transparent" }
                     }
                 }
@@ -550,7 +550,7 @@ Item {
                 // and 50 — two separate circles, so the inner one never filled the outer one and
                 // read as decoration. Concentric, the ring simply fills, which is the whole point.
                 ShapePath {
-                    strokeColor: Style.tint(Colors.bgElement, Style.lift(0.34)); strokeWidth: 9
+                    strokeColor: Style.trackFill; strokeWidth: 9
                     fillColor: "transparent"; capStyle: ShapePath.RoundCap
                     PathAngleArc { centerX: knob.r; centerY: knob.r
                                    radiusX: knob.ring; radiusY: knob.ring
@@ -650,7 +650,7 @@ Item {
                 color: "transparent"
                 border.width: 9
                 border.color: offHov.containsMouse ? Style.tint(Style.accent, 0.55)
-                                                   : Style.tint(Colors.bgElement, Style.lift(0.34))
+                                                   : Style.trackFill
                 Behavior on border.color { ColorAnimation { duration: 120 } }
                 Text {
                     anchors.centerIn: parent
@@ -685,8 +685,8 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: 46; height: 24; radius: 12
                 color: cs.muted ? Style.tint(Colors.fgUrgent, 0.30)
-                     : mh.containsMouse ? Style.tint(Colors.bgActive, Style.lift(0.20))
-                                        : Style.tint(Colors.bgElement, Style.lift(0.22))
+                     : mh.containsMouse ? Style.rowActive
+                                        : Style.knobFill
                 Behavior on color { ColorAnimation { duration: 90 } }
                 Text {
                     anchors.centerIn: parent

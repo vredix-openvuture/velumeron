@@ -125,7 +125,7 @@ Flyout {
                         width: Math.round(root.uRing * 0.92); height: width; radius: width / 2
                         color: "transparent"
                         border.width: 4
-                        border.color: Style.tint(Colors.bgElement, Style.lift(0.34))
+                        border.color: Style.trackFill
                     }
                     Text {
                         anchors.centerIn: parent
@@ -200,7 +200,7 @@ Flyout {
                 height: root.uArt + Math.round(root.uGap * 2.3) + 20
                 radius: Style.rTile
                 visible: hero.med.ok === true
-                color: Style.tint(Colors.bgElement, Style.lift(0.14))
+                color: Style.knobFill
 
                 // Between refreshes (5 s) the position is stepped locally, so a playing track gets a
                 // bar that moves rather than one that lurches once every five seconds.
@@ -292,7 +292,7 @@ Flyout {
                                   verticalCenter: parent.verticalCenter }
                         height: 3; radius: 2
                         visible: (hero.med.length ?? 0) > 0
-                        color: Style.tint(Colors.bgElement, Style.lift(0.34))
+                        color: Style.trackFill
                         Rectangle {
                             anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
                             width: parent.width * prog.frac
@@ -326,7 +326,7 @@ Flyout {
                             anchors { left: vGlyph.right; right: parent.right; leftMargin: 7
                                       verticalCenter: parent.verticalCenter }
                             height: 3; radius: 2
-                            color: Style.tint(Colors.bgElement, Style.lift(0.34))
+                            color: Style.trackFill
                             Rectangle {
                                 anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
                                 width: parent.width * Math.max(0, Math.min(1, volume.v / 100))
@@ -402,8 +402,8 @@ Flyout {
                 height: root.uRow + Math.round(root.uGap * 1.2)
                 radius: Style.rTile
                 clip: true
-                color: oh.containsMouse ? Style.tint(Colors.bgElement, Style.lift(0.16))
-                                        : Style.tint(Colors.bgElement, Style.lift(0.07))
+                color: oh.containsMouse ? Style.rowHover
+                                        : Style.rowFill
                 opacity: orow.live ? 1.0 : 0.55
                 Behavior on color { ColorAnimation { duration: 110 } }
                 MouseArea {
@@ -472,19 +472,21 @@ Flyout {
         property bool on: false
         signal pick()
         width: 22; height: 22
-        Rectangle {
+        // StyledRect, not Rectangle: a radio is a circle by convention, not by law — under a cut
+        // variant it takes the same 45° corners as everything else in the panel.
+        StyledRect {
             anchors.fill: parent
             radius: width / 2
             color: sd.on ? Style.tint(Style.accent, 0.20)
-                 : sdH.containsMouse ? Style.tint(Colors.bgActive, Style.lift(0.24)) : "transparent"
-            border.width: 2
-            border.color: sd.on ? Style.accent
-                        : sdH.containsMouse ? Style.tint(Style.accent, 0.65)
-                                            : Style.tint(Colors.bgElement, Style.lift(0.40))
+                 : sdH.containsMouse ? Style.knobHover : "transparent"
+            borderWidth: 2
+            borderColor: sd.on ? Style.accent
+                       : sdH.containsMouse ? Style.tint(Style.accent, 0.65)
+                                           : Style.trackFill
             Behavior on color { ColorAnimation { duration: 120 } }
-            Behavior on border.color { ColorAnimation { duration: 120 } }
+            Behavior on borderColor { ColorAnimation { duration: 120 } }
         }
-        Rectangle {
+        StyledRect {
             anchors.centerIn: parent
             width: sd.on ? 10 : 0; height: width; radius: width / 2
             color: Style.accent
@@ -500,9 +502,9 @@ Flyout {
         property bool   big:  false
         signal trig()
         width: rb.big ? 34 : 28; height: rb.width; radius: rb.width / 2
-        color: rbH.containsMouse ? Style.tint(Colors.bgActive, Style.lift(0.30))
-             : rb.big ? Style.tint(Colors.bgElement, Style.lift(0.26))
-                      : Style.tint(Colors.bgElement, Style.lift(0.14))
+        color: rbH.containsMouse ? Style.knobHover
+             : rb.big ? Style.knobFill
+                      : Style.knobFill
         Behavior on color { ColorAnimation { duration: 100 } }
         Text {
             anchors.centerIn: parent

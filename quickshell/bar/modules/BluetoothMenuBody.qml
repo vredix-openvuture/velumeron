@@ -251,7 +251,7 @@ Column {
                             width: Math.round(root.uRing * 0.9); height: width; radius: width / 2
                             color: "transparent"
                             border.width: 4
-                            border.color: Style.tint(Colors.bgElement, Style.lift(0.34))
+                            border.color: Style.trackFill
                         }
                         Text {
                             anchors.centerIn: parent
@@ -446,11 +446,11 @@ Column {
         Item { width: 1; height: 2 }
 
         // Forget (destructive).
-        Rectangle {
+        StyledRect {
             width: parent.width; height: 36; radius: Style.rControl
             color: fgPH.containsMouse ? Style.tint(Colors.fgUrgent, 0.30)
                                       : Style.tint(Colors.fgUrgent, 0.12)
-            border.width: Math.max(1, Style.controlBorderW); border.color: Colors.fgUrgent
+            borderWidth: Math.max(1, Style.controlBorderW); borderColor: Colors.fgUrgent
             Behavior on color { ColorAnimation { duration: 100 } }
             Text { anchors.centerIn: parent; text: "󰩹  Forget device"; color: Colors.fgUrgent
                    font.pixelSize: 12; font.bold: true; font.family: Style.font }
@@ -472,8 +472,8 @@ Column {
         clip: true
         // The plate travels with the connected device; everything else is a line on the panel with
         // nothing behind it. Same rule as the sound desk and the network list.
-        color: dev && dev.connected ? Style.tint(Colors.bgElement, Style.lift(0.22))
-             : (brH.containsMouse ? Style.tint(Colors.bgElement, Style.lift(0.10)) : "transparent")
+        color: dev && dev.connected ? Style.knobFill
+             : (brH.containsMouse ? Style.plateFill : "transparent")
         Behavior on color { ColorAnimation { duration: 100 } }
         // A row is wide, so its mark is a bar down the left rather than a rule across the top.
         Rectangle {
@@ -542,7 +542,7 @@ Column {
                        : (br.dev && br.dev.paired ? "paired" : "available")
                    color: Colors.fgMuted; font.pixelSize: 10; font.family: Style.font }
         }
-        Rectangle { id: gB
+        StyledRect { id: gB
             visible: br.gearVisible
             anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
             width: 28; height: 28; radius: 14; color: gH.containsMouse ? Colors.bgActive : "transparent"

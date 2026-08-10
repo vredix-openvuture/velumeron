@@ -26,7 +26,11 @@ StyledRect {
     implicitHeight: 44
 
     radius: Style.rTile
-    color:  s.card ? Style.tint(Colors.bgElement, Style.lift(0.10)) : "transparent"
+    // wellFill, not plateFill: this sits INSIDE a plate, and the same wash on both would make it
+    // vanish into its container. A cut variant swaps the wash for a line instead.
+    color:       s.card ? Style.wellFill : "transparent"
+    borderWidth: s.card ? Style.wellBorderW : 0
+    borderColor: Style.plateBorderColor
 
     readonly property color _c: s.warn ? Colors.fgUrgent
                               : s.dim  ? Colors.fgMuted

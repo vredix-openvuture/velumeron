@@ -294,8 +294,8 @@ Column {
                     clip: true
                     // The plate travels with the row you are connected to; everything else is a
                     // line on the panel with nothing behind it. Same rule as the sound desk.
-                    color: nd.modelData.active ? Style.tint(Colors.bgElement, Style.lift(0.22))
-                         : (rHov.containsMouse ? Style.tint(Colors.bgElement, Style.lift(0.10)) : "transparent")
+                    color: nd.modelData.active ? Style.knobFill
+                         : (rHov.containsMouse ? Style.plateFill : "transparent")
                     Behavior on color { ColorAnimation { duration: 100 } }
                     // A row is wide, so its mark is a bar down the left rather than a rule across
                     // the top — the same statement, turned ninety degrees.
@@ -355,7 +355,7 @@ Column {
                         Text { anchors.fill: parent; verticalAlignment: Text.AlignVCenter; visible: pw.text === ""
                                text: "password…"; color: Colors.fgMuted; font: pw.font }
                     }
-                    Rectangle {
+                    StyledRect {
                         id: goBtn
                         anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
                         width: 56; height: 28; radius: Style.rTile
@@ -385,8 +385,8 @@ Column {
                 required property var modelData
                 width: parent.width; height: 44; radius: Style.rControl
                 clip: true
-                color: modelData.active ? Style.tint(Colors.bgElement, Style.lift(0.22))
-                     : (vHov.containsMouse ? Style.tint(Colors.bgElement, Style.lift(0.10)) : "transparent")
+                color: modelData.active ? Style.knobFill
+                     : (vHov.containsMouse ? Style.plateFill : "transparent")
                 Behavior on color { ColorAnimation { duration: 100 } }
                 Rectangle {
                     anchors { left: parent.left; top: parent.top; bottom: parent.bottom
@@ -396,7 +396,7 @@ Column {
                     opacity: modelData.active ? 1 : 0
                     Behavior on opacity { NumberAnimation { duration: 130 } }
                 }
-                Rectangle {
+                StyledRect {
                     id: vTile
                     anchors { left: parent.left; leftMargin: 11; verticalCenter: parent.verticalCenter }
                     width: 28; height: 28; radius: 14
@@ -430,8 +430,8 @@ Column {
         property string icon: ""
         signal trig()
         width: 28; height: 28; radius: Style.rTile
-        color: iHov.containsMouse ? Style.tint(Colors.bgActive, Style.lift(0.30))
-                                  : Style.tint(Colors.bgElement, Style.lift(0.14))
+        color: iHov.containsMouse ? Style.knobHover
+                                  : Style.knobFill
         Behavior on color { ColorAnimation { duration: 100 } }
         Text { anchors.centerIn: parent; text: parent.icon; color: Colors.fgPrimary; font.pixelSize: 13; font.family: Style.font }
         MouseArea { id: iHov; anchors.fill: parent; hoverEnabled: true; onClicked: parent.trig() }
