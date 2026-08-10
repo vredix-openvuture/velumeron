@@ -143,6 +143,50 @@ _main_vertical=$(hyprctl monitors -j 2>/dev/null | jq -r \
 # old awww/mpvpaper + workspace-"showcase" machinery is gone (the crossfade is clean over windows).
 # ═══════════════════════════════════════════════════════════════════════════════════════════════
 
+# ── Showcase: switch to an empty workspace so the change can actually be SEEN ───────────────────
+# This went away on 2026-06-30 with the move to the in-process wallpaper engine (1abef69), thrown
+# out alongside the awww/mpvpaper machinery on the grounds that "the GPU crossfade is clean over
+# windows". It is clean — but clean UNDER your windows is not the same as seen, and the setting
+# kept promising the switch for six weeks after the code that did it was gone. Every caller has
+# been dutifully passing --no-showcase to a flag nothing read.
+#
+# hyprctl dispatch takes LUA here — hypr.lua wraps it as `return hl.dispatch(<expr>)`, so the
+# keyword form dies with a syntax error ("')' expected near '5'"). Checked against the live
+# compositor, not remembered.
+_sc_prev=""
+_showcase_enter() {
+    [[ "$showcase" == true ]] || return 0
+    command -v hyprctl >/dev/null 2>&1 || return 0
+    _sc_prev=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id // empty' 2>/dev/null)
+    [[ -z "$_sc_prev" ]] && return 0
+
+    # The lowest id that holds no windows. It need not exist: Hyprland makes one on demand and drops
+    # it again the moment it empties, which is exactly the lifetime we want. On a machine where 1-9
+    # are all occupied — the normal case here — this lands on 10 and leaves nothing behind.
+    local used i free=""
+    used=" $(hyprctl workspaces -j 2>/dev/null | jq -r '[.[] | select(.windows>0 and .id>0) | .id] | join(" ")' 2>/dev/null) "
+    for i in $(seq 1 20); do
+        [[ "$used" == *" $i "* || "$i" == "$_sc_prev" ]] && continue
+        free=$i; break
+    done
+    [[ -z "$free" ]] && { _sc_prev=""; return 0; }
+
+    hyprctl dispatch "hl.dsp.focus({ workspace = $free })" >/dev/null 2>&1
+    # Let the workspace animation finish before the crossfade starts, or you watch the tail of one
+    # transition through the tail of another.
+    sleep 0.3
+}
+_showcase_leave() {
+    [[ -n "$_sc_prev" ]] || return 0
+    # Wait out the crossfade the shell is running, whatever the user set it to.
+    local ms
+    ms=$(jq -r '.wallpaper_transition_ms // 700' "$VELUMERON_USER_DIR/gui/settings.json" 2>/dev/null)
+    [[ "$ms" =~ ^[0-9]+$ ]] || ms=700
+    sleep "$(awk -v m="$ms" 'BEGIN { printf "%.2f", (m + 500) / 1000 }')"
+    hyprctl dispatch "hl.dsp.focus({ workspace = $_sc_prev })" >/dev/null 2>&1
+    _sc_prev=""
+}
+
 # ── Per-monitor single apply (per-monitor picker / quick-menu) ──────────────────────────────────
 # Set exactly ONE monitor and leave the others untouched; derive the colour theme only when the
 # MAIN monitor's wallpaper changed. Fully separate from the legacy --hor/--ver/--set path.
@@ -150,9 +194,13 @@ if [[ -n "$mon_arg" && -n "$file_arg" ]]; then
     [[ -f "$file_arg" ]] || { echo "wallpaper-set: file not found: $file_arg" >&2; exit 1; }
     _ext="${file_arg##*.}"
 
-    # Native engine: hand this monitor's wallpaper to quickshell, which crossfades it in place (static
-    # image or live video). No awww/mpvpaper, and no workspace "showcase" — the GPU crossfade is clean.
+    # Native engine: hand this monitor's wallpaper to quickshell, which crossfades it in place
+    # (static image or live video). The showcase brackets that crossfade so you see it happen.
+    _showcase_enter
     _engine_set "$mon_arg" "$file_arg"
+    # Back BEFORE wallust, not after: recolouring takes seconds and restarts the shell, and none of
+    # that is worth staring at an empty workspace for.
+    _showcase_leave
 
     # Derive the colour theme only when the MAIN monitor's wallpaper changed (image, or a video's
     # first frame). wallust's own [hooks] update colors.json — quickshell recolours live.
