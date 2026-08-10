@@ -361,6 +361,26 @@ PanelWindow {
         onClicked:    UiState.openDropdown = ""
     }
 
+    // ── Backdrop, float mode only ─────────────────────────────────────────────────
+    // A window in the middle of the screen has nothing holding it there; a docked panel has the bar
+    // for that. Dimming what is behind it is what makes it read as being in FRONT rather than
+    // simply drawn on top.
+    //
+    // Not pure black: derived from the scheme's own ground, so a warm wallust run dims warm. And
+    // only on the monitor the window is on — the input grab spans every screen so a click anywhere
+    // dismisses, but darkening a second monitor to light a window that is not on it would be a
+    // statement about the whole desktop that this is not.
+    //
+    // Declared BEFORE the panel and left at the default z, so it stacks under it; a Rectangle takes
+    // no input, so the click-catcher above keeps receiving clicks through it.
+    Rectangle {
+        anchors.fill: parent
+        color:   Style.tint(Qt.darker(Colors.bgPrimary, 1.8), 0.55)
+        opacity: (root.active && root.floatOff) ? 1 : 0
+        visible: opacity > 0.001
+        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+    }
+
     // ── Menu panel: grows from the vuture-icon's edge into the content area ───────
     Item {
         id: menu
