@@ -48,6 +48,22 @@ Item {
     readonly property var monitors:   Hyprland.monitors
     readonly property var workspaces: Hyprland.workspaces
 
+    // ── Reserved: the wallpaper showcase ────────────────────────────────────────
+    // One workspace per monitor, 1001 upward, that exists solely so a wallpaper change can be
+    // watched without windows over it (see assets/scripts/wallpaper-set.sh). They are machinery,
+    // not places you work, so nothing that lists workspaces may ever show one — the indicator, the
+    // OSD banner and the OSD's dot row all ask this rather than each inventing a cutoff.
+    readonly property int wsShowcaseBase: 1000
+    function isShowcaseWs(id) { return id > comp.wsShowcaseBase }
+    // 1-based monitor index → its own showcase id, so two monitors changing at once cannot land on
+    // the same one.
+    function showcaseWsFor(monName) {
+        var ms = comp.monitors.values
+        for (var i = 0; i < ms.length; i++)
+            if (ms[i].name === monName) return comp.wsShowcaseBase + i + 1
+        return comp.wsShowcaseBase + 1
+    }
+
     // Is a REAL fullscreen window covering this monitor right now (i.e. is the bar hidden)?
     // Every bar-docked surface asks this before deciding whether to dock onto the bar's inner
     // face or grow from the bare screen edge. Do NOT go back to the raw "fullscreen>>0/1" event

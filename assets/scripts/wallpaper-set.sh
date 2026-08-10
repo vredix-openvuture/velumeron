@@ -154,37 +154,51 @@ _main_vertical=$(hyprctl monitors -j 2>/dev/null | jq -r \
 # keyword form dies with a syntax error ("')' expected near '5'"). Checked against the live
 # compositor, not remembered.
 _sc_prev=""
+_sc_mon=""
 _showcase_enter() {
     [[ "$showcase" == true ]] || return 0
     command -v hyprctl >/dev/null 2>&1 || return 0
-    _sc_prev=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id // empty' 2>/dev/null)
+
+    # One reserved workspace per monitor — 1001, 1002, … by monitor index. NOT "the first empty
+    # one": that would be a workspace you actually use, so a wallpaper change would evict you from
+    # it, and two monitors changing at once would fight over the same one. Anything above 1000 is
+    # machinery and is filtered out of the indicator and the OSD (Compositor.isShowcaseWs).
+    #
+    # The id need not exist. Hyprland creates a workspace on demand and drops it the moment it
+    # empties, which is exactly the lifetime this wants: nothing is left behind.
+    local idx
+    idx=$(hyprctl monitors -j 2>/dev/null | jq -r --arg m "$1" \
+        '[.[] | .name] | index($m) // empty' 2>/dev/null)
+    [[ -z "$idx" ]] && return 0
+    _sc_ws=$(( 1001 + idx ))
+
+    # Remember where to come back to, on the monitor that is changing — and which monitor had focus,
+    # because showing the stage there has to move it.
+    _sc_mon=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.monitor // empty' 2>/dev/null)
+    _sc_prev=$(hyprctl monitors -j 2>/dev/null | jq -r --arg m "$1" \
+        '[.[] | select(.name==$m)][0].activeWorkspace.id // empty' 2>/dev/null)
     [[ -z "$_sc_prev" ]] && return 0
 
-    # The lowest id that holds no windows. It need not exist: Hyprland makes one on demand and drops
-    # it again the moment it empties, which is exactly the lifetime we want. On a machine where 1-9
-    # are all occupied — the normal case here — this lands on 10 and leaves nothing behind.
-    local used i free=""
-    used=" $(hyprctl workspaces -j 2>/dev/null | jq -r '[.[] | select(.windows>0 and .id>0) | .id] | join(" ")' 2>/dev/null) "
-    for i in $(seq 1 20); do
-        [[ "$used" == *" $i "* || "$i" == "$_sc_prev" ]] && continue
-        free=$i; break
-    done
-    [[ -z "$free" ]] && { _sc_prev=""; return 0; }
-
-    hyprctl dispatch "hl.dsp.focus({ workspace = $free })" >/dev/null 2>&1
+    hyprctl dispatch "hl.dsp.focus({ monitor = \"$1\" })"   >/dev/null 2>&1
+    hyprctl dispatch "hl.dsp.focus({ workspace = $_sc_ws })" >/dev/null 2>&1
     # Let the workspace animation finish before the crossfade starts, or you watch the tail of one
     # transition through the tail of another.
     sleep 0.3
 }
 _showcase_leave() {
     [[ -n "$_sc_prev" ]] || return 0
-    # Wait out the crossfade the shell is running, whatever the user set it to.
+    # Wait out the crossfade the shell is running, whatever length the user set it to.
     local ms
     ms=$(jq -r '.wallpaper_transition_ms // 700' "$VELUMERON_USER_DIR/gui/settings.json" 2>/dev/null)
     [[ "$ms" =~ ^[0-9]+$ ]] || ms=700
     sleep "$(awk -v m="$ms" 'BEGIN { printf "%.2f", (m + 500) / 1000 }')"
+
     hyprctl dispatch "hl.dsp.focus({ workspace = $_sc_prev })" >/dev/null 2>&1
-    _sc_prev=""
+    # Hand focus back to whichever monitor had it, so a change on the second screen does not leave
+    # the cursor's attention parked there.
+    [[ -n "$_sc_mon" ]] && \
+        hyprctl dispatch "hl.dsp.focus({ monitor = \"$_sc_mon\" })" >/dev/null 2>&1
+    _sc_prev=""; _sc_mon=""
 }
 
 # ── Per-monitor single apply (per-monitor picker / quick-menu) ──────────────────────────────────
@@ -196,7 +210,7 @@ if [[ -n "$mon_arg" && -n "$file_arg" ]]; then
 
     # Native engine: hand this monitor's wallpaper to quickshell, which crossfades it in place
     # (static image or live video). The showcase brackets that crossfade so you see it happen.
-    _showcase_enter
+    _showcase_enter "$mon_arg"
     _engine_set "$mon_arg" "$file_arg"
     # Back BEFORE wallust, not after: recolouring takes seconds and restarts the shell, and none of
     # that is worth staring at an empty workspace for.

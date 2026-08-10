@@ -82,7 +82,10 @@ Row {
             readonly property int    monActiveId: root.monitor?.lastIpcObject?.activeWorkspace?.id
                                                   ?? root.monitor?.activeWorkspace?.id ?? -1
             readonly property bool   isActive: isMine && monActiveId === modelData.id
+            // Never a showcase workspace, whatever max_workspaces is set to — it is not a place,
+            // it is the empty stage a wallpaper change is played on.
             readonly property bool   show:    modelData.id > 0 && modelData.id <= root._max
+                                              && !Compositor.isShowcaseWs(modelData.id)
             readonly property bool   hovered: dotHover.containsMouse
             // Only the active workspace gets the full icon size; the rest sit a little smaller.
             readonly property int    dotD:    isActive ? root._is : root._is - 5

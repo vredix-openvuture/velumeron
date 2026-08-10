@@ -77,7 +77,9 @@ PanelWindow {
             var d  = "" + event.data
             var ci = d.indexOf(",")
             var id = parseInt(ci >= 0 ? d.substring(0, ci) : d)
-            if (isNaN(id) || id <= 0) return
+            // A showcase workspace is machinery; announcing "Workspace 1001" every time you pick a
+            // wallpaper would be the loudest possible way to say nothing.
+            if (isNaN(id) || id <= 0 || Compositor.isShowcaseWs(id)) return
             root.kind   = "workspace"
             root.wsId   = id
             root.wsName = ci >= 0 ? d.substring(ci + 1) : ""
@@ -386,7 +388,9 @@ PanelWindow {
                             readonly property string wsMon:  modelData.monitor?.name ?? modelData.lastIpcObject?.monitor ?? ""
                             readonly property bool   isMine: wsMon === root.monitor?.name
                             readonly property bool   isActive: modelData.id === root.wsId && isMine
-                            visible: modelData.id > 0 && modelData.id <= 10 && (isMine || isActive)
+                            visible: modelData.id > 0 && modelData.id <= 10
+                                     && !Compositor.isShowcaseWs(modelData.id)
+                                     && (isMine || isActive)
                             width:   visible ? (isActive ? 28 : 12) : 0
                             height:  12; radius: 6
                             color:   isActive ? Colors.boActive : Colors.bgElement
