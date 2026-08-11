@@ -92,6 +92,8 @@ ShellRoot {
         function open():   void { UiState.shotOpen = true }
         function close():  void { UiState.shotOpen = false }
         function toggle(): void { UiState.shotOpen = !UiState.shotOpen }
+        // Skip the picker: `velumeron --screenshot region|window|output|all`.
+        function capture(mode: string): void { UiState.shotFire = mode }
     }
 
     IpcHandler {

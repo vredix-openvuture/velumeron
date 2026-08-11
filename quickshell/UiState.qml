@@ -78,6 +78,10 @@ QtObject {
     property bool   menuFloating:   false
     // The screenshot picker is up (SUPER+SHIFT+S → the `screenshot` IPC).
     property bool   shotOpen:       false
+    // A capture asked for WITHOUT the picker (IPC / a direct bind). The overlay watches this,
+    // fires that mode and clears it. Also the only way to exercise the capture path without a
+    // mouse, which is what two rounds of blind guessing cost.
+    property string shotFire:       ""
     // A dialog belonging to ANOTHER process is up (the file chooser behind "Send files"). Distinct
     // from pickerOpen, which is an in-shell picker that only needs the keyboard: a foreign window
     // needs the panel out of its way entirely, and hiding the settings menu for a colour picker

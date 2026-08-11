@@ -21,7 +21,19 @@ PanelWindow {
     property var monitor: Compositor.monitorFor(root.screen)
     readonly property bool onActiveMonitor: monitor !== null && monitor === Compositor.focusedMonitor
     readonly property bool open:   UiState.shotOpen
-    readonly property bool active: root.open && root.onActiveMonitor
+
+    // LATCHED, not live. `onActiveMonitor` reads Compositor.focusedMonitor, and that is not settled
+    // the instant the key opens this — we already caught it false when it should have been true
+    // (the reset to Selection never ran). `active` gates shoot(), so a transient false there means
+    // your click lands on a tile and does NOTHING: the surface is up, hover works, and the capture
+    // silently declines. Which is exactly "I click Selection and nothing happens".
+    //
+    // So: this instance claims the picker when it opens, and KEEPS it until it closes. Once true it
+    // cannot flap back mid-interaction, and if the monitor resolves a beat late it can still claim
+    // it (one-way, below).
+    property bool mine: false
+    readonly property bool active: root.open && root.mine
+    onOnActiveMonitorChanged: if (root.open && root.onActiveMonitor) root.mine = true
 
     // Selection is the default every time, deliberately: it is what the key meant before this
     // existed, and a picker that remembers "full screen" from last week ambushes you.
@@ -81,7 +93,8 @@ PanelWindow {
         } }
     }
     onOpenChanged: {
-        if (!root.open) return
+        if (!root.open) { root.mine = false; return }
+        root.mine = root.onActiveMonitor
         // UNGATED. This used to sit behind `onActiveMonitor`, so on the instance where that had not
         // resolved yet the reset never ran and the picker came back up on whatever you shot LAST —
         // press the key after grabbing a window and Window was preselected. Setting the mode on an
@@ -133,6 +146,20 @@ PanelWindow {
         }
     }
     Process { id: shotProc }
+
+    // A capture with no picker in front of it. Nothing is on screen to wait for, so it goes
+    // straight to the settle timer — which is also what makes the whole path testable without a
+    // pointer.
+    Connections {
+        target: UiState
+        function onShotFireChanged() {
+            if (UiState.shotFire === "" || !root.onActiveMonitor) return
+            root.pending = UiState.shotFire
+            UiState.shotFire = ""
+            if (root.ctxGeom === "" && root.ctxMon === "") { ctxProc.running = false; ctxProc.running = true }
+            settle.restart()
+        }
+    }
 
     Shortcut { sequence: "Escape"; onActivated: if (root.active) root.cancel() }
     Shortcut { sequence: "Return"; onActivated: if (root.active) root.shoot() }
@@ -246,7 +273,12 @@ PanelWindow {
                         MouseArea {
                             id: th
                             anchors.fill: parent; hoverEnabled: true
-                            onClicked: { root.mode = tile.modelData.key; root.shoot() }
+                            onClicked: {
+                                console.warn("screenshot: tile " + tile.modelData.key
+                                             + " active=" + root.active + " mine=" + root.mine)
+                                root.mode = tile.modelData.key
+                                root.shoot()
+                            }
                         }
                     }
                 }
