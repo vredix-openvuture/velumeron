@@ -698,6 +698,15 @@ Item {
         return fancyZonesResolved
     }
 
+    // Screenshot picker (SUPER+SHIFT+S). The MODE is deliberately not persisted — Selection is the
+    // default every time, because a picker that remembers "all screens" from last week ambushes
+    // you. How you work does persist.
+    readonly property bool   shotCopy:   _data.shot_copy   ?? true
+    readonly property bool   shotSave:   _data.shot_save   ?? true
+    readonly property bool   shotCursor: _data.shot_cursor ?? false
+    readonly property int    shotDelay:  _data.shot_delay  ?? 0
+    readonly property string shotDir:    _data.shot_dir    ?? "~/Bilder/Screenshots"
+
     // The phone the panel tracks at the top. Empty = whichever device answers first; the id is a
     // KDE Connect device id, and one that no longer pairs simply falls back rather than blanking
     // the head (PhoneService.mainDevice).

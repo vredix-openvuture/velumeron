@@ -77,6 +77,10 @@ hl.layer_rule({ name = "velumeron-settings-dim", match = { namespace = "velumero
 -- translucent accent glow, turning it into a frosted block). Opt out here.
 hl.layer_rule({ name = "velumeron-hotcorners", match = { namespace = "velumeron-hotcorners" }, blur = false, no_anim = true, xray = true })
 
+-- Velumeron screenshot picker — its backdrop covers the screen, and the global rule blurs anything
+-- above ignore_alpha. Frosting the desktop you are about to photograph would be a memorable bug.
+hl.layer_rule({ name = "velumeron-screenshot", match = { namespace = "velumeron-screenshot" }, blur = false, no_anim = true, xray = true })
+
 -- Velumeron window switcher — must NOT blur: you want to see the windows clearly, and its dim
 -- backdrop would otherwise frost the whole screen. Opt out of the global blur.
 hl.layer_rule({ name = "velumeron-window-switcher", match = { namespace = "velumeron-window-switcher" }, blur = false, no_anim = true, xray = true })

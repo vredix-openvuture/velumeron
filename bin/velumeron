@@ -32,6 +32,7 @@ case "${1:-}" in
         ;;
 
     # ── settings / notifications toggles ────────────────────────────────────
+    --screenshot)           ipc screenshot open ;;  # SUPER+SHIFT+S → the capture picker
     -t|--toggle|--settings) ipc menu toggle ;;     # settings corner menu
     --panel-toggle)         ipc notify toggle ;;   # notification centre
     --dnd)                  ipc notify dnd ;;       # toggle do-not-disturb

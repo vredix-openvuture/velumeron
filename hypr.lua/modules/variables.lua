@@ -19,7 +19,10 @@ browser        = browser       or "librewolf"
 browser_float  = browser_float or (browser .. " --class=browser-float")
 filemanager    = filemanager   or "thunar"
 notifications  = VTL_DIR .. "/bin/velumeron --panel-toggle"
-screenshot_cmd = "hyprshot -z --mode region --output-folder ~/Bilder/Screenshots"
+-- The picker overlay, not a fixed mode. It opens with Selection preselected — one keystroke more
+-- than the old bare region drag for the common case, and every other mode becomes reachable at all.
+-- Falls back to the old behaviour if the shell is not running to answer the IPC.
+screenshot_cmd = VTL_DIR .. "/bin/velumeron --screenshot"
 screen_record  = screen_record or ""
 bitwarden      = bitwarden     or "bitwarden"
 

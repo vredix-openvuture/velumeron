@@ -86,6 +86,14 @@ ShellRoot {
     // IPC: show the volume / brightness OSD (poked by osd-show.sh):
     //   qs -p <dir> ipc call osd volume
     //   qs -p <dir> ipc call osd brightness 80
+    // IPC: the screenshot picker — bound to SUPER+SHIFT+S via bin/velumeron --screenshot.
+    IpcHandler {
+        target: "screenshot"
+        function open():   void { UiState.shotOpen = true }
+        function close():  void { UiState.shotOpen = false }
+        function toggle(): void { UiState.shotOpen = !UiState.shotOpen }
+    }
+
     IpcHandler {
         target: "osd"
         function volume(): void                 { UiState.osdShow("volume", 0) }
@@ -429,6 +437,11 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         delegate: SettingsDim { required property var modelData; screen: modelData }
+    }
+    // The screenshot picker (SUPER+SHIFT+S). One per screen; only the focused one shows.
+    Variants {
+        model: Quickshell.screens
+        delegate: ShotOverlay { required property var modelData; screen: modelData }
     }
     Variants {
         model: Quickshell.screens
