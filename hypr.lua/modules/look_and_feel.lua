@@ -16,7 +16,13 @@ hl.config({
         },
         extend_border_grab_area = 20,
         resize_on_border        = true,
-        allow_tearing           = true,
+        -- OFF since the 11 Aug upgrade (kernel 7.1.3→7.1.6, hyprland 0.56.0→0.56.2,
+        -- mesa 26.1.5→26.1.6). Tearing lets Hyprland use ASYNCHRONOUS page flips, and the freeze
+        -- this machine now hits is `amdgpu [drm] *ERROR* [CRTC:369:crtc-0] flip_done timed out` —
+        -- a flip that never completes, which is the async flip path's own failure mode. A kernel
+        -- bump touches exactly that code.
+        -- Costs nothing outside competitive fullscreen gaming, where it shaves a frame of latency.
+        allow_tearing           = false,
         layout                  = "dwindle",
 
         snap = {
