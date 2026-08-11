@@ -80,10 +80,18 @@ PanelWindow {
             else if (t.indexOf("m ") === 0) root.ctxMon  = t.substring(2)
         } }
     }
-    onOpenChanged: if (root.open && root.onActiveMonitor) {
+    onOpenChanged: {
+        if (!root.open) return
+        // UNGATED. This used to sit behind `onActiveMonitor`, so on the instance where that had not
+        // resolved yet the reset never ran and the picker came back up on whatever you shot LAST —
+        // press the key after grabbing a window and Window was preselected. Setting the mode on an
+        // instance that will not show costs nothing; not setting it on the one that does costs the
+        // one guarantee this picker makes.
+        root.mode = "region"
         root.ctxGeom = ""; root.ctxMon = ""
-        root.mode = "region"                       // Selection every time — see `mode` above.
-        ctxProc.running = false; ctxProc.running = true
+        // The context read stays gated: only the screen that shows the picker needs to know what
+        // was focused, and one hyprctl call per monitor per open is one too many.
+        if (root.onActiveMonitor) { ctxProc.running = false; ctxProc.running = true }
     }
 
     function cancel() { root.pending = ""; UiState.shotOpen = false }
