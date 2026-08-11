@@ -32,7 +32,14 @@ case "${1:-}" in
         ;;
 
     # ── settings / notifications toggles ────────────────────────────────────
-    --screenshot)           ipc screenshot open ;;  # SUPER+SHIFT+S → the capture picker
+    # SUPER+SHIFT+S → the capture picker. NOT the fire-and-forget `ipc` helper: that swallows
+    # failure, and a screenshot key which silently does nothing because the shell is down or wedged
+    # is worse than never having had a picker. If the IPC does not land, do exactly what this key
+    # did before the picker existed.
+    --screenshot)
+        qs -p "$QS_DIR" ipc call screenshot open >/dev/null 2>&1 \
+            || exec hyprshot -z --mode region --output-folder "$HOME/Bilder/Screenshots"
+        ;;
     -t|--toggle|--settings) ipc menu toggle ;;     # settings corner menu
     --panel-toggle)         ipc notify toggle ;;   # notification centre
     --dnd)                  ipc notify dnd ;;       # toggle do-not-disturb

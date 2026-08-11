@@ -19,7 +19,12 @@ browser        = browser       or "librewolf"
 browser_float  = browser_float or (browser .. " --class=browser-float")
 filemanager    = filemanager   or "thunar"
 notifications  = VTL_DIR .. "/bin/velumeron --panel-toggle"
-screenshot_cmd = "hyprshot -z --mode region --output-folder ~/Bilder/Screenshots"
+-- The picker overlay, not a fixed mode. A KEYBIND STRING and nothing more: it is evaluated when
+-- you press the key, never at login, which is why restoring this cannot cost you a session. The two
+-- layer rules that came with it stay out — those are the half that touches how the compositor
+-- handles surfaces, and one variable at a time.
+-- bin/velumeron falls back to the old hyprshot drag if the shell is not up to answer the IPC.
+screenshot_cmd = VTL_DIR .. "/bin/velumeron --screenshot"
 screen_record  = screen_record or ""
 bitwarden      = bitwarden     or "bitwarden"
 
