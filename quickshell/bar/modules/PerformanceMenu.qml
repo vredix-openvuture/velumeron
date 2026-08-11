@@ -11,8 +11,8 @@ Flyout {
     flyoutId: "performance"
     // Percent of the screen, not a pixel count. Wider than it was because a system monitor that
     // has to elide a process name is not telling you which process.
-    panelW: Math.max(360, Math.round(root.sw * VtlConfig.moduleSetting("performance", "menu_width_pct", 18) / 100))
-    maxH:   Math.round(root.sh * VtlConfig.moduleSetting("performance", "menu_height_pct", 72) / 100)
+    panelW: Math.max(560, Math.round(root.sw * VtlConfig.moduleSetting("performance", "menu_width_pct", 30) / 100))
+    maxH:   Math.round(root.sh * VtlConfig.moduleSetting("performance", "menu_height_pct", 60) / 100)
 
     // ── Live state ───────────────────────────────────────────────────────────────
     property real   cpuPct:   0
@@ -212,9 +212,19 @@ Flyout {
     onIsOpenChanged: if (isOpen) { root._cpuPrev = null; root._corePrev = ({}); _poll() }
 
     // ── Content ──────────────────────────────────────────────────────────────────
-    Column {
+    // TWO columns, not one tall stack. A system monitor is scanned, not read: stacked, the process
+    // list ended up a screen and a half below the load that sent you looking for it, and you cannot
+    // compare two things you have to scroll between. Left is what the machine is doing, right is
+    // what it is doing it to.
+    Row {
+        id: cols
         anchors { left: parent.left; right: parent.right; top: parent.top
                   leftMargin: root.inPad; rightMargin: root.inPad; topMargin: root.inPad }
+        spacing: 12
+        readonly property int colW: Math.floor((width - spacing) / 2)
+
+    Column {
+        width: cols.colW
         spacing: 10
 
         // Power mode
@@ -320,6 +330,12 @@ Flyout {
                 lineColor: root._loadColor(Math.max(0, root.gpuPct))
             }
         }
+
+    }
+
+    Column {
+        width: cols.colW
+        spacing: 10
 
         // Per-core, kept: the dials say how hard, this says how evenly.
         DataTile {
@@ -453,7 +469,8 @@ Flyout {
                 }
             }
         }
-}
+    }
+    }
 
     // A filled track. Four of these were hand-rolled in this file with the same two rectangles.
     // NOT called "Bar": qmldir registers bar/Bar.qml under that name — the actual shell bar — and
