@@ -43,6 +43,14 @@ log()    { printf '  %-14s %s\n' "$1" "$2"; }
 
 start_svc() {
     local label="$1" check="$2" start="$3"
+    # Kill switch. `touch ~/.velumeron-no-shell` and the shell stays down at login, so a session
+    # that cannot survive the shell coming up still gives you a usable desktop and a terminal to
+    # debug from. Everything else — hypridle, polkit, clipboard, brightness — starts as normal.
+    # Delete the file to get the shell back.
+    if [[ "$label" == "shell" && -e "$HOME/.velumeron-no-shell" ]]; then
+        log "$label" "SKIPPED (~/.velumeron-no-shell exists)"
+        return
+    fi
     if eval "$check" >/dev/null 2>&1; then
         log "$label" "already running"
         return
