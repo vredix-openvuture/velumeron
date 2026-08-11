@@ -90,6 +90,15 @@ hl.layer_rule({ name = "velumeron-zones", match = { namespace = "velumeron-zones
 hl.layer_rule({ name = "velumeron-clipboard",      match = { namespace = "velumeron-clipboard" },      blur = false, no_anim = true, xray = true })
 hl.layer_rule({ name = "velumeron-clipboard-blur", match = { namespace = "velumeron-clipboard-blur" }, blur = true, blur_popups = true, ignore_alpha = 0.1, no_anim = true, xray = true })
 
+-- Velumeron screenshot picker — the overlay's own dim covers the screen; the global rule would
+-- frost the desktop you are about to photograph. Opt out (ShotOverlay.qml relies on this).
+hl.layer_rule({ name = "velumeron-screenshot", match = { namespace = "velumeron-screenshot" }, blur = false, no_anim = true, xray = true })
+
+-- Velumeron settings backdrop — the dim behind the floating settings window. It matches the
+-- velumeron-settings regex above (blur + dim_around), so both must be switched off again here;
+-- the panel itself keeps its frost on its own surface (SettingsDim.qml relies on this).
+hl.layer_rule({ name = "velumeron-settings-dim", match = { namespace = "velumeron-settings-dim" }, blur = false, dim_around = false, no_anim = true, xray = true })
+
 -- Velumeron OSD — one rule per slide direction.
 -- The daemon sets the namespace to velumeron-osd-{bottom|top|left|right}
 -- based on the position chosen in the OSD settings page.

@@ -48,13 +48,13 @@ PanelWindow {
     // on a small screen must not grow a menu that does not fit.
     //
     // A FLOATING page is sized by neither of those. It stopped being a bar surface the moment it
-    // left the bar, so the raster that fits the dashboard has no say over it: half the monitor,
+    // left the bar, so the raster that fits the dashboard has no say over it: 74% of the monitor,
     // both ways, whatever the dashboard happens to be.
     readonly property int menuW:  !screen ? 300
-        : root.floatOff ? Math.round(screen.width * 0.5)
+        : root.floatOff ? Math.round(screen.width * 0.74)
         : Math.min(Math.round(screen.width  * 0.94), Style.menuContentW + root.railW)
     readonly property int menuH:  !screen ? 540
-        : root.floatOff ? Math.round(screen.height * 0.5)
+        : root.floatOff ? Math.round(screen.height * 0.74)
         : Math.min(Math.round(screen.height * 0.94), Style.dashGridH + Style.dashChromeH)
 
     // ── How the menu merges into the bar ─────────────────────────────────────────
