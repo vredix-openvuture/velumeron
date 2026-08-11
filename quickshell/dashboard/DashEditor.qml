@@ -180,10 +180,15 @@ PanelWindow {
     function addModule(entry) {
         var l = root.copy()
         var w = Math.min(VtlConfig.dashboardCols, entry.w), h = entry.h
-        // Land it in the first genuinely free spot rather than on top of something.
-        var spot = DashModules.firstFree(l, w, h, VtlConfig.dashboardCols, root.dashRows)
+        var meta = DashModules.meta(entry.key) ?? ({})
+        // Fill the space that already exists before asking for more board: if the only gap left is
+        // a 1x1, the module arrives as a 1x1 rather than opening a page and leaving the hole. Every
+        // module goes down to 1x1, so there is always an answer. Resize it afterwards if you meant
+        // it bigger — that is what the grip is for.
+        var spot = DashModules.fitFree(l, w, h, meta.minW ?? 1, meta.minH ?? 1,
+                                       VtlConfig.dashboardCols, root.dashRows, grid.pages)
         l.push({ id: entry.key + "-" + Date.now(), key: entry.key, x: spot.x, y: spot.y,
-                 w: w, h: h, g: "", bg: entry.bg !== false, gbg: true, opts: entry.opts })
+                 w: spot.w, h: spot.h, g: "", bg: entry.bg !== false, gbg: true, opts: entry.opts })
         root.save(l)
     }
     function resetLayout() { root.selIds = []; root.page = 0; SettingsStore.set("dashboard_modules", VtlConfig.dashboardDefault) }

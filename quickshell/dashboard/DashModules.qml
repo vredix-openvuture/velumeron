@@ -149,6 +149,43 @@ Singleton {
     }
     // First free spot, scanning row by row. Used when a module arrives without coordinates —
     // a fresh one from the palette, or an entry written before free placement existed.
+    // Fit a NEW module into the space that already exists, shrinking it if that is what it takes.
+    //
+    // firstFree() only ever asks "where does this fit at its default size", so a 3x2 module with a
+    // single 1x1 gap left on the page had nowhere to go and opened a new page — leaving the hole
+    // behind it. A dashboard is a fixed board; a module that will not fit the space left should
+    // take the space left, not demand more board.
+    //
+    // Candidates run from the requested size down to the module's own minimum, largest area first,
+    // and a tie goes to the one that keeps the requested WIDTH: a 3x1 strip reads far more like the
+    // 3x2 you picked than a 1x2 column does. Only when nothing at all fits inside the pages that
+    // already exist does it fall back to firstFree and start a new one.
+    function fitFree(items, w, h, minW, minH, cols, rowsPerPage, pagesInUse) {
+        var maxRow = (rowsPerPage > 0 && pagesInUse > 0) ? rowsPerPage * pagesInUse : 0
+        if (maxRow > 0) {
+            var cands = []
+            for (var cw = w; cw >= Math.max(1, minW); cw--)
+                for (var ch = h; ch >= Math.max(1, minH); ch--)
+                    cands.push({ w: Math.min(cols, cw), h: ch })
+            cands.sort(function (a, b) {
+                var d = (b.w * b.h) - (a.w * a.h)
+                if (d !== 0) return d
+                return (b.w === w ? 1 : 0) - (a.w === w ? 1 : 0)
+            })
+            for (var k = 0; k < cands.length; k++) {
+                var cd = cands[k]
+                for (var r = 0; r + cd.h <= maxRow; r++) {
+                    if (rowsPerPage > 0 && (r % rowsPerPage) + cd.h > rowsPerPage) continue
+                    for (var c = 0; c + cd.w <= cols; c++)
+                        if (!root.collides(items, { x: c, y: r, w: cd.w, h: cd.h }, null))
+                            return { x: c, y: r, w: cd.w, h: cd.h }
+                }
+            }
+        }
+        var spot = root.firstFree(items, w, h, cols, rowsPerPage)
+        return { x: spot.x, y: spot.y, w: w, h: h }
+    }
+
     function firstFree(items, w, h, cols, rowsPerPage) {
         for (var r = 0; r < 400; r++) {
             // Never straddle a page break.
