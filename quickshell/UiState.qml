@@ -72,6 +72,10 @@ QtObject {
     // corner menu drops its full-screen input grab + keyboard focus so the dialog
     // underneath is interactive, but stays visually open.
     property bool   pickerOpen:     false
+    // The settings menu has left the bar and is floating (nav mode "float", off Home). Published
+    // here because the BACKDROP is a separate layer surface — it has to be, or Hyprland's global
+    // blur rule frosts the whole screen behind it (ignore_alpha is 0.1 and a dim is far above it).
+    property bool   menuFloating:   false
     // A dialog belonging to ANOTHER process is up (the file chooser behind "Send files"). Distinct
     // from pickerOpen, which is an in-shell picker that only needs the keyboard: a foreign window
     // needs the panel out of its way entirely, and hiding the settings menu for a colour picker

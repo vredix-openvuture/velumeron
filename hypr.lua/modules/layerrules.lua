@@ -68,6 +68,11 @@ hl.layer_rule({
 -- rule so blur=false wins), letting the Launcher settings page toggle blur by swapping the namespace.
 hl.layer_rule({ name = "velumeron-launcher-noblur", match = { namespace = "velumeron-launcher-noblur" }, blur = false, xray = true })
 
+-- Velumeron settings backdrop — the dim behind the FLOATING settings window. Must NOT blur: the
+-- global rule blurs anything above ignore_alpha (0.1), and a dim is far above it, so a full-screen
+-- shade would frost the entire desktop. Same reason as the clipboard and the window switcher below.
+hl.layer_rule({ name = "velumeron-settings-dim", match = { namespace = "velumeron-settings-dim" }, blur = false, no_anim = true, xray = true })
+
 -- Velumeron hot corners — the glow overlay must NOT be blurred (the global rule would blur behind its
 -- translucent accent glow, turning it into a frosted block). Opt out here.
 hl.layer_rule({ name = "velumeron-hotcorners", match = { namespace = "velumeron-hotcorners" }, blur = false, no_anim = true, xray = true })

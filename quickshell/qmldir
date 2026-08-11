@@ -195,6 +195,7 @@ LayoutMenu      1.0 bar/modules/LayoutMenu.qml
 
 # Settings menu (the corner dropdown) + its pages
 Settings             1.0 settings/Settings.qml
+SettingsDim          1.0 settings/SettingsDim.qml
 PaletteEditor        1.0 settings/palette/PaletteEditor.qml
 HomeHub              1.0 settings/home/HomeHub.qml
 NetworkManager       1.0 settings/home/NetworkManager.qml

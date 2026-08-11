@@ -308,6 +308,17 @@ PanelWindow {
     // bar while the page it leads to floats made the gear feel like it opened two different things.
     readonly property bool floatOff: root.navMode === "float"
                                      && (root.activeSection !== "home" || root.navPage)
+    // Publish it for SettingsDim, which cannot see in here. Only the instance that owns the latched
+    // monitor speaks, or every screen's copy would fight over one flag.
+    // A Binding, not three handlers: `when` keeps only the instance that owns the latched monitor
+    // writing, and a handler per input is how a file ends up with two onIsOpenChanged and refuses to
+    // load ("Property value set multiple times" — fatal, and qmllint says nothing about it).
+    Binding {
+        target: UiState; property: "menuFloating"
+        when:   root.active
+        value:  root.floatOff && root.isOpen
+        restoreMode: Binding.RestoreBindingOrValue
+    }
 
     // The menu is opened globally (one instance per screen) but shows on a single monitor. It LATCHES
     // to the monitor focused at open time (UiState.menuMon) and stays there — it does NOT follow the
@@ -361,25 +372,6 @@ PanelWindow {
         onClicked:    UiState.openDropdown = ""
     }
 
-    // ── Backdrop, float mode only ─────────────────────────────────────────────────
-    // A window in the middle of the screen has nothing holding it there; a docked panel has the bar
-    // for that. Dimming what is behind it is what makes it read as being in FRONT rather than
-    // simply drawn on top.
-    //
-    // Not pure black: derived from the scheme's own ground, so a warm wallust run dims warm. And
-    // only on the monitor the window is on — the input grab spans every screen so a click anywhere
-    // dismisses, but darkening a second monitor to light a window that is not on it would be a
-    // statement about the whole desktop that this is not.
-    //
-    // Declared BEFORE the panel and left at the default z, so it stacks under it; a Rectangle takes
-    // no input, so the click-catcher above keeps receiving clicks through it.
-    Rectangle {
-        anchors.fill: parent
-        color:   Style.tint(Qt.darker(Colors.bgPrimary, 1.8), 0.55)
-        opacity: (root.active && root.floatOff) ? 1 : 0
-        visible: opacity > 0.001
-        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-    }
 
     // ── Menu panel: grows from the vuture-icon's edge into the content area ───────
     Item {

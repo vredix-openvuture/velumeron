@@ -424,6 +424,12 @@ ShellRoot {
         model: Quickshell.screens
         delegate: ShareGlide { required property var modelData; screen: modelData }
     }
+    // Backdrop for the floating settings window — its own surface so Hyprland's global blur rule
+    // cannot frost the screen behind it (see settings/SettingsDim.qml).
+    Variants {
+        model: Quickshell.screens
+        delegate: SettingsDim { required property var modelData; screen: modelData }
+    }
     Variants {
         model: Quickshell.screens
         delegate: WorkspaceGlide { required property var modelData; screen: modelData }
