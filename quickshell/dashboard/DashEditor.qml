@@ -54,6 +54,17 @@ PanelWindow {
         Math.max(1, Math.floor((root.dashH + Style.cardGap)
                                / (VtlConfig.dashboardCellH + Style.cardGap)))
     property int page: 0
+    // Move every module off the last page and `pages` drops — but the nav that would take you back
+    // is `visible: grid.pages > 1`, so it vanishes at the same moment and leaves you looking at a
+    // page that no longer exists with no way off it. Closing the editor was the only exit, because
+    // onActiveChanged resets the page. The hub has had this clamp since it got pages; the editor
+    // never did.
+    Connections {
+        target: grid
+        function onPagesChanged() {
+            if (root.page > grid.pages - 1) root.page = Math.max(0, grid.pages - 1)
+        }
+    }
 
     // Which module the side panel is editing. Clicking a tile in the preview picks it.
     // The selection is a SET (ctrl-click adds). `selId`/`sel` are the single-selection

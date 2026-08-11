@@ -16,7 +16,9 @@ DashTile {
                                   : Actions.labelFor(root.action.type)
     readonly property string icon:  (root.opts?.icon ?? "") !== "" ? root.opts.icon
                                   : root._defaultIcon
-    readonly property bool showLabel: width >= 96 && height >= 52
+    // A 1x1 never gets a label: at one cell the module IS its icon, and a name squeezed under it
+    // is two unreadable things instead of one readable one. The name becomes the tooltip.
+    readonly property bool showLabel: !root.tiny && width >= 96 && height >= 52
 
     readonly property string _sectionLabel: {
         var v = root.action.value || ""
@@ -85,4 +87,6 @@ DashTile {
     }
     MouseArea { id: hov; anchors.fill: parent; hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor; onClicked: root.trigger() }
+    // The label a 1x1 could not show.
+    HintTip { target: root; hovered: hov.containsMouse && !root.showLabel; text: root.label }
 }

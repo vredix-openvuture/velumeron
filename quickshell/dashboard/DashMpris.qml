@@ -13,7 +13,9 @@ DashTile {
     readonly property bool big: root.height >= 260 || (root.tall && root.height >= 150)
     // The compact cover grows with whatever height the cell has, so a stretched-but-not-big
     // module shows a real picture instead of a thumbnail.
-    readonly property int  cover: Math.max(52, Math.min(128, root.innerH - 24))
+    // The compact record follows the cell it landed in. The floor was 52, which is bigger than a
+    // 1x1 cell's inner height — the disc then hung out of its own tile.
+    readonly property int  cover: Math.max(24, Math.min(128, Math.min(root.innerW, root.innerH)))
 
     // Same wave as the bar module and the popout, behind the tile's content while something
     // plays. Inset by the tile radius so it cannot paint over the rounded corners.
@@ -37,13 +39,18 @@ DashTile {
         visible: root.player === null
         anchors.centerIn: parent
         spacing: 8
+        // Sized from the tile, not from two hard-coded numbers: at 1x1 a 48px disc overflowed the
+        // cell and at 4x3 a 96px one sat in the middle of a field of nothing. Take the short side
+        // and leave room for the caption under it.
         VinylArt {
             anchors.horizontalCenter: parent.horizontalCenter
-            width: root.big ? 96 : 48; height: width
+            width: Math.max(28, Math.min(root.innerW, root.innerH - (root.tiny ? 0 : 26)))
+            height: width
             source: ""; spinning: false
             opacity: 0.5
         }
         Text { anchors.horizontalCenter: parent.horizontalCenter
+               visible: !root.tiny
                text: "Nothing playing"; color: Colors.fgMuted
                font.pixelSize: 12; font.family: Style.font }
     }

@@ -14,6 +14,11 @@ StyledRect {
     // Per-instance options from the layout entry (sub-kind, action, …). The grid rebinds this.
     property var opts: ({})
     property int pad:  Style.cardPad
+    // How many cells this module was given. The grid binds them; a module that is asked to behave
+    // differently at 1x1 asks THESE, never its pixel size.
+    property int cw: 1
+    property int ch: 1
+    readonly property bool tiny: tile.cw <= 1 && tile.ch <= 1
     // Own surface. Off when the module sits in a group that draws ONE card behind all its members —
     // then a per-module card would be a box inside a box.
     property bool showBg: true

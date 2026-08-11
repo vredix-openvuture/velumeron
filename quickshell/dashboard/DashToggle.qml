@@ -14,9 +14,11 @@ DashTile {
                                  : (NotifService.dnd ? "󰂛" : "󰂚")
     readonly property string label: root.what === "night"    ? "Night Light"
                                   : root.what === "caffeine" ? "Caffeine" : "Do not disturb"
-    // Labels only once the tile has the room — an icon-only square still reads fine, and a squat
-    // strip has no vertical room for a second line.
-    readonly property bool showLabel: width >= 96 && height >= 52
+    // Labels only once the tile has the room. A 1x1 never has it: at one cell the module IS its
+    // icon, and a name squeezed under it is two unreadable things instead of one readable one.
+    // The name is not lost — it becomes the tooltip, which is where a label belongs when the
+    // thing it names is already unmistakable.
+    readonly property bool showLabel: !root.tiny && width >= 96 && height >= 52
 
     // `active` always paints, background-off or not — a toggle that can't show its state is
     // pointless. Only the resting fill defers to showBg.
@@ -81,4 +83,6 @@ DashTile {
     }
     MouseArea { id: hov; anchors.fill: parent; hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor; onClicked: root.trigger() }
+    // The label a 1x1 could not show.
+    HintTip { target: root; hovered: hov.containsMouse && !root.showLabel; text: root.label }
 }

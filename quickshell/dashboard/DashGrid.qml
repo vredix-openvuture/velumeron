@@ -377,6 +377,11 @@ Item {
                 onLoaded: {
                     item.opts = Qt.binding(function () { return cell.modelData.opts ?? ({}) })
                     item.showBg = Qt.binding(function () { return cell.modelData.bg !== false })
+                    // The SPAN in cells, not just the pixels. "Is this a 1x1?" is a question about
+                    // the raster, and a module answering it from its width guesses differently on
+                    // every column count and every screen.
+                    item.cw = Qt.binding(function () { return cell.modelData.w ?? 1 })
+                    item.ch = Qt.binding(function () { return cell.modelData.h ?? 1 })
                     if (item.navigate !== undefined) item.navigate.connect(cell.grid.navigate)
                 }
             }
