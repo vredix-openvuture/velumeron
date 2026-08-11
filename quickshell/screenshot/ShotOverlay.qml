@@ -53,8 +53,13 @@ PanelWindow {
     WlrLayershell.exclusiveZone: -1
     WlrLayershell.keyboardFocus: root.active ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
+    // An explicit Region either way. `mask: null` is not "take everything" — every other surface in
+    // this shell that wants input names the rectangle it wants (Flyout, Bar, HotCorners), and the
+    // one that wanted none says `Region {}`. A null mask is undefined ground, and the picker's whole
+    // job is to receive one click.
     Region { id: noInput }
-    mask: root.active ? null : noInput
+    Region { id: allInput; x: 0; y: 0; width: root.width; height: root.height }
+    mask: root.active ? allInput : noInput
     visible: root.active || card.reveal > 0.01
 
     // ── What was on screen when the key was pressed ────────────────────────────
@@ -110,6 +115,10 @@ PanelWindow {
             if (!root.saveFile) a.push("--no-save")
             if (root.cursor)    a.push("--cursor")
             if (root.delay > 0) { a.push("--delay"); a.push("" + root.delay) }
+            // One line per capture. Not decoration: the last two rounds of "it does not work" were
+            // guesses because nothing on this path left a trace, and a screenshot tool is the one
+            // thing you cannot debug by taking a screenshot of it.
+            console.warn("screenshot: " + a.slice(1).join(" "))
             shotProc.command = ["setsid", "bash"].concat(a)
             shotProc.running = false
             shotProc.running = true
