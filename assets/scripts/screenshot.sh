@@ -46,9 +46,18 @@ $cursor && grim_args+=(-c)
 
 case "$mode" in
     region)
+        # `</dev/null` IS THE WHOLE FIX, and it took far too long to find. slurp reads a list of
+        # predefined regions from stdin when stdin is not a terminal. Run from a shell, stdin is a
+        # TTY and slurp draws. Run from quickshell, stdin is a PIPE — so slurp blocked on
+        # anon_pipe_read forever: alive, silent, no Wayland surface, no error, nothing on screen.
+        # Which is exactly "I click Selection and nothing happens".
+        #
+        # grim was never affected, which is why every other mode worked and made this look like a
+        # QML problem. It was never a QML problem.
+        #
         # slurp writes nothing and exits non-zero when you press Escape — that is a cancel, not a
         # failure, and it must not leave a notification behind.
-        geo=$(slurp -d 2>/dev/null) || exit 0
+        geo=$(slurp -d </dev/null 2>/dev/null) || exit 0
         [[ -z "$geo" ]] && exit 0
         grim_args+=(-g "$geo")
         ;;
