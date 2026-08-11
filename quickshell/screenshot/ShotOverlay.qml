@@ -52,7 +52,6 @@ PanelWindow {
     // These DO persist — they are how you work, not what you are grabbing right now.
     readonly property bool copyClip: VtlConfig.shotCopy
     readonly property bool saveFile: VtlConfig.shotSave
-    readonly property bool cursor:   VtlConfig.shotCursor
     readonly property int  delay:    VtlConfig.shotDelay
 
     color: "transparent"
@@ -147,7 +146,6 @@ PanelWindow {
             if (m === "output" && root.ctxMon  !== "") { a.push("--output"); a.push(root.ctxMon) }
             if (!root.copyClip) a.push("--no-copy")
             if (!root.saveFile) a.push("--no-save")
-            if (root.cursor)    a.push("--cursor")
             if (root.delay > 0) { a.push("--delay"); a.push("" + root.delay) }
             // One line per capture. Not decoration: the last two rounds of "it does not work" were
             // guesses because nothing on this path left a trace, and a screenshot tool is the one
@@ -322,10 +320,8 @@ PanelWindow {
                     label: "󰆓  Save file"; on: root.saveFile
                     onTap: SettingsStore.set("shot_save", !root.saveFile)
                 }
-                DataChip {
-                    label: "󰆾  Cursor"; on: root.cursor
-                    onTap: SettingsStore.set("shot_cursor", !root.cursor)
-                }
+                // No cursor toggle. `grim -c` wedged the display pipeline hard enough to need the
+                // power button (amdgpu flip_done timed out) — see assets/scripts/screenshot.sh.
                 DataChip {
                     label: root.delay > 0 ? ("󰔛  " + root.delay + "s delay") : "󰔛  No delay"
                     on: root.delay > 0

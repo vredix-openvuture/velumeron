@@ -703,7 +703,6 @@ Item {
     // you. How you work does persist.
     readonly property bool   shotCopy:   _data.shot_copy   ?? true
     readonly property bool   shotSave:   _data.shot_save   ?? true
-    readonly property bool   shotCursor: _data.shot_cursor ?? false
     readonly property int    shotDelay:  _data.shot_delay  ?? 0
     readonly property string shotDir:    _data.shot_dir    ?? "~/Bilder/Screenshots"
 
