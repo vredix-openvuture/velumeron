@@ -57,21 +57,55 @@ PanelWindow {
     mask: root.active ? null : noInput
     visible: root.active || card.reveal > 0.01
 
-    function cancel() { UiState.shotOpen = false }
-    function shoot() {
-        var m = root.mode
-        UiState.shotOpen = false
-        shotProc.pending = m
-        fire.restart()
+    // ── What was on screen when the key was pressed ────────────────────────────
+    // Read at OPEN, never after. The picker is a keyboard-grabbing layer surface, so by the time it
+    // has come and gone the compositor's idea of "the focused window" is a state this overlay
+    // itself disturbed — and "the window" you meant is the one you were looking at when you
+    // reached for the key.
+    property string ctxGeom: ""
+    property string ctxMon:  ""
+    Process {
+        id: ctxProc
+        command: ["bash", "-c",
+            "hyprctl activewindow -j 2>/dev/null | jq -r 'select(.at != null) | \"g \\(.at[0]),\\(.at[1]) \\(.size[0])x\\(.size[1])\"' 2>/dev/null; " +
+            "hyprctl activeworkspace -j 2>/dev/null | jq -r '\"m \" + (.monitor // \"\")' 2>/dev/null"]
+        stdout: SplitParser { onRead: line => {
+            var t = ("" + line).trim()
+            if (t.indexOf("g ") === 0)      root.ctxGeom = t.substring(2)
+            else if (t.indexOf("m ") === 0) root.ctxMon  = t.substring(2)
+        } }
+    }
+    onOpenChanged: if (root.open && root.onActiveMonitor) {
+        root.ctxGeom = ""; root.ctxMon = ""
+        root.mode = "region"                       // Selection every time — see `mode` above.
+        ctxProc.running = false; ctxProc.running = true
     }
 
+    function cancel() { root.pending = ""; UiState.shotOpen = false }
+
+    // Arm, then close. The capture is fired by the surface actually GOING AWAY, not by a timer
+    // guessing when that might be: the fade is 180 ms and the old timer was 140, so grim ran with
+    // the picker still on screen — it photographed itself, and slurp never got the pointer because
+    // this surface still held the keyboard. `visible` flips only once nothing is left to draw.
+    property string pending: ""
+    function shoot() {
+        if (!root.active) return
+        root.pending = root.mode
+        UiState.shotOpen = false
+    }
+    onVisibleChanged: if (!root.visible && root.pending !== "") settle.restart()
+
     Timer {
-        id: fire
-        // Long enough for the compositor to unmap this surface. Shorter and grim photographs the
-        // picker; slurp, worse, never gets the pointer.
-        interval: 140
+        id: settle
+        // One breath after the unmap, for the compositor to actually drop the surface.
+        interval: 60
         onTriggered: {
-            var a = [Quickshell.env("VELUMERON_DIR") + "/assets/scripts/screenshot.sh", shotProc.pending]
+            var m = root.pending
+            root.pending = ""
+            if (m === "") return
+            var a = [Quickshell.env("VELUMERON_DIR") + "/assets/scripts/screenshot.sh", m]
+            if (m === "window" && root.ctxGeom !== "") { a.push("--geom");   a.push(root.ctxGeom) }
+            if (m === "output" && root.ctxMon  !== "") { a.push("--output"); a.push(root.ctxMon) }
             if (!root.copyClip) a.push("--no-copy")
             if (!root.saveFile) a.push("--no-save")
             if (root.cursor)    a.push("--cursor")
@@ -81,7 +115,7 @@ PanelWindow {
             shotProc.running = true
         }
     }
-    Process { id: shotProc; property string pending: "region" }
+    Process { id: shotProc }
 
     Shortcut { sequence: "Escape"; onActivated: if (root.active) root.cancel() }
     Shortcut { sequence: "Return"; onActivated: if (root.active) root.shoot() }

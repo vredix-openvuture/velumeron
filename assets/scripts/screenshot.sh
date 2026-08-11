@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# screenshot.sh MODE [--no-copy] [--no-save] [--cursor] [--delay N] [--open]
+# screenshot.sh MODE [--geom "X,Y WxH"] [--output NAME] [--no-copy] [--no-save] [--cursor]
+#                    [--delay N] [--open]
 #
 #   MODE   region | window | output | all
 #
@@ -16,6 +17,10 @@ source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh" 
 
 mode="${1:-region}"; shift || true
 copy=true; save=true; cursor=false; delay=0; open_after=false
+# The picker hands these in from the moment the key was pressed. Asking the compositor AFTER the
+# overlay has come and gone means asking about a focus state the overlay itself disturbed — the
+# window you wanted may not be the active one any more.
+geom=""; out_name=""
 
 while (($#)); do
     case "$1" in
@@ -24,6 +29,8 @@ while (($#)); do
         --cursor)  cursor=true;  shift ;;
         --open)    open_after=true; shift ;;
         --delay)   delay="${2:-0}"; shift 2 ;;
+        --geom)    geom="${2:-}";   shift 2 ;;
+        --output)  out_name="${2:-}"; shift 2 ;;
         *) shift ;;
     esac
 done
@@ -46,14 +53,16 @@ case "$mode" in
         grim_args+=(-g "$geo")
         ;;
     window)
-        geo=$(hyprctl activewindow -j 2>/dev/null \
+        geo="$geom"
+        [[ -z "$geo" ]] && geo=$(hyprctl activewindow -j 2>/dev/null \
               | jq -r 'select(.at != null) | "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"' 2>/dev/null)
         [[ -z "$geo" || "$geo" == "null" ]] && { notify-send -a Velumeron -u low \
             "No window" "Nothing focused to capture." >/dev/null 2>&1 & exit 0; }
         grim_args+=(-g "$geo")
         ;;
     output)
-        mon=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.monitor // empty' 2>/dev/null)
+        mon="$out_name"
+        [[ -z "$mon" ]] && mon=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.monitor // empty' 2>/dev/null)
         [[ -n "$mon" ]] && grim_args+=(-o "$mon")
         ;;
     all) ;;                                   # every output, grim's default
