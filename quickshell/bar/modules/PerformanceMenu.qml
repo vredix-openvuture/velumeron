@@ -9,8 +9,10 @@ import Quickshell.Io
 Flyout {
     id: root
     flyoutId: "performance"
-    panelW:   340
-    maxH:     620
+    // Percent of the screen, not a pixel count. Wider than it was because a system monitor that
+    // has to elide a process name is not telling you which process.
+    panelW: Math.max(360, Math.round(root.sw * VtlConfig.moduleSetting("performance", "menu_width_pct", 18) / 100))
+    maxH:   Math.round(root.sh * VtlConfig.moduleSetting("performance", "menu_height_pct", 72) / 100)
 
     // ── Live state ───────────────────────────────────────────────────────────────
     property real   cpuPct:   0
@@ -24,6 +26,20 @@ Flyout {
     property real   gpuPct:   -1
     property int    gpuTemp:  0
     property string profile:  "balanced"
+    // ── The second reading, everything /proc will hand over in one go ──────────────
+    // One subprocess for the lot rather than one per figure: this polls while the panel is open,
+    // and six shells a second to learn six numbers is six times the price of one.
+    property real   load1:    0
+    property real   load5:    0
+    property real   load15:   0
+    property int    procRun:  0
+    property int    procAll:  0
+    property int    upSecs:   0
+    property real   swapUsed: 0        // GiB
+    property real   swapTotal: 0
+    property int    cpuMhz:   0
+    property var    disks:    []       // [{ mount, size, used }]
+    property var    topProcs: []       // [{ name, cpu, mem }]
 
     function _loadColor(p) {
         return p >= 85 ? Colors.fgUrgent : p >= 60 ? Colors.color11 : Style.accent
@@ -122,7 +138,64 @@ Flyout {
         stdout: SplitParser { onRead: line => { var v = parseInt(("" + line).trim()); if (v > 0) root.gpuTemp = v } }
     }
 
+    property var _sysBuf: []
+    Process {
+        id: sysProc
+        command: ["bash", "-c",
+            "read -r l1 l5 l15 procs _ < /proc/loadavg; echo \"load:$l1 $l5 $l15 $procs\"; " +
+            "awk '{printf \"up:%d\\n\", $1}' /proc/uptime; " +
+            "awk '/^SwapTotal:/{t=$2} /^SwapFree:/{f=$2} END{printf \"swap:%d %d\\n\", t, t-f}' /proc/meminfo; " +
+            "awk -F: '/^cpu MHz/{s+=$2; n++} END{if (n) printf \"mhz:%d\\n\", s/n}' /proc/cpuinfo; " +
+            // -x tmpfs/devtmpfs/efivarfs: those are RAM, and a full RAM disk is not a full disk.
+            // The dedup keeps a separate /home but drops it when it shares the root filesystem.
+            "df -B1 --output=target,size,used -x tmpfs -x devtmpfs -x efivarfs / \"$HOME\" 2>/dev/null " +
+            "  | tail -n +2 | awk '!seen[$1]++ {printf \"disk:%s %s %s\\n\", $1, $2, $3}'; " +
+            // `ps` always tops its own list — it burns a whole timeslice being born and measuring.
+            // Drop it, then take five.
+            "ps -eo comm=,pcpu=,pmem= --sort=-pcpu 2>/dev/null | awk '$1!=\"ps\"' | head -5 " +
+            "  | awk '{printf \"proc:%s %s %s\\n\", $1, $2, $3}'"]
+        stdout: SplitParser { onRead: line => root._sysBuf.push(("" + line).trim()) }
+        onRunningChanged: {
+            if (running) { root._sysBuf = []; return }
+            var ds = [], ps = []
+            for (var i = 0; i < root._sysBuf.length; i++) {
+                var l = root._sysBuf[i], c = l.indexOf(":")
+                if (c < 0) continue
+                var k = l.substring(0, c), v = l.substring(c + 1).split(" ")
+                if (k === "load") {
+                    root.load1 = parseFloat(v[0]) || 0
+                    root.load5 = parseFloat(v[1]) || 0
+                    root.load15 = parseFloat(v[2]) || 0
+                    var rp = ("" + v[3]).split("/")
+                    root.procRun = parseInt(rp[0]) || 0
+                    root.procAll = parseInt(rp[1]) || 0
+                } else if (k === "up")   root.upSecs = parseInt(v[0]) || 0
+                else if (k === "mhz")    root.cpuMhz = parseInt(v[0]) || 0
+                else if (k === "swap") {
+                    root.swapTotal = (parseFloat(v[0]) || 0) / 1048576
+                    root.swapUsed  = (parseFloat(v[1]) || 0) / 1048576
+                } else if (k === "disk" && v.length >= 3)
+                    ds.push({ mount: v[0], size: parseFloat(v[1]) || 0, used: parseFloat(v[2]) || 0 })
+                else if (k === "proc" && v.length >= 3)
+                    ps.push({ name: v[0], cpu: parseFloat(v[1]) || 0, mem: parseFloat(v[2]) || 0 })
+            }
+            root.disks = ds
+            root.topProcs = ps
+        }
+    }
+
+    function fmtUp(s) {
+        var d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60)
+        return d > 0 ? (d + "d " + h + "h") : h > 0 ? (h + "h " + m + "m") : (m + "m")
+    }
+    function fmtSize(b) {
+        if (b >= 1099511627776) return (b / 1099511627776).toFixed(1) + " TB"
+        if (b >= 1073741824)    return Math.round(b / 1073741824) + " GB"
+        return Math.round(b / 1048576) + " MB"
+    }
+
     function _poll() {
+        sysProc.running = false; sysProc.running = true
         cpuProc.running = false; cpuProc.running = true
         memProc.running = false; memProc.running = true
         tempProc.running = false; tempProc.running = true
@@ -156,7 +229,12 @@ Flyout {
         }
 
         // The three loads as dials, side by side — comparable at a glance, which stacked
-        // labelled bars never were.
+        // labelled bars never were — with the figures a dial cannot carry underneath.
+        Plate {
+        label: "Load"
+        value: root.load1.toFixed(2) + "  ·  up " + root.fmtUp(root.upSecs)
+        accent: root.load1 > 0 && root.load1 < root.cores.length * 0.7
+        warn:   root.cores.length > 0 && root.load1 > root.cores.length
         Row {
             width: parent.width
             spacing: 10
@@ -176,6 +254,36 @@ Flyout {
                 value: root.memPct / 100; label: "MEM"
                 warn: root.memPct >= 90
             }
+        }
+
+        Grid {
+            id: sysStats
+            width: parent.width
+            columns: width >= 400 ? 4 : 2
+            spacing: 8
+            readonly property int cellW: Math.floor((width - (columns - 1) * spacing) / columns)
+            // Load against core count is the only reading that says whether the machine is KEEPING
+            // UP; a percentage says how busy it is, which is not the same question.
+            StatCell {
+                width: sysStats.cellW
+                value: root.load1.toFixed(2); caption: "Load 1m"
+                warn: root.cores.length > 0 && root.load1 > root.cores.length
+            }
+            StatCell {
+                width: sysStats.cellW
+                value: root.load5.toFixed(2) + " / " + root.load15.toFixed(2); caption: "5m / 15m"
+                dim: true
+            }
+            StatCell {
+                width: sysStats.cellW
+                value: root.procRun + " / " + root.procAll; caption: "Running"
+            }
+            StatCell {
+                width: sysStats.cellW
+                value: root.cpuMhz > 0 ? ((root.cpuMhz / 1000).toFixed(1) + " GHz") : "—"
+                caption: "Clock"; dim: root.cpuMhz <= 0
+            }
+        }
         }
 
         // What they have been doing.
@@ -245,23 +353,125 @@ Flyout {
             }
         }
 
-        DataTile {
-            pad: 12
+        Plate {
+            label: "Memory"
+            value: root.memUsed.toFixed(1) + " / " + root.memTotal.toFixed(1) + " GiB"
+            warn: root.memPct >= 90
+            LoadBar { frac: root.memPct / 100; tint: root._loadColor(root.memPct) }
+            // Swap only when the machine actually has some. A zero-length bar labelled "swap" says
+            // a thing about this system that is not true.
             Row {
-                width: parent.width
-                CardLabel { text: "MEMORY"; width: parent.width - memMeta.width }
-                Text { id: memMeta
-                       text: root.memUsed.toFixed(1) + " / " + root.memTotal.toFixed(1) + " GiB"
-                       color: Colors.fgPrimary; font.pixelSize: Style.fsLabel; font.bold: true
-                       font.family: Style.font }
+                id: swapRow
+                width: parent.width; spacing: 8
+                visible: root.swapTotal > 0.05
+                Text { text: "SWAP"; color: Colors.fgMuted
+                       font.family: Style.font; font.pixelSize: 9; font.bold: true
+                       font.capitalization: Font.AllUppercase; font.letterSpacing: 0.6
+                       anchors.verticalCenter: swapRow.verticalCenter }
+                LoadBar {
+                    width: swapRow.width - 96
+                    anchors.verticalCenter: swapRow.verticalCenter
+                    frac: root.swapTotal > 0 ? root.swapUsed / root.swapTotal : 0
+                    tint: root.swapUsed / Math.max(0.001, root.swapTotal) > 0.5
+                          ? Colors.fgUrgent : Colors.bgActive
+                }
+                Text { text: root.swapUsed.toFixed(1) + " G"; color: Colors.fgMuted
+                       font.family: Style.font; font.pixelSize: 9
+                       anchors.verticalCenter: swapRow.verticalCenter }
             }
-            Rectangle {
-                width: parent.width; height: 6; radius: 3
-                color: Style.tint(Colors.bgPrimary, 0.85)
-                Rectangle { width: Math.round(parent.width * root.memPct / 100); height: parent.height
-                            radius: parent.radius; color: root._loadColor(root.memPct)
-                            Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } } }
+        }
+
+        // ── Storage. One bar per real filesystem; tmpfs is RAM and a full RAM disk is not a full
+        //    disk, so it never appears here.
+        Plate {
+            label: "Storage"
+            visible: root.disks.length > 0
+            value: root.disks.length > 0
+                   ? (root.fmtSize(root.disks[0].size - root.disks[0].used) + " free") : ""
+            accent: true
+            Repeater {
+                model: root.disks
+                delegate: Column {
+                    id: drow
+                    required property var modelData
+                    width: parent.width
+                    spacing: 4
+                    readonly property real frac: drow.modelData.size > 0
+                                                 ? drow.modelData.used / drow.modelData.size : 0
+                    Row {
+                        id: dhead
+                        width: parent.width
+                        Text { text: drow.modelData.mount; color: Colors.fgPrimary
+                               width: dhead.width - dsz.width
+                               elide: Text.ElideMiddle
+                               font.family: Style.font; font.pixelSize: 11; font.bold: true }
+                        Text { id: dsz
+                               text: root.fmtSize(drow.modelData.used) + " / " + root.fmtSize(drow.modelData.size)
+                               color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 10 }
+                    }
+                    LoadBar { frac: drow.frac
+                          tint: drow.frac > 0.9 ? Colors.fgUrgent : Style.accent }
+                }
+            }
+        }
+
+        // ── What is actually using the machine. The dials say how hard it is working; this says
+        //    what it is working ON, which is the question you open a system monitor with.
+        Plate {
+            label: "Top processes"
+            visible: root.topProcs.length > 0
+            value: "by cpu"
+            Repeater {
+                model: root.topProcs
+                delegate: Item {
+                    id: prow
+                    required property var modelData
+                    width: parent.width
+                    height: 22
+                    Text {
+                        anchors { left: parent.left; right: pcpu.left; rightMargin: 8
+                                  verticalCenter: parent.verticalCenter }
+                        elide: Text.ElideRight
+                        text: prow.modelData.name; color: Colors.fgPrimary
+                        font.family: Style.font; font.pixelSize: 11
+                    }
+                    Text {
+                        id: pmem
+                        anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                        width: 42; horizontalAlignment: Text.AlignRight
+                        text: prow.modelData.mem.toFixed(1) + "%"
+                        color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 10
+                    }
+                    Text {
+                        id: pcpu
+                        anchors { right: pmem.left; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                        width: 42; horizontalAlignment: Text.AlignRight
+                        text: prow.modelData.cpu.toFixed(1) + "%"
+                        color: root._loadColor(prow.modelData.cpu)
+                        font.family: Style.font; font.pixelSize: 10; font.bold: true
+                    }
+                }
             }
         }
 }
+
+    // A filled track. Four of these were hand-rolled in this file with the same two rectangles.
+    // NOT called "Bar": qmldir registers bar/Bar.qml under that name — the actual shell bar — and
+    // an inline component that shadows a registered type is a coin toss nobody should be flipping
+    // inside a popout. (qmllint gave it away: it resolved `Bar` to the real one and could not find
+    // `frac` on it.)
+    component LoadBar: Rectangle {
+        id: bar
+        property real frac: 0
+        property color tint: Style.accent
+        width: parent ? parent.width : 0
+        height: 6; radius: 3
+        color: Style.trackFill
+        Rectangle {
+            width: Math.round(bar.width * Math.max(0, Math.min(1, bar.frac)))
+            height: bar.height; radius: bar.radius
+            color: bar.tint
+            Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+        }
+    }
 }
