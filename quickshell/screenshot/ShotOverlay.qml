@@ -115,17 +115,30 @@ PanelWindow {
     // this surface still held the keyboard. `visible` flips only once nothing is left to draw.
     property string pending: ""
     function shoot() {
-        if (!root.active) return
+        // NO `if (!active) return`. A tile cannot be clicked unless this surface is on screen, so
+        // the click IS the proof; anything else asked here can only decline a capture you already
+        // asked for. That guard swallowed clicks for three rounds.
         root.pending = root.mode
         UiState.shotOpen = false
+        // Belt AND braces. The precise trigger is the surface going away (below) — but that is a
+        // signal I could not prove fires, and my own IPC test never exercised it because it called
+        // the timer directly. A capture must not depend on an event I am assuming. Whichever
+        // arrives first wins; runCapture() clears `pending`, so the second is a no-op.
+        backstop.restart()
     }
     onVisibleChanged: if (!root.visible && root.pending !== "") settle.restart()
+
+    Timer { id: backstop; interval: 320; onTriggered: root.runCapture() }
 
     Timer {
         id: settle
         // One breath after the unmap, for the compositor to actually drop the surface.
         interval: 60
-        onTriggered: {
+        onTriggered: root.runCapture()
+    }
+
+    function runCapture() {
+        {
             var m = root.pending
             root.pending = ""
             if (m === "") return
@@ -153,11 +166,18 @@ PanelWindow {
     Connections {
         target: UiState
         function onShotFireChanged() {
-            if (UiState.shotFire === "" || !root.onActiveMonitor) return
-            root.pending = UiState.shotFire
+            // Works with the picker up (this instance owns it) and without it (the focused screen
+            // takes it), so `velumeron --screenshot region` is a capture on its own.
+            if (UiState.shotFire === "") return
+            if (!root.mine && !root.onActiveMonitor) return
+            var m = UiState.shotFire
             UiState.shotFire = ""
             if (root.ctxGeom === "" && root.ctxMon === "") { ctxProc.running = false; ctxProc.running = true }
-            settle.restart()
+            // Deliberately IDENTICAL to what a tile click does — set the mode, call shoot(). A test
+            // that takes a shortcut past the code under test proves nothing, which is exactly how
+            // the broken path survived a "verified" commit.
+            root.mode = m
+            root.shoot()
         }
     }
 
