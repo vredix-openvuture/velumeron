@@ -434,17 +434,57 @@ ShellRoot {
         model: Quickshell.screens
         delegate: ShareGlide { required property var modelData; screen: modelData }
     }
-    // Backdrop for the floating settings window — its own surface so Hyprland's global blur rule
-    // cannot frost the screen behind it (see settings/SettingsDim.qml).
-    Variants {
-        model: Quickshell.screens
-        delegate: SettingsDim { required property var modelData; screen: modelData }
+    // ── Two surfaces that must NOT exist until they are wanted ───────────────────
+    //
+    // Both are full-screen layer surfaces, and until now both were built at login and simply kept
+    // invisible. That put two new always-present surfaces into the session — the only thing about
+    // startup this repo changed — and the session started wedging its display pipeline
+    // (amdgpu: `[CRTC:369:crtc-0] flip_done timed out`, a freeze hard enough that a VT switch will
+    // not save you).
+    //
+    // An invisible window is not a free window: it is a wl_surface the compositor tracks, composites
+    // over and considers on every frame. A backdrop for the settings panel and a picker for
+    // SUPER+SHIFT+S have no business being alive while you log in. The Loader builds them on the
+    // first open and drops them on close — the same shape NotifService uses for its server, for the
+    // same reason.
+    Loader {
+        active: UiState.menuFloating || dimLinger.running
+        sourceComponent: Component {
+            Variants {
+                model: Quickshell.screens
+                delegate: SettingsDim { required property var modelData; screen: modelData }
+            }
+        }
     }
-    // The screenshot picker (SUPER+SHIFT+S). One per screen; only the focused one shows.
-    Variants {
-        model: Quickshell.screens
-        delegate: ShotOverlay { required property var modelData; screen: modelData }
+    Loader {
+        // The LINGER matters. Closing the picker is something the picker itself does, from inside a
+        // click handler — and tearing an object down while its own handler is still on the stack is
+        // how you turn a screenshot into a crash. So the surface unmaps immediately (the overlay
+        // binds `visible` to shotOpen) while the OBJECT outlives the handler that closed it.
+        // It also keeps the overlay alive across the settle window, so the fade is finished and the
+        // surface is gone before grim looks at the screen.
+        active: UiState.shotOpen || shotLinger.running
+        sourceComponent: Component {
+            Variants {
+                model: Quickshell.screens
+                delegate: ShotOverlay { required property var modelData; screen: modelData }
+            }
+        }
     }
+    Timer { id: shotLinger; interval: 320 }
+    Connections {
+        target: UiState
+        function onShotOpenChanged() { if (!UiState.shotOpen) shotLinger.restart() }
+    }
+    Timer { id: dimLinger; interval: 320 }
+    Connections {
+        target: UiState
+        function onMenuFloatingChanged() { if (!UiState.menuFloating) dimLinger.restart() }
+    }
+
+    // The capture itself. No window, no surface — so the picker above is free to be destroyed the
+    // moment it closes, which is what lets it stay out of the login path entirely.
+    ShotRunner { }
     Variants {
         model: Quickshell.screens
         delegate: WorkspaceGlide { required property var modelData; screen: modelData }

@@ -82,6 +82,10 @@ QtObject {
     // fires that mode and clears it. Also the only way to exercise the capture path without a
     // mouse, which is what two rounds of blind guessing cost.
     property string shotFire:       ""
+    // Read while the picker is open, consumed by ShotRunner after it closes. They live here rather
+    // than in the overlay because the overlay is now destroyed on close — see ShotRunner.qml.
+    property string shotGeom:       ""
+    property string shotMon:        ""
     // A dialog belonging to ANOTHER process is up (the file chooser behind "Send files"). Distinct
     // from pickerOpen, which is an in-shell picker that only needs the keyboard: a foreign window
     // needs the panel out of its way entirely, and hiding the settings menu for a colour picker

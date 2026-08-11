@@ -197,6 +197,7 @@ LayoutMenu      1.0 bar/modules/LayoutMenu.qml
 Settings             1.0 settings/Settings.qml
 SettingsDim          1.0 settings/SettingsDim.qml
 ShotOverlay          1.0 screenshot/ShotOverlay.qml
+ShotRunner           1.0 screenshot/ShotRunner.qml
 PaletteEditor        1.0 settings/palette/PaletteEditor.qml
 HomeHub              1.0 settings/home/HomeHub.qml
 NetworkManager       1.0 settings/home/NetworkManager.qml

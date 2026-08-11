@@ -78,8 +78,6 @@ PanelWindow {
     // has come and gone the compositor's idea of "the focused window" is a state this overlay
     // itself disturbed — and "the window" you meant is the one you were looking at when you
     // reached for the key.
-    property string ctxGeom: ""
-    property string ctxMon:  ""
     Process {
         id: ctxProc
         command: ["bash", "-c",
@@ -87,8 +85,8 @@ PanelWindow {
             "hyprctl activeworkspace -j 2>/dev/null | jq -r '\"m \" + (.monitor // \"\")' 2>/dev/null"]
         stdout: SplitParser { onRead: line => {
             var t = ("" + line).trim()
-            if (t.indexOf("g ") === 0)      root.ctxGeom = t.substring(2)
-            else if (t.indexOf("m ") === 0) root.ctxMon  = t.substring(2)
+            if (t.indexOf("g ") === 0)      UiState.shotGeom = t.substring(2)
+            else if (t.indexOf("m ") === 0) UiState.shotMon  = t.substring(2)
         } }
     }
     onOpenChanged: {
@@ -100,84 +98,21 @@ PanelWindow {
         // instance that will not show costs nothing; not setting it on the one that does costs the
         // one guarantee this picker makes.
         root.mode = "region"
-        root.ctxGeom = ""; root.ctxMon = ""
+        UiState.shotGeom = ""; UiState.shotMon = ""
         // The context read stays gated: only the screen that shows the picker needs to know what
         // was focused, and one hyprctl call per monitor per open is one too many.
         if (root.onActiveMonitor) { ctxProc.running = false; ctxProc.running = true }
     }
 
-    function cancel() { root.pending = ""; UiState.shotOpen = false }
+    function cancel() { UiState.shotOpen = false }
 
-    // Arm, then close. The capture is fired by the surface actually GOING AWAY, not by a timer
-    // guessing when that might be: the fade is 180 ms and the old timer was 140, so grim ran with
-    // the picker still on screen — it photographed itself, and slurp never got the pointer because
-    // this surface still held the keyboard. `visible` flips only once nothing is left to draw.
-    property string pending: ""
-    function shoot() {
-        // NO `if (!active) return`. A tile cannot be clicked unless this surface is on screen, so
-        // the click IS the proof; anything else asked here can only decline a capture you already
-        // asked for. That guard swallowed clicks for three rounds.
-        root.pending = root.mode
-        UiState.shotOpen = false
-        // Belt AND braces. The precise trigger is the surface going away (below) — but that is a
-        // signal I could not prove fires, and my own IPC test never exercised it because it called
-        // the timer directly. A capture must not depend on an event I am assuming. Whichever
-        // arrives first wins; runCapture() clears `pending`, so the second is a no-op.
-        backstop.restart()
-    }
-    onVisibleChanged: if (!root.visible && root.pending !== "") settle.restart()
-
-    Timer { id: backstop; interval: 320; onTriggered: root.runCapture() }
-
-    Timer {
-        id: settle
-        // One breath after the unmap, for the compositor to actually drop the surface.
-        interval: 60
-        onTriggered: root.runCapture()
-    }
-
-    function runCapture() {
-        {
-            var m = root.pending
-            root.pending = ""
-            if (m === "") return
-            var a = [Quickshell.env("VELUMERON_DIR") + "/assets/scripts/screenshot.sh", m]
-            if (m === "window" && root.ctxGeom !== "") { a.push("--geom");   a.push(root.ctxGeom) }
-            if (m === "output" && root.ctxMon  !== "") { a.push("--output"); a.push(root.ctxMon) }
-            if (!root.copyClip) a.push("--no-copy")
-            if (!root.saveFile) a.push("--no-save")
-            if (root.delay > 0) { a.push("--delay"); a.push("" + root.delay) }
-            // One line per capture. Not decoration: the last two rounds of "it does not work" were
-            // guesses because nothing on this path left a trace, and a screenshot tool is the one
-            // thing you cannot debug by taking a screenshot of it.
-            console.warn("screenshot: " + a.slice(1).join(" "))
-            shotProc.command = ["setsid", "bash"].concat(a)
-            shotProc.running = false
-            shotProc.running = true
-        }
-    }
-    Process { id: shotProc }
-
-    // A capture with no picker in front of it. Nothing is on screen to wait for, so it goes
-    // straight to the settle timer — which is also what makes the whole path testable without a
-    // pointer.
-    Connections {
-        target: UiState
-        function onShotFireChanged() {
-            // Works with the picker up (this instance owns it) and without it (the focused screen
-            // takes it), so `velumeron --screenshot region` is a capture on its own.
-            if (UiState.shotFire === "") return
-            if (!root.mine && !root.onActiveMonitor) return
-            var m = UiState.shotFire
-            UiState.shotFire = ""
-            if (root.ctxGeom === "" && root.ctxMon === "") { ctxProc.running = false; ctxProc.running = true }
-            // Deliberately IDENTICAL to what a tile click does — set the mode, call shoot(). A test
-            // that takes a shortcut past the code under test proves nothing, which is exactly how
-            // the broken path survived a "verified" commit.
-            root.mode = m
-            root.shoot()
-        }
-    }
+    // Arm and close. That is ALL this does now.
+    //
+    // It used to close itself and then run the capture from a Timer inside the closing window,
+    // which meant the window could never be allowed to die — so it was built at login and kept
+    // alive forever, invisible, one more full-screen surface in every session. ShotRunner outlives
+    // it instead, so this can be created on demand and destroyed on close.
+    function shoot() { UiState.shotFire = root.mode }   // ShotRunner closes us; see there.
 
     Shortcut { sequence: "Escape"; onActivated: if (root.active) root.cancel() }
     Shortcut { sequence: "Return"; onActivated: if (root.active) root.shoot() }
