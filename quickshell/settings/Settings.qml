@@ -105,19 +105,11 @@ PanelWindow {
     // Menu fill — optionally accent-tinted ("colorful"); frosted under cupertino.
     readonly property color cFill: Style.barPanelColor(Style.panelColor(VtlConfig.menuColorful), root.mon)
     // Overlap the anchored bar edge by a hair so LBar's own inner border line is hidden.
-    // ONE pixel, and the number is a compromise between two visible defects.
-    //
-    // The bar's FILL is not cut by the border gap — it runs straight on and ends exactly where this
-    // panel begins. Two half-transparent surfaces meeting on the same pixel is a seam either way:
-    //   seam 2  the panel overlaps into the bar, two alphas stack → a DARKER stripe
-    //   seam 0  they abut, both edges antialias against what is behind → a LIGHTER stripe
-    // One pixel of overlap closes the antialiasing gap while keeping the double-covered strip too
-    // narrow to read as a line of its own.
-    //
-    // The proper fix is for the bar's fill to be cut by the gap as well, so only one surface is
-    // ever painted there — but with a translucent panel that means the covered patch has strictly
-    // less coverage than the bar around it, which is its own artefact. Not attempted here.
-    readonly property int seam:   1
+    // TWO pixels into the bar, and the bar cuts a matching notch out of its own fill along the gap
+    // span (Bar.gapNotchPath) — exactly ONE translucent surface paints that strip. Every smaller
+    // seam still showed a ghost line on a translucent bar: overlap stacks alpha (darker), abutting
+    // antialiases (lighter); only removing the second paint layer removes the line.
+    readonly property int seam:   2
     // ── How fast the merge corners let go ────────────────────────────────────────────────────────
     // The concave fillets are what tie this panel into the bar's edge. Clamping them to A/3 and D/3
     // means they shrink IN STEP with the panel, so on the way out they are gone while the panel is

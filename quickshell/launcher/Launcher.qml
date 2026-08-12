@@ -270,7 +270,7 @@ PanelWindow {
     readonly property real sizeF:    Style.elSizeF(reveal, active ? 1.0 : 0.0)
     readonly property real grow01:   Style.elG01(reveal)
     readonly property int  elFillet: VtlConfig.barInnerRadiusFor(root.mon)   // concave dock-flare radius
-    readonly property int  elSeam:   1
+    readonly property int  elSeam:   2   // covered by Bar.gapNotchPath — see the seam note in Flyout
     readonly property int  elPad: Math.ceil(Math.max(Style.elTopBulge, Style.elSideBulge)) + elFillet + elSeam + 4
     readonly property real elDim:  Math.min(card.width, card.height)
     readonly property real bulgeT: Style.elBulge(reveal, active ? 1.0 : 0.0, Style.elTopBulge,  elDim)
@@ -475,17 +475,20 @@ PanelWindow {
         // which is what "slides into the border" looks like from the middle of an edge. Width also
         // carries the border gap, so the bar's line closes exactly when the last of it goes.
         // Opening is untouched — leads apply to the close only (Style._lead).
-        readonly property real closeLenLead:   0.10
-        readonly property real closeDepthLead: 0.30
-        // The last stretch of the close runs in slow motion — SIZE-wise, not spring-wise: gamma
-        // 2.2 on the close mapping makes the final pixels crawl while the spring keeps its pace,
-        // so the card visibly melts into the bar border instead of blinking through it. Opening
-        // keeps the shared, near-linear gamma. (Deriving this from root.active is safe here:
-        // these are per-frame size bindings, not animation parameters latched at start.)
-        readonly property real closeGamma: 2.2
-        readonly property real morphGamma: root.active ? Style.elEaseGamma : closeGamma
-        width:  morph ? Style.elDockW(!root.growV, root.fullW, root.collapsed, root.sizeF, root.active ? 1.0 : 0.0, closeLenLead, closeDepthLead, morphGamma) : root.fullW
-        height: morph ? Style.elDockH(!root.growV, root.fullH, root.collapsed, root.sizeF, root.active ? 1.0 : 0.0, closeLenLead, closeDepthLead, morphGamma) : root.fullH
+        // The melt, decomposed PER AXIS — the previous attempt put gamma 2.2 on both, which shrank
+        // the whole card early and moved the "slow tail" below visible size: it read as vanishing
+        // even faster. What actually shows the card entering the bar:
+        //   · ONE lead for both axes, so they end together — a width that dies early zips the
+        //     border shut in one frame; staggered deaths leave slivers.
+        //   · HEIGHT falls on gamma 2.2: the card flattens onto the bar while still wide.
+        //   · WIDTH stays near-linear: the flat sliver keeps real width, and the border gap —
+        //     which follows width — closes progressively behind the melt instead of popping.
+        // (Deriving the gamma from root.active is safe: per-frame size bindings, not animation
+        // parameters latched at start.)
+        readonly property real closeLead:  0.30
+        readonly property real depthGamma: root.active ? Style.elEaseGamma : 2.2
+        width:  morph ? Style.elDockW(!root.growV, root.fullW, root.collapsed, root.sizeF, root.active ? 1.0 : 0.0, closeLead, closeLead) : root.fullW
+        height: morph ? Style.elDockH(!root.growV, root.fullH, root.collapsed, root.sizeF, root.active ? 1.0 : 0.0, closeLead, closeLead, depthGamma) : root.fullH
 
         // The two axes are positioned differently:
         //   depth   pinned to the slide edge — docked at the bottom it grows upward, so its top
@@ -506,6 +509,7 @@ PanelWindow {
         // margin) or fullscreen means it is not touching the bar at all and must not cut it.
         readonly property bool gapDock: root.dock && root.dockEdge !== ""
                                         && VtlConfig.edgeActiveFor(root.dockEdge, root.mon)
+                                        && !VtlConfig.barFloatingFor(root.mon)   // a floating bar is not touched, so never cut
         // The skirt allowance belongs HERE and not on the corner-docked panels. This card is centred
         // on its edge and merges into nothing, so it has a fillet on BOTH sides and the widened cut
         // is covered on both. Without it the bar's border reappears across the fillet while the card
@@ -543,11 +547,15 @@ PanelWindow {
         // Windowed: no fade — the card grows out of its edge, and fading it as well would blend
         // the wallpaper's colour into the card while it moved (see Settings.qml). Fullscreen has no
         // edge to grow from, so there it IS the animation and stays a fade.
-        // Cut when the SIZE is spent, not when the spring is. Both axes reach zero at reveal 0.19
-        // (evenLead), but the fillet-skirt Shapes kept painting their pad margin until 0.012 —
-        // a residual lump at the bar, sinking as the spring settled: "it closes, then glides
-        // down". The gap above dies in the same frame, so the border closes exactly behind it.
-        opacity: root.fs ? Style.popFade(root.reveal) : ((width > 1 && height > 1) ? 1 : 0)
+        // Closing FADES the last 48 px of height away instead of cutting at 1 px — a wide, flat
+        // sliver blinking off in one frame was the "suddenly gone". Opening never fades: it grows
+        // through these heights at full presence. The hard zero at ≤1 px stays as the floor so the
+        // fillet-skirt Shapes can never linger on a spent card.
+        readonly property real meltPx: 48
+        opacity: root.fs ? Style.popFade(root.reveal)
+               : (width <= 1 || height <= 1) ? 0
+               : (!root.active && height < meltPx) ? height / meltPx
+               : 1
         MouseArea { anchors.fill: parent }   // swallow clicks so the backdrop doesn't close
 
         Column {

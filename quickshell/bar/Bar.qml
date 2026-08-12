@@ -149,6 +149,30 @@ PanelWindow {
         }
     }
 
+
+    // The seam notch. A docked panel overlaps 2 px into the bar so the two fills meet without an
+    // antialiasing gap — but two TRANSLUCENT fills on one strip always read as a line: stacked
+    // alpha is darker, abutting edges are lighter, and every seam width from 0 to 2 px only chose
+    // between those two ghosts. So the bar cuts that strip out of its OWN fill along the gap span
+    // and exactly one surface paints there. Frame mode only, like the border gap itself.
+    function gapNotchPath() {
+        if (root.dockMode || root.floating || !root.anyGap) return ""
+        var e = UiState.barGapEdge
+        var horiz = (e === "top" || e === "bottom")
+        var f = Math.max(Math.min(root.gapFrom, root.gapTo), horiz ? root.holeL : root.holeT)
+        var g = Math.min(Math.max(root.gapFrom, root.gapTo), horiz ? root.holeR : root.holeB)
+        if (g - f < 0.5) return ""
+        function rect(x0, y0, x1, y1) {
+            return " M" + x0 + "," + y0 + " L" + x1 + "," + y0 + " L" + x1 + "," + y1 + " L" + x0 + "," + y1 + " Z"
+        }
+        var d = 2                                   // must equal the panels' seam, or a hairline returns
+        if (e === "top")    return rect(f, root.holeT - d, g, root.holeT)
+        if (e === "bottom") return rect(f, root.holeB, g, root.holeB + d)
+        if (e === "left")   return rect(root.holeL - d, f, root.holeL, g)
+        if (e === "right")  return rect(root.holeR, f, root.holeR + d, g)
+        return ""
+    }
+
     // ── Path builders (SVG strings) ─────────────────────────────────────────────
     function roundRectPath(x0, y0, x1, y1, rad) {
         var rr = Math.max(0, Math.min(rad, (x1 - x0) / 2, (y1 - y0) / 2))
@@ -218,7 +242,7 @@ PanelWindow {
             var f = floatRect()
             return roundRectPath(f[0], f[1], f[2], f[3], r)
         }
-        return "M0,0 L" + sw + ",0 L" + sw + "," + sh + " L0," + sh + " Z " + holePath()
+        return "M0,0 L" + sw + ",0 L" + sw + "," + sh + " L0," + sh + " Z " + holePath() + gapNotchPath()
     }
 
     // Dock border: OPEN outline along the content side + the two ends only — the edge that
