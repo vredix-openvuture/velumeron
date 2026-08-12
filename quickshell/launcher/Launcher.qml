@@ -477,8 +477,15 @@ PanelWindow {
         // Opening is untouched — leads apply to the close only (Style._lead).
         readonly property real closeLenLead:   0.10
         readonly property real closeDepthLead: 0.30
-        width:  morph ? Style.elDockW(!root.growV, root.fullW, root.collapsed, root.sizeF, root.active ? 1.0 : 0.0, closeLenLead, closeDepthLead) : root.fullW
-        height: morph ? Style.elDockH(!root.growV, root.fullH, root.collapsed, root.sizeF, root.active ? 1.0 : 0.0, closeLenLead, closeDepthLead) : root.fullH
+        // The last stretch of the close runs in slow motion — SIZE-wise, not spring-wise: gamma
+        // 2.2 on the close mapping makes the final pixels crawl while the spring keeps its pace,
+        // so the card visibly melts into the bar border instead of blinking through it. Opening
+        // keeps the shared, near-linear gamma. (Deriving this from root.active is safe here:
+        // these are per-frame size bindings, not animation parameters latched at start.)
+        readonly property real closeGamma: 2.2
+        readonly property real morphGamma: root.active ? Style.elEaseGamma : closeGamma
+        width:  morph ? Style.elDockW(!root.growV, root.fullW, root.collapsed, root.sizeF, root.active ? 1.0 : 0.0, closeLenLead, closeDepthLead, morphGamma) : root.fullW
+        height: morph ? Style.elDockH(!root.growV, root.fullH, root.collapsed, root.sizeF, root.active ? 1.0 : 0.0, closeLenLead, closeDepthLead, morphGamma) : root.fullH
 
         // The two axes are positioned differently:
         //   depth   pinned to the slide edge — docked at the bottom it grows upward, so its top

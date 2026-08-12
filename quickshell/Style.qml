@@ -191,20 +191,25 @@ QtObject {
     // stiff the spring is. Stiffening the spring cannot fix a pause; it only shortens everything
     // else around it.
     readonly property real elEaseGamma: 1.05
-    function _lead(sizeF, lead, target) {
+    // Optional per-surface `gamma`. Above 1 it makes the SIZE crawl as it approaches zero while
+    // the spring runs on unchanged — time slows exactly where the surface meets the bar and
+    // nowhere else. The launcher passes a high one for its close, so the melt into the border is
+    // readable instead of blinking through the last pixels.
+    function _lead(sizeF, lead, target, gamma) {
         var l = (target >= 0.5) ? 0.0 : lead          // opening: no lead, start moving at once
+        var g = (gamma === undefined) ? elEaseGamma : gamma
         var v = Math.max(0, (sizeF - l) / (1.0 - l))
-        return Math.pow(v, elEaseGamma)
+        return Math.pow(v, g)
     }
-    function elDockW(vert, full, nub, sizeF, target, lenLead, depLead) {
+    function elDockW(vert, full, nub, sizeF, target, lenLead, depLead, gamma) {
         var L = (lenLead === undefined) ? elLengthLead : lenLead
         var D = (depLead === undefined) ? elDepthLead  : depLead
-        return full * (vert ? _lead(sizeF, D, target) : _lead(sizeF, L, target))
+        return full * (vert ? _lead(sizeF, D, target, gamma) : _lead(sizeF, L, target, gamma))
     }
-    function elDockH(vert, full, nub, sizeF, target, lenLead, depLead) {
+    function elDockH(vert, full, nub, sizeF, target, lenLead, depLead, gamma) {
         var L = (lenLead === undefined) ? elLengthLead : lenLead
         var D = (depLead === undefined) ? elDepthLead  : depLead
-        return full * (vert ? _lead(sizeF, L, target) : _lead(sizeF, D, target))
+        return full * (vert ? _lead(sizeF, L, target, gamma) : _lead(sizeF, D, target, gamma))
     }
     // A panel that grows OUT of the bar is part of the bar, so it takes the bar's transparency with
     // it. Anything else looks broken the moment the two are asked to read as one shape: a
