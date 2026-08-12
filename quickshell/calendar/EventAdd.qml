@@ -102,7 +102,7 @@ StyledRect {
             Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 40; height: 20; radius: 10; color: ea.allDay ? Style.accent : Colors.bgPrimary
-                Behavior on color { ColorAnimation { duration: 120 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Rectangle { width: 16; height: 16; radius: 8; color: Colors.fgBright; anchors.verticalCenter: parent.verticalCenter
                             x: ea.allDay ? parent.width - width - 2 : 2
                             Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } } }

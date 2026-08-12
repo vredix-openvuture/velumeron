@@ -134,14 +134,25 @@ PanelWindow {
     // same reason: black punches a hole through a wallust-tinted desktop.
     Rectangle {
         anchors.fill: parent
-        color:   Style.tint(Qt.darker(Colors.bgPrimary, 1.8), 0.45)
-        opacity: card.reveal
+        color:   Style.popDimColor(card.reveal)
     }
 
     StyledRect {
         id: card
         property real reveal: root.active ? 1 : 0
-        Behavior on reveal { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+        // The shell's spring, not a fixed curve. This card was the last surface on a plain 180 ms
+        // OutCubic, which is why it alone ignored the Motion sliders in Settings → Style.
+        Behavior on reveal {
+            id: revealB
+            // Direction from the Behavior's own targetValue, NOT the surface's open flag:
+            // the flag flips in the same signal that starts the animation, and the animation
+            // latched the OLD spring — opening ran on the closing spring and vice versa.
+            SpringAnimation {
+                spring:  Style.springFor(revealB.targetValue > 0.5)
+                damping: Style.dampingFor(revealB.targetValue > 0.5)
+                epsilon: 0.003
+            }
+        }
 
         anchors.centerIn: parent
         // Percent of the screen, not pixels: four tiles and their captions need a share of the
@@ -153,8 +164,8 @@ PanelWindow {
         color:   Style.panelColor(VtlConfig.menuColorful)
         borderWidth: Style.chromeBorderWidth
         borderColor: Style.chromeBorder
-        opacity: card.reveal
-        scale:   0.94 + 0.06 * card.reveal
+        opacity: Style.popFade(card.reveal)
+        scale:   Style.popScale(card.reveal)
 
         Column {
             id: body
@@ -198,7 +209,7 @@ PanelWindow {
                              : th.containsMouse ? Style.rowHover : Style.rowFill
                         borderWidth: tile.on ? 2 : 0
                         borderColor: Style.accent
-                        Behavior on color { ColorAnimation { duration: 110 } }
+                        Behavior on color { ColorAnimation { duration: Style.popColorMs } }
 
                         Column {
                             anchors.centerIn: parent

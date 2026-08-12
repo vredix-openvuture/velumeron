@@ -43,7 +43,7 @@ Item {
                 color: it.modelData.focused
                      ? Style.tint(Colors.bgActive, 0.9)
                      : (h.containsMouse ? Style.tint(Colors.bgActive, 0.22) : "transparent")
-                Behavior on color { ColorAnimation { duration: 100 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Image {
                     anchors.centerIn: parent
                     width: root.isz; height: root.isz

@@ -115,7 +115,7 @@ Item {
              : (atype !== "none" ? Style.tint(Style.accent, 0.22) : Style.controlFill)
         border.width: seld ? 0 : Style.controlBorderW
         border.color: Style.controlBorderColor
-        Behavior on color { ColorAnimation { duration: 90 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         Text {
             anchors.centerIn: parent; text: root.typeShort(zb.atype)
             color: zb.seld ? Colors.fgBright : Colors.fgPrimary

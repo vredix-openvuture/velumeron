@@ -29,15 +29,30 @@ PanelWindow {
         reveal = active ? 1 : 0
         if (active) { search.text = ""; list.currentIndex = 0; root.load(); search.forceActiveFocus() }
     }
-    Behavior on reveal { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.003 } }
+    Behavior on reveal {
+        id: revealB
+        // Direction from the Behavior's own targetValue, NOT the surface's open flag:
+        // the flag flips in the same signal that starts the animation, and the animation
+        // latched the OLD spring — opening ran on the closing spring and vice versa.
+        SpringAnimation {
+            spring:  Style.springFor(revealB.targetValue > 0.5)
+            damping: Style.dampingFor(revealB.targetValue > 0.5)
+            epsilon: 0.003
+        }
+    }
     visible: active || root.reveal > 0.01
 
     color: "transparent"
     anchors { top: true; left: true; right: true; bottom: true }
     WlrLayershell.layer:         WlrLayer.Overlay
-    // Blur is opt-in (Settings → OSD): the -blur namespace gets a blur layer rule, the plain
-    // one opts out of the global blur (layerrules.lua) so only the dim shade tints the screen.
-    WlrLayershell.namespace:     VtlConfig.clipboardBlur ? "velumeron-clipboard-blur" : "velumeron-clipboard"
+    WlrLayershell.namespace:     "velumeron-clipboard"
+    // Blur is requested by PROTOCOL (ext-background-effect-v1), not by a compositor rule: the
+    // surface names the region behind it that it wants frosted. Portable to any compositor that
+    // implements it, ignored (translucent, unfrosted) where it is absent — and it needs nothing in
+    // hypr.lua, which is what the namespace swap below used to be for.
+    // Blur is opt-in here (Settings → OSD); off, only the dim shade tints the screen.
+    BackgroundEffect.blurRegion: VtlConfig.clipboardBlur && root.active ? clipBlur : null
+    Region { id: clipBlur; x: 0; y: 0; width: root.width; height: root.height }
     WlrLayershell.keyboardFocus: active ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusiveZone: 0
 
@@ -65,7 +80,7 @@ PanelWindow {
 
     Rectangle {
         anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, (VtlConfig.clipboardDim ? 0.4 : 0.0) * root.reveal)
+        color: VtlConfig.clipboardDim ? Style.popDimColor(root.reveal) : "transparent"
         MouseArea { anchors.fill: parent; onClicked: UiState.clipboardOpen = false }
     }
 
@@ -77,8 +92,8 @@ PanelWindow {
         y: (root.height - height) / 2
         radius: Style.rCard; color: Colors.bgPrimary
         borderWidth: 1; borderColor: Style.chromeBorder
-        opacity: Style.elG01(root.reveal)
-        scale:   0.97 + 0.03 * Style.elG01(root.reveal)
+        opacity: Style.popFade(root.reveal)
+        scale:   Style.popScale(root.reveal)
         MouseArea { anchors.fill: parent }
 
         Column {

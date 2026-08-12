@@ -30,72 +30,41 @@ Item {
         }
     }
 
+    // Straight out of the live config. This was a python subprocess that printed the page's own
+    // three values back to it, so opening the page meant waiting on an interpreter start-up before
+    // the fields had anything in them — and every reload spawned another.
     function reload() {
         folderStatus = ""
-        readProc.running = false; readProc.running = true
+        root.folder     = VtlConfig.wallpaperDirFor(root.targetMon)
+        root.subfolders = VtlConfig.wallpaperSearchSubfolders
+        root.subSorting = VtlConfig.wallpaperSubfolderSorting
     }
     function setTargetMon(n) { targetMon = n; reload() }
 
-    Process {
-        id: readProc
-        command: ["python3", "-c",
-            "import json,os,sys;" +
-            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
-              "or os.path.expanduser('~/.config'),'velumeron');" +
-            "p=os.path.join(pu,'gui','settings.json');" +
-            "d=json.load(open(p)) if os.path.exists(p) else {};" +
-            "m=sys.argv[1];" +
-            "print('dir:'+str((d.get('wallpaper_dirs',{}) or {}).get(m,'') or ''));" +
-            "print('sub:'+('1' if d.get('wallpaper_search_subfolders') else '0'));" +
-            "print('sort:'+('1' if d.get('wallpaper_subfolder_sorting') else '0'))",
-            root.targetMon]
-        stdout: SplitParser {
-            onRead: line => {
-                var t = line
-                if      (t.startsWith("dir:"))  root.folder     = t.slice(4)
-                else if (t.startsWith("sub:"))  root.subfolders = t.slice(4) === "1"
-                else if (t.startsWith("sort:")) root.subSorting = t.slice(5) === "1"
-            }
-        }
-    }
-
+    // Through SettingsStore, like every other page. The three keys go out as three calls and land
+    // as ONE write, because the store batches whatever accumulates inside its debounce window —
+    // which is also why this no longer has to hand-roll a merge to avoid clobbering its neighbours.
+    //
+    // What it used to do: build the whole document in python and write it straight over
+    // settings.json (no tmp+rename), from a Process it restarted with `running = false` — so two
+    // saves in quick succession killed the first mid-write, and the file being killed mid-write was
+    // the entire configuration.
     function save() {
-        var py = "import json,os,sys;" +
-            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
-              "or os.path.expanduser('~/.config'),'velumeron');" +
-            "p=os.path.join(pu,'gui','settings.json');" +
-            "os.makedirs(os.path.dirname(p),exist_ok=True);" +
-            "d=json.load(open(p)) if os.path.exists(p) else {};" +
-            "m=sys.argv[1];dirp=sys.argv[2].strip();sub=sys.argv[3]=='1';sort=sys.argv[4]=='1';" +
-            "wd=d.get('wallpaper_dirs',{}) or {};" +
-            "wd[m]=dirp;" +
-            "wd={k:v for k,v in wd.items() if v};" +
-            "d['wallpaper_dirs']=wd;" +
-            "d['wallpaper_search_subfolders']=sub;" +
-            "d['wallpaper_subfolder_sorting']=sort;" +
-            "open(p,'w').write(json.dumps(d,indent=2))"
-        saveProc.command = ["python3", "-c", py, root.targetMon, root.folder.trim(),
-                            root.subfolders ? "1" : "0", root.subSorting ? "1" : "0"]
-        saveProc.running = false; saveProc.running = true
+        var wd = {}
+        var cur = VtlConfig.wallpaperDirs
+        for (var k in cur) if (cur[k]) wd[k] = cur[k]
+        var dirp = root.folder.trim()
+        if (dirp) wd[root.targetMon] = dirp
+        else      delete wd[root.targetMon]
+        SettingsStore.set("wallpaper_dirs", wd)
+        SettingsStore.set("wallpaper_search_subfolders", root.subfolders)
+        SettingsStore.set("wallpaper_subfolder_sorting", root.subSorting)
         folderStatus = "Saved"
         thumbsProc.running = false; thumbsProc.running = true
         clearTimer.restart()
     }
-    Process { id: saveProc }
     // Write a single key immediately (the transition controls apply on click — no Save button).
-    function saveKey(key, value) {
-        VtlConfig.applyLocal(key, value)   // instant UI feedback; the write below persists it
-        var py = "import json,os,sys;" +
-            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
-              "or os.path.expanduser('~/.config'),'velumeron');" +
-            "p=os.path.join(pu,'gui','settings.json'); os.makedirs(os.path.dirname(p),exist_ok=True);" +
-            "d=json.load(open(p)) if os.path.exists(p) else {};" +
-            "d[sys.argv[1]]=json.loads(sys.argv[2]);" +
-            "open(p,'w').write(json.dumps(d,indent=2))"
-        keyProc.command = ["python3", "-c", py, key, JSON.stringify(value)]
-        keyProc.running = false; keyProc.running = true
-    }
-    Process { id: keyProc }
+    function saveKey(key, value) { SettingsStore.set(key, value) }
     Process {
         id: thumbsProc
         command: ["bash", "-c",

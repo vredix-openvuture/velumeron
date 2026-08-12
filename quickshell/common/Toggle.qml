@@ -36,7 +36,7 @@ StyledRect {
             height: 1
             color:  Qt.rgba(Colors.fgMuted.r, Colors.fgMuted.g, Colors.fgMuted.b,
                             rowHover.containsMouse ? 0.75 : 0.35)
-            Behavior on color { ColorAnimation { duration: 100 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         }
     }
 

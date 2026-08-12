@@ -28,7 +28,7 @@ DashTile {
     borderColor: root.active ? Style.tint(Style.accent, 0.55)
                : root.showBg ? Style.cardBorderColor : "transparent"
     borderWidth: (root.active || root.showBg) ? Style.cardBorderW : 0
-    Behavior on color { ColorAnimation { duration: 120 } }
+    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
     function trigger() {
         if (root.what === "night") DashState.toggleNight()

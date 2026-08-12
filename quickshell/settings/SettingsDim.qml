@@ -39,6 +39,8 @@ PanelWindow {
         // warm instead of punching a grey hole through it.
         color:   Style.tint(Qt.darker(Colors.bgPrimary, 1.8), 0.55)
         opacity: root.shown ? 1 : 0
-        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        // Matched to the panel's own travel (Settings.qml floatT, 300 ms): the dim arriving on a
+        // different clock than the window it belongs to read as two separate events.
+        Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
     }
 }

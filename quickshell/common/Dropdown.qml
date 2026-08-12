@@ -21,7 +21,7 @@ Column {
         color: ddHov.containsMouse ? Style.controlHover : Style.controlFill
         borderWidth: dd.open ? Math.max(1, Style.controlBorderW) : Style.controlBorderW
         borderColor: dd.open ? Style.accent : Style.controlBorderColor
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         Text {
             anchors { left: parent.left; leftMargin: 12; right: chev.left; rightMargin: 8
                       verticalCenter: parent.verticalCenter }
@@ -46,7 +46,7 @@ Column {
                      : (oHov.containsMouse ? Style.controlHover : Style.controlFill)
                 borderWidth: modelData.on ? Style.selBorderW : Style.controlBorderW
                 borderColor: modelData.on ? Style.selBorderColor : Style.controlBorderColor
-                Behavior on color { ColorAnimation { duration: 90 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Row {
                     anchors { left: parent.left; leftMargin: 12; right: parent.right; rightMargin: 30
                               verticalCenter: parent.verticalCenter }

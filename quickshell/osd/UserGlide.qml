@@ -27,7 +27,7 @@ BarGlide {
                 width: 36; height: 36; radius: 9
                 color: tHov.containsMouse ? Colors.bgActive
                      : Style.tint(Colors.bgActive, 0.14)
-                Behavior on color { ColorAnimation { duration: 100 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Text {
                     anchors.centerIn: parent
                     text:  tile.modelData.icon
@@ -39,6 +39,7 @@ BarGlide {
                     anchors.fill: parent
                     hoverEnabled: true
                     onClicked: {
+                        SettingsStore.flushNow()   // debounced writes must not die with the session
                         UiState.userHover = false
                         sessionProc.command = ["bash", "-c", tile.modelData.cmd]
                         sessionProc.running = false; sessionProc.running = true

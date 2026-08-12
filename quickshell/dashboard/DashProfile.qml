@@ -51,7 +51,7 @@ DashTile {
                      : mHov.containsMouse ? Style.controlHover : Style.controlFill
                 borderWidth: Style.controlBorderW
                 borderColor: modeRow.on ? Style.accent : Style.controlBorderColor
-                Behavior on color { ColorAnimation { duration: 120 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Column {
                     anchors.centerIn: parent
                     spacing: 1

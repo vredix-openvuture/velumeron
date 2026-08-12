@@ -45,7 +45,7 @@ DashTile {
 
     color: hov.containsMouse ? Style.controlHover
          : root.showBg ? Style.cardFill : "transparent"
-    Behavior on color { ColorAnimation { duration: 100 } }
+    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
     function trigger() {
         if (root.action.type === "section") { root.navigate(root.action.value || ""); return }
@@ -65,7 +65,7 @@ DashTile {
                font.pixelSize: 19; font.family: Style.font
                scale: hov.containsMouse ? 1.12 : 1
                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
-               Behavior on color { ColorAnimation { duration: 120 } } }
+               Behavior on color { ColorAnimation { duration: Style.ctrlMs } } }
         MarqueeText { anchors.verticalCenter: parent.verticalCenter
                       width: parent.width - 29
                       text: root.label; color: Colors.fgPrimary; pixelSize: 12 }
@@ -80,7 +80,7 @@ DashTile {
                font.pixelSize: 20; font.family: Style.font
                scale: hov.containsMouse ? 1.12 : 1
                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
-               Behavior on color { ColorAnimation { duration: 120 } } }
+               Behavior on color { ColorAnimation { duration: Style.ctrlMs } } }
         MarqueeText { visible: root.showLabel
                       width: parent.width; hAlign: Text.AlignHCenter
                       text: root.label; color: Colors.fgPrimary; pixelSize: 11 }

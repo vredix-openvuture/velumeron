@@ -67,7 +67,7 @@ Item {
                 color:        root.connected ? Style.accent : "transparent"
                 border.width: root.connected ? 0 : 1
                 border.color: Colors.fgMuted
-                Behavior on color { ColorAnimation { duration: 120 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
             }
         }
 

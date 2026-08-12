@@ -35,7 +35,7 @@ Item {
         font.family:    root._font
         font.pixelSize: root.instanceKey !== "" ? VtlConfig.moduleIconSizeFor(root.instanceKey, root.barMon)
                                                 : VtlConfig.barIconSizeFor(root.barMon)
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
     }
 
     MouseArea {

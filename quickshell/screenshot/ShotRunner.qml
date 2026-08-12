@@ -26,7 +26,12 @@ QtObject {
 
     property string _mode: ""
 
-    readonly property Process _proc: Process { }
+    // The shutter fires when the capture SUCCEEDED, not when it was asked for: region mode is still
+    // waiting for you to drag a box, and `--delay` is a deliberate wait. A non-zero exit means
+    // slurp was cancelled or grim failed — nothing was captured, so nothing should be heard.
+    readonly property Process _proc: Process {
+        onExited: code => { if (code === 0) SoundService.play("screenshot") }
+    }
 
     readonly property Timer _settle: Timer {
         interval: runner.settleMs

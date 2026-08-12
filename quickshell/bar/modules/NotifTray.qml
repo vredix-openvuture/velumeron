@@ -57,7 +57,7 @@ Item {
         color: bellHover.containsMouse ? Colors.fgBright : (Colors[VtlConfig.moduleColorName("notiftray")] ?? Colors.fgPrimary)
         font.family:    VtlConfig.moduleFontFor("notiftray")
         font.pixelSize: root.sz
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
         // Unread indicator — an accent dot at the top-right while unread notifications exist.
         Rectangle {

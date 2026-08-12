@@ -30,7 +30,8 @@ PanelWindow {
     // Dock leaves a little air at the two ends (reuses the gap value) and stays flush to its edge.
     readonly property int  air: dockMode ? VtlConfig.barFloatGapFor(root.mon) : 0
     readonly property int  r:   Style.chromeR(VtlConfig.barInnerRadiusFor(root.mon))
-    readonly property real bgAlpha: VtlConfig.barOpacityEnabled ? VtlConfig.barOpacityValue : 1.0
+    readonly property real bgAlpha: VtlConfig.barOpacityEnabledFor(root.mon)
+                                    ? VtlConfig.barOpacityValueFor(root.mon) : 1.0
 
     // Bar background: optionally tinted with a little accent ("colorful"); neutral-frosted under
     // cupertino (Style.frost — the compositor blur supplies the colour, not the theme).
@@ -40,6 +41,18 @@ PanelWindow {
                                              Colors.bgPrimary.b * (1 - tintAmt) + Colors.bgActive.b * tintAmt, 1))
     readonly property color cFill:   Qt.rgba(cBg.r, cBg.g, cBg.b, bgAlpha)
     readonly property color cBorder: Style.tint(Style.chromeBorder, bgAlpha)
+
+    // Is a popout currently occupying part of THIS monitor's border, on this edge? The bar leaves
+    // that stretch out of its own outline so the popout's outline can carry the line across (see
+    // UiState.setBarGap). A "Z"-closed path is also suppressed while a gap is open — the run is no
+    // longer a closed loop.
+    function gapOn(e) {
+        return UiState.barGapMon === root.mon && UiState.barGapEdge === e
+               && UiState.barGapTo - UiState.barGapFrom > 0.5
+    }
+    readonly property real gapFrom: UiState.barGapFrom
+    readonly property real gapTo:   UiState.barGapTo
+    readonly property bool anyGap:  UiState.barGapMon === root.mon && UiState.barGapEdge !== ""
 
     function edgeOn(e) { return VtlConfig.edgeActiveFor(e, root.mon) }
     function thick(e)  { return edgeOn(e) ? VtlConfig.edgeThicknessFor(e, root.mon) : 0 }
@@ -54,6 +67,22 @@ PanelWindow {
     readonly property real holeR: edgeOn("right")  ? sw - tRight : sw
     readonly property real holeT: edgeOn("top")    ? tTop        : 0
     readonly property real holeB: edgeOn("bottom") ? sh - tBottom : sh
+
+    // Report the drawn inner face so docked surfaces can align to it exactly (UiState.barInner).
+    // These ARE the numbers the strips are built from, so nothing downstream has to re-derive them.
+    onHoleTChanged: root._publishInner()
+    onHoleBChanged: root._publishInner()
+    onHoleLChanged: root._publishInner()
+    onHoleRChanged: root._publishInner()
+    Component.onCompleted:   root._publishInner()
+    Component.onDestruction: UiState.setBarInner(root.mon, 0, 0, 0, 0)
+    function _publishInner() {
+        UiState.setBarInner(root.mon,
+                            root.edgeOn("top")    ? root.holeT      : 0,
+                            root.edgeOn("bottom") ? root.sh - root.holeB : 0,
+                            root.edgeOn("left")   ? root.holeL      : 0,
+                            root.edgeOn("right")  ? root.sw - root.holeR : 0)
+    }
 
     // A hole corner is rounded only where both of its edges are active.
     readonly property real rTL: (edgeOn("left")  && edgeOn("top"))    ? r : 0
@@ -94,6 +123,31 @@ PanelWindow {
     // bottom, under every window.
     WlrLayershell.layer:         root.peekMode ? WlrLayer.Overlay : WlrLayer.Bottom
     WlrLayershell.exclusiveZone: -1
+    WlrLayershell.namespace:     "velumeron-bar"
+
+    // ── Blur, asked for by PROTOCOL rather than by compositor config ───────────────────────────
+    // ext-background-effect-v1 (staging) lets a client name the region behind its own surface that
+    // it wants blurred. That is a standard, so this works on any compositor implementing it and
+    // needs nothing in hypr.lua — which is the point: the shell should ask for what it wants, not
+    // depend on the window manager having been told about it beforehand. Where the protocol is
+    // absent the request is simply ignored and the bar is translucent without frost.
+    //
+    // It is also strictly better than the layer rule it replaces. The bar's surface covers the
+    // WHOLE screen with a hole in the middle, so a rule can only blur the entire surface and then
+    // lean on `ignore_alpha` to guess which parts should not count. Here the region IS the bar:
+    // the screen rect minus the hole, corners and all. Nothing behind the hole is ever touched.
+    BackgroundEffect.blurRegion: VtlConfig.barBlurFor(root.mon)
+                                 && VtlConfig.barOpacityEnabledFor(root.mon) ? barBlurRegion : null
+    Region {
+        id: barBlurRegion
+        x: 0; y: 0; width: root.sw; height: root.sh
+        Region {
+            intersection: Intersection.Subtract
+            x: root.holeL; y: root.holeT
+            width:  Math.max(0, root.holeR - root.holeL)
+            height: Math.max(0, root.holeB - root.holeT)
+        }
+    }
 
     // ── Path builders (SVG strings) ─────────────────────────────────────────────
     function roundRectPath(x0, y0, x1, y1, rad) {
@@ -213,15 +267,39 @@ PanelWindow {
         var L = holeL, R = holeR, T = holeT, B = holeB
         function ln(sx, sy, ex, ey)        { return { s: [sx, sy], e: [ex, ey], c: "L" + ex + "," + ey } }
         function ar(sx, sy, ex, ey, rad)   { return { s: [sx, sy], e: [ex, ey], c: Style.cornerSeg(rad, ex, ey) } }
+        // An open popout takes a bite out of the inner border on ITS edge, so its own outline can
+        // continue the line instead of covering it (UiState.setBarGap). `cut` returns the one or
+        // two pieces of a straight run that survive that bite; the run may be drawn in either
+        // direction, so it works from whichever end the path arrives.
+        function cut(edgeName, sx, sy, ex, ey) {
+            if (!root.gapOn(edgeName)) return [ln(sx, sy, ex, ey)]
+            var horiz = (edgeName === "top" || edgeName === "bottom")
+            var s = horiz ? sx : sy
+            var e = horiz ? ex : ey
+            var lo = Math.min(s, e), hi = Math.max(s, e)
+            var g0 = Math.max(lo, Math.min(root.gapFrom, root.gapTo))
+            var g1 = Math.min(hi, Math.max(root.gapFrom, root.gapTo))
+            if (g1 <= g0) return [ln(sx, sy, ex, ey)]           // bite falls outside this run
+            var out = []
+            function seg(a, b) { return horiz ? ln(a, sy, b, sy) : ln(sx, a, sx, b) }
+            if (e >= s) {                                        // forward
+                if (g0 > s) out.push(seg(s, g0))
+                if (g1 < e) out.push(seg(g1, e))
+            } else {                                             // reversed
+                if (g1 < s) out.push(seg(s, g1))
+                if (g0 > e) out.push(seg(g0, e))
+            }
+            return out
+        }
         var seq = []
         if (cTL)    seq.push(ar(L, T + rTL, L + rTL, T, rTL))
-        if (top)    seq.push(ln(L + (cTL ? rTL : 0), T, R - (cTR ? rTR : 0), T))
+        if (top)    seq = seq.concat(cut("top",    L + (cTL ? rTL : 0), T, R - (cTR ? rTR : 0), T))
         if (cTR)    seq.push(ar(R - rTR, T, R, T + rTR, rTR))
-        if (right)  seq.push(ln(R, T + (cTR ? rTR : 0), R, B - (cBR ? rBR : 0)))
+        if (right)  seq = seq.concat(cut("right",  R, T + (cTR ? rTR : 0), R, B - (cBR ? rBR : 0)))
         if (cBR)    seq.push(ar(R, B - rBR, R - rBR, B, rBR))
-        if (bottom) seq.push(ln(R - (cBR ? rBR : 0), B, L + (cBL ? rBL : 0), B))
+        if (bottom) seq = seq.concat(cut("bottom", R - (cBR ? rBR : 0), B, L + (cBL ? rBL : 0), B))
         if (cBL)    seq.push(ar(L + rBL, B, L, B - rBL, rBL))
-        if (left)   seq.push(ln(L, B - (cBL ? rBL : 0), L, T + (cTL ? rTL : 0)))
+        if (left)   seq = seq.concat(cut("left",   L, B - (cBL ? rBL : 0), L, T + (cTL ? rTL : 0)))
         if (!seq.length) return ""
         var d = "", prev = null
         for (var i = 0; i < seq.length; i++) {
@@ -230,7 +308,7 @@ PanelWindow {
             d += " " + p.c
             prev = p.e
         }
-        if (top && right && bottom && left) d += " Z"
+        if (top && right && bottom && left && !root.anyGap) d += " Z"
         return d
     }
 
@@ -467,7 +545,7 @@ PanelWindow {
             color: msHover.hovered
                  ? Style.tint(Colors.bgActive, Math.min(1.0, _o + 0.12))
                  : Style.tint(Colors.bgElement, _o)
-            Behavior on color { ColorAnimation { duration: 130 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         }
         // Double RIGHT-click → this module's own settings page. Right button only, so a plain
         // left click never sees this area at all. The SINGLE right-click is explicitly handed

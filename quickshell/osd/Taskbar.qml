@@ -355,7 +355,17 @@ PanelWindow {
     readonly property bool revealed: root.enabled && (!root.hoverMode || root.hovered || root.stackOpen || root.ctxOpen)
     property real reveal: 0
     onRevealedChanged: reveal = revealed ? 1 : 0
-    Behavior on reveal { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.003 } }
+    Behavior on reveal {
+        id: revealB
+        // Direction from the Behavior's own targetValue, NOT the surface's open flag:
+        // the flag flips in the same signal that starts the animation, and the animation
+        // latched the OLD spring — opening ran on the closing spring and vice versa.
+        SpringAnimation {
+            spring:  Style.springFor(revealB.targetValue > 0.5)
+            damping: Style.dampingFor(revealB.targetValue > 0.5)
+            epsilon: 0.003
+        }
+    }
     visible: root.enabled
 
     // Elastic emergence: spring overshoot shows as edge bulge; the slide below uses the clamped
@@ -531,7 +541,7 @@ PanelWindow {
                             implicitHeight: isz + 12
                             radius: Style.rControl
                             color: it.foc ? Style.accent : (ihov.containsMouse ? Style.controlHover : "transparent")
-                            Behavior on color { ColorAnimation { duration: 100 } }
+                            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                             scale: ihov.dragging ? 1.12 : 1.0
                             Behavior on scale { NumberAnimation { duration: 100 } }
 
@@ -662,7 +672,7 @@ PanelWindow {
                     radius: Style.rControl
                     color: row.modelData.focused ? Style.accent
                          : (rowHov.containsMouse ? Style.controlHover : "transparent")
-                    Behavior on color { ColorAnimation { duration: 80 } }
+                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                     Row {
                         anchors { left: parent.left; leftMargin: 8; right: parent.right; rightMargin: 8
                                   verticalCenter: parent.verticalCenter }
@@ -728,7 +738,7 @@ PanelWindow {
                         width: parent.width; height: root.ctxRowH
                         radius: Style.rControl
                         color: crHov.containsMouse ? Style.controlHover : "transparent"
-                        Behavior on color { ColorAnimation { duration: 80 } }
+                        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                         Text {
                             anchors { left: parent.left; leftMargin: 10; right: parent.right; rightMargin: 10
                                       verticalCenter: parent.verticalCenter }

@@ -109,7 +109,7 @@ Row {
                     if (wsDot.hovered)  return Colors.fgPrimary
                     return Colors.bgElement
                 }
-                Behavior on color { ColorAnimation { duration: 100 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
                 // Workspace number — only on the (widened) active pill
                 Text {

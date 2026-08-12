@@ -33,10 +33,14 @@ Item {
     readonly property real _shown: _dragging ? _dragVal : value
     readonly property real _t: (to > from) ? Math.max(0, Math.min(1, (_shown - from) / (to - from))) : 0
 
+    // Returns the value actually emitted, so the drag can render exactly what it reported. It used
+    // to render the RAW pointer position while emitting a clamped-and-snapped one, so a stepped
+    // slider drifted away from its own knob during a drag and then jumped back on release.
     function _emit(v) {
         var c = Math.max(from, Math.min(to, v))
         if (step > 0) c = Math.round(c / step) * step
         sl.moved(c)
+        return c
     }
     function nudge(dir) { sl.forceActiveFocus(); sl._emit(sl.value + dir * sl.keyStep) }
 
@@ -99,7 +103,7 @@ Item {
             preventStealing: true          // don't let the enclosing Flickable steal the drag
             // Map pointer x (this area is 8px wider than the track on each side) to a track fraction.
             function frac(mx) { return Math.max(0, Math.min(1, (mx - 8) / track.width)) }
-            function set(mx)  { sl._dragVal = sl.from + frac(mx) * (sl.to - sl.from); sl._emit(sl._dragVal) }
+            function set(mx)  { sl._dragVal = sl._emit(sl.from + frac(mx) * (sl.to - sl.from)) }
             onPressed: e => { sl.forceActiveFocus(); sl._dragging = true; set(e.x) }
             onPositionChanged: e => { if (pressed) set(e.x) }
             onReleased: () => sl._dragging = false

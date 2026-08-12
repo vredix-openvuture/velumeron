@@ -54,7 +54,7 @@ Item {
         color: (glyphHov.containsMouse || root._glideOpen) ? Colors.fgBright : root._col
         font.family:    root._font
         font.pixelSize: root._sz
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
         MouseArea {
             id: glyphHov

@@ -29,7 +29,7 @@ StyledRect {
           : Style.rowFill
     borderWidth: t.highlight ? 1 : 0
     borderColor: Style.accent
-    Behavior on color { ColorAnimation { duration: 110 } }
+    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
     MouseArea { id: hov; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
 

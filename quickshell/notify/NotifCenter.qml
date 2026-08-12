@@ -64,10 +64,7 @@ PanelWindow {
     // Offset from the screen edge onto the bar's inner face (incl. the float gap); 0 when the
     // anchored edge has no bar or a fullscreen window hides it — then it grows from the bare edge.
     readonly property bool edgeBar: VtlConfig.edgeActiveFor(mEdge, root.mon) && !root.monFullscreen
-    readonly property int  barT:   edgeBar
-                                   ? VtlConfig.edgeThicknessFor(mEdge, root.mon)
-                                     + (VtlConfig.barFloatingFor(root.mon) ? VtlConfig.barFloatGapFor(root.mon) : 0)
-                                   : 0
+    readonly property int  barT:   edgeBar ? UiState.barInnerFor(mEdge, root.mon) : 0
 
     // Panel size — width + height from Settings → Notifications. 0 = match the settings menu
     // (same percent-of-screen formula as Settings.qml), so the centre defaults to the menu's size.
@@ -107,9 +104,33 @@ PanelWindow {
     readonly property int flareR: VtlConfig.barInnerRadiusFor(root.mon)
     // Bar-panel colour (like the notification popups' tray) so the module-pill cards on it read the
     // same in the centre as in the toasts.
-    readonly property color cFill: Style.panelColor(VtlConfig.barColorful)
+    readonly property color cFill: Style.barPanelColor(Style.panelColor(VtlConfig.barColorful), root.mon)
     // Overlap the anchored bar edge by a hair so the bar's own inner border line is hidden.
-    readonly property int seam:   2
+    // ONE pixel, and the number is a compromise between two visible defects.
+    //
+    // The bar's FILL is not cut by the border gap — it runs straight on and ends exactly where this
+    // panel begins. Two half-transparent surfaces meeting on the same pixel is a seam either way:
+    //   seam 2  the panel overlaps into the bar, two alphas stack → a DARKER stripe
+    //   seam 0  they abut, both edges antialias against what is behind → a LIGHTER stripe
+    // One pixel of overlap closes the antialiasing gap while keeping the double-covered strip too
+    // narrow to read as a line of its own.
+    //
+    // The proper fix is for the bar's fill to be cut by the gap as well, so only one surface is
+    // ever painted there — but with a translucent panel that means the covered patch has strictly
+    // less coverage than the bar around it, which is its own artefact. Not attempted here.
+    readonly property int seam:   1
+    // ── How fast the merge corners let go ────────────────────────────────────────────────────────
+    // The concave fillets are what tie this panel into the bar's edge. Clamping them to A/3 and D/3
+    // means they shrink IN STEP with the panel, so on the way out they are gone while the panel is
+    // still visibly there — the join lets go first and the panel then travels the last stretch as a
+    // loose rectangle. That is the moment that reads as wrong.
+    //
+    // So they TRAIL: full size until the panel is down to its last third, then they relax. The
+    // panel closes, and only after it has, the corners come back to flat — the rubber band is let
+    // go once there is nothing left pulling on it. On the way in the same curve means the corners
+    // are established almost immediately, which is also what you want: it is anchored from the
+    // first frame and grows out of that anchor.
+    readonly property real filletF: Math.min(1.0, Style.elG01(root.reveal) * 3.0)
     // Grow the Shapes by `pad` on every side so the fillet wedges + seam + the elastic bulge (all
     // outside the panel rect) still render; path coords are emitted in panel-local space + pad.
     readonly property int pad:    flareR + seam + 2 + Math.ceil(Math.max(Style.elTopBulge, Style.elSideBulge))
@@ -121,7 +142,7 @@ PanelWindow {
         var A = horizA ? W : H
         var D = horizA ? H : W
         var e = Math.max(0, Math.min(edgeR,  A / 3, D / 3))
-        var f = VtlConfig.transitionFilletFor("notify_center", root._tctx) ? Math.max(0, Math.min(flareR, A / 3, D / 3)) : 0
+        var f = VtlConfig.transitionFilletFor("notify_center", root._tctx) ? Math.max(0, Math.min(flareR * root.filletF, Math.max(A, D) / 2)) : 0
         var s = seam
         var ca0 = mergeStart ? sideStart     : 0      // near-end content boundary
         var ca1 = mergeEnd   ? (A - sideEnd) : A      // far-end content boundary
@@ -202,12 +223,21 @@ PanelWindow {
     MouseArea { anchors.fill: parent; z: 0; enabled: root.isOpen; onClicked: UiState.notifCenterOpen = false }
 
     // ── Panel: grows from the bell's edge into the content area ───────────────────
+
+    // Blur behind this panel, inherited from the bar it grows out of and requested by protocol
+    // (ext-background-effect-v1) rather than by a compositor rule — so a translucent panel frosts
+    // what shows through, exactly as the bar does. `Region { item: … }` follows the panel's live
+    // geometry, so the frosted area grows and shrinks with the morph instead of being a fixed rect.
+    BackgroundEffect.blurRegion: (VtlConfig.barBlurFor(root.mon)
+                                  && VtlConfig.barOpacityEnabledFor(root.mon)
+                                  && root.reveal > 0.02) ? panelBlur : null
+    Region { id: panelBlur; item: panel }
     Item {
         id: panel
 
         readonly property int  collapsed: root.barT
         // Content fades in only once there's room for it.
-        readonly property real contentReveal: Math.max(0.0, Math.min(1.0, (root.reveal - 0.5) / 0.45))
+        readonly property real contentReveal: Style.popContentFade(root.reveal)
 
         // Elastic emergence — spring error drives the edge bulge + a touch of size overshoot.
         readonly property real target: root.onActiveMonitor ? (root.isOpen ? 1.0 : 0.0) : 0.0
@@ -216,9 +246,18 @@ PanelWindow {
         readonly property real bulgeS: Style.elBulge(root.reveal, target, Style.elSideBulge, elDim)
         readonly property real sizeF:  Style.elSizeF(root.reveal, target)
 
-        width:   collapsed + (root.panelW - collapsed) * sizeF
-        height:  collapsed + (root.panelH - collapsed) * sizeF
-        opacity: Math.min(1.0, root.reveal * 4.0)
+        // Depth retracts into the bar; the length along it never moves — see Style.elDockW.
+        width:   Style.elDockW(root.vert, root.panelW, collapsed, sizeF, target)
+        height:  Style.elDockH(root.vert, root.panelH, collapsed, sizeF, target)
+        // NOT faded. The size already goes to zero, so there is nothing a fade adds — and it costs
+        // something real: this panel sits over the wallpaper, so any opacity below 1 lets the
+        // wallpaper's colour mix into the panel's own. Animating that means the panel CHANGES
+        // COLOUR while it opens and closes, drifting between its fill and whatever happens to be
+        // behind it. The border does it too, which is where the artefacts along the merge curve
+        // came from: two half-transparent lines crossing over a coloured ground.
+        //
+        // A hard cut at the very bottom instead, purely so a sub-pixel remnant cannot linger.
+        opacity: root.reveal > 0.012 ? 1 : 0
 
         // Centre the morph nub on the bell and clamp along the edge; start/end groups snap to the
         // screen corner (merging into the perpendicular bar there, or the bare edge if none).
@@ -232,6 +271,24 @@ PanelWindow {
         y: root.mEdge === "top"    ? root.barT + root.detachGap
          : root.mEdge === "bottom" ? root.scrH - root.barT - root.detachGap - height
          : along
+
+        // Tell the bar how much of its border this panel spans, so the bar can leave that stretch
+        // out of its own outline and the two read as ONE line (UiState.setBarGap).
+        // Exactly the panel's extent — NO allowance for the fillet skirt. Adding one widened the cut
+        // on BOTH sides, but a corner-docked panel has a fillet on one side only (the other merges
+        // into the perpendicular arm). The surplus side left bar border cut away with nothing
+        // covering it: a permanent notch, which is worse than the closing-frame overlap it fixed.
+        readonly property real gapFrom: root.vert ? y : x
+        readonly property real gapTo:   root.vert ? y + height : x + width
+        readonly property bool gapLive: root.onActiveMonitor && root.edgeBar && !root.detached
+        function pushGap() {
+            if (gapLive) UiState.setBarGap(root.mon, root.mEdge, gapFrom, gapTo)
+            else         UiState.clearBarGap(root.mon)
+        }
+        onGapFromChanged: pushGap()
+        onGapToChanged:   pushGap()
+        onGapLiveChanged: pushGap()
+        Component.onDestruction: UiState.clearBarGap(root.mon)
 
         // Block click-through to the desktop, but stay below the content widgets (z:0).
         MouseArea { anchors.fill: parent; z: 0 }
@@ -294,7 +351,7 @@ PanelWindow {
                         color: NotifService.dnd ? Style.tint(Style.accent, Style.lift(0.34))
                              : (dndHov.containsMouse ? Style.knobHover
                                                      : Style.knobFill)
-                        Behavior on color { ColorAnimation { duration: 110 } }
+                        Behavior on color { ColorAnimation { duration: Style.popColorMs } }
                         Text { anchors.centerIn: parent; text: NotifService.dnd ? "󰂛" : "󰂚"
                                color: NotifService.dnd ? Colors.fgBright : Colors.fgPrimary
                                font.pixelSize: 13; font.family: Style.font }
@@ -306,7 +363,7 @@ PanelWindow {
                         width: 30; height: 24; radius: Style.rTile
                         color: clrHov.containsMouse ? Style.knobHover
                                                     : Style.knobFill
-                        Behavior on color { ColorAnimation { duration: 110 } }
+                        Behavior on color { ColorAnimation { duration: Style.popColorMs } }
                         Text { anchors.centerIn: parent; text: "󰎟"; color: Colors.fgPrimary
                                font.pixelSize: 13; font.family: Style.font }
                         MouseArea { id: clrHov; anchors.fill: parent; hoverEnabled: true; onClicked: NotifService.clearAll() }

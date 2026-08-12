@@ -512,7 +512,7 @@ Item {
                 color: gripMa.pressed ? Style.accent
                      : gripMa.containsMouse ? Style.tint(Style.accent, 0.35)
                      : Style.tint(Style.accent, 0.14)
-                Behavior on color { ColorAnimation { duration: 100 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Repeater {
                     model: 3
                     delegate: Rectangle {
@@ -604,7 +604,7 @@ Item {
                 border.width: 2
                 border.color: Style.tint(Style.accent, gring.hot ? 1.0 : 0.65)
                 property bool hot: false
-                Behavior on border.color { ColorAnimation { duration: 180 } }
+                Behavior on border.color { ColorAnimation { duration: Style.ctrlMs } }
                 // One pulse when the group is created, then settle.
                 SequentialAnimation {
                     running: root.flashGroup === gover.modelData.gid
@@ -624,7 +624,7 @@ Item {
                 color: ggripMa.pressed ? Style.accent
                      : ggripMa.containsMouse ? Style.tint(Style.accent, 0.35)
                      : Style.tint(Style.accent, 0.14)
-                Behavior on color { ColorAnimation { duration: 100 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Repeater {
                     model: 3
                     delegate: Rectangle {

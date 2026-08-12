@@ -70,7 +70,7 @@ Item {
                                                            : (Colors[VtlConfig.moduleColorName("user")] ?? Colors.fgPrimary)
             font.family:    VtlConfig.moduleFontFor("user")
             font.pixelSize: VtlConfig.moduleFontSizeFor("user", root.barMon)
-            Behavior on color { ColorAnimation { duration: 100 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         }
     }
 

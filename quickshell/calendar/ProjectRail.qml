@@ -78,7 +78,7 @@ Item {
                 radius: Style.rTile
                 color: rail.selectedId === "" ? Style.tint(Style.accent, 0.35)
                      : allHov.containsMouse ? Style.controlHover : Style.controlFill
-                Behavior on color { ColorAnimation { duration: 90 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Text {
                     anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                     text: "󰒺"; color: rail.selectedId === "" ? Colors.fgBright : Colors.fgMuted
@@ -138,7 +138,7 @@ Item {
                                     radius: Style.rTile
                                     color: row.on ? Style.tint(grp.c, 0.55)
                                          : rowHov.containsMouse ? Style.tint(grp.c, 0.30) : "transparent"
-                                    Behavior on color { ColorAnimation { duration: 90 } }
+                                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                                 }
 
                                 // Chevron (branches only).

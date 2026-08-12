@@ -406,6 +406,7 @@ FocusScope {
     Process { id: sessionProc }
     function _runSession(cmd) {
         if (!cmd) return
+        SettingsStore.flushNow()   // debounced writes must not die with the session
         sessionProc.command = ["bash", "-lc", cmd]
         sessionProc.running = false
         sessionProc.running = true
@@ -450,7 +451,7 @@ FocusScope {
                             color: actHov.containsMouse ? Style.controlHover : "transparent"
                             borderWidth: actHov.containsMouse ? Style.controlBorderW : 0
                             borderColor: Style.controlBorderColor
-                            Behavior on color { ColorAnimation { duration: 90 } }
+                            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                         }
                         Text {
                             anchors.centerIn: parent

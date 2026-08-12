@@ -15,7 +15,26 @@ PanelWindow {
     // `screen` is set by the Variants delegate in shell.qml.
 
     readonly property string ctx: UiState.keybindContext
-    visible: ctx !== ""
+
+    // The cheatsheet is a FREE surface (it belongs to the screen, not the bar), so it opens the way
+    // every other free surface does: the shell's spring, a slight scale, a scheme-tinted veil. It
+    // was the last overlay with no open/close animation at all — it simply blinked into existence,
+    // which next to the switchers and the session menu read as a different program's window.
+    // Driven from the ONE onCtxChanged handler further down — a second one here is not an override,
+    // it is a duplicate declaration, and QML refuses to load the file.
+    property real reveal: 0
+    Behavior on reveal {
+        id: revealB
+        // Direction from the Behavior's own targetValue, NOT the surface's open flag:
+        // the flag flips in the same signal that starts the animation, and the animation
+        // latched the OLD spring — opening ran on the closing spring and vice versa.
+        SpringAnimation {
+            spring:  Style.springFor(revealB.targetValue > 0.5)
+            damping: Style.dampingFor(revealB.targetValue > 0.5)
+            epsilon: 0.003
+        }
+    }
+    visible: ctx !== "" || root.reveal > 0.01
 
     readonly property string mon:  Compositor.monitorFor(root.screen)?.name ?? ""
     readonly property int    scrW: screen ? screen.width  : 1920
@@ -27,12 +46,12 @@ PanelWindow {
     WlrLayershell.namespace:     "velumeron-keybind-help"
     WlrLayershell.layer:         WlrLayer.Overlay
     WlrLayershell.exclusiveZone: -1
-    WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: root.ctx !== "" ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
     // Grab everything except the bar (lockRect): locks the rest while open, bar stays clickable.
     Region { id: emptyMask }
     Region { id: lockMask; x: root._lr[0]; y: root._lr[1]; width: root._lr[2]; height: root._lr[3] }
-    mask: visible ? lockMask : emptyMask
+    mask: root.ctx !== "" ? lockMask : emptyMask
 
     // ── Search state ──────────────────────────────────────────────────────────
     property bool   searching: false
@@ -40,7 +59,10 @@ PanelWindow {
 
     function close()  { UiState.keybindContext = ""; root.searching = false; root.query = "" }
     function openSearch() { root.searching = true; searchField.forceActiveFocus() }
-    onCtxChanged: if (ctx === "") { searching = false; query = "" }
+    onCtxChanged: {
+        root.reveal = (root.ctx !== "") ? 1 : 0
+        if (root.ctx === "") { root.searching = false; root.query = "" }
+    }
 
     // ── Keybind data ──────────────────────────────────────────────────────────
     // Each context → list of blocks; each block → { title, binds:[{k,d}] }.
@@ -180,9 +202,14 @@ PanelWindow {
     Shortcut { sequence: "?"; enabled: !root.searching; onActivated: root.openSearch() }
 
     // ── Click-outside (no dim — just dismiss) ───────────────────────────────────
-    MouseArea {
+    Rectangle {
         anchors.fill: parent
-        onClicked: root.close()
+        color: Style.popDimColor(root.reveal)
+        MouseArea {
+            anchors.fill: parent
+            enabled: root.ctx !== ""
+            onClicked: root.close()
+        }
     }
 
     // ── Card ────────────────────────────────────────────────────────────────────
@@ -195,6 +222,8 @@ PanelWindow {
         color:  Colors.bgPrimary
         borderWidth: 1
         borderColor: Style.chromeBorder
+        opacity: Style.popFade(root.reveal)
+        scale:   Style.popScale(root.reveal)
 
         MouseArea { anchors.fill: parent }   // swallow clicks so the backdrop doesn't close
 

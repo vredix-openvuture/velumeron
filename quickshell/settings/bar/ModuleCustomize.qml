@@ -327,7 +327,7 @@ Item {
                          : (memHov.containsMouse ? Style.controlHover : Style.controlFill)
                     borderWidth: memRow.on ? Style.selBorderW : Style.controlBorderW
                     borderColor: memRow.on ? Style.selBorderColor : Style.controlBorderColor
-                    Behavior on color { ColorAnimation { duration: 90 } }
+                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                     Row {
                         anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
                         spacing: 8
@@ -343,7 +343,7 @@ Item {
                         width: 22; height: 22; radius: 11
                         color: memRow.on ? Style.tint(Colors.fgBright, 0.20) : Style.controlFill
                         borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
-                        Behavior on color { ColorAnimation { duration: 90 } }
+                        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                         Text { anchors.centerIn: parent
                                text: memRow.on ? ("" + (memRow.memIdx + 1)) : "+"
                                color: memRow.on ? Style.selText : Colors.fgMuted

@@ -59,7 +59,7 @@ Item {
             color: root.hovered ? Colors.fgBright : root._col
             font.family:    root._font
             font.pixelSize: VtlConfig.moduleIconSizeFor("volume", root.barMon)
-            Behavior on color { ColorAnimation { duration: 100 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         }
         Text {
             visible: root._showPct
@@ -68,7 +68,7 @@ Item {
             color: root.hovered ? Colors.fgBright : root._col
             font.family:    root._font
             font.pixelSize: VtlConfig.moduleFontSizeFor("volume", root.barMon)
-            Behavior on color { ColorAnimation { duration: 100 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         }
     }
 

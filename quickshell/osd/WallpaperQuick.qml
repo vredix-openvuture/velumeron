@@ -43,10 +43,49 @@ Flyout {
     function isVideo(n) { return /\.(mp4|webm|mkv|avi|mov)$/i.test(n) }
     // Static / live filter for the grid.
     property string typeFilter: "all"   // all | static | live
+
+    // ── Stacks ──────────────────────────────────────────────────────────────────────────────────
+    // Every subfolder of the wallpaper directory is a stack you can switch off. Grouping them under
+    // captions (`grouped`) only ever changed how the SAME set of images was arranged; a stack is
+    // the other half of that idea — being able to say "not today" to a whole pile and have the grid
+    // shrink to what is left. The choice persists, because the pile you are not in the mood for is
+    // usually not a pile you are in the mood for tomorrow either.
+    //
+    // Only offered when there is something to choose between: with one stack the row would be a
+    // single chip that can only turn the entire grid off.
+    readonly property var stackNames: {
+        var seen = {}, out = []
+        for (var i = 0; i < root.items.length; i++) {
+            var s = root.items[i].sub || ""
+            if (!(s in seen)) { seen[s] = true; out.push(s) }
+        }
+        out.sort(function (a, b) {
+            return a === "" ? 1 : b === "" ? -1 : a.toLowerCase() < b.toLowerCase() ? -1 : 1
+        })
+        return out
+    }
+    readonly property bool hasStacks: root.stackNames.length > 1
+    function stackLabel(s) { return s === "" ? "Main" : s }
+    function stackOn(s)    { return VtlConfig.wallpaperStackOn(s) }
+    // Turning the LAST stack off would leave an empty grid and no obvious way back, so the final
+    // one on refuses to switch itself off.
+    function toggleStack(s) {
+        var off = VtlConfig.wallpaperStacksOff.slice()
+        var i = off.indexOf("" + s)
+        if (i >= 0) off.splice(i, 1)
+        else {
+            var remaining = root.stackNames.filter(function (n) { return root.stackOn(n) })
+            if (remaining.length <= 1) return
+            off.push("" + s)
+        }
+        SettingsStore.set("wallpaper_stacks_off", off)
+    }
+
     readonly property var filteredItems: {
-        if (root.typeFilter === "all") return root.items
+        var its = root.items.filter(function (it) { return VtlConfig.wallpaperStackOn(it.sub || "") })
+        if (root.typeFilter === "all") return its
         var live = root.typeFilter === "live"
-        return root.items.filter(function (it) { return root.isVideo(it.name) === live })
+        return its.filter(function (it) { return root.isVideo(it.name) === live })
     }
     // Subfolder-as-sorting (Settings → Wallpaper): bucket the grid into one captioned section
     // per subfolder, root-level files first as "Main". Off → one anonymous group, no captions.
@@ -161,32 +200,22 @@ Flyout {
         // Row 1 — WHERE: one tab per monitor (target for the change) + the Sets tab.
         Flow {
             width: parent.width; spacing: 6
+            // Chip, not a bespoke StyledRect. These tabs used to be hand-drawn with raw palette
+            // colours (bgActive/bgElement) while the rest of the shell selects things with
+            // Style.selFill and a border — so the picker looked like a different program's dialog.
             Repeater {
                 model: root._mons
-                delegate: StyledRect {
+                delegate: Chip {
                     required property string modelData
-                    readonly property bool sel: root.view === "grid" && root.selMon === modelData
-                    width: Math.max(32, mtl.implicitWidth + 18); height: 26; radius: Style.rTile
-                    color: sel ? Colors.bgActive
-                         : (mth.containsMouse ? Style.tint(Colors.bgActive, 0.20) : Colors.bgElement)
-                    Behavior on color { ColorAnimation { duration: 90 } }
-                    Text { id: mtl; anchors.centerIn: parent; text: modelData
-                           color: parent.sel ? Colors.fgBright : Colors.fgPrimary
-                           font.pixelSize: 12; font.bold: parent.sel; font.family: Style.font }
-                    MouseArea { id: mth; anchors.fill: parent; hoverEnabled: true
-                                onClicked: { root.view = "grid"; root.selMon = modelData } }
+                    label:    modelData
+                    selected: root.view === "grid" && root.selMon === modelData
+                    onClicked: { root.view = "grid"; root.selMon = modelData }
                 }
             }
-            StyledRect {
-                readonly property bool sel: root.view === "sets"
-                width: stl.implicitWidth + 18; height: 26; radius: Style.rTile
-                color: sel ? Colors.bgActive
-                     : (sth.containsMouse ? Style.tint(Colors.bgActive, 0.20) : Colors.bgElement)
-                Behavior on color { ColorAnimation { duration: 90 } }
-                Text { id: stl; anchors.centerIn: parent; text: "󰋩 Sets"
-                       color: parent.sel ? Colors.fgBright : Colors.fgPrimary
-                       font.pixelSize: 12; font.bold: parent.sel; font.family: Style.font }
-                MouseArea { id: sth; anchors.fill: parent; hoverEnabled: true; onClicked: root.view = "sets" }
+            Chip {
+                label:    "󰋩 Sets"
+                selected: root.view === "sets"
+                onClicked: root.view = "sets"
             }
         }
         // Visible divider between the WHERE row and the WHAT row.
@@ -201,17 +230,30 @@ Flyout {
             visible: root.view === "grid"
             Repeater {
                 model: [{ k: "all", l: "All" }, { k: "static", l: "Static" }, { k: "live", l: "Live" }]
-                delegate: StyledRect {
+                delegate: Chip {
                     required property var modelData
-                    readonly property bool sel: root.typeFilter === modelData.k
-                    width: ftl.implicitWidth + 16; height: 26; radius: Style.rTile
-                    color: sel ? Colors.bgActive
-                         : (fth.containsMouse ? Style.tint(Colors.bgActive, 0.20) : Colors.bgElement)
-                    Behavior on color { ColorAnimation { duration: 90 } }
-                    Text { id: ftl; anchors.centerIn: parent; text: modelData.l
-                           color: parent.sel ? Colors.fgBright : Colors.fgMuted
-                           font.pixelSize: 11; font.bold: parent.sel; font.family: Style.font }
-                    MouseArea { id: fth; anchors.fill: parent; hoverEnabled: true; onClicked: root.typeFilter = modelData.k }
+                    label:    modelData.l
+                    selected: root.typeFilter === modelData.k
+                    onClicked: root.typeFilter = modelData.k
+                }
+            }
+        }
+
+        // Row 3 — WHICH PILES: one chip per subfolder, click to mute that stack. A muted stack
+        // dims rather than disappearing, so the row stays a stable set of switches instead of
+        // rearranging itself as you use it.
+        Flow {
+            width: parent.width; spacing: 6
+            visible: root.view === "grid" && root.hasStacks
+            Repeater {
+                model: root.stackNames
+                delegate: Chip {
+                    required property string modelData
+                    label:    root.stackLabel(modelData)
+                    selected: root.stackOn(modelData)
+                    opacity:  root.stackOn(modelData) ? 1.0 : 0.45
+                    Behavior on opacity { NumberAnimation { duration: Style.ctrlMs } }
+                    onClicked: root.toggleStack(modelData)
                 }
             }
         }

@@ -20,7 +20,17 @@ PanelWindow {
 
     property real reveal: 0
     onActiveChanged: { reveal = active ? 1 : 0; if (active) { root.sel = 0; focusScope.forceActiveFocus() } }
-    Behavior on reveal { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.003 } }
+    Behavior on reveal {
+        id: revealB
+        // Direction from the Behavior's own targetValue, NOT the surface's open flag:
+        // the flag flips in the same signal that starts the animation, and the animation
+        // latched the OLD spring — opening ran on the closing spring and vice versa.
+        SpringAnimation {
+            spring:  Style.springFor(revealB.targetValue > 0.5)
+            damping: Style.dampingFor(revealB.targetValue > 0.5)
+            epsilon: 0.003
+        }
+    }
     visible: active || root.reveal > 0.01
 
     color: "transparent"
@@ -34,6 +44,10 @@ PanelWindow {
     function run(cmd) { proc.command = ["bash", "-c", cmd]; proc.running = false; proc.running = true }
     function activate(i) {
         var a = root.actions[i]; if (!a) return
+        // Settings writes are debounced (SettingsStore), so a preference changed in the last breath
+        // before hitting Log out would still be sitting in the queue when the session goes down.
+        // Push it out first — this is the one place in the shell where "in a moment" is too late.
+        SettingsStore.flushNow()
         UiState.sessionOpen = false     // close first, then run (detached command)
         root.run(a.cmd)
     }
@@ -41,7 +55,7 @@ PanelWindow {
     // Dim backdrop — click outside closes.
     Rectangle {
         anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.4 * root.reveal)
+        color: Style.popDimColor(root.reveal)
         MouseArea { anchors.fill: parent; onClicked: UiState.sessionOpen = false }
     }
 
@@ -63,8 +77,8 @@ PanelWindow {
             radius: Style.rCard
             color:  Colors.bgPrimary
             borderWidth: 1; borderColor: Style.chromeBorder
-            opacity: Style.elG01(root.reveal)
-            scale:   0.96 + 0.04 * Style.elG01(root.reveal)
+            opacity: Style.popFade(root.reveal)
+            scale:   Style.popScale(root.reveal)
             MouseArea { anchors.fill: parent }   // swallow clicks so the backdrop doesn't close
 
             Row {
@@ -82,7 +96,7 @@ PanelWindow {
                         color: btn.seld ? Style.accent : (bHov.containsMouse ? Style.controlHover : Style.controlFill)
                         borderWidth: btn.seld ? 0 : Style.controlBorderW
                         borderColor: Style.controlBorderColor
-                        Behavior on color { ColorAnimation { duration: 90 } }
+                        Behavior on color { ColorAnimation { duration: Style.popColorMs } }
                         Column {
                             anchors.centerIn: parent; spacing: 10
                             Text { anchors.horizontalCenter: parent.horizontalCenter; text: btn.modelData.icon

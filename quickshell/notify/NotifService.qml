@@ -153,11 +153,33 @@ Singleton {
                 bodyMarkupSupported: true
                 persistenceSupported: true
 
+                // True when the sender asked for no sound. Hints arrive under different shapes
+                // depending on the client, so accept the plain key as well as the string form.
+                function _silentHint(n) {
+                    var h = n.hints
+                    if (!h) return false
+                    var v = h["x-velumeron-silent"]
+                    return v === true || v === 1 || v === "1" || v === "true"
+                }
+
                 onNotification: function (n) {
                     n.tracked = true
                     root.unread++
                     if (!root.dnd) {
                         var critical = (n.urgency === NotificationUrgency.Critical)
+                        // Split by urgency deliberately: the everyday one is off by default and the
+                        // critical one on, so the sound still means something when you do hear it.
+                        // Inside the !dnd branch — do-not-disturb silences the toast, and a shell
+                        // that hides the popup but still beeps has not understood the request.
+                        //
+                        // A notification that merely REPORTS an action the shell already made a
+                        // sound for stays silent. The screenshot is the case that exposed this: the
+                        // shutter fires when the capture succeeds, and the "saved" toast that
+                        // follows it fired the notification sound a moment later — one action, two
+                        // different sounds. Senders opt out with the x-velumeron-silent hint;
+                        // notify-send passes it through unchanged.
+                        if (!_silentHint(n))
+                            SoundService.play(critical ? "notification-critical" : "notification")
                         var to = (n.expireTimeout > 0 ? n.expireTimeout : 5000)
                         root._deadlines[n.id] = critical ? 0 : (Date.now() + to)
                         var a = root.popups.filter(function (x) { return x !== n })

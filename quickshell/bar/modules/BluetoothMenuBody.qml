@@ -348,7 +348,7 @@ Column {
             width: parent.width; height: 32; radius: Style.rControl
             color: bkH.containsMouse ? Style.controlHover : Style.controlFill
             borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
-            Behavior on color { ColorAnimation { duration: 100 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
             Text { anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                    text: "󰁍  Paired devices"; color: Colors.fgPrimary; font.bold: true
                    font.pixelSize: Style.fsLabel; font.family: Style.font }
@@ -380,7 +380,7 @@ Column {
             width: parent.width; height: 32; radius: Style.rControl
             color: dbH.containsMouse ? Style.controlHover : Style.controlFill
             borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
-            Behavior on color { ColorAnimation { duration: 100 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
             Text { anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                    text: "󰁍  Devices"; color: Colors.fgPrimary; font.bold: true
                    font.pixelSize: Style.fsLabel; font.family: Style.font }
@@ -451,7 +451,7 @@ Column {
             color: fgPH.containsMouse ? Style.tint(Colors.fgUrgent, 0.30)
                                       : Style.tint(Colors.fgUrgent, 0.12)
             borderWidth: Math.max(1, Style.controlBorderW); borderColor: Colors.fgUrgent
-            Behavior on color { ColorAnimation { duration: 100 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
             Text { anchors.centerIn: parent; text: "󰩹  Forget device"; color: Colors.fgUrgent
                    font.pixelSize: 12; font.bold: true; font.family: Style.font }
             MouseArea { id: fgPH; anchors.fill: parent; hoverEnabled: true
@@ -474,7 +474,7 @@ Column {
         // nothing behind it. Same rule as the sound desk and the network list.
         color: dev && dev.connected ? Style.knobFill
              : (brH.containsMouse ? Style.plateFill : "transparent")
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         // A row is wide, so its mark is a bar down the left rather than a rule across the top.
         Rectangle {
             anchors { left: parent.left; top: parent.top; bottom: parent.bottom
@@ -513,7 +513,7 @@ Column {
                 width: 26; height: 26; radius: 13
                 visible: bTile.charge < 0
                 color: br.dev && br.dev.connected ? Style.accent : "transparent"
-                Behavior on color { ColorAnimation { duration: 120 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
             }
             ValueRing {
                 anchors.fill: parent

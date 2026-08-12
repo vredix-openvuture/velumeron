@@ -22,7 +22,17 @@ PanelWindow {
 
     property real reveal: 0
     onActiveChanged: { reveal = active ? 1 : 0; if (active) { root.load(); kbd.forceActiveFocus() } }
-    Behavior on reveal { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.003 } }
+    Behavior on reveal {
+        id: revealB
+        // Direction from the Behavior's own targetValue, NOT the surface's open flag:
+        // the flag flips in the same signal that starts the animation, and the animation
+        // latched the OLD spring — opening ran on the closing spring and vice versa.
+        SpringAnimation {
+            spring:  Style.springFor(revealB.targetValue > 0.5)
+            damping: Style.dampingFor(revealB.targetValue > 0.5)
+            epsilon: 0.003
+        }
+    }
     visible: active || root.reveal > 0.01
 
     // Fallback: if the grab doesn't suppress the Super+Tab bind, the bind re-fires `window open`, which
@@ -121,7 +131,7 @@ PanelWindow {
         // Subtle dim backdrop (NOT blurred — the layerrule opts this namespace out of the global blur).
         Rectangle {
             anchors.fill: parent
-            color: Qt.rgba(0, 0, 0, 0.35 * root.reveal)
+            color: Style.popDimColor(root.reveal)
             MouseArea { anchors.fill: parent; onClicked: root.cancel() }   // click outside → cancel
         }
 
@@ -132,8 +142,8 @@ PanelWindow {
             height: 150
             radius: Style.rCard; color: Colors.bgPrimary
             borderWidth: 1; borderColor: Style.chromeBorder
-            opacity: Style.elG01(root.reveal)
-            scale:   0.97 + 0.03 * Style.elG01(root.reveal)
+            opacity: Style.popFade(root.reveal)
+            scale:   Style.popScale(root.reveal)
 
             ListView {
                 id: strip
@@ -155,7 +165,7 @@ PanelWindow {
                     color: wcard.seld ? Style.accent : (wHov.containsMouse ? Style.controlHover : Style.controlFill)
                     borderWidth: wcard.seld ? 0 : Style.controlBorderW
                     borderColor: Style.controlBorderColor
-                    Behavior on color { ColorAnimation { duration: 90 } }
+                    Behavior on color { ColorAnimation { duration: Style.popColorMs } }
                     Column {
                         anchors.centerIn: parent; width: parent.width - 16; spacing: 8
                         Image {

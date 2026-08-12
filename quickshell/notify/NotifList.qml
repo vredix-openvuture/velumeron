@@ -115,7 +115,7 @@ Item {
                        : cardMa.containsMouse ? Style.rowHover
                        : Style.rowFill
             borderWidth: 0
-            Behavior on color { ColorAnimation { duration: 110 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
             // A row is wide, so its mark is a bar down the left rather than a rule across the top.
             Rectangle {

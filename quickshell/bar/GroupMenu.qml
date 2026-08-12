@@ -134,7 +134,7 @@ Flyout {
             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
             width: 32; height: 32; radius: 16
             color: tr.on ? Style.accent : Colors.bgPrimary
-            Behavior on color { ColorAnimation { duration: 120 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
             Text { anchors.centerIn: parent; text: tr.icon
                    color: tr.on ? Colors.fgBright : Colors.fgMuted
                    font.pixelSize: 15; font.family: Style.font }
@@ -277,7 +277,7 @@ Flyout {
         signal trig()
         width: 28; height: 28; radius: 14
         color: mcH.containsMouse ? Style.accent : "transparent"
-        Behavior on color { ColorAnimation { duration: 90 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         Text { anchors.centerIn: parent; text: icon
                color: mcH.containsMouse ? Style.onAccent : Colors.fgPrimary
                font.pixelSize: 13; font.family: Style.iconFont }

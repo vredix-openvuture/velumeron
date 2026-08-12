@@ -54,7 +54,7 @@ Item {
         color:  Style.controlFill
         border.color: Style.accent
         border.width: cell.active ? 2 : (cHov.containsMouse ? 1 : 0)
-        Behavior on border.width { NumberAnimation { duration: 80 } }
+        Behavior on border.width { NumberAnimation { duration: Style.ctrlMs } }
 
         Image {
             id: img

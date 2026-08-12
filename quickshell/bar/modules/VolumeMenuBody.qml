@@ -280,7 +280,7 @@ Item {
                             color: opt.modelData.on ? Style.knobHover
                                  : oh.containsMouse ? Style.rowHover
                                                     : Style.rowHover
-                            Behavior on color { ColorAnimation { duration: 90 } }
+                            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                             Text {
                                 anchors { left: parent.left; leftMargin: 12; right: parent.right
                                           rightMargin: 12; verticalCenter: parent.verticalCenter }
@@ -457,7 +457,7 @@ Item {
                 color: cs.isSel ? Style.rowActive
                      : hov.containsMouse ? Style.rowFill
                                          : "transparent"
-                Behavior on color { ColorAnimation { duration: 140 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Rectangle {
                     anchors.fill: parent
                     visible: cs.isSel
@@ -651,13 +651,13 @@ Item {
                 border.width: 9
                 border.color: offHov.containsMouse ? Style.tint(Style.accent, 0.55)
                                                    : Style.trackFill
-                Behavior on border.color { ColorAnimation { duration: 120 } }
+                Behavior on border.color { ColorAnimation { duration: Style.ctrlMs } }
                 Text {
                     anchors.centerIn: parent
                     text: "󰐥"
                     color: offHov.containsMouse ? Style.accent : Colors.fgMuted
                     font.family: Style.font; font.pixelSize: 44
-                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 }
                 MouseArea {
                     id: offHov
@@ -687,7 +687,7 @@ Item {
                 color: cs.muted ? Style.tint(Colors.fgUrgent, 0.30)
                      : mh.containsMouse ? Style.rowActive
                                         : Style.knobFill
-                Behavior on color { ColorAnimation { duration: 90 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Text {
                     anchors.centerIn: parent
                     text: cs.muted ? "󰝟" : "󰕾"

@@ -289,7 +289,7 @@ StyledRect {
         width: abRow.implicitWidth + 22; height: 32; radius: Style.rControl
         color: ab.active ? Style.tint(ab.accentColor, 0.28) : abHov.containsMouse ? Style.controlHover : Style.controlFill
         borderWidth: 1; borderColor: ab.active ? ab.accentColor : Style.controlBorderColor
-        Behavior on color { ColorAnimation { duration: 90 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         Row {
             id: abRow
             anchors.centerIn: parent; spacing: 7
@@ -309,7 +309,7 @@ StyledRect {
         width: chRow.implicitWidth + 20; height: 28; radius: Style.rTile
         color: ch.on ? Style.tint(ch.tintColor, 0.35) : chHov.containsMouse ? Style.controlHover : "transparent"
         borderWidth: 1; borderColor: ch.on ? ch.tintColor : Style.controlBorderColor
-        Behavior on color { ColorAnimation { duration: 90 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         Row {
             id: chRow
             anchors.centerIn: parent; spacing: 6

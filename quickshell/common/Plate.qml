@@ -63,7 +63,7 @@ StyledRect {
                 text: p.value
                 color: p.warn ? Colors.fgUrgent : p.accent ? Style.accent : Colors.fgMuted
                 font.family: Style.font; font.pixelSize: 10
-                Behavior on color { ColorAnimation { duration: 140 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
             }
         }
     }

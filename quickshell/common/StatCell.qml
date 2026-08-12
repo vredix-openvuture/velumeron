@@ -55,7 +55,7 @@ StyledRect {
             elide: Text.ElideRight
             text: s.value; color: s._c
             font.family: Style.font; font.pixelSize: 16; font.bold: true
-            Behavior on color { ColorAnimation { duration: 140 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         }
     }
     Text {

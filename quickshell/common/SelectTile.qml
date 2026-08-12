@@ -14,7 +14,7 @@ StyledRect {
     color:        selected ? Style.selFill : (h.containsMouse ? Style.controlHover : Style.controlFill)
     borderWidth:  selected ? Style.selBorderW : Style.controlBorderW
     borderColor:  selected ? Style.selBorderColor : Style.controlBorderColor
-    Behavior on color { ColorAnimation { duration: 100 } }
+    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
     Column {
         anchors.centerIn: parent

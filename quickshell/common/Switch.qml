@@ -12,13 +12,13 @@ Rectangle {
 
     width: 42; height: 22; radius: 11
     color: sw.on ? Style.trackOn : Style.trackOff
-    Behavior on color { ColorAnimation { duration: 120 } }
+    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
     Rectangle {
         width: 16; height: 16; radius: 8; color: Style.knob
         anchors.verticalCenter: parent.verticalCenter
         x: sw.on ? parent.width - width - 3 : 3
-        Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+        Behavior on x { NumberAnimation { duration: Style.ctrlMs; easing.type: Easing.OutCubic } }
     }
     MouseArea { anchors.fill: parent; onClicked: sw.toggled() }
 }

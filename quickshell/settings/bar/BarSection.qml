@@ -145,22 +145,55 @@ Item {
     }
 
     // ── Persist one key into settings.json (global, or under bar_monitors.<mon>) ──
+    // Routed through SettingsStore like every other settings page. It used to run its own python
+    // one-liner, and that had three problems the shared writer does not:
+    //   · no optimistic local apply, so every control on this page sat inert until the file had
+    //     been written AND read back — the "sticky" feel was worst here for exactly that reason;
+    //   · `running = false; running = true` KILLS an in-flight write, so two quick changes could
+    //     lose the first one outright;
+    //   · it wrote straight onto settings.json instead of tmp+rename, so an interrupted write
+    //     truncates the entire configuration rather than leaving the old one intact.
+    // The per-monitor case clones the whole map and replaces it, the same shape setComponentEnabled
+    // uses — a nested write would otherwise have to be expressed as a path, which the store has no
+    // notion of, and merging in place is what let one monitor's edit drop another's.
     function saveKey(key, value, mon) {
-        var py = "import json,os,sys;" +
-            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
-              "or os.path.expanduser('~/.config'),'velumeron');" +
-            "p=os.path.join(pu,'gui','settings.json');" +
-            "os.makedirs(os.path.dirname(p),exist_ok=True);" +
-            "d=json.load(open(p)) if os.path.exists(p) else {};" +
-            "k=sys.argv[1];v=json.loads(sys.argv[2]);m=sys.argv[3];" +
-            "t=(d.setdefault('bar_monitors',{}).setdefault(m,{}) if m else d);" +
-            "t[k]=v;" +
-            "open(p,'w').write(json.dumps(d,indent=2))"
-        saveProc.command = ["python3", "-c", py, key, JSON.stringify(value), mon]
-        saveProc.running = false
-        saveProc.running = true
+        if (!mon) { SettingsStore.set(key, value); return }
+        var all = {}
+        var cur = VtlConfig.barMonitors
+        for (var m in cur) {
+            all[m] = {}
+            for (var k in cur[m]) all[m][k] = cur[m][k]
+        }
+        if (!all[mon]) all[mon] = ({})
+        all[mon][key] = value
+        SettingsStore.set("bar_monitors", all)
     }
     function save(key, value) { saveKey(key, value, editMon) }
+
+    // Blur radius is a compositor-wide setting (Hyprland keeps one), so it goes through the same
+    // path Settings → Window rules uses: persist the key, then push it to the running compositor.
+    Process { id: blurProc }
+    Timer {
+        id: blurDebounce
+        interval: 140
+        onTriggered: {
+            blurProc.command = ["bash",
+                Quickshell.env("VELUMERON_DIR") + "/assets/scripts/apply-decoration.sh",
+                "" + VtlConfig.windowOpacity,
+                VtlConfig.windowBlur ? "1" : "0",
+                "" + VtlConfig.windowVibrancy,
+                VtlConfig.windowXray ? "1" : "0",
+                "" + VtlConfig.windowBlurSize,
+                "" + VtlConfig.windowBlurPasses,
+                "" + VtlConfig.windowBlurNoise]
+            blurProc.running = false
+            blurProc.running = true
+        }
+    }
+    function saveBlurSize(v) {
+        SettingsStore.set("window_blur_size", Math.round(v))
+        blurDebounce.restart()
+    }
 
     // Persist the module map under bar_modules_m.<currentMode> (per-monitor when editing one),
     // merging so the other modes/monitors are left untouched. `purgeKey` (a "group:<n>" instance)
@@ -191,41 +224,50 @@ Item {
             "  for mm in ((mo or {}).get('bar_modules_m') or {}).values(): used+=arrs(mm)",
             "  used+=arrs((mo or {}).get('bar_modules'))",
             " if k not in used and isinstance(d.get('module_settings'),dict): d['module_settings'].pop(k,None)",
-            "open(p,'w').write(json.dumps(d,indent=2))"
+            "t=p+'.tmp';open(t,'w').write(json.dumps(d,indent=2));os.replace(t,p)"
         ].join("\n")
+        // NOT restarted with running=false: this walks every mode and every monitor to decide
+        // whether a removed group is still referenced anywhere, and killing that halfway through
+        // used to leave settings.json truncated. Queued instead, and written tmp+rename.
+        if (saveProc.running) { root._modsQueued = [map, purgeKey]; return }
         saveProc.command = ["python3", "-c", py, JSON.stringify(map), root.mode, editMon, purgeKey || ""]
-        saveProc.running = false
         saveProc.running = true
     }
-    Process { id: saveProc }
+    property var _modsQueued: null
+    Process {
+        id: saveProc
+        onExited: {
+            if (!root._modsQueued) return
+            var q = root._modsQueued
+            root._modsQueued = null
+            root.saveModules(q[0], q[1])
+        }
+    }
 
     // ── Per-module customization persistence (module_settings.<key>.<name>, global) ──
+    // Clone-and-replace through SettingsStore, so a customization applies to the live bar the
+    // moment it is set rather than after a write-then-read round trip — these are dragged from
+    // sliders in the customization overlay, so the round trip was visible.
+    function _moduleSettingsClone() {
+        var out = {}
+        var cur = VtlConfig.moduleSettings
+        for (var k in cur) {
+            out[k] = {}
+            for (var n in cur[k]) out[k][n] = cur[k][n]
+        }
+        return out
+    }
     function saveModuleSetting(key, name, value) {
-        var py = "import json,os,sys;" +
-            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
-              "or os.path.expanduser('~/.config'),'velumeron');" +
-            "p=os.path.join(pu,'gui','settings.json');" +
-            "os.makedirs(os.path.dirname(p),exist_ok=True);" +
-            "d=json.load(open(p)) if os.path.exists(p) else {};" +
-            "k=sys.argv[1];n=sys.argv[2];v=json.loads(sys.argv[3]);" +
-            "d.setdefault('module_settings',{}).setdefault(k,{})[n]=v;" +
-            "open(p,'w').write(json.dumps(d,indent=2))"
-        modProc.command = ["python3", "-c", py, key, name, JSON.stringify(value)]
-        modProc.running = false; modProc.running = true
+        var ms = root._moduleSettingsClone()
+        if (!ms[key]) ms[key] = ({})
+        ms[key][name] = value
+        SettingsStore.set("module_settings", ms)
     }
     function resetModuleSettings(key) {
-        var py = "import json,os,sys;" +
-            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') " +
-              "or os.path.expanduser('~/.config'),'velumeron');" +
-            "p=os.path.join(pu,'gui','settings.json');" +
-            "d=json.load(open(p)) if os.path.exists(p) else {};" +
-            "ms=d.get('module_settings');" +
-            "(ms.pop(sys.argv[1],None) if ms else None);" +
-            "open(p,'w').write(json.dumps(d,indent=2))"
-        modProc.command = ["python3", "-c", py, key]
-        modProc.running = false; modProc.running = true
+        var ms = root._moduleSettingsClone()
+        delete ms[key]
+        SettingsStore.set("module_settings", ms)
     }
-    Process { id: modProc }
 
     // Installed font families (lazy — loaded the first time the customization overlay opens).
     function loadFonts() {
@@ -466,7 +508,7 @@ Item {
                 id: formPage
                 visible: root.tab === "form"
                 width: parent.width
-                spacing: 16
+                spacing: Style.cardGap
 
                 Column {
                     width: parent.width; spacing: 6
@@ -507,9 +549,7 @@ Item {
                                   { label: "Right",  key: "right",  on: root.edges.indexOf("right") >= 0  }]
                         onPicked: root.toggleEdge(key)
                     }
-                    Text { text: "Edges without modules render half-thick."; color: Colors.fgMuted
-                           font.pixelSize: 11; width: parent.width; wrapMode: Text.WordWrap
-                           font.family: Style.font }
+                    SubLabel { width: parent.width; text: "Edges without modules render half-thick." }
                 }
             }
 
@@ -518,22 +558,27 @@ Item {
                 id: stylePage
                 visible: root.tab === "style"
                 width: parent.width
-                spacing: 16
+                spacing: Style.cardGap
 
+                // Every stepper on this page moves by ONE, against the shared default of five.
+                // The bar is tuned by eye against the wallpaper and the windows around it, and at
+                // that scale five is not a nudge — it is a redesign: a 14 px icon lands on 15 or 20
+                // with nothing in between, and a radius you are matching to a window corner can
+                // simply not be hit.
                 Card {
                     CardLabel { text: "SIZE" }
-                    Stepper { label: "Thickness"; unit: "px"; value: root.thickness; onChanged: root.setThickness(v) }
-                    Stepper { label: root.mode === "dock" ? "End air" : "Gap"; unit: "px"; value: root.gap
+                    Stepper { label: "Thickness"; unit: "px"; step: 1; value: root.thickness; onChanged: root.setThickness(v) }
+                    Stepper { label: root.mode === "dock" ? "End air" : "Gap"; unit: "px"; step: 1; value: root.gap
                               visible: root.mode === "float" || root.mode === "dock"; onChanged: root.setGap(v) }
-                    Stepper { label: "Radius"; unit: "px"; value: root.radius
+                    Stepper { label: "Radius"; unit: "px"; step: 1; value: root.radius
                               visible: root.mode === "frame" || root.mode === "dock"; onChanged: root.setRadius(v) }
-                    Stepper { label: "Icon size"; unit: "px"; value: root.iconSize; onChanged: root.setIconSize(v) }
-                    Stepper { label: "Font size"; unit: "px"; value: root.fontSize; onChanged: root.setFontSize(v) }
+                    Stepper { label: "Icon size"; unit: "px"; step: 1; value: root.iconSize; onChanged: root.setIconSize(v) }
+                    Stepper { label: "Font size"; unit: "px"; step: 1; value: root.fontSize; onChanged: root.setFontSize(v) }
                 }
                 Card {
                     CardLabel { text: "LAYOUT" }
-                    Stepper { label: "Edge gap"; unit: "px"; value: root.margin;     onChanged: root.setMargin(v) }
-                    Stepper { label: "Spacing";  unit: "px"; value: root.modSpacing; onChanged: root.setSpacing(v) }
+                    Stepper { label: "Edge gap"; unit: "px"; step: 1; value: root.margin;     onChanged: root.setMargin(v) }
+                    Stepper { label: "Spacing";  unit: "px"; step: 1; value: root.modSpacing; onChanged: root.setSpacing(v) }
 
                     FieldLabel { text: "Module background"
                                  hint: "Whether each module gets its own little background pill, one pill per group, or none at all." }
@@ -545,18 +590,59 @@ Item {
                                    { label: "Module", key: "module" }]
                         onPicked: root.setBgMode(key)
                     }
-                    Stepper { label: "BG radius";  unit: "px"; value: root.bgRadius; visible: root.bgMode !== "none"; onChanged: root.setBgRadius(v) }
-                    Stepper { label: "BG opacity"; unit: "%"; max: 100; value: Math.round(VtlConfig.barModuleBgOpacityFor(root.editMon) * 100)
+                    Stepper { label: "BG radius";  unit: "px"; step: 1; value: root.bgRadius; visible: root.bgMode !== "none"; onChanged: root.setBgRadius(v) }
+                    Stepper { label: "BG opacity"; unit: "%"; step: 1; max: 100; value: Math.round(VtlConfig.barModuleBgOpacityFor(root.editMon) * 100)
                               visible: root.bgMode !== "none"; onChanged: root.setBgOpacity(v) }
                 }
+                // ── BACKGROUND: how much of the desktop comes through, and how ────
+                // Two knobs that only make sense together. Opacity is ours and moves instantly;
+                // blur belongs to the compositor and is asked for per surface (Bar.qml swaps its
+                // layer namespace, layerrules.lua answers). At full opacity neither switch below
+                // changes anything visible, which is why they are disabled up there rather than
+                // silently doing nothing.
+                Card {
+                    CardLabel { text: "BACKGROUND"
+                                hint: "Opacity is the bar’s own fill and applies instantly. Blur is asked of the compositor per surface; at full opacity neither one changes anything visible." }
+                    Toggle {
+                        label: "Transparent background"
+                        sub:   "Let the desktop show through the bar. Off = the bar is solid."
+                        on:    VtlConfig.barOpacityEnabledFor(root.editMon)
+                        onToggled: root.save("bar_opacity_enabled", !VtlConfig.barOpacityEnabledFor(root.editMon))
+                    }
+                    Slider {
+                        label:    "Opacity"
+                        visible:  VtlConfig.barOpacityEnabledFor(root.editMon)
+                        from:     0.15; to: 1.0; decimals: 2; step: 0.01
+                        value:    VtlConfig.barOpacityValueFor(root.editMon)
+                        onMoved:  v => root.save("bar_opacity_value", v)
+                    }
+                    Toggle {
+                        label:   "Blur behind the bar"
+                        sub:     "Frost whatever shows through. Off = you see the desktop sharply. "
+                               + "Applies immediately — the bar requests this itself, it is not compositor configuration."
+                        visible: VtlConfig.barOpacityEnabledFor(root.editMon)
+                        on:      VtlConfig.barBlurFor(root.editMon)
+                        onToggled: root.save("bar_blur", !VtlConfig.barBlurFor(root.editMon))
+                    }
+                    Slider {
+                        label:   "Blur amount"
+                        visible: VtlConfig.barOpacityEnabledFor(root.editMon) && VtlConfig.barBlurFor(root.editMon)
+                        from:    1; to: 20; decimals: 0; step: 1
+                        value:   VtlConfig.windowBlurSize
+                        onMoved: v => root.saveBlurSize(v)
+                    }
+                    SubLabel {
+                        width:   parent.width
+                        visible: VtlConfig.barOpacityEnabledFor(root.editMon) && VtlConfig.barBlurFor(root.editMon)
+                        text:    "Shared with Window rules — one radius per compositor."
+                    }
+                }
+
                 Card {
                     CardLabel { text: "MENU" }
-                    Text { text: "Corner-menu size (% of the monitor)"; color: Colors.fgMuted
-                           font.pixelSize: 10; font.family: Style.font }
                     SubLabel {
                         width: parent.width
-                        text: "The menu is sized by the dashboard raster — set columns and rows in "
-                            + "Settings → Velumeron → Dashboard → Arrange."
+                        text: "Sized by the dashboard raster."
                     }
                 }
             }
@@ -566,32 +652,19 @@ Item {
                 id: modPage
                 visible: root.tab === "modules"
                 width: parent.width
-                spacing: 14
+                spacing: Style.cardGap
 
-                // Edge to edit
+                // Edge to edit. This was a hand-rolled row of StyledRects that reimplemented
+                // Segmented — the same control used three cards higher up on this very page, with
+                // its own hover colours and its own hardcoded 100 ms fade. Same thing, drawn twice.
                 Column {
                     width: parent.width; spacing: 6
                     FieldLabel { text: "Edge" }
-                    Row {
-                        width: parent.width; spacing: 6
-                        Repeater {
-                            model: root.currentEdges()
-                            delegate: StyledRect {
-                                required property string modelData
-                                readonly property bool on: root.activeEdge === modelData
-                                width:  (modPage.width - (root.currentEdges().length - 1) * 6) / Math.max(1, root.currentEdges().length)
-                                height: 30; radius: Style.rTile
-                                color: on ? Style.selFill
-                                     : (eHov.containsMouse ? Style.controlHover : Style.controlFill)
-                                borderWidth: on ? Style.selBorderW : Style.controlBorderW
-                                borderColor: on ? Style.selBorderColor : Style.controlBorderColor
-                                Behavior on color { ColorAnimation { duration: 100 } }
-                                Text { anchors.centerIn: parent; text: root.cap(modelData)
-                                       color: parent.on ? Style.selText : Colors.fgPrimary
-                                       font.pixelSize: 12; font.family: Style.font }
-                                MouseArea { id: eHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.activeEdge = modelData }
-                            }
-                        }
+                    Segmented {
+                        equal:    true
+                        current:  root.activeEdge
+                        segments: root.currentEdges().map(function (e) { return { label: root.cap(e), key: e } })
+                        onPicked: root.activeEdge = key
                     }
                 }
 
@@ -616,7 +689,7 @@ Item {
                 width: 34; height: 34; radius: Style.rControl
                 color: abHov.containsMouse ? Style.accent : Style.controlFill
                 borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
-                Behavior on color { ColorAnimation { duration: 100 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Text { anchors.centerIn: parent; text: "󰁍"
                        color: abHov.containsMouse ? Style.onAccent : Colors.fgPrimary
                        font.pixelSize: 16; font.family: Style.iconFont }
@@ -649,7 +722,7 @@ Item {
                                     width: chipRow.implicitWidth + 22; height: 34; radius: Style.rControl
                                     color: chHov.containsMouse ? Style.controlHover : Style.controlFill
                                     borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
-                                    Behavior on color { ColorAnimation { duration: 90 } }
+                                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                                     Row {
                                         id: chipRow
                                         anchors.centerIn: parent; spacing: 8
@@ -691,7 +764,7 @@ Item {
                 width: 34; height: 34; radius: Style.rControl
                 color: bkHov.containsMouse ? Style.accent : Style.controlFill
                 borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
-                Behavior on color { ColorAnimation { duration: 100 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Text { anchors.centerIn: parent; text: "󰁍"
                        color: bkHov.containsMouse ? Style.onAccent : Colors.fgPrimary
                        font.pixelSize: 16; font.family: Style.iconFont }
@@ -727,7 +800,7 @@ Item {
         color:  tb.on ? Style.selFill : (tbHov.containsMouse ? Style.controlHover : Style.controlFill)
         borderWidth: tb.on ? Style.selBorderW : Style.controlBorderW
         borderColor: tb.on ? Style.selBorderColor : Style.controlBorderColor
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         Row {
             anchors.centerIn: parent
             spacing: 7
@@ -770,7 +843,7 @@ Item {
                 width: 22; height: 22; radius: 11
                 color: addHov.containsMouse ? Style.accent : Style.controlFill
                 borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
-                Behavior on color { ColorAnimation { duration: 100 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Text { anchors.centerIn: parent; text: "+"
                        color: addHov.containsMouse ? Style.onAccent : Colors.fgPrimary
                        font.pixelSize: 14; font.family: Style.font }
@@ -954,7 +1027,7 @@ Item {
                          : (sh.containsMouse ? Style.controlHover : Style.controlFill)
                     borderWidth: modelData.on ? Style.selBorderW : Style.controlBorderW
                     borderColor: modelData.on ? Style.selBorderColor : Style.controlBorderColor
-                    Behavior on color { ColorAnimation { duration: 100 } }
+                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                     Text { anchors.centerIn: parent; text: modelData.label
                            color: modelData.on ? Style.selText : Colors.fgPrimary
                            font.pixelSize: 12; font.family: Style.font }

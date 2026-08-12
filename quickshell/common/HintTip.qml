@@ -95,7 +95,7 @@ Item {
 
             opacity: 0
             Component.onCompleted: opacity = 1
-            Behavior on opacity { NumberAnimation { duration: 110 } }
+            Behavior on opacity { NumberAnimation { duration: Style.ctrlMs } }
 
             Text {
                 id: hintText

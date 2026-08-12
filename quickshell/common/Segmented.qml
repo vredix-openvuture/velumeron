@@ -28,7 +28,7 @@ Row {
             color: on ? Style.selFill : (h.containsMouse ? Style.controlHover : Style.controlFill)
             borderWidth: on ? Style.selBorderW : Style.controlBorderW
             borderColor: on ? Style.selBorderColor : Style.controlBorderColor
-            Behavior on color { ColorAnimation { duration: 100 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
             Row {
                 id: lbl; anchors.centerIn: parent; spacing: 6
                 Text { visible: segIcon !== ""; text: segIcon; anchors.verticalCenter: parent.verticalCenter

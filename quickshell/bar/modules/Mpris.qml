@@ -142,7 +142,7 @@ Item {
                 text:    root.full
                 color:   titleHover.containsMouse ? Colors.fgBright : root._col
                 font.family: root._font; font.pixelSize: root.fontSize
-                Behavior on color { ColorAnimation { duration: 100 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
             }
             Row {
                 id: marquee
@@ -155,7 +155,7 @@ Item {
                         text:  root.full
                         color: titleHover.containsMouse ? Colors.fgBright : root._col
                         font.family: root._font; font.pixelSize: root.fontSize
-                        Behavior on color { ColorAnimation { duration: 100 } }
+                        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                     }
                 }
                 NumberAnimation on x {
@@ -186,7 +186,7 @@ Item {
         text:  icon
         color: ctlHover.containsMouse ? Colors.fgBright : root._col
         font.family: root._font; font.pixelSize: root.iconSize
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         MouseArea { id: ctlHover; anchors.fill: parent; hoverEnabled: true; onClicked: parent.trig() }
     }
 }

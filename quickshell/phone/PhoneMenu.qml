@@ -405,7 +405,7 @@ Flyout {
                 color: oh.containsMouse ? Style.rowHover
                                         : Style.rowFill
                 opacity: orow.live ? 1.0 : 0.55
-                Behavior on color { ColorAnimation { duration: 110 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 MouseArea {
                     id: oh; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton
                     onContainsMouseChanged: if (containsMouse && orow.live) root.dropTarget = orow.modelData.id
@@ -483,7 +483,7 @@ Flyout {
             borderColor: sd.on ? Style.accent
                        : sdH.containsMouse ? Style.tint(Style.accent, 0.65)
                                            : Style.trackFill
-            Behavior on color { ColorAnimation { duration: 120 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
             Behavior on borderColor { ColorAnimation { duration: 120 } }
         }
         StyledRect {
@@ -505,7 +505,7 @@ Flyout {
         color: rbH.containsMouse ? Style.knobHover
              : rb.big ? Style.knobFill
                       : Style.knobFill
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         Text {
             anchors.centerIn: parent
             text: rb.icon; color: Colors.fgBright

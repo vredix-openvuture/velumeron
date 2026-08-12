@@ -86,7 +86,7 @@ Item {
             StyledRect {   // + → full task editor
                 width: 32; height: 32; radius: Style.rControl
                 color: fabHov.containsMouse ? Style.tint(Style.accent, 0.55) : Style.tint(Style.accent, 0.34)
-                Behavior on color { ColorAnimation { duration: 90 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Text { anchors.centerIn: parent; text: "󰐕"; color: Colors.fgBright; font.pixelSize: 15; font.family: Style.font }
                 MouseArea { id: fabHov; anchors.fill: parent; hoverEnabled: true; onClicked: board.newTask(board.addTarget) }
             }
@@ -180,7 +180,7 @@ Item {
         height: 34
         radius: Style.rTile
         color:  taskHov.containsMouse ? Style.controlHover : Style.controlFill
-        Behavior on color { ColorAnimation { duration: 90 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
         readonly property int indent: row.sub ? 26 : 0
 
@@ -203,7 +203,7 @@ Item {
             border.width: 1
             border.color: task.t.done ? Style.accent
                         : checkHov.containsMouse ? Style.accent : Colors.fgMuted
-            Behavior on color { ColorAnimation { duration: 120 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
             Text {
                 anchors.centerIn: parent
                 visible: task.t.done || checkHov.containsMouse

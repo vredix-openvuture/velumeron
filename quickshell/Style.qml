@@ -62,8 +62,38 @@ QtObject {
     // Panels spring open PAST their target and ring back; the free edges bow by the live spring
     // error `over = reveal − target`, scaled by how grown we are so a sliver doesn't fold in on
     // itself. Every emerging surface reads these + the two helpers, so one slider retunes them all.
-    readonly property real elSpring:    VtlConfig.elasticSpring
-    readonly property real elDamping:   VtlConfig.elasticDamping
+    // Slow-motion switch for inspecting these animations. 1.0 = the real thing; 10.0 runs
+    // everything ten times slower, which is the only practical way to see what a 300 ms spring is
+    // actually doing. A spring's period goes with 1/sqrt(spring), so N× slower means stiffness ÷N²
+    // and damping ÷N — which also leaves the damping RATIO untouched, so it slows down without
+    // becoming bouncier. Leave it at 1.0; it is a tool, not a setting.
+    readonly property real motionSlow:  1.0
+
+    readonly property real elSpring:    VtlConfig.elasticSpring / (motionSlow * motionSlow)
+    readonly property real elDamping:   VtlConfig.elasticDamping / motionSlow
+
+    // Closing takes 20 % longer. DURATION ONLY — the curve, the axis stagger and the overshoot are
+    // identical in both directions, so it is still the opening played backwards, just at a calmer
+    // pace. (An earlier attempt also gave closing its own ease curve; that made it read as a second,
+    // different animation. This does not.)
+    //
+    // Dividing stiffness by N² and damping by N leaves the DAMPING RATIO untouched — the spring is
+    // slower without becoming bouncier, which is the only reason this is safe to do to one direction.
+    // BOTH DIRECTIONS RUN ON THE SAME SPRING. That is the spec, stated plainly after a long
+    // detour: open and close at equal speed, one Motion slider controlling both, no asymmetry.
+    // The direction split below is kept NEUTRAL (both factors 1.0) — the targetValue wiring at the
+    // call sites is correct and harmless, and the hooks remain should a deliberate asymmetry ever
+    // be wanted again. The detour's lesson is recorded there: selecting a spring from an external
+    // open-flag latches stale and runs every animation on the wrong-direction spring.
+    readonly property real elOpenBoost:    1.0
+    readonly property real elCloseSlow:    1.0
+    readonly property real elSpringOpen:   elSpring  * elOpenBoost * elOpenBoost
+    readonly property real elDampingOpen:  elDamping * elOpenBoost
+    readonly property real elSpringClose:  elSpring  / (elCloseSlow * elCloseSlow)
+    readonly property real elDampingClose: elDamping / elCloseSlow
+    function springFor(open)  { return open ? elSpringOpen  : elSpringClose }
+    function dampingFor(open) { return open ? elDampingOpen : elDampingClose }
+
     readonly property real elTopBulge:  VtlConfig.elasticTopBulge
     readonly property real elSideBulge: VtlConfig.elasticSideBulge
     readonly property real elSizeOver:  VtlConfig.elasticSizeOver
@@ -77,12 +107,137 @@ QtObject {
     // panel bows OUTWARD (convex) as it emerges and INWARD (concave) as it retracts — the mass pushes
     // out on the way in, sucks in on the way out. coeff = elTopBulge (content edge) or elSideBulge;
     // dim = the element's short side (min of its width/height), used for the proportional cap.
+    // How much of that bow survives on the way OUT. Closing drives the bow from `reveal − target`
+    // with a target of 0 — i.e. from the reveal itself — so it is strongest the instant the panel
+    // starts to close and eases off from there, rather than appearing only when the spring
+    // overshoots. The edges therefore suck inward hard for the whole retreat. Scaling it back keeps
+    // the soft-mass character without the panel folding in on itself. 1.0 = as much as opening.
+    readonly property real elCloseBow: 0.4
     function elBulge(reveal, target, coeff, dim) {
         var b = Math.min(coeff, dim * elMaxFrac)
-        return -b * (reveal - target) * elG01(reveal)
+        var stiff = (target < 0.5) ? elCloseBow : 1.0
+        return -b * (reveal - target) * elG01(reveal) * stiff
     }
-    // size multiplier for the container morph: reveal plus a touch of the spring error.
-    function elSizeF(reveal, target)      { return Math.max(0, reveal + elSizeOver * (reveal - target)) }
+    // Size multiplier for the container morph: reveal plus a touch of the spring OVERSHOOT.
+    //
+    // "Overshoot" means the spring has gone PAST its target — above 1 while opening, below 0 while
+    // closing. The old form used the raw error `reveal − target`, which is the same thing while
+    // opening but nothing like it while closing: there the target is 0, so the error IS the reveal,
+    // and the panel was scaled by (1 + elSizeOver) for the entire retreat. It left the bar 15 %
+    // oversized and shrank from there.
+    //
+    // That was always happening; a fast spring simply hid it. Slow the close down and it becomes
+    // the panel visibly ballooning before it goes.
+    function elSizeF(reveal, target) {
+        var over = (target >= 0.5) ? Math.max(0, reveal - 1.0)   // opening: only past full size
+                                   : Math.min(0, reveal)          // closing: only past empty
+        return Math.max(0, reveal + elSizeOver * over)
+    }
+
+    // ── The two motions, and which surface gets which ─────────────────────────────────────────────
+    // Everything that opens in this shell does it in one of exactly two ways, and the difference is
+    // not decorative — it says where the thing CAME FROM:
+    //
+    //   DOCKED   it grew out of the bar. Depth (away from the bar) runs 0 → full, so it emerges
+    //            from the bar's inner face and retracts back into it; the length along the bar runs
+    //            from a nub to full. Flyout, Settings, NotifCenter, Launcher.
+    //   FREE     it belongs to the screen, not the bar, and fades up in place with a slight scale.
+    //            Session, clipboard, window switcher, layout switcher, screenshot.
+    //
+    // Both are driven by the SAME spring, so they feel like one system. What used to differ was
+    // everything else: four different start scales (0.94/0.96/0.97/0.97), two dim levels
+    // (0.35/0.40), three colour-fade durations (90/110/180) and one surface (the screenshot card)
+    // on a plain 180 ms curve instead of the spring at all. Those are now these constants, and a
+    // free card is `scale: Style.popScale(reveal); opacity: Style.popFade(reveal)` — nothing else.
+    readonly property real popScaleFrom: 0.96
+    readonly property real popDim:       0.45    // how heavy the veil behind a free card gets
+    readonly property int  popColorMs:   100     // hover/selection colour fades inside any popout
+    // Every control-level transition: a switch knob sliding, a row lighting up under the cursor, a
+    // chip taking selection. One number, because the eye reads a hover at 90 ms next to a hover at
+    // 120 ms as one of them being broken. Controls are NOT sprung — a switch that overshoots reads
+    // as a toy — so this stays a plain duration.
+    readonly property int  ctrlMs:       Math.round(110 * motionSlow)
+
+    // Size of a DOCKED panel mid-morph. BOTH axes collapse — the panel gathers itself back into the
+    // corner it grew from, vertically and horizontally at once.
+    //
+    //   depth  (away from the bar)  0 → full
+    //   length (along the bar)      0 → full
+    //
+    // Both run to ZERO rather than to a nub, and that is what lets the bar's own border close
+    // behind it: the gap the bar leaves for this panel is exactly its length (see Bar.qml's
+    // `menuGap`), so a length that never reaches zero leaves a notch in the bar that never shuts.
+    // `nub` is kept in the signature so the call sites did not all have to change at once.
+    // The two axes do NOT finish together, and that is the point. Running both to zero at the same
+    // instant collapses the panel onto a single point, and a rectangle shrinking to a dot reads as
+    // being sucked away rather than as closing — it is the last thing left that still looks wrong.
+    //
+    // So the LENGTH runs out early: it reaches zero while the panel still has depth left, and the
+    // remaining depth then plays out against nothing. The panel is gone before the maths is.
+    //
+    // Length rather than depth, because the gap in the bar's border is exactly this panel's length
+    // (Bar.qml's `cut`). Retiring the length first means the border has already closed by the time
+    // the panel disappears; the other way round would leave a notch in the bar with nothing in it.
+    // The depth finishes early too, just by less. Letting it run the full travel meant the last
+    // stretch of the animation was the spring settling against a panel that had already gone — time
+    // in which nothing happens on screen. Both axes now retire before the spring does; the LENGTH
+    // still leads, which is what keeps the border closing ahead of the panel.
+    readonly property real elLengthLead: 0.26     // fraction of the travel the length finishes early
+    readonly property real elDepthLead:  0.13     // …and the depth, half as much
+
+    // THE LEAD ONLY APPLIES WHILE CLOSING. It exists so a panel is gone before the spring has
+    // finished settling; applied on the way IN it is simply dead time — the first quarter of the
+    // travel produces no visible change at all, which is felt as "it opens slowly" no matter how
+    // stiff the spring is. Stiffening the spring cannot fix a pause; it only shortens everything
+    // else around it.
+    readonly property real elEaseGamma: 1.05
+    function _lead(sizeF, lead, target) {
+        var l = (target >= 0.5) ? 0.0 : lead          // opening: no lead, start moving at once
+        var v = Math.max(0, (sizeF - l) / (1.0 - l))
+        return Math.pow(v, elEaseGamma)
+    }
+    function elDockW(vert, full, nub, sizeF, target, lenLead, depLead) {
+        var L = (lenLead === undefined) ? elLengthLead : lenLead
+        var D = (depLead === undefined) ? elDepthLead  : depLead
+        return full * (vert ? _lead(sizeF, D, target) : _lead(sizeF, L, target))
+    }
+    function elDockH(vert, full, nub, sizeF, target, lenLead, depLead) {
+        var L = (lenLead === undefined) ? elLengthLead : lenLead
+        var D = (depLead === undefined) ? elDepthLead  : depLead
+        return full * (vert ? _lead(sizeF, L, target) : _lead(sizeF, D, target))
+    }
+    // A panel that grows OUT of the bar is part of the bar, so it takes the bar's transparency with
+    // it. Anything else looks broken the moment the two are asked to read as one shape: a
+    // see-through strip with a solid slab hanging off it is not a bulge in an edge, it is two
+    // objects. Pass the monitor so per-monitor bar settings carry across.
+    function barPanelColor(base, mon) {
+        if (!VtlConfig.barOpacityEnabledFor(mon)) return base
+        return Qt.rgba(base.r, base.g, base.b, base.a * VtlConfig.barOpacityValueFor(mon))
+    }
+
+    function popScale(reveal) { return popScaleFrom + (1.0 - popScaleFrom) * elG01(reveal) }
+    function popFade(reveal)  { return elG01(reveal) }
+    // The veil behind a free card — and it is NOT black. The desktop underneath is wallust-tinted,
+    // and pure black punches a hole through that tint instead of dimming it; the screenshot overlay
+    // had already worked this out for itself while everything else was still laying rgba(0,0,0,·)
+    // over the wallpaper. Derived from the scheme's own ground, so the desktop darkens in its own
+    // colour. This is also what the session menu now uses in place of its blur.
+    function popDimColor(reveal) {
+        var c = Qt.darker(Colors.bgPrimary, 1.8)
+        return Qt.rgba(c.r, c.g, c.b, popDim * popFade(reveal))
+    }
+    // Opacity tracks the reveal ONE-TO-ONE, and that matters at the end of a close.
+    //
+    // This used to be min(1, reveal·4) — opaque for the whole first quarter, so the surface was
+    // still fully visible when the spring had already pulled its size most of the way to zero. Size
+    // and opacity were then running on different curves, and you could watch it: the panel snapped
+    // shut and a leftover sliver faded out behind it. "It plops away and then fades out again."
+    //
+    // One curve for both, so there is nothing left to fade when the shape is gone.
+    function popShellFade(reveal)   { return elG01(reveal) }
+    // Content from a QUARTER of the way in, not half. Waiting until 50 % meant the panel spent
+    // the first half of every open as an empty box — the other half of "it opens slowly".
+    function popContentFade(reveal) { return Math.max(0.0, Math.min(1.0, (reveal - 0.25) / 0.40)) }
 
     // Rounded-rectangle outline whose FREE edges bow outward by the elastic bulge — for surfaces NOT
     // built in the panels' (a,d) dock space (launcher, free notification toasts). Returns

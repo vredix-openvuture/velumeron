@@ -15,6 +15,7 @@ singleton Hyprwindows 1.0 Hyprwindows.qml
 singleton VpnService 1.0 VpnService.qml
 singleton ThumbQueue 1.0 ThumbQueue.qml
 singleton CavaService 1.0 CavaService.qml
+singleton SoundService 1.0 SoundService.qml
 singleton LockState 1.0 lock/LockState.qml
 singleton LockPresets 1.0 LockPresets.qml
 
@@ -207,6 +208,7 @@ ModuleCustomize      1.0 settings/bar/ModuleCustomize.qml
 StyleSection         1.0 settings/style/StyleSection.qml
 VelumeronSection     1.0 settings/velumeron/VelumeronSection.qml
 OsdSection           1.0 settings/osd/OsdSection.qml
+SoundsSection        1.0 settings/sounds/SoundsSection.qml
 LauncherSection      1.0 settings/launcher/LauncherSection.qml
 CornerActionsSection 1.0 settings/corners/CornerActionsSection.qml
 TaskbarSection       1.0 settings/taskbar/TaskbarSection.qml

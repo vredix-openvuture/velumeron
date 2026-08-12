@@ -81,7 +81,7 @@ Column {
                 width: 38; height: 38; radius: Style.rControl
                 color: cur ? Colors.bgActive
                      : (pHov.containsMouse ? Style.tint(Colors.bgActive, 0.20) : Style.menuRowFill)
-                Behavior on color { ColorAnimation { duration: 100 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Text {
                     anchors.centerIn: parent; text: root.iconFor(modelData)
                     color: cur ? Colors.fgBright : (modelData.isPlaying ? Colors.fgPrimary : Colors.fgMuted)
@@ -192,7 +192,7 @@ Column {
         // Opaque on purpose: controlFill is a translucent accent tint, so with the wave running
         // behind the popout the transport buttons had the spectrum shining through them.
         color:  ch.containsMouse ? Style.accent : Style.liftSolid(Colors.bgElement)
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         Text {
             anchors.centerIn: parent
             text:  parent.icon

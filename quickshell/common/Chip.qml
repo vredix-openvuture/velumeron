@@ -19,7 +19,7 @@ StyledRect {
     color:        selected ? Style.selFill : (h.containsMouse ? Style.controlHover : Style.controlFill)
     borderWidth:  selected ? Style.selBorderW : Style.controlBorderW
     borderColor:  selected ? Style.selBorderColor : Style.controlBorderColor
-    Behavior on color { ColorAnimation { duration: 100 } }
+    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
     Text { id: lbl
            anchors.verticalCenter: parent.verticalCenter
@@ -35,7 +35,7 @@ StyledRect {
         anchors { right: parent.right; rightMargin: 4; verticalCenter: parent.verticalCenter }
         width: 20; height: 20; radius: 10
         color: xh.containsMouse ? Style.tint(Colors.fgUrgent, 0.35) : "transparent"
-        Behavior on color { ColorAnimation { duration: 90 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         Text { anchors.centerIn: parent; text: "✕"
                color: xh.containsMouse ? Colors.fgBright : Colors.fgMuted
                font.pixelSize: 10; font.family: Style.font }

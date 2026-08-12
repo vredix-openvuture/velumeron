@@ -31,12 +31,34 @@ Item {
     property var _data: ({})
 
     // Optimistic in-memory update: settings pages call this the instant a control is changed so every
-    // binding reacts immediately, instead of waiting up to one poll (≤400 ms) for the file write to be
-    // read back. The next poll re-reads the (now-written) file and confirms the same value.
+    // binding reacts immediately, instead of waiting for the file write to be read back.
+    //
+    // ── Why the pending set exists, and why controls "jumped" without it ────────────────────────
+    // A write does not reach the disk instantly (SettingsStore batches, and python takes a moment
+    // to start). Any re-read landing in that window parses a file that does NOT yet contain the
+    // change — and `_data` was replaced wholesale by that parse, throwing the optimistic value away.
+    // On screen: you click, the control moves, it snaps BACK, and a moment later it moves again.
+    //
+    // That is what "the toggles jump from value to value and don't react to the click" was. It was
+    // always possible; batching the writes made the window several times wider and turned an
+    // occasional flicker into the normal case.
+    //
+    // So a locally applied key is remembered here until the writer confirms it is on disk, and a
+    // re-parse layers those keys back on top. A read can then never undo something the user just
+    // did, no matter how long the write takes.
+    property var _pendingLocal: ({})
     function applyLocal(key, value) {
         var d = Object.assign({}, root._data)
         d[key] = value
         root._data = d
+        root._pendingLocal[key] = value
+    }
+    // Called by SettingsStore once a batch has actually been written. Only drops keys whose pending
+    // value is still the one that was written — a key changed AGAIN while the write was in flight
+    // must stay pending, or the next read would undo the newer value.
+    function confirmWritten(batch) {
+        for (var k in batch)
+            if (root._pendingLocal[k] === batch[k]) delete root._pendingLocal[k]
     }
 
     // Watched file — re-parse on every change. Keep the last good config if a read lands
@@ -45,13 +67,30 @@ Item {
     function _parse(t) {
         var s = ("" + t).trim()
         if (s === "") return
-        try { root._data = JSON.parse(s) } catch (e) { /* keep previous _data */ }
+        try {
+            var parsed = JSON.parse(s)
+            for (var k in root._pendingLocal) parsed[k] = root._pendingLocal[k]
+            root._data = parsed
+        } catch (e) { /* keep previous _data */ }
+    }
+    // Re-reads are DEBOUNCED, and that matters more than it looks. A reload re-parses the whole
+    // document and reassigns `_data`, which re-evaluates every binding in the shell that reads any
+    // setting — several hundred of them. That is fine once; it is not fine once per file change
+    // during a burst of writes. Since the writer already applied each value locally before it hit
+    // the disk, nothing on screen is waiting for this read: its only job is to pick up changes made
+    // by someone ELSE (the Lua side, a script, an editor). Coalescing a burst into one parse costs
+    // nothing and takes the binding storm out of every slider drag.
+    Timer {
+        id: reparse
+        interval: 90
+        onTriggered: fileView.reload()
     }
     FileView {
+        id: fileView
         path: root.settingsPath
         watchChanges: true
         onLoaded:      root._parse(text())
-        onFileChanged: reload()
+        onFileChanged: reparse.restart()
     }
 
     // ── Component register (à-la-carte) ───────────────────────────────────────
@@ -116,10 +155,28 @@ Item {
     readonly property int  windowBlurPasses: _data.window_blur_passes ?? 4
     readonly property real windowBlurNoise:  _data.window_blur_noise  ?? 0.025
 
-    // Settings menu navigation: "sidebar" (icon rail) or "page" (full-page nav list).
-    // sidebar | page | float. "float" is page navigation PLUS a detached window: Home still grows
-    // out of the bar, every settings page opens centred and free-floating instead.
-    readonly property string settingsNavMode: _data.settings_nav_mode ?? "sidebar"
+    // ── Settings menu: how you navigate it, and where it lives ──────────────────────────────────
+    // These used to be ONE setting with three values (sidebar | page | float), which quietly made
+    // "floating" a property of page navigation only — there was no way to have the icon rail in a
+    // window, and no way to say "pages, but keep it on the bar" once you had chosen float. They are
+    // two independent questions and are now stored as two:
+    //
+    //   settings_nav_mode   sidebar | page      how you get from one page to another
+    //   settings_float      false | true        whether the menu is glued to the bar or a window
+    //
+    // The old "float" value is still read and means what it always did (page navigation, detached),
+    // so an existing config keeps working and is migrated the first time either control is touched.
+    readonly property string _navRaw:         _data.settings_nav_mode ?? "sidebar"
+    readonly property string settingsNavMode: _navRaw === "float" ? "page" : _navRaw
+    readonly property bool   settingsFloat:   _data.settings_float ?? (_navRaw === "float")
+
+    // Sidebar only: does the rail show one section at a time (with dots to flip between them), or
+    // every icon in one continuous scroll? Sectioned keeps the rail short and the icons large;
+    // endless means you never have to find the right section first.
+    readonly property string settingsSidebarScroll: _data.settings_sidebar_scroll ?? "segmented"
+    // Sidebar only: spell the section names out next to the icons instead of leaving them to a
+    // hover tooltip. Costs rail width, buys not having to know the icons.
+    readonly property bool   settingsSidebarLabels: _data.settings_sidebar_labels ?? false
 
     // ── Public properties (with sane defaults) ────────────────────────────────
     readonly property bool   opacityEnabled:  _data.opacity_enabled   ?? false
@@ -141,8 +198,8 @@ Item {
     // Every panel/OSD that grows open springs with these; the free edges bow by the spring's
     // overshoot. Prototype + meaning of each knob: _lab/ElasticShapeTest.qml. Exposed to the rest
     // of the shell via Style.el* (+ Style.elBulge/elSizeF helpers), so components read one source.
-    readonly property real   elasticSpring:    _data.elastic_spring     ?? 5.0    // spring stiffness (higher = snappier)
-    readonly property real   elasticDamping:   _data.elastic_damping    ?? 0.36   // 0..1, lower = more wobble
+    readonly property real   elasticSpring:    _data.elastic_spring     ?? 10.4   // spring stiffness (higher = snappier)
+    readonly property real   elasticDamping:   _data.elastic_damping    ?? 0.68   // 0..1, lower = more wobble
     readonly property real   elasticTopBulge:  _data.elastic_top_bulge  ?? 86     // px the content edge bows / overshoot
     readonly property real   elasticSideBulge: _data.elastic_side_bulge ?? 144    // px the free side edges bow / overshoot
     readonly property real   elasticSizeOver:  _data.elastic_size_over  ?? 0.10   // extra size overshoot fed from the spring error
@@ -176,6 +233,12 @@ Item {
         if (Hyprland.monitors.values.length < 2) return false   // single monitor → full bar
         return mon !== _mainMonName()
     }
+
+    // The whole per-monitor bar map, for writers that have to merge into it (settings pages must
+    // clone-and-replace rather than write a nested path, so that one monitor's edit cannot drop
+    // another's).
+    readonly property var barMonitors: (_data.bar_monitors && typeof _data.bar_monitors === "object")
+                                       ? _data.bar_monitors : ({})
 
     function _monObj(mon) {
         if (!barPerMonitor || !mon) return null
@@ -248,6 +311,10 @@ Item {
     // font size / icon size and its own bespoke options, stored globally under
     // module_settings.<key>.<name>. A missing/blank value = inherit (default family, the global bar
     // size, or the module's own default colour). Modules read these for their primary text/icon.
+    // The whole map, for writers that must clone-and-replace it (SettingsStore has no notion of a
+    // nested path, and merging in place is how one module's edit used to drop another's).
+    readonly property var moduleSettings: (_data.module_settings && typeof _data.module_settings === "object")
+                                          ? _data.module_settings : ({})
     function moduleSetting(key, name, def) {
         var ms = _data.module_settings
         return (ms && ms[key] && ms[key][name] !== undefined && ms[key][name] !== "") ? ms[key][name] : def
@@ -316,6 +383,24 @@ Item {
     function edgeThicknessFor(edge, mon) {
         return (barModeFor(mon) === "frame" && !edgeHasModulesFor(edge, mon))
                ? Math.round(barThicknessFor(mon) / 2) : barThicknessFor(mon)
+    }
+
+    // ── THE inset: how far in from an edge the bar's inner face sits ────────────────────────────
+    // Every surface that docks onto the bar needs this number, and until now each one worked it out
+    // for itself — four copies of the same three-term expression in Flyout, Settings, NotifCenter
+    // and Launcher. That is exactly the shape of bug that costs an afternoon: an edge carrying no
+    // modules renders at HALF thickness (see edgeThicknessFor), so any copy that forgets a term, or
+    // reads a different monitor, silently docks a panel 20 px away from the bar it is supposed to
+    // be touching — and it only shows up on the one edge that happens to be empty.
+    //
+    // One function, one answer. It folds in all three things that move the inner face:
+    //   · whether the edge has a bar at all      (0 if not — the panel sits at the screen edge)
+    //   · half thickness on an empty frame edge  (edgeThicknessFor)
+    //   · the gap a floating bar keeps           (barFloatGapFor)
+    function barInsetFor(edge, mon) {
+        if (!edgeActiveFor(edge, mon)) return 0
+        return edgeThicknessFor(edge, mon)
+             + (barFloatingFor(mon) ? barFloatGapFor(mon) : 0)
     }
 
     // ── Bar footprint geometry (shared by Bar.qml's own strips + the overlay interaction-lock
@@ -562,6 +647,21 @@ Item {
     readonly property bool   launcherBlur:       _data.launcher_blur       ?? true  // blur the backdrop (Hyprland)
     readonly property bool   launcherDock:       _data.launcher_dock       ?? false // snap flush against the bar/edge
 
+    // ── System sounds (Settings → Sounds) ─────────────────────────────────────
+    // The pack is a NAME, not a path: "freedesktop" means the installed XDG sound theme, anything
+    // else a directory under assets/sounds/. Resolution and the per-event overrides live in
+    // SoundService — this only holds what the user chose.
+    readonly property string soundPack:   _data.sound_pack   ?? "velumeron"
+    readonly property int    soundVolume: _data.sound_volume ?? 60     // 0…100, curved in SoundService
+    readonly property var    soundEvents: (_data.sound_events && typeof _data.sound_events === "object")
+                                          ? _data.sound_events : ({})
+    // Absent ⇒ the catalogue's own default, which is how a new event added later arrives switched
+    // to whatever it should be rather than silently off for everyone who already has a settings file.
+    function soundEventEnabled(key, def) {
+        var v = soundEvents[key]
+        return (v === undefined || v === null) ? !!def : !!v
+    }
+
     // ── Hot corners / screen edges (Settings → Corners) ───────────────────────
     // Push the mouse into a corner or edge-centre and hold for the dwell time → fire an action.
     // Zones (ids): top-left | top | top-right | right | bottom-right | bottom | bottom-left | left.
@@ -729,6 +829,45 @@ Item {
     // (Half-thickness only applies in frame mode; dock/float edges are always full.)
     function edgeThickness(edge) { return edgeThicknessFor(edge, "") }
 
+    // ── Bar background: how transparent, and whether what shows through is frosted ──────────────
+    // Two separate questions that are easy to confuse. Opacity is ours and takes effect the moment
+    // the slider moves (it is just the fill's alpha). Blur belongs to the compositor: we can only
+    // ask for it per surface, by name — see Bar.qml's namespace and the rules in layerrules.lua.
+    //
+    // A blurred bar at full opacity looks identical to an unblurred one, because nothing shows
+    // through either way. So the blur switch is only meaningful once the opacity is below 1, and
+    // the settings page presents them together for that reason.
+    // Wallpaper folder per monitor, plus the two search switches. Read straight from the config
+    // like everything else — the settings page used to shell out to python to read its OWN values
+    // back, which is a subprocess round-trip before the page can even draw itself.
+    readonly property var  wallpaperDirs: (_data.wallpaper_dirs && typeof _data.wallpaper_dirs === "object")
+                                          ? _data.wallpaper_dirs : ({})
+    function wallpaperDirFor(mon) { return "" + (wallpaperDirs[mon] || "") }
+    // Named multi-monitor arrangements: wallpaper_sets.<name> = { "<mon>": "<path>" }.
+    readonly property var wallpaperSets: (_data.wallpaper_sets && typeof _data.wallpaper_sets === "object")
+                                         ? _data.wallpaper_sets : ({})
+    readonly property bool wallpaperSearchSubfolders: _data.wallpaper_search_subfolders ?? false
+    readonly property bool wallpaperSubfolderSorting: _data.wallpaper_subfolder_sorting ?? false
+
+    // ── Wallpaper stacks ────────────────────────────────────────────────────────────────────────
+    // A subfolder of the wallpaper directory is a STACK: a named pile you can switch off when you
+    // are not in the mood for it. Stored as the list of stacks that are OFF, not the ones that are
+    // on, so that a folder you add later shows up by default instead of being invisible until you
+    // remember to enable it. "" is the root-level bucket ("Main").
+    readonly property var wallpaperStacksOff: (_data.wallpaper_stacks_off instanceof Array)
+                                              ? _data.wallpaper_stacks_off : []
+    function wallpaperStackOn(sub) { return wallpaperStacksOff.indexOf("" + sub) < 0 }
+
+    // PER MONITOR, like every other bar setting. They were plain globals while the settings page
+    // wrote them through the bar's normal `save()` — which routes to bar_monitors.<mon> whenever
+    // per-monitor editing is on. So with that switch enabled the controls wrote somewhere nothing
+    // ever read, and the transparency toggle simply did nothing at all.
+    function barOpacityEnabledFor(mon) { return _bv("bar_opacity_enabled", mon) ?? false }
+    function barOpacityValueFor(mon)   { return _bv("bar_opacity_value", mon)   ?? 0.88 }
+    function barBlurFor(mon)           { return _bv("bar_blur", mon)            ?? true }
+    // Global reads, for surfaces that are not per-monitor themselves (the settings page's own
+    // preview state). Prefer the …For(mon) form anywhere a monitor is known.
     readonly property bool barOpacityEnabled: _data.bar_opacity_enabled ?? false
     readonly property real barOpacityValue:   _data.bar_opacity_value   ?? 0.88
+    readonly property bool barBlur:           _data.bar_blur            ?? true
 }

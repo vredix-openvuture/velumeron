@@ -21,7 +21,7 @@ StyledRect {
          : h.containsMouse ? Style.controlHover : Style.controlFill
     borderWidth: c.ghost ? Style.controlBorderW : 0
     borderColor: Style.controlBorderColor
-    Behavior on color { ColorAnimation { duration: 90 } }
+    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
     Row {
         id: row

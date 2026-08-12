@@ -47,7 +47,7 @@ Item {
             text:  root.iconFor(root.current)
             color: hov.containsMouse || root.menuOpen ? Colors.fgBright : root._col
             font.family: root._font; font.pixelSize: root._is
-            Behavior on color { ColorAnimation { duration: 100 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         }
         Text {
             visible: root._showName
@@ -55,7 +55,7 @@ Item {
             text:  root.labelFor(root.current)
             color: hov.containsMouse || root.menuOpen ? Colors.fgBright : root._col
             font.family: root._font; font.pixelSize: root._fs
-            Behavior on color { ColorAnimation { duration: 100 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         }
     }
 

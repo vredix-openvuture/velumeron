@@ -72,7 +72,7 @@ PanelWindow {
                 border.width: hot ? 2 : 1
                 border.color: hot ? Style.accent : Style.tint(Colors.boNormal, 0.55)
                 Behavior on color        { ColorAnimation { duration: 110 } }
-                Behavior on border.color { ColorAnimation { duration: 110 } }
+                Behavior on border.color { ColorAnimation { duration: Style.ctrlMs } }
 
                 // A soft inner glow dot marks the snap centre of the hot zone.
                 Rectangle {

@@ -13,7 +13,7 @@ StyledRect {
     color:        selected ? Style.selFill : (h.containsMouse ? Style.controlHover : Style.controlFill)
     borderWidth:  selected ? Style.selBorderW : Style.controlBorderW
     borderColor:  selected ? Style.selBorderColor : Style.controlBorderColor
-    Behavior on color { ColorAnimation { duration: 90 } }
+    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
     Text { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
            text: r.label; color: r.selected ? Style.selText : Colors.fgPrimary

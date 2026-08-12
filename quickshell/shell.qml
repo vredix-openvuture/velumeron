@@ -9,7 +9,10 @@ ShellRoot {
     // Touch the Templates singleton on startup so its copy-on-write watcher + one-time migration run
     // even before any settings UI is opened (a singleton only instantiates once referenced).
     // OnboardingState decides whether to open the first-run wizard / post-update changelog.
-    Component.onCompleted: { Templates.boot(); LockPresets.boot(); void Hyprwindows.windows; OnboardingState.boot() }
+    // SoundService.boot() builds the sound cache and — once per session, never per shell restart —
+    // fires the login sound. Like the others it has to be TOUCHED, or the singleton is never created.
+    Component.onCompleted: { Templates.boot(); LockPresets.boot(); void Hyprwindows.windows
+                             OnboardingState.boot(); SoundService.boot() }
 
     // Cold-start resync: Quickshell.Hyprland builds its workspace→monitor /
     // monitor→activeWorkspace graph from the event socket and can latch a bogus
@@ -67,6 +70,14 @@ ShellRoot {
     //   open   → first-run wizard (pages write real config!)
     //   update → changelog report for the current release
     //   close  → hide without stamping the version as seen
+    // Sounds are reachable from the outside too: a bind or a script can make the shell speak, and
+    // it is the only way to exercise the path without opening a menu.
+    IpcHandler {
+        target: "sound"
+        function play(key: string):    void { SoundService.play(key) }
+        function preview(key: string): void { SoundService.preview(key) }
+    }
+
     IpcHandler {
         target: "onboarding"
         function open():   void { OnboardingState.openForced("first-run") }

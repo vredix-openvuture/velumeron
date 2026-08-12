@@ -85,7 +85,7 @@ Flyout {
                 radius: Style.rTile
                 color: on ? Style.tint(Style.accent, 0.30)
                      : eHov.containsMouse ? Style.controlHover : Style.controlFill
-                Behavior on color { ColorAnimation { duration: 90 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
                 Text {
                     anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }

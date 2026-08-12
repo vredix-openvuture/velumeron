@@ -94,7 +94,7 @@ Item {
             color: root.hovered ? Colors.fgBright : root._col
             font.family:    root._font
             font.pixelSize: root._is
-            Behavior on color { ColorAnimation { duration: 100 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         }
         // Mode word (font size). The detailed stats glide out of the bar on hover (PerformanceGlide).
         Text {
@@ -104,7 +104,7 @@ Item {
             color: root.hovered ? Colors.fgBright : root._col
             font.family:    root._font
             font.pixelSize: root._fs
-            Behavior on color { ColorAnimation { duration: 100 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         }
     }
 

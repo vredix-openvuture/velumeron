@@ -265,7 +265,7 @@ Flyout {
                         visible: root.eventCals.length > 0
                         width: 32; height: 26; radius: Style.rTile
                         color: (root.sidebarOpen || sbHov.containsMouse) ? Style.controlHover : Style.controlFill
-                        Behavior on color { ColorAnimation { duration: 90 } }
+                        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                         Text { anchors.centerIn: parent; text: "󰃭"
                                color: root.sidebarOpen ? Style.accent : Colors.fgMuted
                                font.pixelSize: 14; font.family: Style.font }
@@ -288,7 +288,7 @@ Flyout {
                         anchors.verticalCenter: parent.verticalCenter
                         width: 26; height: 24; radius: Style.rTile
                         color: addHov.containsMouse ? Style.tint(Style.accent, 0.55) : Style.tint(Style.accent, 0.32)
-                        Behavior on color { ColorAnimation { duration: 90 } }
+                        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                         Text { anchors.centerIn: parent; text: "󰐕"; color: Colors.fgBright
                                font.pixelSize: 14; font.family: Style.font }
                         MouseArea { id: addHov; anchors.fill: parent; hoverEnabled: true
@@ -306,7 +306,7 @@ Flyout {
                                 width: vlbl.implicitWidth + 18; height: 24; radius: Style.rTile
                                 color: vseg.on ? Style.tint(Style.accent, 0.35)
                                      : vHov.containsMouse ? Style.controlHover : "transparent"
-                                Behavior on color { ColorAnimation { duration: 90 } }
+                                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                                 Text { id: vlbl; anchors.centerIn: parent; text: vseg.modelData.l
                                        color: vseg.on ? Colors.fgBright : Colors.fgMuted
                                        font.pixelSize: 12; font.bold: vseg.on; font.family: Style.font }
@@ -363,7 +363,7 @@ Flyout {
                                     width: calCol.width; height: 30
                                     radius: Style.rTile
                                     color: calRowHov.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : "transparent"
-                                    Behavior on color { ColorAnimation { duration: 90 } }
+                                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                                     Rectangle {
                                         anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
                                         width: 11; height: 11; radius: 5.5
@@ -447,7 +447,7 @@ Flyout {
                                     color:  cellHov.containsMouse ? Style.controlHover : Style.controlFill
                                     borderWidth: cell.isToday ? 1 : 0
                                     borderColor: Style.accent
-                                    Behavior on color { ColorAnimation { duration: 90 } }
+                                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                                     Column {
                                         anchors { fill: parent; margins: 4 }
                                         spacing: 2

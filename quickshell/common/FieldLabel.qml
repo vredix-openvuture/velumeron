@@ -19,7 +19,7 @@ Text {
         width:   fl.contentWidth
         height:  1
         color:   Qt.rgba(fl.color.r, fl.color.g, fl.color.b, hintHover.containsMouse ? 0.9 : 0.4)
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
     }
     MouseArea {
         id: hintHover

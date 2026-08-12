@@ -117,7 +117,7 @@ Item {
                                       : tileHov.containsMouse ? Style.controlHover : Style.controlFill
                                 border.width: tile.on ? 1 : Style.controlBorderW
                                 border.color: tile.on ? Style.accent : Style.controlBorderColor
-                                Behavior on color { ColorAnimation { duration: 100 } }
+                                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
                                 Item {
                                     anchors.fill: parent

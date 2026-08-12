@@ -44,7 +44,7 @@ Column {
                 radius: Style.rTile
                 color: opt.modelData.on ? Style.tint(Colors.bgActive, 0.28)
                      : oh.containsMouse ? Style.controlHover : "transparent"
-                Behavior on color { ColorAnimation { duration: 90 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Text {
                     anchors { left: parent.left; leftMargin: 9; right: parent.right
                               rightMargin: 9; verticalCenter: parent.verticalCenter }

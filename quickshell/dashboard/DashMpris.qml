@@ -180,7 +180,7 @@ DashTile {
         // Opaque: this was an accent tint at 18 % alpha, so the wave behind the tile shone
         // straight through the transport buttons.
         color: mbHov.containsMouse ? Style.accent : Style.liftSolid(Colors.bgElement)
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         Text { anchors.centerIn: parent; text: mb.icon
                color: mbHov.containsMouse ? Style.onAccent : Colors.fgPrimary
                font.pixelSize: Math.round(mb.size * 0.47); font.family: Style.iconFont }

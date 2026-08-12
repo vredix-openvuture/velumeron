@@ -220,11 +220,10 @@ PanelWindow {
     readonly property int  _m:    64   // edge margin in windowed (floating) mode
     readonly property bool dock:  !fs && VtlConfig.launcherDock
     // Bar offset for an edge (thickness + float gap), 0 when that edge has no bar.
-    function _edgeOff(edge) {
-        return VtlConfig.edgeActiveFor(edge, root.mon)
-            ? VtlConfig.edgeThicknessFor(edge, root.mon) + (VtlConfig.barFloatingFor(root.mon) ? VtlConfig.barFloatGapFor(root.mon) : 0)
-            : 0
-    }
+    // ONE source for this (VtlConfig.barInsetFor). Hand-rolling it here is what put the card 20 px
+    // off the bottom bar: that edge carries no modules, so it renders at half thickness, and any
+    // second copy of the arithmetic is a second chance to disagree with the bar about where it ends.
+    function _edgeOff(edge) { return UiState.barInnerFor(edge, root.mon) }
     readonly property int mLeft:   dock ? _edgeOff("left")   : _m
     readonly property int mRight:  dock ? _edgeOff("right")  : _m
     readonly property int mTop:    dock ? _edgeOff("top")    : _m
@@ -253,19 +252,31 @@ PanelWindow {
     // Kept visible while it animates back to 0 so the close morph plays.
     property real reveal: 0
     onActiveChanged: reveal = active ? 1 : 0
-    Behavior on reveal { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.003 } }
-    // Soft-mass emergence: the card grows cleanly out of its edge (clamped reveal → no size
-    // overshoot / "plop", it just rises), and the spring's overshoot shows only as the free edges
-    // bowing — same as the OSDs. The dock edge flares into the bar with concave fillets (elFillet).
+    Behavior on reveal {
+        id: revealB
+        // Direction from the Behavior's own targetValue, NOT the surface's open flag:
+        // the flag flips in the same signal that starts the animation, and the animation
+        // latched the OLD spring — opening ran on the closing spring and vice versa.
+        SpringAnimation {
+            spring:  Style.springFor(revealB.targetValue > 0.5)
+            damping: Style.dampingFor(revealB.targetValue > 0.5)
+            epsilon: 0.003
+        }
+    }
+    // The SAME size curve the bar flyouts use — `Style.elSizeF`, which carries the spring's
+    // overshoot into the size itself. This used to be `elG01` (the clamped reveal, no overshoot):
+    // the card rose without the little push past its target that every panel in the shell has, so
+    // it never quite matched them no matter what else was aligned. That was the actual difference.
+    readonly property real sizeF:    Style.elSizeF(reveal, active ? 1.0 : 0.0)
     readonly property real grow01:   Style.elG01(reveal)
     readonly property int  elFillet: VtlConfig.barInnerRadiusFor(root.mon)   // concave dock-flare radius
-    readonly property int  elSeam:   2
+    readonly property int  elSeam:   1
     readonly property int  elPad: Math.ceil(Math.max(Style.elTopBulge, Style.elSideBulge)) + elFillet + elSeam + 4
     readonly property real elDim:  Math.min(card.width, card.height)
     readonly property real bulgeT: Style.elBulge(reveal, active ? 1.0 : 0.0, Style.elTopBulge,  elDim)
     readonly property real bulgeS: Style.elBulge(reveal, active ? 1.0 : 0.0, Style.elSideBulge, elDim)
     // Content fades in only in the second half, once the card has grown enough room for it.
-    readonly property real contentReveal: Math.max(0.0, Math.min(1.0, (reveal - 0.5) / 0.45))
+    readonly property real contentReveal: Style.popContentFade(reveal)
 
     // Final card rect (full size + resting position). The morph grows the card from a `collapsed` nub
     // at `slideEdge` up to this rect; fullscreen uses it directly (centred, plain fade — no edge).
@@ -280,16 +291,42 @@ PanelWindow {
         : (VtlConfig.launcherPosition.indexOf("top")    >= 0 ? mTop
          : VtlConfig.launcherPosition.indexOf("bottom") >= 0 ? height - mBottom - fullH
          : (height - fullH) / 2)
-    readonly property int  collapsed: 48   // nub size the card grows out of (windowed morph)
+    // Nub the card grows out of. When it docks onto a real bar that nub IS the bar's thickness, so
+    // the launcher emerges from exactly the same seed as every flyout on that edge; 48 is only the
+    // fallback for docking onto a bare screen edge, where there is no thickness to inherit.
+    readonly property int  collapsed: (root.dockEdge !== "" && VtlConfig.edgeActiveFor(root.dockEdge, root.mon))
+                                      ? VtlConfig.edgeThicknessFor(root.dockEdge, root.mon) : 48
 
     visible: active || root.reveal > 0.01
     color: "transparent"
     anchors { top: true; left: true; right: true; bottom: true }
     WlrLayershell.layer:         WlrLayer.Overlay
-    // Namespace drives the Hyprland blur layerrule: the "-noblur" variant is overridden to blur=false.
-    WlrLayershell.namespace:     VtlConfig.launcherBlur ? "velumeron-launcher" : "velumeron-launcher-noblur"
+    WlrLayershell.namespace:     "velumeron-launcher"
+    // Blur is requested by PROTOCOL (ext-background-effect-v1), not by a compositor rule: the
+    // surface names the region behind it that it wants frosted. Portable to any compositor that
+    // implements it, ignored (translucent, unfrosted) where it is absent — and it needs nothing in
+    // hypr.lua, which is what the namespace swap below used to be for.
+    // Docked, the launcher is a bar surface and behaves like one: it frosts ITSELF, following the
+    // bar's own transparency/blur switches, with the region tracking the card as it morphs. It was
+    // blurring the whole screen instead — the "blur backdrop" behaviour, which is right only when
+    // it floats free of the bar, and which is why it never picked up the bar's setting.
+    readonly property bool blurDocked: root.dock && root.dockEdge !== ""
+                                       && VtlConfig.edgeActiveFor(root.dockEdge, root.mon)
+    BackgroundEffect.blurRegion: !root.active ? null
+        : root.blurDocked ? ((VtlConfig.barBlurFor(root.mon) && VtlConfig.barOpacityEnabledFor(root.mon))
+                             ? cardBlur : null)
+        : (VtlConfig.launcherBlur ? launcherBlur : null)
+    Region { id: launcherBlur; x: 0; y: 0; width: root.width; height: root.height }
+    Region { id: cardBlur;     item: card }
     WlrLayershell.keyboardFocus: active ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-    exclusiveZone: 0
+    // -1, like every other bar-docked popout (Flyout, Settings, NotifCenter). At 0 this surface
+    // HONOURS the exclusive zones the bar reserves, so the compositor already hands it a rect with
+    // the bar cut off — and the card then subtracted the bar's thickness a second time. The result
+    // was a gap exactly one bar-thickness wide, which on an empty (half-thick) edge is 20 px.
+    //
+    // That is why three rounds of fixing the inset arithmetic changed nothing: the arithmetic was
+    // right, the RECT it was applied to was already short.
+    WlrLayershell.exclusiveZone: -1
 
     // ── App list + fuzzy filter ──────────────────────────────────────────────────────────────
     readonly property var allApps: {
@@ -381,7 +418,10 @@ PanelWindow {
     // blur OFF there's no dark haze either; it fades with the reveal.
     Rectangle {
         anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, (VtlConfig.launcherBlur ? 0.4 : 0.0) * root.reveal)
+        // Tied to the blur setting: with blur off there is no haze either, so what is behind the
+        // launcher stays exactly as it was. When it IS on, the same scheme-tinted veil every other
+        // free surface uses.
+        color: VtlConfig.launcherBlur ? Style.popDimColor(root.reveal) : "transparent"
         MouseArea { anchors.fill: parent; onClicked: UiState.launcherOpen = false }
     }
 
@@ -397,7 +437,11 @@ PanelWindow {
         opacity: card.opacity
         preferredRendererType: Shape.GeometryRenderer
         ShapePath {
-            fillColor: Colors.bgPrimary; strokeWidth: -1
+            // The shell's panel colour, not the raw palette ground — every other popout uses
+            // Style.panelColor, so this one was the only surface painting itself a different shade
+            // of the same theme. It inherits the bar's transparency too, like the flyouts.
+            fillColor: Style.barPanelColor(Style.panelColor(VtlConfig.menuColorful), root.mon)
+            strokeWidth: -1
             fillRule: ShapePath.WindingFill
             PathSvg { path: Style.elRectPaths(card.width, card.height, Style.rCard, root.elFillet,
                             root.bulgeT, root.bulgeS, root.dockEdge, root.elSeam, root.elPad)[1] }
@@ -418,11 +462,68 @@ PanelWindow {
         id: card
         // Windowed: grow from a nub at slideEdge to the full rect (edge pinned). Fullscreen: full rect.
         readonly property bool morph: !root.fs
-        width:  (morph && !root.growV) ? root.collapsed + (root.fullW - root.collapsed) * root.grow01 : root.fullW
-        height: (morph &&  root.growV) ? root.collapsed + (root.fullH - root.collapsed) * root.grow01 : root.fullH
-        // Pin the slide edge so the card unfolds outward from the bar/edge (the opposite side expands).
-        x: (morph && !root.growV && root.slideEdge === "right")  ? root.fx + root.fullW - width  : root.fx
-        y: (morph &&  root.growV && root.slideEdge === "bottom") ? root.fy + root.fullH - height : root.fy
+        // Depth only (Style.elDockW): the card keeps its full width and grows out of its edge. It
+        // used to morph on the length axis too, which is what made it appear to open sideways
+        // instead of rising — the length changed while its left edge stayed put, so the card wiped
+        // to the right. `growV` = the slide edge is horizontal, i.e. height is depth (Style's !vert).
+        // DEPTH LEADS on this card — the reverse of the corner panels' stagger, because the shape
+        // of a good exit differs with where the surface sits. A corner panel retires its length
+        // first and the sliver tucks into the corner. This card is centred on its edge: length
+        // dying first left a tall line standing mid-screen (the first attempt), and equal leads
+        // still had it collapsing as a tall block sinking downward. Height retiring FIRST means it
+        // flattens onto the bar and melts into it — the card is wide and low for its whole exit,
+        // which is what "slides into the border" looks like from the middle of an edge. Width also
+        // carries the border gap, so the bar's line closes exactly when the last of it goes.
+        // Opening is untouched — leads apply to the close only (Style._lead).
+        readonly property real closeLenLead:   0.10
+        readonly property real closeDepthLead: 0.30
+        width:  morph ? Style.elDockW(!root.growV, root.fullW, root.collapsed, root.sizeF, root.active ? 1.0 : 0.0, closeLenLead, closeDepthLead) : root.fullW
+        height: morph ? Style.elDockH(!root.growV, root.fullH, root.collapsed, root.sizeF, root.active ? 1.0 : 0.0, closeLenLead, closeDepthLead) : root.fullH
+
+        // The two axes are positioned differently:
+        //   depth   pinned to the slide edge — docked at the bottom it grows upward, so its top
+        //           edge moves and its bottom edge does not.
+        //   length  CENTRED on the edge, so it opens symmetrically out of one point.
+        // Leaving the length pinned to fx is what made the card lean: its left edge stayed put and
+        // the whole thing unrolled to the right, even though it hangs off no side edge at all.
+        x: !morph      ? root.fx
+         : root.growV  ? root.fx + (root.fullW - width) / 2
+         : root.slideEdge === "right"  ? root.fx + root.fullW - width  : root.fx
+        y: !morph      ? root.fy
+         : !root.growV ? root.fy + (root.fullH - height) / 2
+         : root.slideEdge === "bottom" ? root.fy + root.fullH - height : root.fy
+
+        // Claim the stretch of bar border this card covers, exactly as the flyouts do — otherwise
+        // the bar draws its line straight through underneath, and on the way out that line reappears
+        // from under the closing card. Only when DOCKED against a real bar: floating (the 64 px
+        // margin) or fullscreen means it is not touching the bar at all and must not cut it.
+        readonly property bool gapDock: root.dock && root.dockEdge !== ""
+                                        && VtlConfig.edgeActiveFor(root.dockEdge, root.mon)
+        // The skirt allowance belongs HERE and not on the corner-docked panels. This card is centred
+        // on its edge and merges into nothing, so it has a fillet on BOTH sides and the widened cut
+        // is covered on both. Without it the bar's border reappears across the fillet while the card
+        // is still on screen — the line showing up before it has finished closing.
+        readonly property real gapEdge: root.elFillet * Style.elG01(root.reveal)
+        readonly property real gapFrom: (root.growV ? x : y) - gapEdge
+        readonly property real gapTo:   (root.growV ? x + width : y + height) + gapEdge
+        // NOT root.active — that includes isOpen, which flips false the instant the close begins,
+        // so the bar border snapped back fully drawn and the whole close played out in front of
+        // it. Through a translucent card that is precisely "it sinks behind the bar". The latched
+        // monitor keeps ownership through the close; the gap then follows the shrinking width and
+        // clears itself when nothing is left (setBarGap drops spans under half a pixel).
+        readonly property bool gapLive: morph && gapDock
+                                        && root.mon !== "" && root.mon === UiState.launcherMon
+        function pushGap() {
+            if (gapLive && width > 1 && height > 1)
+                 UiState.setBarGap(root.mon, root.dockEdge, gapFrom, gapTo)
+            else UiState.clearBarGap(root.mon)
+        }
+        onGapFromChanged: pushGap()
+        onGapToChanged:   pushGap()
+        onGapLiveChanged: pushGap()
+        onWidthChanged:   pushGap()
+        onHeightChanged:  pushGap()
+        Component.onDestruction: UiState.clearBarGap(root.mon)
         radius: Style.rCard
         // Square the corners on the docked edge so the card visually merges into the bar/edge.
         radiusTL: (root.dockEdge === "top"    || root.dockEdge === "left")  ? 0 : Style.rCard
@@ -432,7 +533,14 @@ PanelWindow {
         color:  "transparent"                            // fill + border drawn by the bowable Shapes behind
         clip:    true                                     // clip content to the morphing card
         // Background fades in fast so you see the nub grow out of the edge (matches the bar flyouts).
-        opacity: root.fs ? root.reveal : Math.min(1.0, root.reveal * 4.0)
+        // Windowed: no fade — the card grows out of its edge, and fading it as well would blend
+        // the wallpaper's colour into the card while it moved (see Settings.qml). Fullscreen has no
+        // edge to grow from, so there it IS the animation and stays a fade.
+        // Cut when the SIZE is spent, not when the spring is. Both axes reach zero at reveal 0.19
+        // (evenLead), but the fillet-skirt Shapes kept painting their pad margin until 0.012 —
+        // a residual lump at the bar, sinking as the spring settled: "it closes, then glides
+        // down". The gap above dies in the same frame, so the border closes exactly behind it.
+        opacity: root.fs ? Style.popFade(root.reveal) : ((width > 1 && height > 1) ? 1 : 0)
         MouseArea { anchors.fill: parent }   // swallow clicks so the backdrop doesn't close
 
         Column {

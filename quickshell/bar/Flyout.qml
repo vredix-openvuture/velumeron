@@ -46,10 +46,7 @@ PanelWindow {
 
     // ── Dock geometry (ported from Settings.qml) ──────────────────────────────────────────────
     readonly property bool   edgeBar: VtlConfig.edgeActiveFor(mEdge, root.mon) && !root.monFullscreen
-    readonly property int    barT:   edgeBar
-                                     ? VtlConfig.edgeThicknessFor(mEdge, root.mon)
-                                       + (VtlConfig.barFloatingFor(root.mon) ? VtlConfig.barFloatGapFor(root.mon) : 0)
-                                     : 0
+    readonly property int    barT:   edgeBar ? UiState.barInnerFor(mEdge, root.mon) : 0
     // A floating bar gets a floating panel: no merges into the bar, a fully-rounded free outline,
     // offset from the bar's inner face by the same gap — docking into a bar that itself floats
     // reads as glued-on. Cupertino detaches ALWAYS: macOS menus are free dropdowns under the
@@ -70,9 +67,33 @@ PanelWindow {
 
     readonly property int edgeR:  Style.panelR(VtlConfig.barInnerRadiusFor(root.mon))
     readonly property int flareR: VtlConfig.barInnerRadiusFor(root.mon)
-    readonly property int seam:   2
+    // ONE pixel, and the number is a compromise between two visible defects.
+    //
+    // The bar's FILL is not cut by the border gap — it runs straight on and ends exactly where this
+    // panel begins. Two half-transparent surfaces meeting on the same pixel is a seam either way:
+    //   seam 2  the panel overlaps into the bar, two alphas stack → a DARKER stripe
+    //   seam 0  they abut, both edges antialias against what is behind → a LIGHTER stripe
+    // One pixel of overlap closes the antialiasing gap while keeping the double-covered strip too
+    // narrow to read as a line of its own.
+    //
+    // The proper fix is for the bar's fill to be cut by the gap as well, so only one surface is
+    // ever painted there — but with a translucent panel that means the covered patch has strictly
+    // less coverage than the bar around it, which is its own artefact. Not attempted here.
+    readonly property int seam:   1
+    // ── How fast the merge corners let go ────────────────────────────────────────────────────────
+    // The concave fillets are what tie this panel into the bar's edge. Clamping them to A/3 and D/3
+    // means they shrink IN STEP with the panel, so on the way out they are gone while the panel is
+    // still visibly there — the join lets go first and the panel then travels the last stretch as a
+    // loose rectangle. That is the moment that reads as wrong.
+    //
+    // So they TRAIL: full size until the panel is down to its last third, then they relax. The
+    // panel closes, and only after it has, the corners come back to flat — the rubber band is let
+    // go once there is nothing left pulling on it. On the way in the same curve means the corners
+    // are established almost immediately, which is also what you want: it is anchored from the
+    // first frame and grows out of that anchor.
+    readonly property real filletF: Math.min(1.0, Style.elG01(panel.reveal) * 3.0)
     readonly property int pad:    flareR + seam + 2 + Math.ceil(Math.max(Style.elTopBulge, Style.elSideBulge))
-    readonly property color cardColor: Style.panelColor(VtlConfig.menuColorful)
+    readonly property color cardColor: Style.barPanelColor(Style.panelColor(VtlConfig.menuColorful), root.mon)
 
     // Outline in (a, d) space — a runs along the bar, d is the depth away from it — mapped onto the
     // actual edge. Returns [borderOpen, fillClosed]; the fill closes back through the merged edges.
@@ -82,7 +103,7 @@ PanelWindow {
         var A = horizA ? W : H        // extent along the bar
         var D = horizA ? H : W        // depth away from the bar
         var e = Math.max(0, Math.min(edgeR,  A / 3, D / 3))
-        var f = VtlConfig.transitionFilletFor("flyout", root._tctx) ? Math.max(0, Math.min(flareR, A / 3, D / 3)) : 0
+        var f = VtlConfig.transitionFilletFor("flyout", root._tctx) ? Math.max(0, Math.min(flareR * root.filletF, Math.max(A, D) / 2)) : 0
         var s = seam
         var ca0 = mergeStart ? sideStart     : 0      // near-end content boundary
         var ca1 = mergeEnd   ? (A - sideEnd) : A      // far-end content boundary
@@ -179,15 +200,34 @@ PanelWindow {
         onClicked: UiState.flyout = ""
     }
 
+
+    // Blur behind this panel, inherited from the bar it grows out of and requested by protocol
+    // (ext-background-effect-v1) rather than by a compositor rule — so a translucent panel frosts
+    // what shows through, exactly as the bar does. `Region { item: … }` follows the panel's live
+    // geometry, so the frosted area grows and shrinks with the morph instead of being a fixed rect.
+    BackgroundEffect.blurRegion: (VtlConfig.barBlurFor(root.mon)
+                                  && VtlConfig.barOpacityEnabledFor(root.mon)
+                                  && panel.reveal > 0.02) ? panelBlur : null
+    Region { id: panelBlur; item: panel }
     // ── Menu panel: grows from the module's edge/corner into the content area ──────────────────
     Item {
         id: panel
         property real reveal: root.isOpen ? 1 : 0
-        Behavior on reveal { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.003 } }
+        Behavior on reveal {
+            id: revealB
+            // Direction from the Behavior's own targetValue, NOT the surface's open flag:
+            // the flag flips in the same signal that starts the animation, and the animation
+            // latched the OLD spring — opening ran on the closing spring and vice versa.
+            SpringAnimation {
+                spring:  Style.springFor(revealB.targetValue > 0.5)
+                damping: Style.dampingFor(revealB.targetValue > 0.5)
+                epsilon: 0.003
+            }
+        }
 
         readonly property int  collapsed: root.barT
         // Inner content fades in only once there's room for it.
-        readonly property real contentReveal: Math.max(0.0, Math.min(1.0, (reveal - 0.5) / 0.45))
+        readonly property real contentReveal: Style.popContentFade(reveal)
         // Auto-fit the content height, clamped to maxH and the screen.
         readonly property int  targetH: Math.min(root.maxH,
                                             Math.min(root.vert ? root.sh - 16 : root.sh - root.barT - 16,
@@ -200,10 +240,18 @@ PanelWindow {
         readonly property real bulgeS: Style.elBulge(reveal, target, Style.elSideBulge, elDim)
         readonly property real sizeF:  Style.elSizeF(reveal, target)
 
-        // Morph from a barT nub to full size (grow-from-corner), same as the settings menu.
-        width:   collapsed + (root.panelW - collapsed) * sizeF
-        height:  collapsed + (targetH     - collapsed) * sizeF
-        opacity: Math.min(1.0, reveal * 4.0)
+        // Grow out of the bar's inner face: depth 0 → full, length unchanged (Style.elDockW).
+        width:   Style.elDockW(root.vert, root.panelW, collapsed, sizeF, target)
+        height:  Style.elDockH(root.vert, targetH,     collapsed, sizeF, target)
+        // NOT faded. The size already goes to zero, so there is nothing a fade adds — and it costs
+        // something real: this panel sits over the wallpaper, so any opacity below 1 lets the
+        // wallpaper's colour mix into the panel's own. Animating that means the panel CHANGES
+        // COLOUR while it opens and closes, drifting between its fill and whatever happens to be
+        // behind it. The border does it too, which is where the artefacts along the merge curve
+        // came from: two half-transparent lines crossing over a coloured ground.
+        //
+        // A hard cut at the very bottom instead, purely so a sub-pixel remnant cannot linger.
+        opacity: reveal > 0.012 ? 1 : 0
 
         // Docked edge pinned at the bar inner face; along the bar an icon in start/end snaps the
         // panel to that corner, a center icon tracks the anchor (clamped on-screen).
@@ -220,6 +268,24 @@ PanelWindow {
         y: root.mEdge === "top"    ? root.barT + root.detachGap
          : root.mEdge === "bottom" ? root.sh - root.barT - root.detachGap - height
          : along
+
+        // Tell the bar how much of its border this panel spans, so the bar can leave that stretch
+        // out of its own outline and the two read as ONE line (UiState.setBarGap).
+        // Exactly the panel's extent — NO allowance for the fillet skirt. Adding one widened the cut
+        // on BOTH sides, but a corner-docked panel has a fillet on one side only (the other merges
+        // into the perpendicular arm). The surplus side left bar border cut away with nothing
+        // covering it: a permanent notch, which is worse than the closing-frame overlap it fixed.
+        readonly property real gapFrom: root.vert ? y : x
+        readonly property real gapTo:   root.vert ? y + height : x + width
+        readonly property bool gapLive: root.isOpen && root.edgeBar && !root.detached
+        function pushGap() {
+            if (gapLive) UiState.setBarGap(root.mon, root.mEdge, gapFrom, gapTo)
+            else         UiState.clearBarGap(root.mon)
+        }
+        onGapFromChanged: pushGap()
+        onGapToChanged:   pushGap()
+        onGapLiveChanged: pushGap()
+        Component.onDestruction: UiState.clearBarGap(root.mon)
 
         MouseArea { anchors.fill: parent; z: 0 }   // block click-through (keep the flyout open)
 

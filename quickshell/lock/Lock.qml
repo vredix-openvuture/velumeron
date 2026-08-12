@@ -99,6 +99,9 @@ Item {
         LockState.buffer = ""
         LockState.failMsg = ""
         LockState.failCount = 0
+        // At the START of the unlock, not after it: the reveal-out runs for 440 ms and the sound
+        // belongs to the moment the password was accepted, not to the animation finishing.
+        SoundService.play("unlock")
         if (VtlConfig.lockReveal === "none") { root._finishUnlock(); return }
         LockState.unlocking = true
         unlockTimer.restart()
@@ -144,6 +147,11 @@ Item {
         function onLockedChanged() {
             if (LockState.locked) {
                 LockState.unlocking = false
+                // On the state change, not on the one process that happens to set it today: this
+                // fires whichever way the screen came to be locked, and it fires on the frame the
+                // screen actually goes — the screenshot pass ahead of it takes long enough that
+                // an earlier hook would sound like the lock happened before it had.
+                SoundService.play("lock")
                 statusProc.running = false; statusProc.running = true   // capture + pause media
                 readyTimer.restart()                                    // → suspend may proceed once it fires
             } else {

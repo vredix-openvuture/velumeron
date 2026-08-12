@@ -511,7 +511,7 @@ Item {
         height: 92; radius: Style.rCard
         color: root._pcol(0, Colors.bgPrimary)
         clip: true
-        Behavior on color { ColorAnimation { duration: 140 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
         Text {
             id: pvCaption
@@ -596,21 +596,70 @@ Item {
             Card {
                 CardLabel { text: "MENU NAVIGATION"
                             hint: "How this settings menu is navigated, and where the pages appear." }
+                // Navigation and placement are two questions, not one. They used to share a single
+                // three-way switch in which "Float" silently also meant "Pages", so there was no
+                // way to float the sidebar and no way to go back to a docked page list.
+                FieldLabel { text: "Navigation" }
                 Segmented {
                     equal: true
                     current: VtlConfig.settingsNavMode
                     segments: [{ label: "Sidebar", key: "sidebar" },
-                               { label: "Pages", key: "page" },
-                               { label: "Float", key: "float" }]
+                               { label: "Pages",   key: "page"    }]
                     onPicked: SettingsStore.set("settings_nav_mode", key)
                 }
                 SubLabel {
-                    text: VtlConfig.settingsNavMode === "sidebar"
-                          ? "The classic icon rail down the side; every page opens beside it."
-                        : VtlConfig.settingsNavMode === "page"
-                          ? "A gear on Home opens a scrollable list of every page. Everything stays on the bar."
-                          : "Same page navigation — but the dashboard keeps the bar and the settings "
-                          + "pages open as a window in the middle of the screen."
+                    text: VtlConfig.settingsNavMode === "sidebar" ? "Icon rail down the side." : "Gear on Home opens the page list."
+                }
+
+                // The sidebar's own options belong to the sidebar, so they sit directly under it and
+                // are indented — not stranded below Placement as a third equal-looking row, which
+                // is where they were and read as unrelated.
+                Toggle {
+                    visible: VtlConfig.settingsNavMode === "sidebar"
+                    indent:  true
+                    label:   "Show section names"
+                    sub:     "Spell the names out next to the icons instead of only on hover. The rail gets wider."
+                    on:      VtlConfig.settingsSidebarLabels
+                    onToggled: SettingsStore.set("settings_sidebar_labels", !VtlConfig.settingsSidebarLabels)
+                }
+                Column {
+                    visible: VtlConfig.settingsNavMode === "sidebar"
+                    width:   parent.width - 12
+                    x:       12                       // indented to match the Toggle above it
+                    spacing: 6
+                    FieldLabel { text: "Scrolling" }
+                    Segmented {
+                        equal:   true
+                        current: VtlConfig.settingsSidebarScroll
+                        segments: [{ label: "Sectioned", key: "segmented" },
+                                   { label: "Endless",   key: "endless"   }]
+                        onPicked: SettingsStore.set("settings_sidebar_scroll", key)
+                    }
+                    SubLabel {
+                        width: parent.width
+                        text: VtlConfig.settingsSidebarScroll === "segmented"
+                              ? "One group at a time; wheel to move." : "All icons, one strip."
+                    }
+                }
+
+                FieldLabel { text: "Placement" }
+                Segmented {
+                    equal: true
+                    current: VtlConfig.settingsFloat ? "float" : "docked"
+                    segments: [{ label: "Docked", key: "docked" },
+                               { label: "Floating", key: "float" }]
+                    onPicked: {
+                        SettingsStore.set("settings_float", key === "float")
+                        // Migrate the legacy combined value in the same breath, so the old "float"
+                        // string can never come back and override what was just chosen here.
+                        if (VtlConfig.settingsNavMode !== "")
+                            SettingsStore.set("settings_nav_mode", VtlConfig.settingsNavMode)
+                    }
+                }
+                SubLabel {
+                    text: !VtlConfig.settingsFloat ? "Attached to the bar."
+                        : VtlConfig.settingsNavMode === "sidebar" ? "Opens centred, as a window."
+                        : "Dashboard stays on the bar; pages float."
                 }
             }
 
@@ -709,7 +758,7 @@ Item {
                                     color:       prow.sel ? Style.selFill : (ph.containsMouse ? Style.controlHover : Style.controlFill)
                                     borderWidth: prow.sel ? Style.selBorderW : Style.controlBorderW
                                     borderColor: prow.sel ? Style.selBorderColor : Style.controlBorderColor
-                                    Behavior on color { ColorAnimation { duration: 90 } }
+                                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                                 }
                                 Column {
                                     anchors { left: parent.left; leftMargin: 12; right: pswatch.left
@@ -787,7 +836,7 @@ Item {
                         width: parent.width; height: 34; radius: Style.rControl
                         color: advHov.containsMouse ? Style.controlHover : Style.controlFill
                         border.width: Style.controlBorderW; border.color: Style.controlBorderColor
-                        Behavior on color { ColorAnimation { duration: 100 } }
+                        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                         Text {
                             anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
                             text: "Advanced — raw wallust dials"; color: Colors.fgPrimary
@@ -869,7 +918,7 @@ Item {
                                 color:        sel ? Style.selFill : (hov.containsMouse ? Style.controlHover : Style.controlFill)
                                 borderWidth:  sel ? Style.selBorderW : Style.controlBorderW
                                 borderColor:  sel ? Style.selBorderColor : Style.controlBorderColor
-                                Behavior on color { ColorAnimation { duration: 90 } }
+                                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                             }
                             Text {
                                 anchors { left: parent.left; leftMargin: 12
@@ -926,7 +975,7 @@ Item {
                                 anchors.fill: parent; radius: Style.rControl
                                 color: uh.containsMouse ? Style.controlHover : Style.controlFill
                                 borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
-                                Behavior on color { ColorAnimation { duration: 90 } }
+                                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                             }
                             // Whole-row click applies the palette (declared first = under the edit button).
                             MouseArea { id: uh; anchors.fill: parent; hoverEnabled: true
@@ -974,7 +1023,7 @@ Item {
                         width: parent.width; height: 44; radius: Style.rControl
                         color: byoHov.containsMouse ? Style.accent : Style.tint(Style.accent, 0.22)
                         border.width: 1; border.color: Style.accent
-                        Behavior on color { ColorAnimation { duration: 100 } }
+                        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                         Text { anchors.centerIn: parent; text: "󰏘   Build your own"
                                color: byoHov.containsMouse ? Style.onAccent : Colors.fgPrimary
                                font.pixelSize: 14; font.bold: true; font.family: Style.font }
@@ -1063,7 +1112,7 @@ Item {
                     width: parent.width; height: 44; radius: Style.rControl
                     color: buildHov.containsMouse ? Style.accent : Style.tint(Style.accent, 0.22)
                     border.width: 1; border.color: Style.accent
-                    Behavior on color { ColorAnimation { duration: 100 } }
+                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                     Text { anchors.centerIn: parent; text: "󰏘   Build a theme"
                            color: buildHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
                            font.pixelSize: 14; font.bold: true; font.family: Style.font }
@@ -1127,7 +1176,7 @@ Item {
             Rectangle {
                 width: 34; height: 34; radius: 8
                 color: bbHov.containsMouse ? Style.accent : Style.controlFill
-                Behavior on color { ColorAnimation { duration: 100 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Text { anchors.centerIn: parent; text: "󰁍"; color: Colors.fgBright
                        font.pixelSize: 16; font.family: Style.font }
                 MouseArea { id: bbHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.page = "" }
@@ -1253,7 +1302,7 @@ Item {
                         width: parent.width; height: 34; radius: Style.rControl
                         color: phHov.containsMouse ? Style.controlHover : Style.controlFill
                         border.width: Style.controlBorderW; border.color: Style.controlBorderColor
-                        Behavior on color { ColorAnimation { duration: 100 } }
+                        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                         Text {
                             anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
                             text: "Per-menu overrides"; color: Colors.fgPrimary
@@ -1347,7 +1396,7 @@ Item {
                              : (!tc.wip && tcHov.containsMouse ? Style.controlHover : Style.controlFill)
             borderWidth: tc.active ? 2 : Style.controlBorderW
             borderColor: tc.active ? Style.accent : Style.controlBorderColor
-            Behavior on color { ColorAnimation { duration: 90 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         }
 
         // Mock viewport.

@@ -50,7 +50,7 @@ Item {
         color: gHov.containsMouse ? Colors.fgBright : root._col
         font.family:    root._font
         font.pixelSize: VtlConfig.moduleIconSizeFor("wallpaper-switcher", root.barMon)
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         MouseArea { id: gHov; anchors.fill: parent; hoverEnabled: true; onClicked: root._open() }
     }
 }

@@ -202,7 +202,7 @@ PanelWindow {
         anchors.verticalCenter: parent ? parent.verticalCenter : undefined
         color: pbHov.containsMouse ? Style.accent : Style.controlFill
         borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
-        Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         Text { anchors.centerIn: parent; text: pb.glyph
                color: pbHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
                font.pixelSize: 14; font.family: Style.font }
@@ -409,7 +409,7 @@ PanelWindow {
                             width: 8; height: 8; radius: 4
                             anchors.verticalCenter: parent.verticalCenter
                             color: index === root.page ? Style.accent : Style.tint(Colors.boNormal, 0.6)
-                            Behavior on color { ColorAnimation { duration: 150 } }
+                            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                             MouseArea { anchors.fill: parent; anchors.margins: -5
                                         cursorShape: Qt.PointingHandCursor; onClicked: root.page = index }
                         }
@@ -583,7 +583,7 @@ PanelWindow {
                                         borderWidth: Style.controlBorderW
                                         borderColor: entryRow.avail ? Style.controlBorderColor : "transparent"
                                         opacity: entryRow.avail ? 1 : 0.4
-                                        Behavior on color { ColorAnimation { duration: 100 } }
+                                        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
                                         Text {
                                             id: eIcon

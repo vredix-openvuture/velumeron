@@ -224,8 +224,14 @@ PanelWindow {
         property bool _behave: false
         readonly property real target: NotifService.isLeaving(card.notif) ? 0.0 : 1.0
         Behavior on reveal {
+            id: revealB
             enabled: card._behave
-            SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.003 }
+            // Direction from targetValue — see Style.springFor; an external flag latches stale.
+            SpringAnimation {
+                spring:  Style.springFor(revealB.targetValue > 0.5)
+                damping: Style.dampingFor(revealB.targetValue > 0.5)
+                epsilon: 0.003
+            }
         }
         Component.onCompleted: {
             if (NotifService.isLeaving(card.notif)) {

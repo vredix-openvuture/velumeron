@@ -52,32 +52,23 @@ Item {
     function saveSet() {
         var name = newName.trim()
         if (name === "") { status = "Name required"; clearTimer.restart(); return }
-        var py = "import json,os,sys;" +
-            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.expanduser('~/.config/velumeron');" +
-            "p=os.path.join(pu,'gui','settings.json');" +
-            "os.makedirs(os.path.dirname(p),exist_ok=True);" +
-            "d=json.load(open(p)) if os.path.exists(p) else {};" +
-            "s=d.get('wallpaper_sets',{}) or {};" +
-            "s[sys.argv[1]]=json.loads(sys.argv[2]);" +
-            "d['wallpaper_sets']=s;" +
-            "open(p,'w').write(json.dumps(d,indent=2))"
-        writeProc.command = ["python3", "-c", py, name, JSON.stringify(picks)]
-        writeProc.running = false; writeProc.running = true
+        // Clone-and-replace through SettingsStore. The python one-liner this replaces wrote
+        // straight onto settings.json with no tmp+rename, from a Process restarted with
+        // `running = false` — saving two sets quickly could kill the first write mid-file.
+        var s = {}
+        var cur = VtlConfig.wallpaperSets
+        for (var k in cur) s[k] = cur[k]
+        s[name] = root.picks
+        SettingsStore.set("wallpaper_sets", s)
         status = "Saved '" + name + "'"; clearTimer.restart()
         newName = ""
         reloadSets()
     }
     function deleteSet(name) {
-        var py = "import json,os,sys;" +
-            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.expanduser('~/.config/velumeron');" +
-            "p=os.path.join(pu,'gui','settings.json');" +
-            "d=json.load(open(p)) if os.path.exists(p) else {};" +
-            "s=d.get('wallpaper_sets',{}) or {};" +
-            "s.pop(sys.argv[1],None);" +
-            "d['wallpaper_sets']=s;" +
-            "open(p,'w').write(json.dumps(d,indent=2))"
-        writeProc.command = ["python3", "-c", py, name]
-        writeProc.running = false; writeProc.running = true
+        var s = {}
+        var cur = VtlConfig.wallpaperSets
+        for (var k in cur) if (k !== name) s[k] = cur[k]
+        SettingsStore.set("wallpaper_sets", s)
         reloadSets()
     }
     function applySet(images) {
@@ -89,7 +80,6 @@ Item {
         applyProc.running = false; applyProc.running = true
         status = "Applying set…"; clearTimer.restart()
     }
-    Process { id: writeProc }
     Process { id: applyProc }
     Timer { id: clearTimer; interval: 2500; onTriggered: root.status = "" }
 

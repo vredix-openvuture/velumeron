@@ -104,7 +104,11 @@ fi
 (
     # -t alongside -A: `-A` implies --wait, and with no timeout this process sits forever holding a
     # notification open. hyprshot passes a timeout for the same reason.
+    # x-velumeron-silent: the shutter has already sounded (ShotRunner plays it the moment grim
+    # exits 0). Without this the "saved" toast fires the notification sound straight after it, so
+    # one screenshot made two different noises.
     act=$(notify-send -a Velumeron -t 8000 -A default=Open -i "$file" \
+                      -h string:x-velumeron-silent:1 \
                       "Screenshot saved" "$(basename "$file")$($copy && echo ' · copied')" 2>/dev/null)
     [[ "$act" == "default" ]] && ! $open_after && setsid -f xdg-open "$file" >/dev/null 2>&1
 ) >/dev/null 2>&1 &

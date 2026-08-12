@@ -45,6 +45,9 @@ QtObject {
         st.shown  = true
         st._hold.restart()
         st._gone.restart()
+        // The login sound plays UNDER the curtain, not before or after it. SoundService keeps its
+        // own once-per-session rule, so a restart shows the splash without making a noise.
+        SoundService.loginOnSplash()
     }
     // Click / preview: cut it short without waiting out the hold.
     function finish() {

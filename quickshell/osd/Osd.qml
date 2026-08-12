@@ -242,7 +242,17 @@ PanelWindow {
             height: VtlConfig.osdHeight + (root.deviceLine ? 16 : 0)
 
             property real reveal: root.open ? 1 : 0
-            Behavior on reveal { SpringAnimation { spring: Style.elSpring; damping: Style.elDamping; epsilon: 0.003 } }
+            Behavior on reveal {
+                id: revealB
+                // Direction from the Behavior's own targetValue, NOT the surface's open flag:
+                // the flag flips in the same signal that starts the animation, and the animation
+                // latched the OLD spring — opening ran on the closing spring and vice versa.
+                SpringAnimation {
+                    spring:  Style.springFor(revealB.targetValue > 0.5)
+                    damping: Style.dampingFor(revealB.targetValue > 0.5)
+                    epsilon: 0.003
+                }
+            }
 
             // Elastic emergence: the spring overshoot shows purely as edge bulge (the scale below is
             // clamped to 0→1 so text isn't scaled past 100%).

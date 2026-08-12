@@ -48,7 +48,7 @@ Item {
                         color:  rowHov.containsMouse ? Style.controlHover : Style.controlFill
                         border.width: Style.controlBorderW
                         border.color: Style.controlBorderColor
-                        Behavior on color { ColorAnimation { duration: 90 } }
+                        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 
                         Text {
                             anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }

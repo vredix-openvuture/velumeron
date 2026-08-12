@@ -296,7 +296,7 @@ Column {
                     // line on the panel with nothing behind it. Same rule as the sound desk.
                     color: nd.modelData.active ? Style.knobFill
                          : (rHov.containsMouse ? Style.plateFill : "transparent")
-                    Behavior on color { ColorAnimation { duration: 100 } }
+                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                     // A row is wide, so its mark is a bar down the left rather than a rule across
                     // the top — the same statement, turned ninety degrees.
                     Rectangle {
@@ -387,7 +387,7 @@ Column {
                 clip: true
                 color: modelData.active ? Style.knobFill
                      : (vHov.containsMouse ? Style.plateFill : "transparent")
-                Behavior on color { ColorAnimation { duration: 100 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Rectangle {
                     anchors { left: parent.left; top: parent.top; bottom: parent.bottom
                               topMargin: 8; bottomMargin: 8 }
@@ -401,7 +401,7 @@ Column {
                     anchors { left: parent.left; leftMargin: 11; verticalCenter: parent.verticalCenter }
                     width: 28; height: 28; radius: 14
                     color: modelData.active ? Style.accent : "transparent"
-                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                     Text { anchors.centerIn: parent; text: "󰌾"
                            color: modelData.active ? Colors.fgBright : Colors.fgMuted
                            font.pixelSize: 14; font.family: Style.font }
@@ -432,7 +432,7 @@ Column {
         width: 28; height: 28; radius: Style.rTile
         color: iHov.containsMouse ? Style.knobHover
                                   : Style.knobFill
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         Text { anchors.centerIn: parent; text: parent.icon; color: Colors.fgPrimary; font.pixelSize: 13; font.family: Style.font }
         MouseArea { id: iHov; anchors.fill: parent; hoverEnabled: true; onClicked: parent.trig() }
     }

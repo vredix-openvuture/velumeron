@@ -143,7 +143,7 @@ Item {
         height: 44; radius: Style.rControl
         color: dev && dev.connected ? Style.selFill
              : (dHov.containsMouse ? Style.controlHover : Style.controlFill)
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         Text { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
                text: dev ? root.devIcon(dev.icon) : ""; color: Colors.fgMuted
                font.pixelSize: 16; font.family: Style.font }
@@ -165,7 +165,7 @@ Item {
         signal trig()
         width: 34; height: 34; radius: Style.rControl
         color: bHov.containsMouse ? Style.accent : Style.controlFill
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         Text { anchors.centerIn: parent; text: "󰁍"
                color: bHov.containsMouse ? Style.onAccent : Colors.fgPrimary
                font.pixelSize: 16; font.family: Style.iconFont }
@@ -177,7 +177,7 @@ Item {
         width: 28; height: 28; radius: Style.rTile
         color: iHov.containsMouse ? Style.accent : Style.controlFill
         anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         Text { anchors.centerIn: parent; text: parent.icon
                color: iHov.containsMouse ? Style.onAccent : Colors.fgPrimary
                font.pixelSize: 13; font.family: Style.iconFont }

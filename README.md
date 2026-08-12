@@ -167,16 +167,28 @@ the mouse cursor, live and without a restart.
 <table><tr><td width="33%"><img src="docs/img/calendar-month.png" alt="Month"></td><td width="33%"><img src="docs/img/calendar-day.png" alt="Day grid"></td><td width="33%"><img src="docs/img/calendar-tasks.png" alt="Task board"></td></tr></table>
 
 A real CalDAV client, not a month printout: events are created and edited in place, the day grid
-puts them on a timeline, and tasks live on a board next to them. Nextcloud and Vikunja are wired in
-as integrations.
+puts them on a timeline, and tasks live on a board next to them.
+
+Nothing is built in — you point it at your own server. Any CalDAV account works (Nextcloud among
+them); credentials stay in a file only your user can read. Vikunja is separate: it comes in over
+its REST API, because CalDAV has no notion of a project tree or of subtasks. Both feed one model,
+so a Vikunja project and a CalDAV task list sit next to each other on the same board.
+
+Without an account you get a plain month view — events and tasks live on your server, there is no
+local store yet.
+
+Tasks and notes on the desktop are [Disponera](https://github.com/vredix-openvuture/disponera),
+a separate application from the same workshop. It reads the very same caches, so the shell and the
+app never disagree about what is done.
 
 
 ### Boot themes
 
 <table><tr><td width="33%"><img src="docs/img/boot-plymouth.png" alt="Plymouth"></td><td width="33%"><img src="docs/img/boot-grub.png" alt="GRUB"></td><td width="33%"><img src="docs/img/boot-sddm.png" alt="SDDM"></td></tr></table>
 
-The three stages before the shell — boot splash, boot menu, login — come from the same palette as
-everything after it, as a setting rather than as hand-edited system files.
+Built in support for grub- / plymouth- / sddm-themes.
+Choose your style inside the menu. <br>
+(Coming with a own color and wallpaper aware velumeron-theme)
 
 ## Roadmap
 

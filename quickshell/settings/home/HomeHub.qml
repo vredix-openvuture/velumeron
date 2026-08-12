@@ -58,7 +58,7 @@ Item {
                 width: 6; height: 6; radius: 3
                 anchors.verticalCenter: parent.verticalCenter
                 color: index === root.page ? Style.accent : Style.tint(Colors.boNormal, 0.6)
-                Behavior on color { ColorAnimation { duration: 150 } }
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 MouseArea { anchors.fill: parent; anchors.margins: -4
                             cursorShape: Qt.PointingHandCursor; onClicked: root.page = index }
             }
@@ -194,7 +194,7 @@ Item {
             anchors { left: parent.left; verticalCenter: parent.verticalCenter }
             color: gearHov.containsMouse ? Style.accent : Style.controlFill
             borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
-            Behavior on color { ColorAnimation { duration: 120 } }
+            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
             Text { anchors.centerIn: parent; text: "󰒓"
                    color: gearHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
                    font.pixelSize: 18; font.family: Style.font }
@@ -232,7 +232,7 @@ Item {
         width: 48; height: 48; radius: Style.rTile
         color: ptHov.containsMouse ? Style.accent : Style.controlFill
         borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
-        Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         Text { anchors.centerIn: parent; text: pt.icon; color: ptHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
                font.pixelSize: 18; font.family: Style.font }
         MouseArea { id: ptHov; anchors.fill: parent; hoverEnabled: true

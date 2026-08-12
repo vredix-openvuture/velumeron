@@ -16,9 +16,15 @@ QtObject {
         // exist, not to paint — the machine used to go down mid-reveal). Falls back to a bare
         // suspend if the script is missing, so this can never become a no-op.
         { icon: "󰤄", label: "Suspend",  cmd: "\"$VELUMERON_DIR/assets/scripts/suspend.sh\" || systemctl suspend" },
-        { icon: "󰗽", label: "Logout",   cmd: "hyprctl dispatch exit" },
-        { icon: "󰜉", label: "Reboot",   cmd: "systemctl reboot" },
-        { icon: "󰐥", label: "Shutdown", cmd: "systemctl poweroff" }
+        // The three that end the session play their sound HERE rather than through SoundService,
+        // and block on it: each of these kills the shell, so a sound started inside it would be cut
+        // off mid-note. play-sound.sh waits for the file (capped, so it can never look like a hang)
+        // and stays silent if sounds are off — the check lives in the script, not in this string.
+        // The cap is passed explicitly: the pack's logout runs 4.4 s, and the script's default of 4
+        // would cut it off outright. Sized with room for paplay's own start-up on top.
+        { icon: "󰗽", label: "Logout",   cmd: "\"$VELUMERON_DIR/assets/scripts/play-sound.sh\" logout 6; hyprctl dispatch exit" },
+        { icon: "󰜉", label: "Reboot",   cmd: "\"$VELUMERON_DIR/assets/scripts/play-sound.sh\" logout 6; systemctl reboot" },
+        { icon: "󰐥", label: "Shutdown", cmd: "\"$VELUMERON_DIR/assets/scripts/play-sound.sh\" logout 6; systemctl poweroff" }
     ]
 
     property string openDropdown:   ""      // key of the currently open module dropdown
@@ -148,8 +154,66 @@ QtObject {
     // `reveal − target`). Tuned in the _lab/ElasticShapeTest.qml prototype.
     property real menuReveal: cornerMenuOpen ? 1.0 : 0.0
     Behavior on menuReveal {
-        SpringAnimation { spring: VtlConfig.elasticSpring; damping: VtlConfig.elasticDamping; epsilon: 0.003 }
+        id: menuRevealB
+        // Direction from the Behavior's own targetValue, NOT the surface's open flag:
+        // the flag flips in the same signal that starts the animation, and the animation
+        // latched the OLD spring — opening ran on the closing spring and vice versa.
+        SpringAnimation {
+            spring:  Style.springFor(menuRevealB.targetValue > 0.5)
+            damping: Style.dampingFor(menuRevealB.targetValue > 0.5)
+            epsilon: 0.003
+        }
     }
+
+    // ── Where the bar's inner face ACTUALLY is ──────────────────────────────────────────────────
+    // Published by Bar.qml from the very numbers it draws with, and read by everything that docks
+    // onto it. Computing it a second time from the config is what left the launcher hanging 20 px
+    // off a bottom edge: that edge renders at half thickness, and the two sides disagreed about
+    // whether it counted as empty (the minimal-secondary-bar rule can also empty an edge without
+    // the config saying so). Reading the drawn value cannot disagree with the drawing.
+    //
+    // { "<monitor>": { top, bottom, left, right } } — pixels in from each screen edge, 0 = no bar.
+    property var barInner: ({})
+    function setBarInner(mon, t, b, l, r) {
+        if (!mon) return
+        var cur = barInner[mon]
+        if (cur && cur.top === t && cur.bottom === b && cur.left === l && cur.right === r) return
+        var m = {}
+        for (var k in barInner) m[k] = barInner[k]
+        m[mon] = { top: t, bottom: b, left: l, right: r }
+        barInner = m
+    }
+    // Falls back to the config-derived value until the bar for that monitor has reported in (first
+    // frame, or a monitor with no bar surface at all).
+    function barInnerFor(edge, mon) {
+        var e = barInner[mon]
+        return (e && e[edge] !== undefined) ? e[edge] : VtlConfig.barInsetFor(edge, mon)
+    }
+
+    // ── The gap a popout tears in the bar's border ──────────────────────────────────────────────
+    // A panel growing out of the bar used to simply lie ON TOP of the bar's inner border and hide
+    // it under a 2 px seam. That works while the panel is big — and fails in the one moment you
+    // notice: on the way out, the panel uncovers the bar's border a slice at a time, so a line you
+    // had forgotten about reappears from under the closing menu.
+    //
+    // Instead the bar now LEAVES A GAP in its own border exactly where the panel meets it, and the
+    // panel's outline spans that gap. The two are one continuous line: opening pulls a bulge out of
+    // the bar's edge, closing lets it snap back flat. Nothing is ever drawn over anything.
+    //
+    // One slot is enough — only one surface grows out of the bar at a time (menu, flyout or
+    // notification centre; opening any of them closes the others). `from`/`to` are screen
+    // coordinates ALONG the docking edge: x for a top/bottom bar, y for left/right.
+    property string barGapMon:  ""      // "" = no gap anywhere
+    property string barGapEdge: ""
+    property real   barGapFrom: 0
+    property real   barGapTo:   0
+    function setBarGap(mon, edge, from, to) {
+        if (to - from < 0.5) { clearBarGap(mon); return }   // nothing left to leave out
+        barGapMon = mon; barGapEdge = edge; barGapFrom = from; barGapTo = to
+    }
+    // Only the owner may clear it: a panel closing on one monitor must not wipe the gap another
+    // monitor's panel just claimed.
+    function clearBarGap(mon) { if (barGapMon === mon) { barGapMon = ""; barGapEdge = "" } }
 
     // ── Notification-centre anchor + morph ──────────────────────────────────────
     // The notiftray bell publishes its edge / group / along-edge position so the centre grows out
@@ -160,7 +224,15 @@ QtObject {
     property real   notifStart:  0       // along-edge coordinate of the bell centre
     property real notifReveal: notifCenterOpen ? 1.0 : 0.0
     Behavior on notifReveal {
-        SpringAnimation { spring: VtlConfig.elasticSpring; damping: VtlConfig.elasticDamping; epsilon: 0.003 }
+        id: notifRevealB
+        // Direction from the Behavior's own targetValue, NOT the surface's open flag:
+        // the flag flips in the same signal that starts the animation, and the animation
+        // latched the OLD spring — opening ran on the closing spring and vice versa.
+        SpringAnimation {
+            spring:  Style.springFor(notifRevealB.targetValue > 0.5)
+            damping: Style.dampingFor(notifRevealB.targetValue > 0.5)
+            epsilon: 0.003
+        }
     }
 
     // ── OSD trigger ─────────────────────────────────────────────────────────────

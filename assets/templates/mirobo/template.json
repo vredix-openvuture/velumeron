@@ -202,6 +202,8 @@
     },
     "bar_icon_size": 14,
     "bar_font_size": 14,
-    "ui_font": "Fredoka"
+    "ui_font": "Fredoka",
+    "elastic_spring": 10.4,
+    "elastic_damping": 0.68
   }
 }
