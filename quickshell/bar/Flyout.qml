@@ -271,13 +271,13 @@ PanelWindow {
         readonly property real gapTo:   root.vert ? y + height : x + width
         readonly property bool gapLive: root.isOpen && root.edgeBar && !root.detached
         function pushGap() {
-            if (gapLive) UiState.setBarGap(root.mon, root.mEdge, gapFrom, gapTo)
-            else         UiState.clearBarGap(root.mon)
+            if (gapLive) UiState.setBarGap("flyout:" + root.flyoutId + ":" + root.mon, root.mon, root.mEdge, gapFrom, gapTo)
+            else         UiState.clearBarGap("flyout:" + root.flyoutId + ":" + root.mon)
         }
         onGapFromChanged: pushGap()
         onGapToChanged:   pushGap()
         onGapLiveChanged: pushGap()
-        Component.onDestruction: UiState.clearBarGap(root.mon)
+        Component.onDestruction: UiState.clearBarGap("flyout:" + root.flyoutId + ":" + root.mon)
 
         MouseArea { anchors.fill: parent; z: 0 }   // block click-through (keep the flyout open)
 

@@ -42,17 +42,24 @@ PanelWindow {
     readonly property color cFill:   Qt.rgba(cBg.r, cBg.g, cBg.b, bgAlpha)
     readonly property color cBorder: Style.tint(Style.chromeBorder, bgAlpha)
 
-    // Is a popout currently occupying part of THIS monitor's border, on this edge? The bar leaves
-    // that stretch out of its own outline so the popout's outline can carry the line across (see
-    // UiState.setBarGap). A "Z"-closed path is also suppressed while a gap is open — the run is no
-    // longer a closed loop.
-    function gapOn(e) {
-        return UiState.barGapMon === root.mon && UiState.barGapEdge === e
-               && UiState.barGapTo - UiState.barGapFrom > 0.5
+    // Every claim any surface holds on THIS monitor's border, per edge (UiState.barGaps). The bar
+    // unions them: each span is left out of the outline so the popout in front can carry the line.
+    // Reading the whole map keeps this a live binding — barGaps is reassigned wholesale on change.
+    function gapSpans(e) {
+        var out = []
+        var g = UiState.barGaps
+        for (var k in g) {
+            var c = g[k]
+            if (c.mon === root.mon && c.edge === e && c.to - c.from > 0.5) out.push([c.from, c.to])
+        }
+        out.sort(function (a, b) { return a[0] - b[0] })
+        return out
     }
-    readonly property real gapFrom: UiState.barGapFrom
-    readonly property real gapTo:   UiState.barGapTo
-    readonly property bool anyGap:  UiState.barGapMon === root.mon && UiState.barGapEdge !== ""
+    readonly property bool anyGap: {
+        var g = UiState.barGaps
+        for (var k in g) if (g[k].mon === root.mon) return true
+        return false
+    }
 
     function edgeOn(e) { return VtlConfig.edgeActiveFor(e, root.mon) }
     function thick(e)  { return edgeOn(e) ? VtlConfig.edgeThicknessFor(e, root.mon) : 0 }
@@ -157,20 +164,27 @@ PanelWindow {
     // and exactly one surface paints there. Frame mode only, like the border gap itself.
     function gapNotchPath() {
         if (root.dockMode || root.floating || !root.anyGap) return ""
-        var e = UiState.barGapEdge
-        var horiz = (e === "top" || e === "bottom")
-        var f = Math.max(Math.min(root.gapFrom, root.gapTo), horiz ? root.holeL : root.holeT)
-        var g = Math.min(Math.max(root.gapFrom, root.gapTo), horiz ? root.holeR : root.holeB)
-        if (g - f < 0.5) return ""
         function rect(x0, y0, x1, y1) {
             return " M" + x0 + "," + y0 + " L" + x1 + "," + y0 + " L" + x1 + "," + y1 + " L" + x0 + "," + y1 + " Z"
         }
         var d = 2                                   // must equal the panels' seam, or a hairline returns
-        if (e === "top")    return rect(f, root.holeT - d, g, root.holeT)
-        if (e === "bottom") return rect(f, root.holeB, g, root.holeB + d)
-        if (e === "left")   return rect(root.holeL - d, f, root.holeL, g)
-        if (e === "right")  return rect(root.holeR, f, root.holeR + d, g)
-        return ""
+        var out = ""
+        var edges = ["top", "bottom", "left", "right"]
+        for (var i = 0; i < edges.length; i++) {
+            var e = edges[i]
+            var horiz = (e === "top" || e === "bottom")
+            var spans = root.gapSpans(e)
+            for (var j = 0; j < spans.length; j++) {
+                var f = Math.max(spans[j][0], horiz ? root.holeL : root.holeT)
+                var g = Math.min(spans[j][1], horiz ? root.holeR : root.holeB)
+                if (g - f < 0.5) continue
+                if (e === "top")         out += rect(f, root.holeT - d, g, root.holeT)
+                else if (e === "bottom") out += rect(f, root.holeB, g, root.holeB + d)
+                else if (e === "left")   out += rect(root.holeL - d, f, root.holeL, g)
+                else                     out += rect(root.holeR, f, root.holeR + d, g)
+            }
+        }
+        return out
     }
 
     // ── Path builders (SVG strings) ─────────────────────────────────────────────
@@ -291,28 +305,32 @@ PanelWindow {
         var L = holeL, R = holeR, T = holeT, B = holeB
         function ln(sx, sy, ex, ey)        { return { s: [sx, sy], e: [ex, ey], c: "L" + ex + "," + ey } }
         function ar(sx, sy, ex, ey, rad)   { return { s: [sx, sy], e: [ex, ey], c: Style.cornerSeg(rad, ex, ey) } }
-        // An open popout takes a bite out of the inner border on ITS edge, so its own outline can
-        // continue the line instead of covering it (UiState.setBarGap). `cut` returns the one or
-        // two pieces of a straight run that survive that bite; the run may be drawn in either
-        // direction, so it works from whichever end the path arrives.
+        // Open popouts take bites out of the inner border on their edges; `cut` returns the pieces
+        // of a straight run that survive ALL of them. The run may be drawn in either direction.
         function cut(edgeName, sx, sy, ex, ey) {
-            if (!root.gapOn(edgeName)) return [ln(sx, sy, ex, ey)]
+            var spans = root.gapSpans(edgeName)
+            if (spans.length === 0) return [ln(sx, sy, ex, ey)]
             var horiz = (edgeName === "top" || edgeName === "bottom")
             var s = horiz ? sx : sy
             var e = horiz ? ex : ey
             var lo = Math.min(s, e), hi = Math.max(s, e)
-            var g0 = Math.max(lo, Math.min(root.gapFrom, root.gapTo))
-            var g1 = Math.min(hi, Math.max(root.gapFrom, root.gapTo))
-            if (g1 <= g0) return [ln(sx, sy, ex, ey)]           // bite falls outside this run
-            var out = []
-            function seg(a, b) { return horiz ? ln(a, sy, b, sy) : ln(sx, a, sx, b) }
-            if (e >= s) {                                        // forward
-                if (g0 > s) out.push(seg(s, g0))
-                if (g1 < e) out.push(seg(g1, e))
-            } else {                                             // reversed
-                if (g1 < s) out.push(seg(s, g1))
-                if (g0 > e) out.push(seg(g0, e))
+            var keep = [[lo, hi]]
+            for (var i = 0; i < spans.length; i++) {
+                var g0 = Math.max(lo, spans[i][0]), g1 = Math.min(hi, spans[i][1])
+                if (g1 <= g0) continue
+                var next = []
+                for (var j = 0; j < keep.length; j++) {
+                    var a = keep[j][0], b = keep[j][1]
+                    if (g1 <= a || g0 >= b) { next.push([a, b]); continue }
+                    if (g0 > a) next.push([a, g0])
+                    if (g1 < b) next.push([g1, b])
+                }
+                keep = next
             }
+            function seg(a, b) { return horiz ? ln(a, sy, b, sy) : ln(sx, a, sx, b) }
+            var out = []
+            if (e >= s) for (var m = 0; m < keep.length; m++) out.push(seg(keep[m][0], keep[m][1]))
+            else        for (var n = keep.length - 1; n >= 0; n--) out.push(seg(keep[n][1], keep[n][0]))
             return out
         }
         var seq = []

@@ -610,13 +610,13 @@ PanelWindow {
         readonly property bool gapLive: root.onActiveMonitor && root.edgeBar && !root.dockDetached
                                         && root.floatT < 0.02
         function pushGap() {
-            if (gapLive) UiState.setBarGap(root.mon, root.mEdge, gapFrom, gapTo)
-            else         UiState.clearBarGap(root.mon)
+            if (gapLive) UiState.setBarGap("menu:" + root.mon, root.mon, root.mEdge, gapFrom, gapTo)
+            else         UiState.clearBarGap("menu:" + root.mon)
         }
         onGapFromChanged: menu.pushGap()
         onGapToChanged:   menu.pushGap()
         onGapLiveChanged: menu.pushGap()
-        Component.onDestruction: UiState.clearBarGap(root.mon)
+        Component.onDestruction: UiState.clearBarGap("menu:" + root.mon)
 
         // Block click-through to the desktop, but stay BELOW the rail/content widgets
         // (declared first + z:0) so their MouseAreas still receive clicks.

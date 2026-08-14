@@ -528,15 +528,15 @@ PanelWindow {
                                         && root.mon !== "" && root.mon === UiState.launcherMon
         function pushGap() {
             if (gapLive && width > 1 && height > 1)
-                 UiState.setBarGap(root.mon, root.dockEdge, gapFrom, gapTo)
-            else UiState.clearBarGap(root.mon)
+                 UiState.setBarGap("launcher:" + root.mon, root.mon, root.dockEdge, gapFrom, gapTo)
+            else UiState.clearBarGap("launcher:" + root.mon)
         }
         onGapFromChanged: pushGap()
         onGapToChanged:   pushGap()
         onGapLiveChanged: pushGap()
         onWidthChanged:   pushGap()
         onHeightChanged:  pushGap()
-        Component.onDestruction: UiState.clearBarGap(root.mon)
+        Component.onDestruction: UiState.clearBarGap("launcher:" + root.mon)
         radius: Style.rCard
         // Square the corners on the docked edge so the card visually merges into the bar/edge.
         radiusTL: (root.dockEdge === "top"    || root.dockEdge === "left")  ? 0 : Style.rCard

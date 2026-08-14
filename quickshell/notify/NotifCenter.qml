@@ -274,13 +274,13 @@ PanelWindow {
         readonly property real gapTo:   root.vert ? y + height : x + width
         readonly property bool gapLive: root.onActiveMonitor && root.edgeBar && !root.detached
         function pushGap() {
-            if (gapLive) UiState.setBarGap(root.mon, root.mEdge, gapFrom, gapTo)
-            else         UiState.clearBarGap(root.mon)
+            if (gapLive) UiState.setBarGap("notify:" + root.mon, root.mon, root.mEdge, gapFrom, gapTo)
+            else         UiState.clearBarGap("notify:" + root.mon)
         }
         onGapFromChanged: pushGap()
         onGapToChanged:   pushGap()
         onGapLiveChanged: pushGap()
-        Component.onDestruction: UiState.clearBarGap(root.mon)
+        Component.onDestruction: UiState.clearBarGap("notify:" + root.mon)
 
         // Block click-through to the desktop, but stay below the content widgets (z:0).
         MouseArea { anchors.fill: parent; z: 0 }

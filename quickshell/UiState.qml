@@ -203,17 +203,31 @@ QtObject {
     // One slot is enough — only one surface grows out of the bar at a time (menu, flyout or
     // notification centre; opening any of them closes the others). `from`/`to` are screen
     // coordinates ALONG the docking edge: x for a top/bottom bar, y for left/right.
-    property string barGapMon:  ""      // "" = no gap anywhere
-    property string barGapEdge: ""
-    property real   barGapFrom: 0
-    property real   barGapTo:   0
-    function setBarGap(mon, edge, from, to) {
-        if (to - from < 0.5) { clearBarGap(mon); return }   // nothing left to leave out
-        barGapMon = mon; barGapEdge = edge; barGapFrom = from; barGapTo = to
+    // KEYED BY OWNER, one claim per surface — id → { mon, edge, from, to }. The first version was
+    // a single shared slot, and that is what the "ghost border" turned out to be: two surfaces
+    // animating at once (a menu closing while the launcher opened) would overwrite or clear each
+    // other's claim, either drawing the bar's line through an open panel or leaving a dead gap —
+    // no border, plus the 2 px fill notch as a groove — across an edge with nothing in front of
+    // it. Now a claim can only be replaced or removed by its own id, and the bar unions all of
+    // them (Bar.gapSpans).
+    property var barGaps: ({})
+    function setBarGap(id, mon, edge, from, to) {
+        if (!id || !mon) return
+        if (to - from < 0.5) { clearBarGap(id); return }
+        var cur = barGaps[id]
+        if (cur && cur.mon === mon && cur.edge === edge
+                && Math.abs(cur.from - from) < 0.25 && Math.abs(cur.to - to) < 0.25) return
+        var m = {}
+        for (var k in barGaps) m[k] = barGaps[k]
+        m[id] = { mon: mon, edge: edge, from: from, to: to }
+        barGaps = m
     }
-    // Only the owner may clear it: a panel closing on one monitor must not wipe the gap another
-    // monitor's panel just claimed.
-    function clearBarGap(mon) { if (barGapMon === mon) { barGapMon = ""; barGapEdge = "" } }
+    function clearBarGap(id) {
+        if (!(id in barGaps)) return
+        var m = {}
+        for (var k in barGaps) if (k !== id) m[k] = barGaps[k]
+        barGaps = m
+    }
 
     // ── Notification-centre anchor + morph ──────────────────────────────────────
     // The notiftray bell publishes its edge / group / along-edge position so the centre grows out
