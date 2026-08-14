@@ -475,20 +475,22 @@ PanelWindow {
         // which is what "slides into the border" looks like from the middle of an edge. Width also
         // carries the border gap, so the bar's line closes exactly when the last of it goes.
         // Opening is untouched — leads apply to the close only (Style._lead).
-        // The melt, decomposed PER AXIS — the previous attempt put gamma 2.2 on both, which shrank
-        // the whole card early and moved the "slow tail" below visible size: it read as vanishing
-        // even faster. What actually shows the card entering the bar:
-        //   · ONE lead for both axes, so they end together — a width that dies early zips the
-        //     border shut in one frame; staggered deaths leave slivers.
-        //   · HEIGHT falls on gamma 2.2: the card flattens onto the bar while still wide.
-        //   · WIDTH stays near-linear: the flat sliver keeps real width, and the border gap —
-        //     which follows width — closes progressively behind the melt instead of popping.
-        // (Deriving the gamma from root.active is safe: per-frame size bindings, not animation
-        // parameters latched at start.)
-        readonly property real closeLead:  0.30
-        readonly property real depthGamma: root.active ? Style.elEaseGamma : 2.2
-        width:  morph ? Style.elDockW(!root.growV, root.fullW, root.collapsed, root.sizeF, root.active ? 1.0 : 0.0, closeLead, closeLead) : root.fullW
-        height: morph ? Style.elDockH(!root.growV, root.fullH, root.collapsed, root.sizeF, root.active ? 1.0 : 0.0, closeLead, closeLead, depthGamma) : root.fullH
+        // THE DRAWER. Every previous attempt shrank the card, and shrinking was the wrong verb:
+        // the card keeps its FULL size and simply rides out of the bar — the border bulges up and
+        // the launcher grows out of it; closing presses it back in behind that border. Only the
+        // depth axis moves (bottom dock: height; side dock: width); the extent along the bar never
+        // changes, so the border gap is constant while the drawer travels and closes when it is in.
+        //
+        // The edge-pinned position below plus `clip: true` plus the top-anchored, FIXED-HEIGHT
+        // content (see the Column) is what turns a height change into a slide: the card's top edge
+        // descends, the content rides down with it, and everything below the bar's inner face is
+        // cut off. sizeF (not the clamped grow01) drives it, so the spring's overshoot pushes the
+        // drawer a touch past its rest — the border visibly bulges and settles. The small depth
+        // lead hides the spring's ring below zero after the close.
+        readonly property real depth01: Style.elDockH(false, 1.0, 0, root.sizeF, root.active ? 1.0 : 0.0,
+                                                      Style.elDepthLead, Style.elDepthLead)
+        width:  (!morph ||  root.growV) ? root.fullW : Math.round(root.fullW * depth01)
+        height: (!morph || !root.growV) ? root.fullH : Math.round(root.fullH * depth01)
 
         // The two axes are positioned differently:
         //   depth   pinned to the slide edge — docked at the bottom it grows upward, so its top
@@ -547,22 +549,22 @@ PanelWindow {
         // Windowed: no fade — the card grows out of its edge, and fading it as well would blend
         // the wallpaper's colour into the card while it moved (see Settings.qml). Fullscreen has no
         // edge to grow from, so there it IS the animation and stays a fade.
-        // Closing FADES the last 48 px of height away instead of cutting at 1 px — a wide, flat
-        // sliver blinking off in one frame was the "suddenly gone". Opening never fades: it grows
-        // through these heights at full presence. The hard zero at ≤1 px stays as the floor so the
-        // fillet-skirt Shapes can never linger on a spent card.
-        readonly property real meltPx: 48
+        // No fade in either direction — a drawer does not dim while it slides, its clip hides it.
+        // The ≤1 px cut only stops the fillet-skirt Shapes from painting around a spent card.
         opacity: root.fs ? Style.popFade(root.reveal)
-               : (width <= 1 || height <= 1) ? 0
-               : (!root.active && height < meltPx) ? height / meltPx
-               : 1
+               : ((root.growV ? height : width) > 1 ? 1 : 0)
         MouseArea { anchors.fill: parent }   // swallow clicks so the backdrop doesn't close
 
         Column {
-            anchors.fill: parent
-            anchors.margins: 14
+            // NOT anchors.fill: the drawer works because the content keeps its full-size layout
+            // and is pinned to the card's top — it rides down with the card and is clipped at the
+            // bar's inner face, instead of re-flowing into whatever height is left.
+            anchors { top: parent.top; left: parent.left; margins: 14 }
+            width:  root.fullW - 28
+            height: root.fullH - 28
             spacing: 10
-            opacity: root.contentReveal      // content fades in once the card has room for it
+            // Full presence while docked — content is part of the drawer. Fullscreen keeps its fade.
+            opacity: root.fs ? root.contentReveal : 1
 
             // Search field.
             StyledRect {
