@@ -5,7 +5,9 @@
 # panels — instant). Otherwise falls back to ddcutil for external monitors over
 # DDC/CI, targeting cached I2C buses directly (`--bus`) so each step is ~0.3s
 # instead of ~2s (ddcutil's per-call display detection is the slow part).
-# Brightness moves in 5% steps, clamped to 0–100.
+# Brightness moves in 5% steps, clamped to MIN_PCT–100. The floor is not cosmetic: on a laptop
+# panel `brightnessctl set 0%` switches the backlight off, and a black screen leaves no way to
+# find the slider again.
 #
 #   brightness.sh up        # +5%
 #   brightness.sh down      # -5%
@@ -18,6 +20,9 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 OSD="$SCRIPT_DIR/osd-show.sh"
 STEP=5
+# Never fully dark. 5 % is still readable in a dim room and is above the point where most panels
+# cut off entirely.
+MIN_PCT=5
 ARG="${1:-up}"
 
 RUNTIME="${XDG_RUNTIME_DIR:-/tmp}"
@@ -43,7 +48,7 @@ ddc_buses() {
     printf '%s\n' "${valid[@]}"
 }
 
-clamp() { local v=$1; (( v > 100 )) && v=100; (( v < 0 )) && v=0; echo "$v"; }
+clamp() { local v=$1; (( v > 100 )) && v=100; (( v < MIN_PCT )) && v=$MIN_PCT; echo "$v"; }
 
 # warm: just populate the bus cache so the first real keypress is already fast.
 if [[ "$ARG" == warm ]]; then
@@ -62,7 +67,7 @@ if [[ "$ARG" == get ]]; then
             cur=$(ddcutil --bus "${BUSES[0]}" --noverify getvcp 10 2>/dev/null \
                   | grep -oP 'current value =\s*\K[0-9]+')
         fi
-        [[ "$cur" =~ ^[0-9]+$ ]] && echo "$cur" || echo 0
+        [[ "$cur" =~ ^[0-9]+$ ]] && echo "$cur" || echo "$MIN_PCT"
     fi
     exit 0
 fi
@@ -70,7 +75,7 @@ fi
 # set <pct>: jump to an absolute brightness. backlight is instant; DDC reuses the single-flight
 # applier below so a dragged slider coalesces into the latest target instead of queueing I2C writes.
 if [[ "$ARG" == set ]]; then
-    val="${2:-0}"; [[ "$val" =~ ^[0-9]+$ ]] || val=0; val=$(clamp "$val")
+    val="${2:-$MIN_PCT}"; [[ "$val" =~ ^[0-9]+$ ]] || val=$MIN_PCT; val=$(clamp "$val")
     if have_backlight; then
         brightnessctl set "${val}%" >/dev/null 2>&1
         "$OSD" brightness "$val"
@@ -103,10 +108,16 @@ delta=$STEP
 
 # ── brightnessctl (real backlight) ──────────────────────────────────────────
 if have_backlight; then
-    if (( delta >= 0 )); then brightnessctl set "${STEP}%+" >/dev/null 2>&1
-    else                      brightnessctl set "${STEP}%-" >/dev/null 2>&1; fi
+    if (( delta >= 0 )); then
+        brightnessctl set "${STEP}%+" >/dev/null 2>&1
+    else
+        # brightnessctl's own "5%-" would happily walk into 0, so step down by hand and clamp.
+        cur=$(brightnessctl -m 2>/dev/null | awk -F, '{print $4}' | tr -d '%')
+        [[ "$cur" =~ ^[0-9]+$ ]] || cur=$MIN_PCT
+        brightnessctl set "$(clamp $(( cur - STEP )))%" >/dev/null 2>&1
+    fi
     cur=$(brightnessctl -m 2>/dev/null | awk -F, '{print $4}' | tr -d '%')
-    "$OSD" brightness "${cur:-0}"
+    "$OSD" brightness "${cur:-$MIN_PCT}"
     exit 0
 fi
 

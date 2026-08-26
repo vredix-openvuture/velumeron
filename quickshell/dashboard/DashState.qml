@@ -47,13 +47,22 @@ Singleton {
 
     // ── Brightness (brightness.sh get/set) ─────────────────────────────────────
     property int brightness: 100
+    // Mirrors MIN_PCT in brightness.sh. The slider must not offer a position the backend refuses
+    // to take: dragging to 0 while the panel stops at 5 leaves the two disagreeing, and on a
+    // laptop a real 0 turns the backlight off with the slider no longer visible to undo it.
+    readonly property int minBrightness: 5
     Process { id: briGet; command: ["bash", "-c", "$VELUMERON_DIR/assets/scripts/brightness.sh get"]
-              stdout: SplitParser { onRead: line => { var v = parseInt(line.trim()); if (!isNaN(v)) root.brightness = Math.max(0, Math.min(100, v)) } } }
+              stdout: SplitParser { onRead: line => { var v = parseInt(line.trim())
+                                                     if (!isNaN(v)) root.brightness = Math.max(root.minBrightness, Math.min(100, v)) } } }
     Process { id: briSet }
     Timer { id: briThrottle; interval: 60
             onTriggered: { briSet.command = ["bash", "-c", "$VELUMERON_DIR/assets/scripts/brightness.sh set " + root.brightness]
                            briSet.running = false; briSet.running = true } }
-    function setBrightness(v) { root.brightness = Math.round(Math.max(0, Math.min(1, v)) * 100); briThrottle.restart() }
+    function setBrightness(v) {
+        root.brightness = Math.max(root.minBrightness,
+                                   Math.min(100, Math.round(Math.max(0, Math.min(1, v)) * 100)))
+        briThrottle.restart()
+    }
 
     // ── Power profile (powermode.sh) ────────────────────────────────────────────
     property string profile: "balanced"
@@ -69,24 +78,22 @@ Singleton {
 
     // ── Quick toggles (optimistic flip, then the re-poll confirms) ──────────────
     property bool night:    false
-    property bool caffeine: false
+    // Caffeine lives in CaffeineService now — one state for the tile, the settings hub and the
+    // idle chain, instead of three processes with three opinions.
+    readonly property bool caffeine: CaffeineService.active
     Process { id: nightGet; command: ["bash", "-c", "$VELUMERON_DIR/assets/scripts/nightlight.sh --active"]
               stdout: SplitParser { onRead: line => { root.night = line.trim() === "on" } } }
     Process { id: nightSet; command: ["bash", "-c", "$VELUMERON_DIR/assets/scripts/nightlight.sh --toggle"]
               onRunningChanged: if (!running) { nightGet.running = false; nightGet.running = true } }
-    Process { id: cafGet; command: ["bash", "-c", "$VELUMERON_DIR/assets/scripts/caffeine.sh --active"]
-              stdout: SplitParser { onRead: line => { root.caffeine = line.trim() === "on" } } }
-    Process { id: cafSet; command: ["bash", "-c", "$VELUMERON_DIR/assets/scripts/caffeine.sh --toggle"]
-              onRunningChanged: if (!running) { cafGet.running = false; cafGet.running = true } }
     function toggleNight()    { root.night    = !root.night;    nightSet.running = false; nightSet.running = true }
-    function toggleCaffeine() { root.caffeine = !root.caffeine; cafSet.running   = false; cafSet.running   = true }
+    function toggleCaffeine() { CaffeineService.toggle() }
 
     // One-shot refresh of the cheap state whenever the hub opens — only for what's on the grid.
     function refresh() {
         if (root.has("slider:brightness")) { briGet.running = false; briGet.running = true }
         if (root.has("profile"))           { profProc.running = false; profProc.running = true }
         if (root.has("toggle:night"))      { nightGet.running = false; nightGet.running = true }
-        if (root.has("toggle:caffeine"))   { cafGet.running = false; cafGet.running = true }
+        if (root.has("toggle:caffeine"))   CaffeineService.refresh()
     }
     onActiveChanged: {
         if (root.active) root.refresh()
