@@ -82,9 +82,15 @@ Row {
             readonly property int    monActiveId: root.monitor?.lastIpcObject?.activeWorkspace?.id
                                                   ?? root.monitor?.activeWorkspace?.id ?? -1
             readonly property bool   isActive: isMine && monActiveId === modelData.id
+            // The SLOT: with one hundred ids per monitor (see hypr.lua/modules/workspaces.lua)
+            // this monitor's workspaces are 1-99, the second's 101-199, and so on. The dot shows
+            // the slot, because the slot is what SUPER+1…0 presses — a pill reading "103" next
+            // to a key that says 3 is a puzzle, not information.
+            readonly property int    slot:    Compositor.wsSlot(modelData.id)
             // Never a showcase workspace, whatever max_workspaces is set to — it is not a place,
-            // it is the empty stage a wallpaper change is played on.
-            readonly property bool   show:    modelData.id > 0 && modelData.id <= root._max
+            // it is the empty stage a wallpaper change is played on. `max_workspaces` counts
+            // SLOTS per monitor now, which is what it always meant on a single screen.
+            readonly property bool   show:    modelData.id > 0 && wsDot.slot <= root._max
                                               && !Compositor.isShowcaseWs(modelData.id)
             readonly property bool   hovered: dotHover.containsMouse
             // Only the active workspace gets the full icon size; the rest sit a little smaller.
@@ -118,7 +124,7 @@ Row {
                     // left edge's -90°, -90° to undo the right edge's +90°.
                     rotation:       root.vertical ? (root.onRight ? -90 : 90) : 0
                     visible:        wsDot.isActive && root._showNum
-                    text:           wsDot.wsId
+                    text:           wsDot.slot
                     color:          Colors.bgPrimary
                     font.pixelSize: root._fs
                     font.bold:      true

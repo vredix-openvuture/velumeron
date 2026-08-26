@@ -1,7 +1,6 @@
 import "../.."
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import Quickshell.Hyprland
 
 Item {
@@ -77,19 +76,22 @@ Item {
         anchors.fill:    parent
         hoverEnabled:    true
         acceptedButtons: Qt.LeftButton | Qt.RightButton
+        // Left: the settings menu. Right: the app launcher — the same pair a start button has,
+        // and both are things you actually reach for from this corner.
+        //
+        // The right click used to shell out to assets/scripts/launcher.sh with no arguments. That
+        // script only ever knew --wlogout and --waybar, both of them pointing at directories that
+        // left the tree with waybar, and with no argument it printed "Nothing to do" and exited. So
+        // the button had been silently dead since the quickshell rewrite. Driving the launcher
+        // through its own state (not the IPC) keeps it one property write, like the left click.
         onClicked: event => {
             if (event.button === Qt.RightButton) {
-                launcherProc.running = false
-                launcherProc.running = true
+                UiState.launcherMon  = root.barMonitor?.name ?? ""
+                UiState.launcherOpen = !UiState.launcherOpen
             } else {
                 // The openDropdown watcher publishes the anchor for the focused monitor.
                 UiState.openDropdown = UiState.openDropdown === "vuture-icon" ? "" : "vuture-icon"
             }
         }
-    }
-
-    Process {
-        id: launcherProc
-        command: ["bash", "-c", "$VELUMERON_DIR/assets/scripts/launcher.sh"]
     }
 }

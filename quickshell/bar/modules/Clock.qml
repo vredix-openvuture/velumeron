@@ -20,6 +20,10 @@ Item {
 
     readonly property bool menuOpen: UiState.flyout === "calendar" && UiState.flyoutMon === root.barMon
 
+    // A task is overdue or due today → the bar's status dot, drawn by the slot (Bar.qml's ModSlot).
+    // Unified Vikunja + CalDAV model, Settings → Calendar.
+    readonly property bool dotOn: TodoService.dueCount > 0
+
     implicitWidth:  label.implicitWidth
     implicitHeight: label.implicitHeight
 
@@ -46,15 +50,6 @@ Item {
             opacity:        hov.containsMouse || root.menuOpen ? 1.0 : 0.75
             Behavior on opacity { NumberAnimation { duration: 80 } }
         }
-    }
-
-    // A task is overdue or due today → a small accent dot beside the time (unified
-    // Vikunja + CalDAV model, Settings → Calendar).
-    Rectangle {
-        visible: TodoService.dueCount > 0
-        anchors { left: label.right; leftMargin: 3; top: label.top; topMargin: 1 }
-        width: 5; height: 5; radius: 2.5
-        color: Colors.boActive
     }
 
     Timer {

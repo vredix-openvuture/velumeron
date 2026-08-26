@@ -48,6 +48,17 @@ Item {
     readonly property var monitors:   Hyprland.monitors
     readonly property var workspaces: Hyprland.workspaces
 
+    // ── Workspace blocks: one hundred ids per monitor ───────────────────────────
+    // Monitor n owns (n-1)*100 + 1 … +99, so the main screen has 1-99, the second 101-199. The
+    // scheme lives in hypr.lua/modules/workspaces.lua (it is the compositor that enforces it via
+    // the generated block rules); these two are how every surface here reads a workspace id:
+    // the SLOT is what the user presses and what a label shows, the BASE says which monitor it
+    // belongs to. Ids below the block size have slot == id, so a single-monitor setup is
+    // unchanged and a config from before the scheme still reads correctly.
+    readonly property int wsBlock: 100
+    function wsSlot(id) { return id > 0 ? (id % comp.wsBlock === 0 ? comp.wsBlock : id % comp.wsBlock) : id }
+    function wsBaseOf(id) { return id > 0 ? id - comp.wsSlot(id) : 0 }
+
     // ── Reserved: the wallpaper showcase ────────────────────────────────────────
     // One workspace per monitor, 1001 upward, that exists solely so a wallpaper change can be
     // watched without windows over it (see assets/scripts/wallpaper-set.sh). They are machinery,
@@ -102,6 +113,9 @@ Item {
     function focusWorkspace(id)       { Hyprland.dispatch("hl.dsp.focus({ workspace = " + id + " })") }
     function focusWorkspaceDir(dir)   { Hyprland.dispatch("hl.dsp.focus({ workspace = \"" + dir + "\" })") }
     function focusWindowAddress(addr) { Hyprland.dispatch("hl.dsp.focus({ window = \"address:" + addr + "\" })") }
+    // Close one window by address — the launcher's workspace overview offers it per miniature
+    // (middle-click / the ×), the same way the GNOME overview does.
+    function closeWindowAddress(addr) { Hyprland.dispatch("hl.dsp.window.close({ window = \"address:" + addr + "\" })") }
 
     // Session exit / logout — plain on Hyprland; a backend maps it to its own quit verb.
     function exit() { Hyprland.dispatch("exit") }

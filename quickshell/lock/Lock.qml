@@ -54,6 +54,16 @@ Item {
                 anchors.fill: parent
                 screenName: surface.screen ? surface.screen.name : ""
             }
+            // The screensaver over a LOCKED screen. It cannot be a layer surface here: the
+            // ext-session-lock protocol draws this surface above every layer, on purpose, so that
+            // nothing can be shown over a password prompt. The lock therefore hosts the very same
+            // component the desktop overlay uses, above its own content. The idle clock does not
+            // care whether the screen is locked — it runs its own timer either way.
+            ScreensaverView {
+                anchors.fill: parent
+                monName: surface.screen ? surface.screen.name : ""
+                active:  UiState.screensaverOn
+            }
         }
     }
 
@@ -70,7 +80,7 @@ Item {
         LockState.authenticating = true
         if (!pam.start()) {
             LockState.authenticating = false
-            LockState.failMsg = "Authentifizierung nicht möglich"
+            LockState.failMsg = "Authentication unavailable"
             return
         }
         pamWatchdog.restart()
@@ -88,7 +98,7 @@ Item {
             pam.abort()
             LockState.authenticating = false
             LockState.buffer = ""
-            LockState.failMsg = "Zeitüberschreitung — bitte erneut versuchen"
+            LockState.failMsg = "Timed out, try again"
         }
     }
 
@@ -175,9 +185,9 @@ Item {
             } else {
                 LockState.failCount += 1
                 LockState.buffer = ""
-                LockState.failMsg = (result === PamResult.MaxTries) ? "Zu viele Versuche"
-                                  : (result === PamResult.Error)    ? "PAM-Fehler"
-                                  :                                    "Falsches Passwort"
+                LockState.failMsg = (result === PamResult.MaxTries) ? "Too many attempts"
+                                  : (result === PamResult.Error)    ? "PAM error"
+                                  :                                    "Wrong password"
             }
         }
         // PamContext reports a broken conversation through `error`, and then `completed` never
@@ -187,9 +197,9 @@ Item {
             pamWatchdog.stop()
             LockState.authenticating = false
             LockState.buffer = ""
-            LockState.failMsg = (err === PamError.StartFailed)   ? "PAM startet nicht (Konfiguration?)"
-                              : (err === PamError.TryAuthFailed) ? "PAM-Abfrage fehlgeschlagen"
-                              :                                    "Interner PAM-Fehler"
+            LockState.failMsg = (err === PamError.StartFailed)   ? "PAM will not start (configuration?)"
+                              : (err === PamError.TryAuthFailed) ? "PAM request failed"
+                              :                                    "Internal PAM error"
         }
     }
 

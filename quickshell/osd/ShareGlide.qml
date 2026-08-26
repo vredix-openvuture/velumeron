@@ -17,6 +17,7 @@ PanelWindow {
     id: root
 
     property var monitor: Compositor.monitorFor(root.screen)
+    readonly property string mon: monitor?.name ?? ""
     readonly property bool onActiveMonitor: monitor !== null && monitor === Compositor.focusedMonitor
     readonly property var  x: PhoneService.xfer
     readonly property bool showable: root.onActiveMonitor && x.on === true
@@ -31,6 +32,13 @@ PanelWindow {
     mask: Region {}                     // never take input — it is a readout, not a control
     visible: root.showable || card.reveal > 0.01
 
+    // Same material as every other shell surface: the bar's translucency, and the blur asked for by
+    // protocol (ext-background-effect-v1) so what shows through is frosted rather than plain glass.
+    BackgroundEffect.blurRegion: (VtlConfig.barBlurFor(root.mon)
+                                  && VtlConfig.barOpacityEnabledFor(root.mon)
+                                  && card.reveal > 0.02) ? cardBlur : null
+    Region { id: cardBlur; item: card; radius: card.radius }
+
     StyledRect {
         id: card
         property real reveal: root.showable ? 1 : 0
@@ -42,7 +50,7 @@ PanelWindow {
         width:  Math.min(root.width - 40, 380)
         height: 72
         radius: Style.rCard
-        color: Style.panelColor(VtlConfig.barColorful)
+        color: Style.barPanelColor(Style.panelColor(VtlConfig.barColorful), root.mon)
         borderWidth: Style.chromeBorderWidth
         borderColor: Style.chromeBorder
 

@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-# wallpaper-set.sh [--no-showcase] [--no-waybar] (--set SET_ID | [--hor FILE] [--ver FILE])
-#   --no-waybar : don't kill/launch/signal waybar (use when quickshell is the active bar)
+# wallpaper-set.sh [--no-showcase] (--set SET_ID | [--hor FILE] [--ver FILE] | --mon MON --file FILE)
 source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh"
 
 showcase=true
-no_waybar=false
 set_id=""
 hor_file=""
 ver_file=""
@@ -102,7 +100,6 @@ PY
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --no-showcase) showcase=false; shift ;;
-        --no-waybar)   no_waybar=true; shift ;;
         --set)         set_id="$2"; shift 2 ;;
         --hor)         hor_file="$2"; shift 2 ;;
         --ver)         ver_file="$2"; shift 2 ;;

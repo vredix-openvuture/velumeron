@@ -178,15 +178,23 @@ PanelWindow {
     readonly property int  stackPW:   260
     readonly property int  stackGap:  10
     readonly property int  stackPH:   Math.min(root.sh - 20, Math.max(1, root.stackWins.length) * stackRowH + 12)
+    // Along-edge travel for the hover popups stops at the bar's frame, not at the screen: a
+    // perpendicular strip is still bar, and clamping to the screen slides the popup onto it.
+    // Same bound the glides use (osd/BarGlide.qml).
+    readonly property real alongLoX: UiState.barInnerFor("left", root.mon) + 8
+    readonly property real alongHiX: root.sw - UiState.barInnerFor("right", root.mon) - 8
+    readonly property real alongLoY: UiState.barInnerFor("top", root.mon) + 8
+    readonly property real alongHiY: root.sh - UiState.barInnerFor("bottom", root.mon) - 8
+
     readonly property real stackX: {
         if (root.dockEdge === "left")  return root.openX + root.cardW + stackGap
         if (root.dockEdge === "right") return root.openX - stackPW - stackGap
-        return Math.max(8, Math.min(root.sw - stackPW - 8, root.stackCX - stackPW / 2))
+        return Math.max(alongLoX, Math.min(alongHiX - stackPW, root.stackCX - stackPW / 2))
     }
     readonly property real stackY: {
         if (root.dockEdge === "top")    return root.openY + root.cardH + stackGap
         if (root.dockEdge === "bottom") return root.openY - stackGap - stackPH
-        return Math.max(8, Math.min(root.sh - stackPH - 8, root.stackCY - stackPH / 2))
+        return Math.max(alongLoY, Math.min(alongHiY - stackPH, root.stackCY - stackPH / 2))
     }
     // The popup rect PLUS the gap back to the card edge, so the pointer travelling from the tile up
     // into the popup never leaves the input mask (and the hover doesn't drop mid-transit).
@@ -221,12 +229,12 @@ PanelWindow {
     readonly property real ctxX: {
         if (root.dockEdge === "left")  return root.openX + root.cardW + stackGap
         if (root.dockEdge === "right") return root.openX - ctxW - stackGap
-        return Math.max(8, Math.min(root.sw - ctxW - 8, root.ctxCX - ctxW / 2))
+        return Math.max(alongLoX, Math.min(alongHiX - ctxW, root.ctxCX - ctxW / 2))
     }
     readonly property real ctxY: {
         if (root.dockEdge === "top")    return root.openY + root.cardH + stackGap
         if (root.dockEdge === "bottom") return root.openY - stackGap - ctxH
-        return Math.max(8, Math.min(root.sh - ctxH - 8, root.ctxCY - ctxH / 2))
+        return Math.max(alongLoY, Math.min(alongHiY - ctxH, root.ctxCY - ctxH / 2))
     }
     function openCtx(m, cx, cy) {
         root.stackOpen = false; root.stackCloseT.stop()
@@ -283,8 +291,10 @@ PanelWindow {
     readonly property int    perpSeam: root.perpThk + 24
     readonly property int    pad:      root.flareR + Math.max(root.seam, root.perpSeam)
                                        + Math.ceil(Math.max(Style.elTopBulge, Style.elSideBulge))
-    // Shared panel fill (accent-tintable, frosted under cupertino — see Style.panelColor).
-    readonly property color  cardColor: Style.panelColor(VtlConfig.osdColorful)
+    // Shared panel fill (accent-tintable, frosted under cupertino — see Style.panelColor), carrying
+    // the bar's translucency: the strip docks into the bar's edge, so a see-through bar must not
+    // hand out a solid slab hanging off it.
+    readonly property color  cardColor: Style.barPanelColor(Style.panelColor(VtlConfig.osdColorful), root.mon)
 
     readonly property int cardW: Math.min(root.sw - 16, content.implicitWidth)
     readonly property int cardH: Math.min(root.sh - 16, content.implicitHeight)
@@ -300,7 +310,8 @@ PanelWindow {
     // for "straight" (square corners); either way the fill closes through the bar (borderless merge),
     // and at a corner it also merges into the perpendicular bar. Returns [borderOpen, fillClosed].
     // bT / bS = live elastic bulge (px) for the content edge / free side edges; 0 at rest → straight.
-    function _paths(W, H, bT, bS) {
+    function _paths(W, H, bT, bS, off) {
+        off = off || 0    // pixel-grid nudge; border only (Style.hairline)
         var horizA = (root.dockEdge === "top" || root.dockEdge === "bottom")
         var A = horizA ? W : H
         var D = horizA ? H : W
@@ -311,12 +322,19 @@ PanelWindow {
         var P  = root.pad
         var flip = (root.dockEdge === "bottom" || root.dockEdge === "left")
         function XY(a, d) {
-            var x, y
-            if      (root.dockEdge === "bottom") { x = a;     y = H - d }
-            else if (root.dockEdge === "left")   { x = d;     y = a     }
-            else if (root.dockEdge === "right")  { x = W - d; y = a     }
-            else                                 { x = a;     y = d     }   // top
-            return (x + P) + "," + (y + P)
+            // The MOUTH (d = 0) is nudged the other way. Every other run takes this panel's own
+            // first row (+off, the pixel-grid rule); the mouth has to land on the row the BAR's
+            // line occupies, which is one row further out — the bar insets its line INTO the strip
+            // and the panel insets its own into the panel, so the two ended up on adjacent rows and
+            // a fillet had to climb a pixel to reach the line it is supposed to continue (measured:
+            // bar row 39, panel outline row 40, and the join visibly stepped). A mirrored edge
+            // (bottom / right) counts depth the other way, hence the sign.
+            var mirrored = (root.dockEdge === "bottom" || root.dockEdge === "right")
+            var dOff = (d === 0) ? (mirrored ? off : -off) : off
+            if      (root.dockEdge === "bottom") return (a + P + off)       + "," + ((H - d) + P + dOff)
+            else if (root.dockEdge === "left")   return (d + P + dOff)      + "," + (a + P + off)
+            else if (root.dockEdge === "right")  return ((W - d) + P + dOff) + "," + (a + P + off)
+            return (a + P + off) + "," + (d + P + dOff)   // top
         }
         var cur = [0, 0]
         function M(a, d)      { cur = [a, d]; return "M" + XY(a, d) }
@@ -381,6 +399,56 @@ PanelWindow {
     WlrLayershell.layer:         WlrLayer.Overlay
     WlrLayershell.namespace:     "velumeron-taskbar"
     WlrLayershell.exclusiveZone: -1
+
+    // Blur behind the strip, by protocol (ext-background-effect-v1) exactly as the bar asks for it —
+    // this docks into the bar's edge, so it takes the bar's frost along with its translucency.
+    //
+    // Spelled out rather than `Region { item: cardBox }`: the card sits inside the hover region and
+    // slides on a Translate, so the rect below is the TRANSLATED card in window space. It also has to
+    // cover the SKIRT — `_paths` runs the concave fillets `f` past both ends of the docked edge, and
+    // at a corner `f` past the content edge too — because those wedges are painted in the card's own
+    // translucent fill and would otherwise hang off the frosted strip unblurred.
+    //
+    // It is then clamped back to the bar's inner face: while auto-hide pushes the strip out through
+    // the edge it crosses the bar, and two surfaces blurring one strip is what shows up as a band.
+    BackgroundEffect.blurRegion: (VtlConfig.barBlurFor(root.mon)
+                                  && VtlConfig.barOpacityEnabledFor(root.mon)
+                                  && root.enabled && root.grow01 > 0.02) ? cardBlur : null
+    Region {
+        id: cardBlur
+        readonly property real slide: 1 - root.grow01
+        readonly property real bx: root.openX + (root.dockEdge === "left"  ? -slide * (root.cardW + 8)
+                                               : root.dockEdge === "right" ?  slide * (root.cardW + 8) : 0)
+        readonly property real by: root.openY + (root.dockEdge === "top"    ? -slide * (root.cardH + 8)
+                                               : root.dockEdge === "bottom" ?  slide * (root.cardH + 8) : 0)
+        // Skirt width, in the same (a, d) space `_paths` builds the outline in, mapped back onto the
+        // card's own sides.
+        readonly property bool hz: root.dockEdge === "top" || root.dockEdge === "bottom"
+        readonly property real aE: hz ? root.cardW : root.cardH
+        readonly property real dE: hz ? root.cardH : root.cardW
+        readonly property real f:  (root.dock && VtlConfig.transitionFilletFor("taskbar", root._tctx))
+                                   ? Math.max(0, Math.min(root.flareR, aE / 3, dE / 3)) : 0
+        readonly property real xa0: root.perpStart ? 0 : f
+        readonly property real xa1: root.perpEnd   ? 0 : f
+        readonly property real xd:  (root.perpStart || root.perpEnd) ? f : 0
+        readonly property real mL: hz ? xa0 : (root.dockEdge === "right"  ? xd : 0)
+        readonly property real mR: hz ? xa1 : (root.dockEdge === "left"   ? xd : 0)
+        readonly property real mT: hz ? (root.dockEdge === "bottom" ? xd : 0) : xa0
+        readonly property real mB: hz ? (root.dockEdge === "top"    ? xd : 0) : xa1
+        // The area the bar does NOT already blur (screen minus the docked strip on each side).
+        readonly property real cl: root.hside === "left"   ? root.hBarThk : 0
+        readonly property real cr: root.hside === "right"  ? root.sw - root.hBarThk : root.sw
+        readonly property real ct: root.vside === "top"    ? root.vBarThk : 0
+        readonly property real cb: root.vside === "bottom" ? root.sh - root.vBarThk : root.sh
+        x:      Math.max(cl, bx - mL)
+        y:      Math.max(ct, by - mT)
+        width:  Math.max(0, Math.min(bx + root.cardW + mR, cr) - Math.max(cl, bx - mL))
+        height: Math.max(0, Math.min(by + root.cardH + mB, cb) - Math.max(ct, by - mT))
+        // A free card is rounded on all four corners, so the frost has to be too — a square region
+        // leaves four blurred wallpaper nubs poking out. The docked shape merges into the bar and
+        // keeps the plain rect, as the glides and flyouts do.
+        radius: root.dock ? 0 : Style.rCard
+    }
 
     // While hidden, hover mode arms only a thin strip hugging the monitor edge — revealing a full
     // card-height away from the edge felt hair-triggered. Once revealed the zone grows to card +
@@ -499,7 +567,7 @@ PanelWindow {
                 preferredRendererType: Shape.CurveRenderer
                 ShapePath {
                     fillColor: "transparent"; strokeColor: Style.chromeBorder; strokeWidth: Style.chromeBorderWidth
-                    PathSvg { path: root._paths(root.cardW, root.cardH, root.bulgeT, root.bulgeS)[0] }
+                    PathSvg { path: root._paths(root.cardW, root.cardH, root.bulgeT, root.bulgeS, Style.hairline(Style.chromeBorderWidth))[0] }
                 }
             }
 

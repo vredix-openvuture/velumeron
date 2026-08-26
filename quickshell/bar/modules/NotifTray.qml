@@ -16,6 +16,9 @@ Item {
     readonly property bool vert: barEdge === "left" || barEdge === "right"
     readonly property int  sz:   VtlConfig.moduleIconSizeFor("notiftray", root.barMon)
 
+    // Unread notifications → the bar's status dot, drawn by the slot (Bar.qml's ModSlot).
+    readonly property bool dotOn: NotifService.unread > 0
+
     implicitWidth:  bell.implicitWidth
     implicitHeight: bell.implicitHeight
     width:  implicitWidth
@@ -58,15 +61,6 @@ Item {
         font.family:    VtlConfig.moduleFontFor("notiftray")
         font.pixelSize: root.sz
         Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
-
-        // Unread indicator — an accent dot at the top-right while unread notifications exist.
-        Rectangle {
-            visible: NotifService.unread > 0
-            anchors { right: parent.right; top: parent.top; rightMargin: -1; topMargin: 1 }
-            width: 7; height: 7; radius: 4
-            color: Colors.fgUrgent
-            border.width: 1; border.color: Colors.bgPrimary
-        }
 
         MouseArea {
             id: bellHover

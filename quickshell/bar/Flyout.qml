@@ -45,23 +45,52 @@ PanelWindow {
     readonly property bool monFullscreen: Compositor.fullscreenOn(root.monId)
 
     // ── Dock geometry (ported from Settings.qml) ──────────────────────────────────────────────
-    readonly property bool   edgeBar: VtlConfig.edgeActiveFor(mEdge, root.mon) && !root.monFullscreen
+    // A real fullscreen window hides the bar — unless "Peek in fullscreen" is on, in which case the
+    // bar lifts ABOVE that window and is right there at the edge. Treating the edge as bare while a
+    // visible strip sits on it is why nothing docked during a fullscreen video: the panel grew from
+    // the monitor's bezel, through the bar, with its own full outline. Bar.qml holds the peek open
+    // for as long as one of these panels is up, so the strip cannot fade out from under it.
+    readonly property bool   edgeBar: VtlConfig.edgeActiveFor(mEdge, root.mon)
+                                      && (!root.monFullscreen || VtlConfig.barFullscreenPeekFor(root.mon))
     readonly property int    barT:   edgeBar ? UiState.barInnerFor(mEdge, root.mon) : 0
     // A floating bar gets a floating panel: no merges into the bar, a fully-rounded free outline,
     // offset from the bar's inner face by the same gap — docking into a bar that itself floats
     // reads as glued-on. Cupertino detaches ALWAYS: macOS menus are free dropdowns under the
     // strip, never panels growing out of it.
-    readonly property bool   detached:  root.edgeBar && (VtlConfig.barFloatingFor(root.mon) || Style.isCupertino)
-    readonly property int    detachGap: detached ? Math.max(6, VtlConfig.barFloatingFor(root.mon)
-                                                               ? VtlConfig.barFloatGapFor(root.mon) : 8) : 0
+    // A floating bar used to detach its panels too — a free rounded tab hanging under the strip.
+    // It reads as two unrelated objects, so a float now docks like a dock: the panel meets the
+    // strip's inner face (which since Bar._publishInner INCLUDES the float gap) and leaves its own
+    // border off that side, so the bar's line is the one line between them. Cupertino still
+    // detaches always — macOS menus are free dropdowns under the strip, that is the style.
+    readonly property bool   detached:  root.edgeBar && Style.isCupertino
+    readonly property int    detachGap: detached ? 8 : 0
     // An icon in the start/end group merges the menu into that end of the bar (the concave
     // L-transition); the perpendicular target is the side bar if present, else the bare screen edge.
     readonly property string startEdge: vert ? "top"    : "left"
     readonly property string endEdge:   vert ? "bottom" : "right"
     readonly property string _tctx:      root.edgeBar ? "bar" : "edge"
     readonly property bool   _mergeAll:  VtlConfig.transitionMergeAllFor("flyout", root._tctx)
-    readonly property bool   mergeStart: mGroup === "start" && root.edgeBar && _mergeAll && !detached
-    readonly property bool   mergeEnd:   mGroup === "end"   && root.edgeBar && _mergeAll && !detached
+    // Whether the strip runs into the screen corner at all. Only a frame does; a float never does
+    // (it is inset on every side), and a dock only while its ends are not pulled in. Without a
+    // corner there is nothing to merge INTO — the corner merge snaps the panel to the screen edge,
+    // so it would hang off the end of the very strip it grows out of. Then it tracks its module
+    // like a centre one does, and the span clamp below keeps it on the bar.
+    readonly property bool   endsFree:   VtlConfig.barModeFor(root.mon) !== "frame"
+                                         && (VtlConfig.barModeFor(root.mon) === "float"
+                                             || VtlConfig.barSideGapFor(root.mon) > 0)
+    // The stretch of this edge the strip covers — a docked panel stays inside it.
+    readonly property var    barSpan:    VtlConfig.barSpanFor(root.mEdge, root.mon,
+                                                              root.vert ? root.sh : root.sw)
+    // ── Flush end, or curve ─────────────────────────────────────────────────────────────────────
+    // The concave fillet flares OUTWARD past the panel, into the bar it hangs on. That only works
+    // while there is bar left beside it: a module sitting at the very end of a dock/float strip
+    // puts the panel's edge on the end of the bar, and the flare then reaches into the empty
+    // stretch next to the strip — the "frame artefact". So a side that lands on the end of the bar
+    // closes FLUSH with it, and only a side that stops short of the end keeps its curve.
+    readonly property bool flushLo: root.edgeBar && !root.detached && panel.along <= root.barSpan[0] + 1
+    readonly property bool flushHi: root.edgeBar && !root.detached && (panel.along + panel.alongSize) >= root.barSpan[1] - 1
+    readonly property bool   mergeStart: mGroup === "start" && root.edgeBar && _mergeAll && !detached && !endsFree
+    readonly property bool   mergeEnd:   mGroup === "end"   && root.edgeBar && _mergeAll && !detached && !endsFree
     readonly property int    sideStart:  (mergeStart && VtlConfig.edgeActiveFor(startEdge, root.mon)) ? VtlConfig.edgeThicknessFor(startEdge, root.mon) : 0
     readonly property int    sideEnd:    (mergeEnd   && VtlConfig.edgeActiveFor(endEdge,   root.mon)) ? VtlConfig.edgeThicknessFor(endEdge,   root.mon)   : 0
 
@@ -71,7 +100,12 @@ PanelWindow {
     // span (Bar.gapNotchPath) — exactly ONE translucent surface paints that strip. Every smaller
     // seam still showed a ghost line on a translucent bar: overlap stacks alpha (darker), abutting
     // antialiases (lighter); only removing the second paint layer removes the line.
-    readonly property int seam:   2
+        // 0, not 2: the seam that used to run into the bar IS the dark line. A translucent panel
+    // over the bar's ground and the same panel over its own ground composite to different
+    // colours, so the overlap always showed as a band (see the note in bar/Bar.qml). The fills
+    // abut at the bar's inner face instead — GeometryRenderer's edges are crisp at an integer
+    // coordinate, so nothing shows through between them.
+    readonly property int seam:   0
     // ── How fast the merge corners let go ────────────────────────────────────────────────────────
     // The concave fillets are what tie this panel into the bar's edge. Clamping them to A/3 and D/3
     // means they shrink IN STEP with the panel, so on the way out they are gone while the panel is
@@ -90,7 +124,8 @@ PanelWindow {
     // Outline in (a, d) space — a runs along the bar, d is the depth away from it — mapped onto the
     // actual edge. Returns [borderOpen, fillClosed]; the fill closes back through the merged edges.
     // bT / bS = live elastic bulge (px) for the far edge / free side edges; 0 at rest → straight.
-    function _paths(W, H, bT, bS) {
+    function _paths(W, H, bT, bS, off) {
+        off = off || 0    // pixel-grid nudge; border only (Style.hairline)
         var horizA = (mEdge === "top" || mEdge === "bottom")
         var A = horizA ? W : H        // extent along the bar
         var D = horizA ? H : W        // depth away from the bar
@@ -101,12 +136,19 @@ PanelWindow {
         var ca1 = mergeEnd   ? (A - sideEnd) : A      // far-end content boundary
         var flip = (mEdge === "bottom" || mEdge === "left")
         function XY(a, d) {
-            var x, y
-            if      (mEdge === "bottom") { x = a;     y = H - d }
-            else if (mEdge === "left")   { x = d;     y = a     }
-            else if (mEdge === "right")  { x = W - d; y = a     }
-            else                         { x = a;     y = d     }   // top
-            return (x + pad) + "," + (y + pad)
+            // The MOUTH (d = 0) is nudged the other way. Every other run takes this panel's own
+            // first row (+off, the pixel-grid rule); the mouth has to land on the row the BAR's
+            // line occupies, which is one row further out — the bar insets its line INTO the strip
+            // and the panel insets its own into the panel, so the two ended up on adjacent rows and
+            // a fillet had to climb a pixel to reach the line it is supposed to continue (measured:
+            // bar row 39, panel outline row 40, and the join visibly stepped). A mirrored edge
+            // (bottom / right) counts depth the other way, hence the sign.
+            var mirrored = (mEdge === "bottom" || mEdge === "right")
+            var dOff = (d === 0) ? (mirrored ? off : -off) : off
+            if      (mEdge === "bottom") return (a + pad + off)       + "," + ((H - d) + pad + dOff)
+            else if (mEdge === "left")   return (d + pad + dOff)      + "," + (a + pad + off)
+            else if (mEdge === "right")  return ((W - d) + pad + dOff) + "," + (a + pad + off)
+            return (a + pad + off) + "," + (d + pad + dOff)   // top
         }
         var cur = [0, 0]
         function M(a, d)     { cur = [a, d]; return "M" + XY(a, d) }
@@ -144,15 +186,17 @@ PanelWindow {
                + LB(ca0 + f, D, 0, 1, bT) + A_(f, ca0, D + f, 0)
             close = L(0, D + f) + L(0, -s) + L(A, -s) + L(A, D + f) + " Z"
         } else {                                  // free tab — concave fillets on both bar corners
-            bd = M(A + f, 0) + A_(f, A, f, 0)
+            var fH = root.flushHi ? 0 : f, fL = root.flushLo ? 0 : f
+            bd = M(A + fH, 0) + (fH > 0 ? A_(fH, A, fH, 0) : "")
                + LB(A, D - e,  1, 0, bS) + A_(e, A - e, D, 1)
                + LB(e, D,      0, 1, bT) + A_(e, 0, D - e, 1)
-               + LB(0, f,     -1, 0, bS) + A_(f, -f, 0, 0)
-            close = L(-f, -s) + L(A + f, -s) + " Z"
+               + LB(0, fL,    -1, 0, bS) + (fL > 0 ? A_(fL, -fL, 0, 0) : "")
+            close = L(-fL, -s) + L(A + fH, -s) + " Z"
         }
         return [bd, bd + close]
     }
-    function borderPath(W, H, bT, bS) { return _paths(W, H, bT, bS)[0] }
+    readonly property int borderW: Style.barBorderW(root.mon)
+    function borderPath(W, H, bT, bS) { return _paths(W, H, bT, bS, Style.hairline(root.borderW))[0] }
     function fillPath(W, H, bT, bS)   { return _paths(W, H, bT, bS)[1] }
 
     color: "transparent"
@@ -247,13 +291,26 @@ PanelWindow {
 
         // Docked edge pinned at the bar inner face; along the bar an icon in start/end snaps the
         // panel to that corner, a center icon tracks the anchor (clamped on-screen).
-        readonly property real alongMax: root.vert ? (root.sh - height) : (root.sw - width)
+        readonly property real alongSize: root.vert ? height : width
+        // Travel bounds: the strip's own span, not the screen. A bar inset from its ends is shorter
+        // than the screen, and a panel clamped to the screen slid past the end of it — visibly
+        // hanging in the air next to the strip it is supposed to be attached to. Falls back to
+        // centring on the span when the panel is wider than the bar is long.
+        readonly property real alongLo:  root.edgeBar ? root.barSpan[0] : 0
+        readonly property real alongHi:  (root.edgeBar ? root.barSpan[1] : (root.vert ? root.sh : root.sw)) - alongSize
+        readonly property real alongMax: Math.max(alongLo, alongHi)
         readonly property real anchor:   root.vert ? UiState.flyoutAnchorY : UiState.flyoutAnchorX
         // Centre the panel ON the anchor (was anchored at the panel's start → off-centre); start/end
-        // groups still snap to the corner.
-        readonly property real along: root.mergeStart ? 0
+        // groups still snap to the corner where there IS one (see endsFree).
+        readonly property real along: root.mergeStart ? alongLo
                                     : root.mergeEnd   ? alongMax
-                                    : Math.max(0, Math.min(anchor - (root.vert ? height : width) / 2, alongMax))
+                                    : (alongHi < alongLo
+                                       ? (alongLo + alongHi) / 2
+                                       // Within a pixel of an end → sit ON that end, or the flush
+                                       // close draws its line beside the bar's instead of continuing
+                                       // it (Style.flushSnap).
+                                       : Style.flushSnap(Math.max(alongLo, Math.min(anchor - alongSize / 2, alongHi)),
+                                                         alongLo, alongHi))
         x: root.mEdge === "left"  ? root.barT + root.detachGap
          : root.mEdge === "right" ? root.sw - root.barT - root.detachGap - width
          : along
@@ -263,12 +320,20 @@ PanelWindow {
 
         // Tell the bar how much of its border this panel spans, so the bar can leave that stretch
         // out of its own outline and the two read as ONE line (UiState.setBarGap).
-        // Exactly the panel's extent — NO allowance for the fillet skirt. Adding one widened the cut
-        // on BOTH sides, but a corner-docked panel has a fillet on one side only (the other merges
-        // into the perpendicular arm). The surplus side left bar border cut away with nothing
-        // covering it: a permanent notch, which is worse than the closing-frame overlap it fixed.
-        readonly property real gapFrom: root.vert ? y : x
-        readonly property real gapTo:   root.vert ? y + height : x + width
+        //
+        // The span runs to where the OUTLINE reaches, not to the panel's box: a side that ends in a
+        // concave fillet carries the border `skirt` px further along the bar before it turns away,
+        // and the bar's own line has to stop there — otherwise it runs on straight through the arc
+        // and leaves a stub across the corner. A MERGED side has no arc and gets no allowance;
+        // widening both sides blindly (the earlier attempt) cut bar border away with nothing in
+        // front of it, which is the notch that had to be reverted.
+        readonly property real skirt: VtlConfig.transitionFilletFor("flyout", root._tctx)
+                                      ? Math.max(0, Math.min(root.flareR * root.filletF,
+                                                             Math.max(width, height) / 2)) : 0
+        // No skirt on a side that closed flush: there is no arc reaching further along the bar
+        // there, so claiming extra border would cut the bar's line past the panel for nothing.
+        readonly property real gapFrom: (root.vert ? y : x)                  - ((root.mergeStart || root.flushLo) ? 0 : skirt)
+        readonly property real gapTo:   (root.vert ? y + height : x + width) + ((root.mergeEnd   || root.flushHi) ? 0 : skirt)
         readonly property bool gapLive: root.isOpen && root.edgeBar && !root.detached
         function pushGap() {
             if (gapLive) UiState.setBarGap("flyout:" + root.flyoutId + ":" + root.mon, root.mon, root.mEdge, gapFrom, gapTo)
@@ -298,7 +363,7 @@ PanelWindow {
             anchors.margins:       -root.pad
             preferredRendererType: Shape.CurveRenderer
             ShapePath {
-                fillColor: "transparent"; strokeColor: Style.chromeBorder; strokeWidth: Style.chromeBorderWidth
+                fillColor: "transparent"; strokeColor: Style.chromeBorder; strokeWidth: root.borderW
                 PathSvg { path: root.borderPath(panel.width, panel.height, panel.bulgeT, panel.bulgeS) }
             }
         }

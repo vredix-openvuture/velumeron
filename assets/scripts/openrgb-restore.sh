@@ -13,15 +13,38 @@
 # profile first is what the old `sleep 30 && openrgb -p ...` retry was working
 # around; it never actually fixed the zone size.
 #
+# That workaround is ONE board's. This script is the login path for every
+# machine now (Settings -> OpenRGB -> apply at login), so the resize step is
+# best-effort: a machine without that controller waits a few seconds, finds
+# nothing to resize, and loads the profile regardless. It used to spend the full
+# timeout looking and then exit WITHOUT loading the profile, which on any other
+# board meant no lighting at all.
+#
 #   openrgb-restore.sh [profile]     default profile: purple-blizzard
+#
+# Overridable per machine (Settings writes the first two into settings.json):
+#   openrgb_zone_board / $VELUMERON_OPENRGB_BOARD      controller name substring
+#   openrgb_zone_size  / $VELUMERON_OPENRGB_ZONE_SIZE  LEDs per ARGB header
+#   empty board                                        skip the resize entirely
 
 set -uo pipefail
 
+_dir="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+source "$_dir/lib/env.sh"
+
+_setting() {  # $1 key, $2 default — from the shell's settings.json
+    local v="" gs="$VELUMERON_USER_DIR/gui/settings.json"
+    [[ -f "$gs" ]] && command -v jq >/dev/null 2>&1 &&
+        v=$(jq -r --arg k "$1" '.[$k] // empty' "$gs" 2>/dev/null)
+    printf '%s' "${v:-$2}"
+}
+
 PROFILE="${1:-purple-blizzard}"
-ZONE_SIZE=15                    # LEDs per ARGB header (D_LED1 / D_LED2)
-BOARD="B660M"                   # substring match on the controller name
+BOARD="${VELUMERON_OPENRGB_BOARD:-$(_setting openrgb_zone_board "")}"
+ZONE_SIZE="${VELUMERON_OPENRGB_ZONE_SIZE:-$(_setting openrgb_zone_size 15)}"
 PORT=6742
 TIMEOUT=60
+RESIZE_TIMEOUT=20               # the resize is a workaround, not the point — don't sit on it
 
 log() { printf '[openrgb-restore] %s\n' "$*"; }
 
@@ -43,7 +66,7 @@ if ! ss -ltn 2>/dev/null | grep -q ":${PORT}\b"; then
 fi
 
 # 3. Force the ARGB zone sizes over the SDK.
-PORT="$PORT" BOARD="$BOARD" ZONE_SIZE="$ZONE_SIZE" TIMEOUT="$TIMEOUT" python3 - <<'PYEOF'
+PORT="$PORT" BOARD="$BOARD" ZONE_SIZE="$ZONE_SIZE" TIMEOUT="$RESIZE_TIMEOUT" python3 - <<'PYEOF'
 import os, re, socket, struct, sys, time
 
 PORT      = int(os.environ["PORT"])
@@ -128,62 +151,81 @@ def zones(buf):
 
 
 def find_board(c):
-    """Return (device_index, controller_buffer) for the board, or None."""
+    """Return [(device_index, controller_buffer)] for the controllers to inspect.
+
+    With BOARD set, that is the one whose name contains it — the original,
+    named-board behaviour. With BOARD EMPTY it is every controller, and the fix
+    narrows instead to the symptom (see needs_fix): an ARGB header reporting
+    zero LEDs is wrong on any board, and a header with nothing plugged into it
+    does not care what length we give it. That is what makes this script safe as
+    the login path on machines that never had the bug.
+    """
     c.send(0, REQ_COUNT)
     count = struct.unpack("<I", c.recv(4))[0]
+    out = []
     for dev in range(count):
         c.send(dev, REQ_DATA, struct.pack("<I", c.proto))
         buf = c.recv()
         if len(buf) < 10:
             continue
+        if not BOARD:
+            out.append((dev, buf))
+            continue
         (nlen,) = struct.unpack_from("<H", buf, 8)
         if BOARD in buf[10:10 + nlen]:
-            return dev, buf
-    return None
+            return [(dev, buf)]
+    return out
+
+
+def needs_fix(lcnt):
+    """Is this ARGB zone's length wrong? Named board: anything but ZONE_SIZE.
+    Auto mode: only a zero, which is the enumeration bug and nothing else."""
+    return lcnt != ZONE_SIZE if BOARD else lcnt == 0
 
 
 def attempt():
-    """One full try. Returns True once the ARGB zones are correctly sized."""
+    """One full try. Returns True once no ARGB zone is left to resize."""
     c = None
     try:
         c = Client()
         found = find_board(c)
         if not found:
             return False
-        dev, buf = found
 
-        def sized_ok(controller_buf):
-            """Both ARGB zones must be seen AND be the right length.
+        def pending(controllers):
+            """Zones still wanting a resize, as [(dev, idx, name, lcnt)].
 
-            Seeing neither means the controller data was still incomplete —
-            that is a retry, not a success.
+            With a named board, seeing NEITHER ARGB zone means the controller
+            data was still incomplete — a retry, not a success. In auto mode
+            there is no such expectation: most machines legitimately have none.
             """
-            seen = {
-                name: lcnt
-                for _, name, lcnt in zones(controller_buf)
-                if name in ARGB_ZONES
-            }
-            return len(seen) == len(ARGB_ZONES) and all(
-                lcnt == ZONE_SIZE for lcnt in seen.values()
-            )
+            todo, seen = [], 0
+            for dev, buf in controllers:
+                for idx, name, lcnt in zones(buf):
+                    if name not in ARGB_ZONES:
+                        continue
+                    seen += 1
+                    if needs_fix(lcnt):
+                        todo.append((dev, idx, name, lcnt))
+            if BOARD and seen < len(ARGB_ZONES):
+                return None                      # not ready yet
+            return todo
 
-        if sized_ok(buf):
+        todo = pending(found)
+        if todo is None:
+            return False
+        if not todo:
             print("[openrgb-restore] ARGB zones already sized correctly")
             return True
 
-        changed = False
-        for idx, name, lcnt in zones(buf):
-            if name in ARGB_ZONES and lcnt != ZONE_SIZE:
-                c.send(dev, RESIZE, struct.pack("<ii", idx, ZONE_SIZE))
-                print(f"[openrgb-restore] {name}: {lcnt} -> {ZONE_SIZE} LEDs")
-                changed = True
-        if not changed:
-            return False
+        for dev, idx, name, lcnt in todo:
+            c.send(dev, RESIZE, struct.pack("<ii", idx, ZONE_SIZE))
+            print(f"[openrgb-restore] {name}: {lcnt} -> {ZONE_SIZE} LEDs")
 
         # Read back rather than trusting the write.
         time.sleep(2)
-        found = find_board(c)
-        return bool(found) and sized_ok(found[1])
+        again = pending(find_board(c))
+        return again is not None and not again
     except (OSError, ConnectionError, struct.error):
         return False
     finally:
@@ -200,13 +242,13 @@ else:
     print(f"[openrgb-restore] could not size the ARGB zones within {TIMEOUT}s")
     sys.exit(1)
 PYEOF
+# Not fatal. On the board this exists for, a failed resize means the ARGB headers stay at 0 LEDs
+# and those fans stay dark — but every OTHER device in the profile still lights up, and on a
+# machine that never had the bug there was nothing to resize in the first place.
+(( $? == 0 )) || log "zone sizing did not complete — loading the profile anyway"
 
-if (( $? != 0 )); then
-    log "zone sizing failed — not loading the profile (it would silently no-op)"
-    exit 1
-fi
-
-# 4. Only now does the profile have zones to write into.
+# 4. The profile. On the quirky board, only now does it have zones to write into.
 log "loading profile '${PROFILE}'"
 openrgb -p "$PROFILE" >/dev/null 2>&1 || { log "profile load failed"; exit 1; }
+printf '%s' "$PROFILE" > "$VELUMERON_USER_DIR/gui/openrgb-active" 2>/dev/null || true
 log "done"

@@ -1,6 +1,7 @@
 import ".."
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Mpris
@@ -15,6 +16,10 @@ FocusScope {
 
     property string screenName: ""    // monitor name — resolves this monitor's wallpaper
     property bool   preview:    false  // true inside the editor: no key input, dummy dots
+    // The base layer is the frozen desktop the iris grows out of. A thumbnail has no iris and the
+    // stage covers it completely, so the preset grid switches it off rather than decoding the
+    // wallpaper a second time per tile.
+    property bool   baseLayer:  true
 
     // Card + widgets show ONLY on the main monitor (lowest-id output, same rule as "notifications on
     // main monitor only"); other outputs just show the locked/blurred backdrop. The editor preview,
@@ -46,6 +51,18 @@ FocusScope {
     property int    cfgClockScale:    VtlConfig.lockClockScale
     property string cfgClockStyle:    VtlConfig.lockClockStyle
     property string cfgBlurTarget:    VtlConfig.lockBlurTarget
+    property string cfgLayout:        VtlConfig.lockLayout
+
+    // Which arrangement draws. Everything above is shared by all six; the layout only decides where
+    // the pieces sit — and therefore which of the card keys still mean anything (see VtlConfig).
+    readonly property bool isCard:  root.cfgLayout === "card"
+    readonly property bool isSlab:  root.cfgLayout === "slab"
+    readonly property bool isEdge:  root.cfgLayout === "edge"
+    readonly property bool isHud:   root.cfgLayout === "hud"
+    readonly property bool isFocus: root.cfgLayout === "focus"
+    readonly property bool isSplit: root.cfgLayout === "split"
+    readonly property bool isBand:  !root.isCard && !root.isSlab && !root.isEdge && !root.isHud
+                                    && !root.isFocus && !root.isSplit
 
     // Blur + dim land on exactly one surface. "background" = the classic frosted wallpaper behind a
     // solid card; "card" turns it around — the desktop stays sharp and the CARD is the frosted pane.
@@ -63,7 +80,67 @@ FocusScope {
     property real reveal: 0
     NumberAnimation { id: openAnim;  target: root; property: "reveal"; to: 1; duration: 640; easing.type: Easing.OutCubic }
     NumberAnimation { id: closeAnim; target: root; property: "reveal"; to: 0; duration: 360; easing.type: Easing.InCubic }
-    function _open()  { if (root.cfgReveal === "none") { openAnim.stop(); root.reveal = 1; return } root.reveal = 0; openAnim.restart() }
+    function _open()  {
+        if (root.cfgReveal === "none") { openAnim.stop(); root.reveal = 1; root.entrance = 1; return }
+        root.reveal = 0; root.entrance = 0; openAnim.restart(); entranceAnim.restart()
+    }
+
+    // ── Entrance — the iris shows the screen, then the contents ARRIVE. Without this every layout
+    // popped fully formed the instant the circle passed over it, which is what made the lock feel
+    // like a screenshot rather than a surface. One clock drives all blocks; `stagger(i)` slices it
+    // so block 1 is still rising while block 0 has settled. ──────────────────────────────────────
+    property real entrance: 0
+    NumberAnimation { id: entranceAnim; target: root; property: "entrance"; to: 1
+                      duration: 620; easing.type: Easing.OutCubic }
+    readonly property int riseY: Math.round(Math.max(10, root.height * 0.012))
+    function stagger(i) { return Math.max(0, Math.min(1, (root.entrance - i * 0.13) / 0.6)) }
+    function rise(i)    { return (1 - root.stagger(i)) * root.riseY }
+
+    // ── Wrong password — the message alone was easy to miss, and nothing else in the lock ever
+    // moved. The input block itself flinches. ───────────────────────────────────────────────────
+    property real shakeX: 0
+    SequentialAnimation {
+        id: shakeAnim
+        NumberAnimation { target: root; property: "shakeX"; to:  9; duration: 45 }
+        NumberAnimation { target: root; property: "shakeX"; to: -8; duration: 70 }
+        NumberAnimation { target: root; property: "shakeX"; to:  6; duration: 70 }
+        NumberAnimation { target: root; property: "shakeX"; to: -4; duration: 70 }
+        NumberAnimation { target: root; property: "shakeX"; to:  0; duration: 60 }
+    }
+    Connections {
+        target: LockState
+        function onFailCountChanged() { if (LockState.failCount > 0 && !root.preview) shakeAnim.restart() }
+    }
+    // ── Ambient — a locked screen is not a photograph. Two very slow signals run for as long as the
+    // lock is up: the backdrop drifts, and whatever carries the accent breathes. Both are small
+    // enough that you never catch them moving; what you notice is that the screen is awake. Neither
+    // runs in the preset grid (baseLayer:false), where a dozen animated blurs would cost real frames
+    // for a thumbnail the size of a stamp. ──────────────────────────────────────────────
+    readonly property real driftAmp: Math.max(6, Math.min(root.width, root.height) * 0.012)
+    // The scale has to swallow the travel or the drift walks a hard wallpaper edge into view. It is
+    // sized off the SHORT side, so the long axis is covered with room to spare.
+    readonly property real driftScale: 1 + 2.4 * root.driftAmp / Math.max(1, Math.min(root.width, root.height))
+    property real driftPhase: 0
+    // Two different periods on the two axes, so the path is a slow open curve rather than a circle
+    // returning to its own start every lap.
+    readonly property real driftX: Math.cos(root.driftPhase) * root.driftAmp
+    readonly property real driftY: Math.sin(root.driftPhase * 0.6) * root.driftAmp * 0.7
+    NumberAnimation on driftPhase {
+        running: root.baseLayer
+        loops: Animation.Infinite
+        from: 0; to: 2 * Math.PI; duration: 96000
+    }
+    // Breath for the one saturated mark each layout is allowed. Never while a failure is on screen:
+    // a pulsing red reads as an alarm, and the shake has already said it.
+    property real pulse: 1
+    readonly property real accentPulse: LockState.failMsg !== "" ? 1 : root.pulse
+    SequentialAnimation on pulse {
+        running: root.baseLayer
+        loops: Animation.Infinite
+        NumberAnimation { to: 0.70; duration: 2600; easing.type: Easing.InOutSine }
+        NumberAnimation { to: 1.00; duration: 2600; easing.type: Easing.InOutSine }
+    }
+
     function _close() { if (root.cfgReveal === "none") { root.reveal = 0; return } closeAnim.restart() }
     Component.onCompleted: { if (!root.preview) root.forceActiveFocus(); root._open() }
     Connections {
@@ -91,16 +168,38 @@ FocusScope {
         return vs.length ? vs[0] : null
     }
     readonly property UPowerDevice _batDev: UPower.displayDevice
+    // Notifications waiting — the COUNT, never the text. A lock that prints a message prints it for
+    // whoever walks past, and an unattended machine is the whole premise of the screen.
+    //
+    // Gated on the widget actually being placed, and that gate is load-bearing: TOUCHING
+    // NotifService is what instantiates it, componentEnabled() returns TRUE for a key nobody set,
+    // and the singleton then claims org.freedesktop.Notifications. In the standalone lock
+    // (lock-standalone.qml, Tier-0, built to run beside a foreign shell) that would take the
+    // notification bus away from whatever daemon the user already runs. Nobody who has not placed
+    // the widget may reach the singleton — hence the short-circuit rather than a tidier binding.
+    readonly property bool _notifWanted: {
+        var z = root.cfgWidgetZones
+        return !!(z && z.notifs && z.notifs !== "off")
+    }
+    readonly property int _notifCount: {
+        if (!root._notifWanted) return 0
+        var m = NotifService.model
+        return m ? m.values.length : 0
+    }
+    readonly property bool _notifDnd: root._notifWanted && NotifService.dnd
 
     // Widget placement — 6 zones (top/bottom × left/center/right); "off" = hidden, empty zones draw
     // nothing. `order` keeps a stable arrangement when several widgets share one zone.
     function _widgetVisible(name) {
         if (name === "media")   return root._mediaPlayer !== null
         if (name === "battery") return root._batDev !== null && root._batDev.isPresent
+        // Nothing waiting, nothing drawn — the same rule the media widget follows. The editor shows
+        // it regardless, or turning the zone on would look like it did nothing.
+        if (name === "notifs")  return root.preview || root._notifCount > 0 || root._notifDnd
         return true
     }
     function _zoneWidgets(zone) {
-        var order = ["user", "weather", "media", "battery", "session"], z = root.cfgWidgetZones, out = []
+        var order = ["user", "weather", "media", "notifs", "battery", "session"], z = root.cfgWidgetZones, out = []
         for (var i = 0; i < order.length; i++)
             if (z && z[order[i]] === zone && root._widgetVisible(order[i])) out.push(order[i])
         return out
@@ -109,6 +208,7 @@ FocusScope {
         return name === "user"    ? userComp
              : name === "weather" ? weatherComp
              : name === "media"   ? mediaComp
+             : name === "notifs"  ? notifsComp
              : name === "session" ? sessionComp
              :                      batteryComp
     }
@@ -117,6 +217,56 @@ FocusScope {
     readonly property int widgetCardH:  78
     readonly property int weatherCardH: root._wxDays.length > 0 ? root.widgetCardH + 72 : root.widgetCardH
     function _widgetH(name) { return name === "weather" ? root.weatherCardH : root.widgetCardH }
+
+    // Battery state hoisted out of the card: the compact widget in the other layouts reads the same
+    // three values, so a glyph can never disagree with the card that shows the same battery.
+    readonly property int  _batPct: root._batDev ? Math.round(root._batDev.percentage * 100) : 0
+    readonly property bool _batCharging: root._batDev !== null
+                && (root._batDev.state === UPowerDeviceState.Charging
+                 || root._batDev.state === UPowerDeviceState.FullyCharged
+                 || root._batDev.state === UPowerDeviceState.PendingCharge)
+    readonly property string _batGlyph: root._batPct > 80 ? "\u{F0079}" : root._batPct > 55 ? "\u{F0080}"
+                                      : root._batPct > 30 ? "\u{F007E}" : root._batPct > 10 ? "\u{F007B}"
+                                      :                     "\u{F007A}"
+
+    // Layouts without zones still honour the on/off state the zone picker writes: anything not
+    // "off" shows, in the order the zones already use. One switch, two presentations.
+    function _activeWidgets() {
+        var order = ["user", "weather", "media", "notifs", "battery", "session"], z = root.cfgWidgetZones, out = []
+        for (var i = 0; i < order.length; i++)
+            if (z && z[order[i]] && z[order[i]] !== "off" && root._widgetVisible(order[i])) out.push(order[i])
+        return out
+    }
+    function _widgetGlyph(name) {
+        if (name === "media")   return "\u{F0388}"
+        if (name === "weather") return (root.weather && root.weather.ok && root.weather.icon)
+                                     ? root.weather.icon : "\u{F0590}"
+        if (name === "battery") return root._batCharging ? "\u{F0084}" : root._batGlyph
+        if (name === "user")    return "\u{F0004}"
+        if (name === "notifs")   return "\u{F009C}"    // the same bell the bar's tray shows
+        return "\u{F0425}"
+    }
+    function _widgetText(name) {
+        if (name === "media")   return root._mediaPlayer ? ("" + (root._mediaPlayer.trackTitle ?? "")) : ""
+        if (name === "weather") return (root.weather && root.weather.ok)
+                                     ? (root.weather.temp + (root.weather.unit || "")) : "\u2014"
+        if (name === "battery") return root._batPct + " %"
+        if (name === "user")    return root._userName
+        if (name === "notifs")  return root._notifDnd ? "Do not disturb"
+                                     : root._notifCount === 1 ? "1 waiting"
+                                     : root._notifCount + " waiting"
+        return ""
+    }
+    // The HUD shows the same widgets as one status line rather than as objects.
+    function _statusLine() {
+        var ws = root._activeWidgets(), out = []
+        for (var i = 0; i < ws.length; i++) {
+            if (ws[i] === "session") continue
+            var t = root._widgetText(ws[i])
+            if (t !== "") out.push(t)
+        }
+        return out.join("   \u00B7   ")
+    }
 
     // The days actually shown: what the fetch delivered, capped to the configured count (wttr.in
     // ships 3). In the editor preview there is no fetch, so placeholders stand in — otherwise
@@ -135,6 +285,9 @@ FocusScope {
     // ── Password input (disabled in preview) ────────────────────────────────────────────────────
     Keys.onPressed: (event) => {
         if (root.preview || LockState.authenticating) { event.accepted = true; return }
+        // A keystroke that dismisses the screensaver must not ALSO land in the password buffer:
+        // you press a key to see the field, not to start typing into it blind.
+        if (UiState.screensaverOn) { UiState.screensaverOn = false; event.accepted = true; return }
         if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) { LockState.submit(); event.accepted = true }
         else if (event.key === Qt.Key_Backspace) { LockState.backspace(); event.accepted = true }
         else if (event.key === Qt.Key_Escape)    { LockState.clear();     event.accepted = true }
@@ -190,7 +343,7 @@ FocusScope {
         id: baseShot
         anchors.fill: parent
         source: root.preview
-                ? (root.wallPath !== "" ? "file://" + root.wallPath : "")
+                ? ((root.baseLayer && root.wallPath !== "") ? "file://" + root.wallPath : "")
                 : ("file://" + (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/velumeron-lock-" + root.screenName + ".png")
         fillMode: Image.PreserveAspectCrop
         cache: false; smooth: true
@@ -270,7 +423,7 @@ FocusScope {
                         anchors.verticalCenter: parent.verticalCenter; spacing: 2
                         Text { text: root.weather && root.weather.ok
                                      ? (root.weather.temp + (root.weather.unit || ""))
-                                     : (VtlConfig.lockWeatherCity === "" ? "Stadt setzen" : "…")
+                                     : (VtlConfig.lockWeatherCity === "" ? "Set a city" : "…")
                                color: Colors.fgBright; font.family: Style.font; font.pixelSize: 22; font.weight: Font.Medium }
                         Text { visible: !!(root.weather && root.weather.ok && root.weather.desc)
                                text: root.weather ? (root.weather.desc || "") : ""
@@ -365,6 +518,35 @@ FocusScope {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+    // Notifications — a bell, a count, and nothing else. See _notifCount for why there is no text.
+    Component {
+        id: notifsComp
+        StyledRect {
+            id: nCard
+            height: root.widgetCardH; implicitWidth: nRow.implicitWidth + 36
+            radius: Style.rCard; color: Style.panelColor(VtlConfig.barColorful)
+            borderWidth: Style.cardBorderW; borderColor: Style.cardBorderColor
+            readonly property int _n: root.preview && root._notifCount === 0 ? 3 : root._notifCount
+            Row {
+                id: nRow; anchors.centerIn: parent; spacing: 12
+                Text { anchors.verticalCenter: parent.verticalCenter
+                       text: "\u{F009C}"
+                       color: root._notifDnd ? Colors.fgMuted : Colors.fgBright
+                       font.family: Style.font; font.pixelSize: 32 }
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 2
+                    Text { text: root._notifDnd ? "\u2014" : ("" + nCard._n)
+                           color: Colors.fgBright
+                           font.family: Style.font; font.pixelSize: 20; font.weight: Font.Medium }
+                    Text { text: root._notifDnd ? "Do not disturb"
+                                : nCard._n === 1 ? "notification" : "notifications"
+                           color: Colors.fgMuted
+                           font.family: Style.font; font.pixelSize: 12 }
                 }
             }
         }
@@ -499,8 +681,8 @@ FocusScope {
                                     :                               Math.round((root.width - root.cardW) / 2)
     readonly property int cardY:      Math.round((root.height - root.cardH) / 2)
     // Card content scales with the card, so a 20% card isn't just a clipped 40% one.
-    readonly property int faceSize:   Math.round(Math.max(64, Math.min(root.cardH * 0.28, 220)))
-    readonly property int datePx:     Math.round(Math.max(11, Math.min(root.cardH * 0.045, 16)))
+    readonly property int faceSize:   Math.round(Math.max(48, Math.min(root.cardH * 0.20, 140)))
+    readonly property int datePx:     Math.round(Math.max(10, Math.min(root.cardH * 0.036, 14)))
     readonly property int cardGap:    Math.round(Math.max(8,  Math.min(root.cardH * 0.05, 18)))
 
     // ── Clock: size + style ─────────────────────────────────────────────────────────────────────
@@ -509,7 +691,7 @@ FocusScope {
     // (hh:mm:ss is half again as wide as hh:mm) — a 200% clock can't push out of its card.
     readonly property string clockText: Qt.formatTime(root.now, root.cfgClockFormat)
     readonly property int    clockPx: {
-        var base  = Math.max(30, Math.min(root.cardH * 0.20, 72))
+        var base  = Math.max(24, Math.min(root.cardH * 0.145, 54))
                     * (Math.max(50, Math.min(200, root.cfgClockScale)) / 100)
         var chars = Math.max(4, ("" + root.clockText).length)
         var fitW  = (root.cardW - 2 * root.cardGap) / (chars * 0.62)   // ≈ advance width per glyph
@@ -528,6 +710,306 @@ FocusScope {
     readonly property int zoneM:   40
     readonly property int zoneMin: 12
     readonly property int zoneGap: 18
+
+    // ── Layout metrics — a panel is a fraction of the SCREEN, its inner measures a fraction of the
+    // panel. Fixed pixels appear only as hard minimums, so one preset fits a 1080p laptop and a
+    // 1440p desk without a second set of numbers. ───────────────────────────────────────────────
+    readonly property int  bandH:      Math.round(Math.max(112, root.height * 0.21))
+    readonly property int  bandPad:    Math.round(Math.max(28, root.width * 0.035))
+    readonly property int  edgeM:      Math.round(Math.max(28, root.width * 0.05))
+    readonly property int  hudM:       Math.round(Math.max(24, Math.min(root.width, root.height) * 0.05))
+    readonly property int  splitW:     Math.round(root.width * Math.max(22, Math.min(55, root.cfgCardWPct)) / 100)
+    readonly property bool splitRight: root.cfgCardPos === "right"
+    // Mirobo — a wide, shallow slab. It reuses the card keys, but the height reads as a fraction
+    // of a BAR rather than of a card, so the same 20..70 range that makes a card square makes this
+    // a letterbox. Clamped tighter at the top: past ~34 % it stops being a slab.
+    readonly property int  slabW: Math.round(root.width  * Math.max(30, Math.min(80, root.cfgCardWPct)) / 100)
+    readonly property int  slabH: Math.round(root.height * Math.max(14, Math.min(34, root.cfgCardHPct)) / 100)
+    readonly property int  slabX: root.cfgCardPos === "left"  ? root.cardMargin
+                                : root.cfgCardPos === "right" ? root.width - root.slabW - root.cardMargin
+                                :                               Math.round((root.width - root.slabW) / 2)
+    readonly property int  slabY: Math.round((root.height - root.slabH) / 2)
+    readonly property int  focusRing:  Math.round(Math.max(92, Math.min(root.width, root.height) * 0.17))
+
+    // One clock fitter for all six layouts: `base` is the size this layout wants at 100 %, `maxW`
+    // the width it must not exceed. The scale key rides on top, and the character count keeps
+    // hh:mm:ss from pushing out of a box that hh:mm fitted.
+    // Split a width budget between n items that sit in a Row with `gap` between them. Every widget
+    // strip in every layout divides its space this way, so no strip can ever be wider than the
+    // surface holding it, whatever a media player decides to call the current track.
+    // Text in the lock is TEXT, not a graphic. Panels scale with the screen, but a label does not
+    // stay readable by growing forever — it just gets shouty. Everything except the clock therefore
+    // scales only INSIDE the range a person actually reads at. Coupling every size linearly to the
+    // panel is what produced 27px widget labels on a 1440p slab; the clock is the one display
+    // element and keeps its own fitter.
+    function _titlePx(base) { return Math.round(Math.max(13, Math.min(19, base))) }   // name, greeting head
+    function _bodyPx(base)  { return Math.round(Math.max(12, Math.min(15, base))) }   // widget lines
+    function _smallPx(base) { return Math.round(Math.max(11, Math.min(13, base))) }   // date, captions
+    function _share(total, n, gap) {
+        if (n <= 0) return 0
+        return Math.max(48, (total - (n - 1) * gap) / n)
+    }
+    function _fitClock(base, maxW) {
+        var s     = base * (Math.max(50, Math.min(200, root.cfgClockScale)) / 100)
+        var chars = Math.max(4, ("" + root.clockText).length)
+        return Math.round(Math.max(14, Math.min(s, maxW / (chars * 0.62))))
+    }
+    // Chamfered outline for the HUD frame. `p` is the hairline nudge — see CLAUDE.md: an odd-width
+    // axis-aligned stroke has to sit on the half pixel, or Qt's CurveRenderer saturates both rows at
+    // large coordinates. Every coordinate takes the SAME nudge, so the whole outline shifts as one.
+    function _chamferPath(w, h, c, p) {
+        return "M " + (c + p) + "," + p
+             + " L " + (w - p) + "," + p
+             + " L " + (w - p) + "," + (h - c - p)
+             + " L " + (w - c - p) + "," + (h - p)
+             + " L " + p + "," + (h - p)
+             + " L " + p + "," + (c + p) + " Z"
+    }
+    // "The user has started to unlock" — the edge layout keeps its input block invisible until this
+    // turns true, so an untouched screen is nothing but the wallpaper and the clock.
+    readonly property bool typing: root.preview || root.dotCount > 0
+                                   || LockState.authenticating || LockState.failMsg !== ""
+    property string _hostName: ""
+    FileView {
+        path: "/etc/hostname"
+        onLoaded: root._hostName = ("" + text()).trim()
+    }
+    readonly property string hostName: root._hostName !== "" ? root._hostName : "velumeron"
+
+    // ── Shared pieces — every layout builds from these, so a change to the password field or the
+    // avatar lands in all six at once. ──────────────────────────────────────────────────────────
+    // The dots ARE the field: no box, no border, no placeholder. `size` scales them to whatever type
+    // sits around them, so the same component reads next to a 140px clock and next to a prompt line.
+    component Dots: Row {
+        id: dotsRoot
+        property int   size:  10
+        property color tint:  Colors.fgBright
+        property bool  shown: true
+        spacing: dotsRoot.size
+        opacity: (dotsRoot.shown ? 1.0 : 0.0) * (LockState.authenticating ? 0.6 : 1.0)
+        Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+        Repeater {
+            model: root.dotCount
+            delegate: Rectangle {
+                width: dotsRoot.size; height: dotsRoot.size; radius: dotsRoot.size / 2
+                color: LockState.failMsg !== "" ? Colors.fgUrgent : dotsRoot.tint
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
+                // Starts small and settles — the keystroke gets an answer on screen. The initial
+                // value has to differ from the target or the Behavior has nothing to run.
+                scale: 0.35
+                Component.onCompleted: scale = 1
+                Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutBack } }
+            }
+        }
+    }
+    component Avatar: Rectangle {
+        id: avRoot
+        property int size: 64
+        width: avRoot.size; height: avRoot.size; radius: avRoot.size / 2; clip: true
+        color: Colors.bgElement
+        border.width: Math.max(1, Math.round(avRoot.size * 0.03))
+        border.color: Qt.rgba(1, 1, 1, 0.20)
+        Image {
+            id: avImg
+            anchors.fill: parent
+            source: "file://" + root._homeDir + "/.face"
+            fillMode: Image.PreserveAspectCrop
+            sourceSize.width: avRoot.size * 2; sourceSize.height: avRoot.size * 2
+            smooth: true; mipmap: true; antialiasing: true
+            visible: status === Image.Ready
+        }
+        Text {
+            anchors.centerIn: parent; text: "\u{F0004}"; color: Colors.fgMuted
+            font.family: Style.font; font.pixelSize: Math.round(avRoot.size * 0.48)
+            visible: avImg.status !== Image.Ready
+        }
+    }
+    // A specular hairline along the top edge of a surface. Glass catches the light there; without it
+    // a panel is a flat fill with a border drawn round it, which is what made the big surfaces read
+    // as printed ONTO the wallpaper instead of laid on top of it. Brightest off-centre — an even
+    // highlight looks like a drawn line, not like light.
+    component Sheen: Rectangle {
+        id: sheen
+        // The caller anchors the long axis and lets the implicit size supply the 1px short one.
+        property bool vertical: false
+        implicitWidth:  1
+        implicitHeight: 1
+        gradient: Gradient {
+            orientation: sheen.vertical ? Gradient.Vertical : Gradient.Horizontal
+            GradientStop { position: 0.00; color: Qt.rgba(1, 1, 1, 0.02) }
+            GradientStop { position: 0.32; color: Qt.rgba(1, 1, 1, 0.14) }
+            GradientStop { position: 0.70; color: Qt.rgba(1, 1, 1, 0.07) }
+            GradientStop { position: 1.00; color: Qt.rgba(1, 1, 1, 0.02) }
+        }
+    }
+    component FailText: Text {
+        visible: LockState.failMsg !== ""
+        text: LockState.failMsg
+        color: Colors.fgUrgent
+        font.family: Style.font
+        font.pixelSize: Style.fsLabel
+    }
+    // A string that does not fit does NOT get cut here. A lock is read from across the room and the
+    // part that would be elided — the end of a track title — is usually the part worth reading, so
+    // an overlong line marches slowly instead. Static when it fits, and the animation only exists
+    // while it is actually needed. `avail` 0 means "no limit, size to the text".
+    component ScrollText: Item {
+        id: st
+        property string text: ""
+        property color  color:     Colors.fgBright
+        property int    pixelSize: 13
+        property int    weight:    Font.Normal
+        property real   avail:     0
+        readonly property real over: (st.avail > 0) ? Math.max(0, stInner.implicitWidth - st.avail) : 0
+        readonly property bool overflowing: st.over > 0.5
+        implicitWidth:  st.avail > 0 ? Math.min(stInner.implicitWidth, st.avail) : stInner.implicitWidth
+        implicitHeight: stInner.implicitHeight
+        clip: st.overflowing
+        Text {
+            id: stInner
+            text: st.text
+            color: st.color
+            font.family: Style.font
+            font.pixelSize: st.pixelSize
+            font.weight: st.weight
+            SequentialAnimation on x {
+                running: st.overflowing
+                loops: Animation.Infinite
+                // Held at both ends so the start and the tail are both readable at rest.
+                PauseAnimation { duration: 2000 }
+                NumberAnimation { to: -st.over; duration: Math.max(1400, st.over * 26)
+                                  easing.type: Easing.InOutSine }
+                PauseAnimation { duration: 2000 }
+                NumberAnimation { to: 0; duration: Math.max(900, st.over * 16)
+                                  easing.type: Easing.InOutSine }
+                // Stopping leaves x wherever the last frame put it; a line that stops overflowing
+                // (a shorter track, a wider card) would stay pushed off to the left forever.
+                onRunningChanged: if (!running) stInner.x = 0
+            }
+        }
+    }
+
+    // Compact stand-in for the widget cards, for the layouts with no room for them: one glyph and
+    // one line, or the glyph alone. `session` renders its action row here instead of a card, so
+    // every layout offers the same widget set out of the same zone settings.
+    component MiniWidget: Item {
+        id: mw
+        property string name
+        property int    px:        14
+        property bool   glyphOnly: false
+        // Width this widget may occupy. 0 = unbounded (only safe where the container is unbounded
+        // too). Anything longer scrolls rather than running out of the surface.
+        property real   avail:     0
+        // Take the whole share rather than only what the content needs, so a strip of widgets
+        // spreads across its surface instead of clumping at one end while the rest sits empty.
+        property bool   fill:      false
+        implicitWidth:  (mw.fill && mw.avail > 0) ? mw.avail : mwRow.implicitWidth
+        implicitHeight: Math.max(mwRow.implicitHeight, Math.round(mw.px * 1.5))
+        visible: mw.name === "session" || root._widgetVisible(mw.name)
+        Row {
+            id: mwRow
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Math.round(mw.px * 0.55)
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: mw.name !== "session"
+                text: root._widgetGlyph(mw.name)
+                color: Colors.fgBright
+                font.family: Style.font; font.pixelSize: Math.round(mw.px * 1.45)
+            }
+            ScrollText {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: !mw.glyphOnly && mw.name !== "session" && text !== ""
+                text: root._widgetText(mw.name)
+                color: Colors.fgBright
+                pixelSize: mw.px
+                // The glyph and the gap come off the budget before the text gets it.
+                avail: mw.avail > 0 ? Math.max(24, mw.avail - Math.round(mw.px * 2.0)) : 0
+            }
+            Row {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: mw.name === "session"
+                spacing: Math.round(mw.px * 0.9)
+                Repeater {
+                    model: mw.name === "session" ? root._sessionActs : []
+                    delegate: Text {
+                        id: actGlyph
+                        required property var modelData
+                        text: actGlyph.modelData.icon
+                        color: sesHov.containsMouse ? Style.accent : Colors.fgBright
+                        font.family: Style.font; font.pixelSize: Math.round(mw.px * 1.45)
+                        MouseArea {
+                            id: sesHov
+                            anchors.fill: parent; hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: if (!root.preview) root._runSession(actGlyph.modelData.cmd)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Widget zones — top/bottom × left/center/right ─────────────────────────────────────────
+    // Placed by explicit x/y (not anchors) because y carries the card-dodge rule above. Cards in
+    // one zone share a baseline: the row is as tall as its tallest member (the weather card with
+    // a forecast), top zones align their cards to the top edge, bottom zones to the bottom.
+    component ZoneRow: Row {
+        id: zr
+        property string zone
+        readonly property bool   _top: zr.zone.indexOf("top") === 0
+        readonly property string _h:   ("" + zr.zone).split("-")[1]
+        readonly property int    rowH: {
+            var ws = root._zoneWidgets(zr.zone), h = 0
+            for (var i = 0; i < ws.length; i++) h = Math.max(h, root._widgetH(ws[i]))
+            return h
+        }
+        // Resting place at its own edge, and the dodged place when the card is in the way.
+        readonly property int  _base:  zr._top ? root.zoneM : root.height - zr.height - root.zoneM
+        readonly property bool _hits:  root.isMainMon && zr.width > 0
+                                       && zr.x < root.cardX + root.cardW + root.zoneGap
+                                       && zr.x + zr.width > root.cardX - root.zoneGap
+        readonly property int  _dodge: zr._top
+            ? Math.min(zr._base, root.cardY - root.zoneGap - zr.height)
+            : Math.max(zr._base, root.cardY + root.cardH + root.zoneGap)
+        readonly property bool _fits:  !zr._hits || (zr._top ? zr._dodge >= root.zoneMin
+                                                             : zr._dodge <= root.height - zr.height - root.zoneMin)
+        visible: root.isMainMon && zr._fits
+        spacing: 16
+        // A centre row wider than the screen computes a NEGATIVE x and hangs off the left edge,
+        // taking its first card with it. A row never starts before its own margin.
+        x: Math.max(root.zoneM,
+                    zr._h === "left"  ? root.zoneM
+                  : zr._h === "right" ? root.width - zr.width - root.zoneM
+                  :                     Math.round((root.width - zr.width) / 2))
+        y: zr._hits ? zr._dodge : zr._base
+
+        Repeater {
+            model: root._zoneWidgets(zr.zone)
+            delegate: Item {
+                id: wCell
+                required property var modelData
+                // The card's OWN height (only the weather card differs) — the Loader must get it
+                // explicitly: without a set size a Loader reports its item's *implicit* height,
+                // which these cards don't declare, so it would measure 0 and the bottom-zone
+                // alignment below would push the card out of the row.
+                readonly property int cellH: root._widgetH(wCell.modelData)
+                width:  wLoader.implicitWidth
+                height: zr.rowH
+                Loader {
+                    id: wLoader
+                    height: wCell.cellH
+                    y: zr._top ? 0 : zr.rowH - wCell.cellH
+                    sourceComponent: root._widgetComp(wCell.modelData)
+                }
+            }
+        }
+    }
+
+    // ── Stage — everything the lock draws. For "bubble" it is layer-backed and clipped to the
+    // growing circle (the iris); for "fade" it cross-fades; for "none" it shows at once. The
+    // backdrop below is shared by every layout — the Loader swaps only the arrangement on top, so
+    // switching layout never re-decodes the wallpaper. ──────────────────────────────────────────
     Item {
         id: stage
         anchors.fill: parent
@@ -557,192 +1039,1024 @@ FocusScope {
             source: wpSource
             blurEnabled: root.bgBlur > 0.001; blur: root.bgBlur; blurMax: 64; autoPaddingEnabled: false
             brightness: -root.bgDim
+            // Ambient drift. Vitrine's band and Mirobo's slab blur the SAME source a second time and
+            // take the identical transform, so the two images stay registered where they meet.
+            scale: root.driftScale
+            transform: Translate { x: root.driftX; y: root.driftY }
         }
 
-        // ── Centre card — thick border in the module (bar) colour, sharp wallpaper inside ─────────
+        // Vignette — the corners fall away, so the wallpaper reads as lit rather than printed, and
+        // whatever the layout puts in the middle gains contrast without dimming the whole picture.
+        // One radial fill, not four edge gradients: those stack at the corners and band visibly.
+        // Fill only (strokeWidth -1) — no axis-aligned stroke, so none of the CurveRenderer trouble
+        // in CLAUDE.md applies here.
+        Shape {
+            anchors.fill: parent
+            ShapePath {
+                strokeWidth: -1
+                fillGradient: RadialGradient {
+                    centerX: stage.width / 2; centerY: stage.height / 2
+                    focalX:  stage.width / 2; focalY:  stage.height / 2
+                    centerRadius: Math.max(stage.width, stage.height) * 0.75
+                    focalRadius: 0
+                    GradientStop { position: 0.00; color: Qt.rgba(0, 0, 0, 0.00) }
+                    GradientStop { position: 0.62; color: Qt.rgba(0, 0, 0, 0.00) }
+                    GradientStop { position: 1.00; color: Qt.rgba(0, 0, 0, 0.26) }
+                }
+                startX: 0; startY: 0
+                PathLine { x: stage.width; y: 0 }
+                PathLine { x: stage.width; y: stage.height }
+                PathLine { x: 0;           y: stage.height }
+                PathLine { x: 0;           y: 0 }
+            }
+        }
+
+        // Exactly one arrangement exists at a time — the others cost nothing.
+        Loader {
+            anchors.fill: parent
+            sourceComponent: root.isCard  ? cardLayout
+                           : root.isSlab  ? slabLayout
+                           : root.isEdge  ? edgeLayout
+                           : root.isHud   ? hudLayout
+                           : root.isFocus ? focusLayout
+                           : root.isSplit ? splitLayout
+                           :                bandLayout
+        }
+    }
+
+    // ── Layouts — the six arrangements. Only the one the config names is instantiated. ─────────
+    // Mirobo: the centred card with its wallpaper crop, and the six widget zones around it.
+    Component {
+        id: cardLayout
         Item {
-            id: cardGroup
-            visible: root.isMainMon
-            x:      root.cardX
-            y:      root.cardY
-            width:  root.cardW
-            height: root.cardH
-            // The thick coloured border frames the wallpaper crop — with no wallpaper in the card
-            // there is nothing to frame, so it goes too and the card reads as a plain surface.
-            readonly property int bw: root.cfgCardWallpaper ? 6 : 0
+            anchors.fill: parent
+            // ── Centre card — thick border in the module (bar) colour, sharp wallpaper inside ─────────
+            Item {
+                id: cardGroup
+                visible: root.isMainMon
+                x:      root.cardX
+                y:      root.cardY
+                width:  root.cardW
+                height: root.cardH
+                // The thick coloured border frames the wallpaper crop — with no wallpaper in the card
+                // there is nothing to frame, so it goes too and the card reads as a plain surface.
+                readonly property int bw: root.cfgCardWallpaper ? 6 : 0
+            transform: Translate { y: root.rise(0) }
 
-            // Fill only — the border is a separate overlay on TOP (below), so the wallpaper corners
-            // can never eat into it (a rectangular-clipped wallpaper otherwise thinned the corners).
-            StyledRect {
-                anchors.fill: parent
-                radius: Style.rCard
-                color:  Style.cardFill
-                borderWidth: 0
-            }
-            // Wallpaper crop inside the border (rounded via clip) — sharp in "background" blur mode,
-            // blurred + dimmed in "card" mode, which is what turns the card into the frosted pane.
-            Rectangle {
-                anchors { fill: parent; margins: cardGroup.bw }
-                radius: Math.max(2, Style.rCard - cardGroup.bw); clip: true; color: "transparent"
-                visible: root.cfgCardWallpaper && root.wallPath !== ""
-                Image {
-                    id: cardWall
+                // Fill only — the border is a separate overlay on TOP (below), so the wallpaper corners
+                // can never eat into it (a rectangular-clipped wallpaper otherwise thinned the corners).
+                StyledRect {
                     anchors.fill: parent
-                    source: "file://" + root.wallPath
-                    fillMode: Image.PreserveAspectCrop
-                    cache: false; smooth: true
-                    sourceSize.width: root.cardW * 2
-                    visible: root.cardBlur <= 0.001          // blurred → the effect below draws it
+                    radius: Style.rCard
+                    color:  Style.cardFill
+                    borderWidth: 0
                 }
-                MultiEffect {
-                    anchors.fill: parent
-                    visible: root.cardBlur > 0.001
-                    source: cardWall
-                    blurEnabled: true; blur: root.cardBlur; blurMax: 64; autoPaddingEnabled: false
-                    brightness: -root.cardDim
-                }
-            }
-            // Legibility scrim over the wallpaper. Lighter when the card is already dimmed by the
-            // frost, so "card" mode doesn't darken twice.
-            Rectangle {
-                anchors { fill: parent; margins: cardGroup.bw }
-                radius: Math.max(2, Style.rCard - cardGroup.bw)
-                color: Qt.rgba(0, 0, 0, !(root.cfgCardWallpaper && root.wallPath !== "") ? 0
-                                      : root.blurCard ? 0.18 : 0.34)
-            }
-
-            Column {
-                anchors.centerIn: parent
-                spacing: root.cardGap
+                // Wallpaper crop inside the border (rounded via clip) — sharp in "background" blur mode,
+                // blurred + dimmed in "card" mode, which is what turns the card into the frosted pane.
                 Rectangle {
-                    // Off → the identity lives in the "user" widget instead (Column skips it entirely).
-                    visible: root.cfgCardAvatar
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: root.faceSize; height: root.faceSize; radius: root.faceSize / 2; clip: true
-                    color: Colors.bgElement
-                    border.width: 2; border.color: Qt.rgba(1, 1, 1, 0.20)
+                    anchors { fill: parent; margins: cardGroup.bw }
+                    radius: Math.max(2, Style.rCard - cardGroup.bw); clip: true; color: "transparent"
+                    visible: root.cfgCardWallpaper && root.wallPath !== ""
                     Image {
-                        id: faceImage
+                        id: cardWall
                         anchors.fill: parent
-                        source: "file://" + root._homeDir + "/.face"
+                        source: "file://" + root.wallPath
                         fillMode: Image.PreserveAspectCrop
-                        sourceSize.width: root.faceSize * 2; sourceSize.height: root.faceSize * 2
-                        smooth: true; mipmap: true; antialiasing: true
-                        visible: status === Image.Ready
+                        cache: false; smooth: true
+                        sourceSize.width: root.cardW * 2
+                        visible: root.cardBlur <= 0.001          // blurred → the effect below draws it
                     }
-                    Text { anchors.centerIn: parent; text: "󰀄"; color: Colors.fgMuted
-                           font.family: Style.font; font.pixelSize: Math.round(root.faceSize * 0.48); visible: faceImage.status !== Image.Ready }
+                    MultiEffect {
+                        anchors.fill: parent
+                        visible: root.cardBlur > 0.001
+                        source: cardWall
+                        blurEnabled: true; blur: root.cardBlur; blurMax: 64; autoPaddingEnabled: false
+                        brightness: -root.cardDim
+                    }
                 }
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    // clockPx already targets a fitting size; HorizontalFit is the hard guarantee on
-                    // top of it (the estimate there can't know the real advance widths of the theme
-                    // font), so no scale/format combination can push the clock out of its card.
-                    width: root.cardW - 2 * root.cardGap
-                    horizontalAlignment: Text.AlignHCenter
-                    fontSizeMode: Text.HorizontalFit
-                    minimumPixelSize: 12
-                    text: root.clockText
-                    color: Colors.fgBright
-                    font.family: Style.font; font.pixelSize: root.clockPx
-                    font.weight: root.clockWeight; font.letterSpacing: root.clockSpacing
+                // Legibility scrim over the wallpaper. Lighter when the card is already dimmed by the
+                // frost, so "card" mode doesn't darken twice.
+                Rectangle {
+                    anchors { fill: parent; margins: cardGroup.bw }
+                    radius: Math.max(2, Style.rCard - cardGroup.bw)
+                    color: Qt.rgba(0, 0, 0, !(root.cfgCardWallpaper && root.wallPath !== "") ? 0
+                                          : root.blurCard ? 0.18 : 0.34)
                 }
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: Qt.formatDate(root.now, root.cfgDateFormat)
-                    color: Colors.fgMuted; font.family: Style.font; font.pixelSize: root.datePx
+
+                Column {
+                    anchors.centerIn: parent
+                    spacing: root.cardGap
+                    opacity: root.stagger(1)
+                    transform: Translate { x: root.shakeX }
+                    Rectangle {
+                        // Off → the identity lives in the "user" widget instead (Column skips it entirely).
+                        visible: root.cfgCardAvatar
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: root.faceSize; height: root.faceSize; radius: root.faceSize / 2; clip: true
+                        color: Colors.bgElement
+                        border.width: 2; border.color: Qt.rgba(1, 1, 1, 0.20)
+                        Image {
+                            id: faceImage
+                            anchors.fill: parent
+                            source: "file://" + root._homeDir + "/.face"
+                            fillMode: Image.PreserveAspectCrop
+                            sourceSize.width: root.faceSize * 2; sourceSize.height: root.faceSize * 2
+                            smooth: true; mipmap: true; antialiasing: true
+                            visible: status === Image.Ready
+                        }
+                        Text { anchors.centerIn: parent; text: "󰀄"; color: Colors.fgMuted
+                               font.family: Style.font; font.pixelSize: Math.round(root.faceSize * 0.48); visible: faceImage.status !== Image.Ready }
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        // clockPx already targets a fitting size; HorizontalFit is the hard guarantee on
+                        // top of it (the estimate there can't know the real advance widths of the theme
+                        // font), so no scale/format combination can push the clock out of its card.
+                        width: root.cardW - 2 * root.cardGap
+                        horizontalAlignment: Text.AlignHCenter
+                        fontSizeMode: Text.HorizontalFit
+                        minimumPixelSize: 12
+                        text: root.clockText
+                        color: Colors.fgBright
+                        font.family: Style.font; font.pixelSize: root.clockPx
+                        font.weight: root.clockWeight; font.letterSpacing: root.clockSpacing
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: Qt.formatDate(root.now, root.cfgDateFormat)
+                        color: Colors.fgMuted; font.family: Style.font; font.pixelSize: root.datePx
+                    }
+                    // Password: just the dots — no background, no border, no placeholder text. Fixed
+                    // height so the column doesn't jump when empty.
+                    Item {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        implicitWidth: cardDots.implicitWidth
+                        height: Math.round(Math.max(16, root.cardH * 0.055))
+                        Dots {
+                            id: cardDots
+                            anchors.centerIn: parent
+                            size: Math.round(Math.max(6, root.cardH * 0.022))
+                        }
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        visible: LockState.failMsg !== ""
+                        text: LockState.failMsg; color: Colors.fgUrgent
+                        font.family: Style.font; font.pixelSize: 13
+                    }
                 }
-                // Password: just the dots — no background, no border, no placeholder text. Fixed
-                // height so the column doesn't jump when empty.
-                Item {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    implicitWidth: dotsRow.implicitWidth
-                    height: 26
-                    Row {
-                        id: dotsRow
-                        anchors.centerIn: parent; spacing: 10
-                        opacity: LockState.authenticating ? 0.6 : 1.0
-                        Repeater {
-                            model: root.dotCount
-                            delegate: Rectangle { width: 10; height: 10; radius: 5; color: Colors.fgBright }
+                // Uniform thick border in the module (bar) colour, on TOP of the wallpaper.
+                StyledRect {
+                    visible: cardGroup.bw > 0
+                    anchors.fill: parent
+                    radius: Style.rCard
+                    color: "transparent"
+                    borderWidth: cardGroup.bw
+                    borderColor: Style.panelColor(VtlConfig.barColorful)
+                }
+            }
+            ZoneRow { zone: "top-left" }
+            ZoneRow { zone: "top-center" }
+            ZoneRow { zone: "top-right" }
+            ZoneRow { zone: "bottom-left" }
+            ZoneRow { zone: "bottom-center" }
+            ZoneRow { zone: "bottom-right" }
+        }
+    }
+
+    // ── Vitrine — no card at all: the lower third becomes a bank of milk glass. The wallpaper above
+    // stays sharp, because the band alone carries the legibility. ────────────────────────────────
+    Component {
+        id: bandLayout
+        Item {
+            anchors.fill: parent
+            visible: root.isMainMon
+
+            // Lift: a soft gradient riding just above the band edge, so the bank reads as a slab
+            // standing in front of the wallpaper rather than a rectangle painted onto it.
+            Rectangle {
+                anchors { left: parent.left; right: parent.right }
+                y: parent.height - root.bandH - height
+                height: Math.round(Math.max(12, root.height * 0.03))
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.0) }
+                    GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.30) }
+                }
+            }
+            Item {
+                id: band
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                height: root.bandH
+                clip: true
+                // The surface slides up; its contents fade in behind it, a beat later.
+                transform: Translate { y: root.rise(0) * 1.6 }
+
+                // The frost is a SECOND blur of the same wallpaper, registered to the screen and
+                // clipped to the band — the inverse of the centre card's sharp crop. Drawing it at
+                // -band.y is what keeps the blurred image lined up with the sharp one at the seam.
+                MultiEffect {
+                    width: root.width; height: root.height; y: -band.y
+                    visible: root.wallPath !== ""
+                    source: wpSource
+                    blurEnabled: true; blur: 1.0; blurMax: 64; autoPaddingEnabled: false
+                    brightness: -0.28
+                    // Same drift as the backdrop, about the same screen centre — the frosted half and
+                    // the sharp half must not slide against each other at the seam.
+                    scale: root.driftScale
+                    transform: Translate { x: root.driftX; y: root.driftY }
+                }
+                Rectangle {
+                    anchors.fill: parent
+                    color: Style.tint(Style.panelColor(VtlConfig.barColorful), 0.55)
+                }
+                // A plain Rectangle edge, not a stroked path: axis-aligned rect edges are pixel
+                // exact and sidestep the CurveRenderer doubling described in CLAUDE.md entirely.
+                Rectangle {
+                    anchors { left: parent.left; right: parent.right; top: parent.top }
+                    height: Math.max(1, Style.cardBorderW)
+                    color: Style.tint(Colors.boNormal, 0.55)
+                }
+                Sheen {
+                    anchors { left: parent.left; right: parent.right; top: parent.top
+                              topMargin: Math.max(1, Style.cardBorderW) }
+                }
+
+                Column {
+                    id: bandClock
+                    anchors { left: parent.left; leftMargin: root.bandPad; verticalCenter: parent.verticalCenter }
+                    spacing: Math.round(root.bandH * 0.03)
+                    opacity: root.stagger(1)
+                    Text {
+                        text: root.clockText; color: Colors.fgBright
+                        font.family: Style.font
+                        font.pixelSize: root._fitClock(root.bandH * 0.34, root.width * 0.28)
+                        font.weight: root.clockWeight; font.letterSpacing: root.clockSpacing
+                    }
+                    Text {
+                        text: Qt.formatDate(root.now, root.cfgDateFormat)
+                        color: Colors.fgMuted
+                        font.family: Style.font
+                        font.pixelSize: root._smallPx(root.bandH * 0.072)
+                    }
+                }
+                // Two rules cut the bank into its three readings: the time, what is going on, and the
+                // way back in. Vitrine is the only layout wide enough to need the structure, and the
+                // rule is the one the slab already draws between its halves.
+                Rectangle {
+                    visible: bandMid.visible
+                    x: Math.round((bandClock.x + bandClock.width + bandMid.x) / 2)
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 1; height: Math.round(root.bandH * 0.42)
+                    color: Style.tint(Colors.boNormal, 0.40)
+                    opacity: root.stagger(2)
+                }
+                Rectangle {
+                    visible: bandMid.visible
+                    x: Math.round((bandMid.x + bandMid.width + bandPw.x) / 2)
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 1; height: Math.round(root.bandH * 0.42)
+                    color: Style.tint(Colors.boNormal, 0.40)
+                    opacity: root.stagger(2)
+                }
+
+                Column {
+                    id: bandPw
+                    anchors { right: parent.right; rightMargin: root.bandPad; verticalCenter: parent.verticalCenter }
+                    width: Math.round(Math.max(150, root.width * 0.17))
+                    spacing: Math.round(root.bandH * 0.07)
+                    opacity: root.stagger(2)
+                    transform: Translate { x: root.shakeX }
+                    Item {
+                        width: parent.width
+                        height: Math.round(Math.max(10, root.bandH * 0.10))
+                        Dots {
+                            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                            size: Math.round(Math.max(6, root.bandH * 0.044))
+                        }
+                    }
+                    Rectangle {
+                        width: parent.width
+                        height: Math.max(2, Math.round(root.bandH * 0.014))
+                        radius: height / 2
+                        color: LockState.failMsg !== "" ? Colors.fgUrgent : Style.accent
+                        opacity: root.accentPulse
+                        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
+                    }
+                    Text {
+                        anchors.right: parent.right
+                        text: LockState.failMsg !== "" ? LockState.failMsg
+                            : LockState.authenticating ? "Checking" : "Password"
+                        color: LockState.failMsg !== "" ? Colors.fgUrgent : Colors.fgMuted
+                        font.family: Style.font
+                        font.pixelSize: root._smallPx(root.bandH * 0.062)
+                    }
+                }
+                // Hides itself rather than colliding: on a narrow screen the clock and the field
+                // own the band, and the widgets are the part that yields.
+                // The middle takes exactly what the clock and the field leave it, and its widgets
+                // share that. Hiding the row when it did not fit was the old behaviour and it was
+                // wrong: a long track title silently removed the weather and the battery too.
+                Row {
+                    id: bandMid
+                    anchors.centerIn: parent
+                    readonly property int gap:   Math.round(Math.max(20, root.width * 0.028))
+                    readonly property int count: root._activeWidgets().length
+                    readonly property real budget: root.width - 2 * root.bandPad
+                                                   - bandClock.width - bandPw.width
+                                                   - 2 * bandMid.gap
+                    spacing: bandMid.gap
+                    opacity: root.stagger(2)
+                    visible: bandMid.count > 0 && bandMid.budget > 140
+                    Repeater {
+                        model: root._activeWidgets()
+                        delegate: MiniWidget {
+                            required property var modelData
+                            anchors.verticalCenter: parent.verticalCenter
+                            name: modelData
+                            px: root._bodyPx(root.bandH * 0.070)
+                            avail: root._share(bandMid.budget, bandMid.count, bandMid.gap)
+                            fill: true
                         }
                     }
                 }
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    visible: LockState.failMsg !== ""
-                    text: LockState.failMsg; color: Colors.fgUrgent
-                    font.family: Style.font; font.pixelSize: 13
-                }
-            }
-            // Uniform thick border in the module (bar) colour, on TOP of the wallpaper.
-            StyledRect {
-                visible: cardGroup.bw > 0
-                anchors.fill: parent
-                radius: Style.rCard
-                color: "transparent"
-                borderWidth: cardGroup.bw
-                borderColor: Style.panelColor(VtlConfig.barColorful)
             }
         }
+    }
 
-        // ── Widget zones — top/bottom × left/center/right ─────────────────────────────────────────
-        // Placed by explicit x/y (not anchors) because y carries the card-dodge rule above. Cards in
-        // one zone share a baseline: the row is as tall as its tallest member (the weather card with
-        // a forecast), top zones align their cards to the top edge, bottom zones to the bottom.
-        component ZoneRow: Row {
-            id: zr
-            property string zone
-            readonly property bool   _top: zr.zone.indexOf("top") === 0
-            readonly property string _h:   ("" + zr.zone).split("-")[1]
-            readonly property int    rowH: {
-                var ws = root._zoneWidgets(zr.zone), h = 0
-                for (var i = 0; i < ws.length; i++) h = Math.max(h, root._widgetH(ws[i]))
-                return h
+    // ── Randnotiz — nothing in the middle. The clock sits on the margin grid, and the input block
+    // stays invisible until the first keystroke. ─────────────────────────────────────────────────
+    Component {
+        id: edgeLayout
+        Item {
+            id: edge
+            anchors.fill: parent
+            visible: root.isMainMon
+
+            // The wallpaper stays sharp here, so legibility cannot come from a backdrop blur: a
+            // corner-weighted scrim darkens only the side that carries text.
+            Rectangle {
+                anchors.fill: parent
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0;  color: Qt.rgba(0, 0, 0, 0.62) }
+                    GradientStop { position: 0.45; color: Qt.rgba(0, 0, 0, 0.22) }
+                    GradientStop { position: 0.80; color: Qt.rgba(0, 0, 0, 0.0) }
+                }
             }
-            // Resting place at its own edge, and the dodged place when the card is in the way.
-            readonly property int  _base:  zr._top ? root.zoneM : root.height - zr.height - root.zoneM
-            readonly property bool _hits:  root.isMainMon && zr.width > 0
-                                           && zr.x < root.cardX + root.cardW + root.zoneGap
-                                           && zr.x + zr.width > root.cardX - root.zoneGap
-            readonly property int  _dodge: zr._top
-                ? Math.min(zr._base, root.cardY - root.zoneGap - zr.height)
-                : Math.max(zr._base, root.cardY + root.cardH + root.zoneGap)
-            readonly property bool _fits:  !zr._hits || (zr._top ? zr._dodge >= root.zoneMin
-                                                                 : zr._dodge <= root.height - zr.height - root.zoneMin)
-            visible: root.isMainMon && zr._fits
-            spacing: 16
-            x: zr._h === "left"  ? root.zoneM
-             : zr._h === "right" ? root.width - zr.width - root.zoneM
-             :                     Math.round((root.width - zr.width) / 2)
-            y: zr._hits ? zr._dodge : zr._base
-
-            Repeater {
-                model: root._zoneWidgets(zr.zone)
-                delegate: Item {
-                    id: wCell
-                    required property var modelData
-                    // The card's OWN height (only the weather card differs) — the Loader must get it
-                    // explicitly: without a set size a Loader reports its item's *implicit* height,
-                    // which these cards don't declare, so it would measure 0 and the bottom-zone
-                    // alignment below would push the card out of the row.
-                    readonly property int cellH: root._widgetH(wCell.modelData)
-                    width:  wLoader.implicitWidth
-                    height: zr.rowH
-                    Loader {
-                        id: wLoader
-                        height: wCell.cellH
-                        y: zr._top ? 0 : zr.rowH - wCell.cellH
-                        sourceComponent: root._widgetComp(wCell.modelData)
+            // The margin itself, drawn. Randnotiz hangs its type off a rule the way a notebook does;
+            // without one the two blocks just sit in opposite corners with nothing between them.
+            Rectangle {
+                x: Math.round(root.edgeM * 0.5)
+                y: Math.round(root.edgeM * 0.7)
+                width: 1
+                height: root.height - 2 * Math.round(root.edgeM * 0.7)
+                color: Qt.rgba(1, 1, 1, 0.13)
+                opacity: root.stagger(0)
+            }
+            Column {
+                anchors { left: parent.left; top: parent.top; leftMargin: root.edgeM; topMargin: root.edgeM }
+                spacing: Math.round(root.edgeM * 0.22)
+                opacity: root.stagger(0)
+                transform: Translate { y: root.rise(0) }
+                Text {
+                    text: root.clockText; color: Colors.fgBright
+                    font.family: Style.font
+                    font.pixelSize: root._fitClock(root.height * 0.10, root.width * 0.42)
+                    font.weight: root.clockWeight; font.letterSpacing: root.clockSpacing
+                }
+                ScrollText {
+                    text: Wording.greeting(root.now.getHours()) + ", " + root._userName
+                    color: Colors.fgBright
+                    opacity: 0.92
+                    pixelSize: root._titlePx(root.height * 0.020)
+                    avail: root.width - 2 * root.edgeM
+                }
+                Text {
+                    text: Qt.formatDate(root.now, root.cfgDateFormat)
+                    color: Colors.fgMuted
+                    font.family: Style.font
+                    font.pixelSize: root._smallPx(root.height * 0.0135)
+                }
+            }
+            Row {
+                anchors { left: parent.left; bottom: parent.bottom; leftMargin: root.edgeM; bottomMargin: root.edgeM }
+                spacing: Math.round(root.edgeM * 0.42)
+                opacity: root.stagger(1)
+                transform: Translate { x: root.shakeX; y: root.rise(1) }
+                Avatar {
+                    anchors.verticalCenter: parent.verticalCenter
+                    size: Math.round(Math.max(28, root.height * 0.038))
+                }
+                ScrollText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root._userName; color: Colors.fgBright
+                    pixelSize: root._titlePx(root.height * 0.0155)
+                    avail: root.width * 0.30
+                }
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 1; height: Math.round(Math.max(14, root.height * 0.021))
+                    color: Qt.rgba(1, 1, 1, 0.30)
+                    opacity: root.typing ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                }
+                Dots {
+                    anchors.verticalCenter: parent.verticalCenter
+                    size: Math.round(Math.max(6, root.height * 0.0085))
+                    shown: root.typing
+                }
+                FailText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    font.pixelSize: root._smallPx(root.height * 0.0115)
+                }
+            }
+            Row {
+                anchors { right: parent.right; bottom: parent.bottom; rightMargin: root.edgeM; bottomMargin: root.edgeM }
+                spacing: Math.round(root.edgeM * 0.5)
+                opacity: 0.55 * root.stagger(2)
+                Repeater {
+                    model: root._activeWidgets()
+                    delegate: MiniWidget {
+                        required property var modelData
+                        anchors.verticalCenter: parent.verticalCenter
+                        name: modelData
+                        glyphOnly: true
+                        px: root._bodyPx(root.height * 0.0125)
+                        avail: root.width * 0.24
                     }
                 }
             }
         }
-        ZoneRow { zone: "top-left" }
-        ZoneRow { zone: "top-center" }
-        ZoneRow { zone: "top-right" }
-        ZoneRow { zone: "bottom-left" }
-        ZoneRow { zone: "bottom-center" }
-        ZoneRow { zone: "bottom-right" }
+    }
+
+    // ── Kommandozeile — the lock in the voice the futuristic and nostalgic personas already speak:
+    // a chamfered frame, status lines instead of cards, and a real prompt with a block cursor. ───
+    Component {
+        id: hudLayout
+        Item {
+            id: hud
+            anchors.fill: parent
+            visible: root.isMainMon
+            property bool blinkOn: true
+            readonly property int px:        root._smallPx(root.height * 0.0105)
+            readonly property int clockSize: root._fitClock(root.height * 0.09, root.width * 0.45)
+
+            Timer { interval: 550; repeat: true; running: true; onTriggered: hud.blinkOn = !hud.blinkOn }
+
+            // The HUD owns its darkness instead of asking the preset for it — a terminal that
+            // depended on lock_dim would stop reading as one the moment the slider moved.
+            Rectangle { anchors.fill: parent; color: Qt.rgba(0, 0, 0, 0.55) }
+
+            Item {
+                id: hudFrame
+                anchors.fill: parent
+                anchors.margins: root.hudM
+                opacity: root.stagger(0)
+                Shape {
+                    anchors.fill: parent
+                    ShapePath {
+                        strokeWidth: 1
+                        strokeColor: Style.tint(Colors.boNormal, 0.75)
+                        fillColor: "transparent"
+                        PathSvg {
+                            path: root._chamferPath(hudFrame.width, hudFrame.height,
+                                                    Math.round(Math.min(hudFrame.width, hudFrame.height) * 0.06),
+                                                    Style.hairline(1))
+                        }
+                    }
+                }
+                // Registration ticks inside the two SQUARE corners — the chamfer already marks the
+                // other two on its own. Rectangles, not a second stroked path: an axis-aligned rect
+                // edge is pixel exact and sidesteps the CurveRenderer doubling in CLAUDE.md.
+                Item {
+                    id: hudTicks
+                    anchors.fill: parent
+                    readonly property int   ins: Math.round(root.hudM * 0.34)
+                    readonly property int   arm: Math.round(root.hudM * 0.75)
+                    readonly property color tk:  Style.tint(Colors.boNormal, 0.45)
+                    Rectangle { anchors { right: parent.right; top: parent.top
+                                          rightMargin: hudTicks.ins; topMargin: hudTicks.ins }
+                                width: hudTicks.arm; height: 1; color: hudTicks.tk }
+                    Rectangle { anchors { right: parent.right; top: parent.top
+                                          rightMargin: hudTicks.ins; topMargin: hudTicks.ins }
+                                width: 1; height: hudTicks.arm; color: hudTicks.tk }
+                    Rectangle { anchors { left: parent.left; bottom: parent.bottom
+                                          leftMargin: hudTicks.ins; bottomMargin: hudTicks.ins }
+                                width: hudTicks.arm; height: 1; color: hudTicks.tk }
+                    Rectangle { anchors { left: parent.left; bottom: parent.bottom
+                                          leftMargin: hudTicks.ins; bottomMargin: hudTicks.ins }
+                                width: 1; height: hudTicks.arm; color: hudTicks.tk }
+                }
+            }
+            Text {
+                anchors { left: hudFrame.left; top: hudFrame.top
+                          leftMargin: Math.round(root.hudM * 0.7); topMargin: Math.round(root.hudM * 0.5) }
+                text: "SESSION LOCKED"
+                color: Colors.boNormal
+                font.family: Style.iconFont; font.pixelSize: hud.px; font.letterSpacing: hud.px * 0.20
+            }
+            Text {
+                anchors { right: hudFrame.right; top: hudFrame.top
+                          rightMargin: Math.round(root.hudM * 0.7); topMargin: Math.round(root.hudM * 0.5) }
+                text: root.hostName
+                color: Colors.fgMuted
+                font.family: Style.iconFont; font.pixelSize: hud.px; font.letterSpacing: hud.px * 0.20
+            }
+            Column {
+                anchors { left: hudFrame.left; leftMargin: Math.round(root.hudM * 0.7)
+                          verticalCenter: parent.verticalCenter }
+                spacing: Math.round(hud.px * 0.7)
+                opacity: root.stagger(1)
+                Text {
+                    text: root.clockText; color: Colors.fgBright
+                    font.family: Style.iconFont; font.pixelSize: hud.clockSize
+                    font.weight: root.clockWeight; font.letterSpacing: hud.clockSize * 0.06
+                }
+                Text {
+                    text: Qt.formatDate(root.now, root.cfgDateFormat)
+                    color: Colors.boNormal
+                    font.family: Style.iconFont; font.pixelSize: hud.px; font.letterSpacing: hud.px * 0.24
+                }
+            }
+            Row {
+                anchors { left: hudFrame.left; leftMargin: Math.round(root.hudM * 0.7)
+                          bottom: hudFrame.bottom; bottomMargin: Math.round(root.hudM * 1.6) }
+                spacing: Math.round(hud.px * 0.6)
+                opacity: root.stagger(2)
+                transform: Translate { x: root.shakeX }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "auth@" + root.hostName
+                    color: Colors.boNormal
+                    font.family: Style.iconFont; font.pixelSize: Math.round(hud.px * 1.25)
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "%"; color: Colors.fgMuted
+                    font.family: Style.iconFont; font.pixelSize: Math.round(hud.px * 1.25)
+                }
+                Dots {
+                    anchors.verticalCenter: parent.verticalCenter
+                    size: Math.round(Math.max(6, hud.px * 0.7))
+                }
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.round(hud.px * 0.6); height: Math.round(hud.px * 1.35)
+                    color: Colors.fgBright
+                    opacity: hud.blinkOn && !LockState.authenticating ? 1 : 0
+                }
+            }
+            Text {
+                anchors { left: hudFrame.left; leftMargin: Math.round(root.hudM * 0.7)
+                          right: hudFrame.right; rightMargin: Math.round(root.hudM * 0.7)
+                          bottom: hudFrame.bottom; bottomMargin: Math.round(root.hudM * 0.5) }
+                elide: Text.ElideRight
+                text: LockState.failMsg !== "" ? "→ " + LockState.failMsg : root._statusLine()
+                color: LockState.failMsg !== "" ? Colors.fgUrgent : Colors.fgMuted
+                font.family: Style.iconFont; font.pixelSize: hud.px; font.letterSpacing: hud.px * 0.16
+            }
+        }
+    }
+
+    // ── Fokus — everything gone but the face, the dots and a ring that doubles as the feedback the
+    // lock never had: it fills while you type and sweeps while PAM is thinking. ──────────────────
+    Component {
+        id: focusLayout
+        Item {
+            id: foc
+            anchors.fill: parent
+            visible: root.isMainMon
+            readonly property int  ring:    root.focusRing
+            readonly property real strokeW: Math.max(3, Math.round(foc.ring * 0.035))
+            readonly property real rad:     (foc.ring - foc.strokeW) / 2
+            readonly property real fill:    Math.min(1, root.dotCount / 8)
+            property real spin:  -90
+            property real sweep: LockState.authenticating ? 90 : 360 * foc.fill
+            Behavior on sweep { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+            NumberAnimation on spin {
+                running: LockState.authenticating
+                from: -90; to: 270; duration: 1100; loops: Animation.Infinite
+            }
+            Connections {
+                target: LockState
+                function onAuthenticatingChanged() { if (!LockState.authenticating) foc.spin = -90 }
+            }
+            Column {
+                anchors.centerIn: parent
+                spacing: Math.round(foc.ring * 0.15)
+                opacity: root.stagger(0)
+                transform: Translate { x: root.shakeX; y: root.rise(0) }
+                Item {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: foc.ring; height: foc.ring
+                    // Focus is the layout with nothing else on screen, so the light has to come from
+                    // the subject. A blurred disc of the accent, breathing with everything else.
+                    Rectangle {
+                        id: focHaloSrc
+                        visible: false
+                        anchors.centerIn: parent
+                        width: Math.round(foc.ring * 1.15); height: Math.round(foc.ring * 1.15)
+                        radius: width / 2
+                        color: Style.accent
+                    }
+                    MultiEffect {
+                        anchors.fill: focHaloSrc
+                        source: focHaloSrc
+                        blurEnabled: true; blur: 1.0; blurMax: 64
+                        opacity: 0.20 * root.accentPulse
+                    }
+                    Shape {
+                        anchors.fill: parent
+                        ShapePath {
+                            strokeWidth: foc.strokeW
+                            strokeColor: Style.tint(Style.accent, 0.22)
+                            fillColor: "transparent"
+                            PathAngleArc {
+                                centerX: foc.ring / 2; centerY: foc.ring / 2
+                                radiusX: foc.rad; radiusY: foc.rad
+                                startAngle: 0; sweepAngle: 360
+                            }
+                        }
+                        ShapePath {
+                            strokeWidth: foc.strokeW
+                            strokeColor: LockState.failMsg !== "" ? Colors.fgUrgent : Style.accent
+                            fillColor: "transparent"
+                            capStyle: ShapePath.RoundCap
+                            PathAngleArc {
+                                centerX: foc.ring / 2; centerY: foc.ring / 2
+                                radiusX: foc.rad; radiusY: foc.rad
+                                startAngle: foc.spin; sweepAngle: foc.sweep
+                            }
+                        }
+                    }
+                    Avatar { anchors.centerIn: parent; size: Math.round(foc.ring * 0.76) }
+                }
+                Dots {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    size: Math.round(Math.max(6, foc.ring * 0.050))
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: root.clockText; color: Colors.fgBright
+                    font.family: Style.font
+                    font.pixelSize: root._fitClock(foc.ring * 0.17, root.width * 0.35)
+                    font.weight: root.clockWeight; font.letterSpacing: root.clockSpacing
+                }
+                FailText {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    font.pixelSize: root._smallPx(foc.ring * 0.068)
+                }
+            }
+        }
+    }
+
+    // ── Diptychon — one cut through the screen: a solid panel down one side, sharp wallpaper on the
+    // other. `lock_card_pos` picks the side, `lock_card_width_pct` its share. ────────────────────
+    Component {
+        id: splitLayout
+        Item {
+            id: sp
+            anchors.fill: parent
+            visible: root.isMainMon
+            readonly property int pad: Math.round(Math.max(24, root.splitW * 0.12))
+
+            Rectangle {
+                id: spPanel
+                width: root.splitW
+                x: root.splitRight ? root.width - root.splitW : 0
+                anchors { top: parent.top; bottom: parent.bottom }
+                // A flat slab reads as a hole cut in the screen. The gradient is barely there, but
+                // it gives the panel a top and a bottom.
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: Qt.lighter(Style.panelColor(VtlConfig.barColorful), 1.35) }
+                    GradientStop { position: 1.0; color: Style.panelColor(VtlConfig.barColorful) }
+                }
+                transform: Translate { x: (root.splitRight ? 1 : -1) * root.rise(0) * 2 }
+            }
+            // The panel casts onto the wallpaper, not the other way round.
+            Rectangle {
+                width: Math.round(Math.max(10, root.width * 0.014))
+                x: root.splitRight ? spPanel.x - width : spPanel.width
+                anchors { top: parent.top; bottom: parent.bottom }
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, root.splitRight ? 0.0 : 0.34) }
+                    GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, root.splitRight ? 0.34 : 0.0) }
+                }
+            }
+            Rectangle {
+                width: Math.max(1, Style.cardBorderW)
+                x: root.splitRight ? spPanel.x - width : spPanel.width
+                anchors { top: parent.top; bottom: parent.bottom }
+                color: Style.tint(Colors.boNormal, 0.55)
+            }
+            // A slab standing in front of a wallpaper catches the light down the side that faces
+            // out. The border alone only drew its outline; this is what gives it a thickness.
+            Sheen {
+                vertical: true
+                x: root.splitRight ? spPanel.x + 1 : spPanel.width - 2
+                anchors { top: parent.top; bottom: parent.bottom }
+            }
+            Column {
+                anchors { left: spPanel.left; right: spPanel.right; top: spPanel.top
+                          leftMargin: sp.pad; rightMargin: sp.pad
+                          topMargin: Math.round(root.height * 0.14) }
+                spacing: Math.round(sp.pad * 0.35)
+                opacity: root.stagger(1)
+                Text {
+                    text: root.clockText; color: Colors.fgBright
+                    font.family: Style.font
+                    font.pixelSize: root._fitClock(root.splitW * 0.19, root.splitW - 2 * sp.pad)
+                    font.weight: root.clockWeight; font.letterSpacing: root.clockSpacing
+                }
+                Text {
+                    text: Qt.formatDate(root.now, root.cfgDateFormat)
+                    color: Colors.fgMuted
+                    font.family: Style.font
+                    font.pixelSize: root._smallPx(root.splitW * 0.032)
+                }
+                // Anchors the type block instead of letting it float in the slab.
+                Item { width: 1; height: Math.round(sp.pad * 0.55) }
+                Rectangle {
+                    width: Math.round((root.splitW - 2 * sp.pad) * 0.34)
+                    height: Math.max(2, Math.round(root.splitW * 0.006))
+                    radius: height / 2
+                    color: Style.accent
+                    opacity: root.accentPulse
+                }
+                Item { width: 1; height: Math.round(sp.pad * 0.7) }
+                Row {
+                    spacing: Math.round(sp.pad * 0.45)
+                    Avatar {
+                        anchors.verticalCenter: parent.verticalCenter
+                        size: Math.round(Math.max(28, root.splitW * 0.095))
+                    }
+                    ScrollText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root._userName; color: Colors.fgBright
+                        pixelSize: root._titlePx(root.splitW * 0.040)
+                        avail: root.splitW - 2 * sp.pad
+                               - Math.max(28, root.splitW * 0.095) - Math.round(sp.pad * 0.45)
+                    }
+                }
+                Item { width: 1; height: Math.round(sp.pad * 0.5) }
+                Item {
+                    width: parent.width
+                    height: Math.round(Math.max(9, root.splitW * 0.026))
+                    transform: Translate { x: root.shakeX }
+                    Dots {
+                        anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                        size: Math.round(Math.max(7, root.splitW * 0.026))
+                    }
+                }
+                FailText { font.pixelSize: root._smallPx(root.splitW * 0.030) }
+            }
+            Column {
+                anchors { left: spPanel.left; right: spPanel.right; bottom: spPanel.bottom
+                          leftMargin: sp.pad; rightMargin: sp.pad
+                          bottomMargin: Math.round(root.height * 0.08) }
+                spacing: Math.round(sp.pad * 0.5)
+                opacity: root.stagger(2)
+                Repeater {
+                    model: root._activeWidgets()
+                    delegate: MiniWidget {
+                        required property var modelData
+                        name: modelData
+                        px: root._bodyPx(root.splitW * 0.032)
+                        // One per row, so each gets the whole panel width, not a share of it.
+                        avail: root.splitW - 2 * sp.pad
+                    }
+                }
+            }
+        }
+    }
+    // ── Mirobo — a wide, shallow slab floating over the wallpaper. Where the classic card stacked
+    // avatar over clock over dots and grew tall, this one reads across: time on the left, identity
+    // and input on the right, a hairline between them, and the widgets on their own strip along the
+    // bottom edge. It is the only layout that casts a real shadow, which is what makes it read as an
+    // object lying ON the wallpaper rather than a hole cut into it. ─────────────────────────────
+    Component {
+        id: slabLayout
+        Item {
+            id: sl
+            anchors.fill: parent
+            visible: root.isMainMon
+
+            readonly property int  radius:  Math.round(Math.max(10, root.slabH * 0.14))
+            readonly property int  pad:     Math.round(Math.max(16, root.slabH * 0.16))
+            readonly property int  stripH:  Math.round(Math.max(26, root.slabH * 0.26))
+            readonly property int  px:      root._smallPx(root.slabH * 0.095)
+            readonly property bool frosted: root.cfgCardWallpaper && root.wallPath !== ""
+
+            // The configured height is a MINIMUM, not the height. Type sizes above all derive from
+            // root.slabH (the pure percentage), never from the drawn height — otherwise growing the
+            // slab would grow the clock, which would grow the slab, and the binding would not
+            // settle. `drawH` is therefore free to follow the content.
+            readonly property int  tickGap: Math.round(sl.pad * 0.45)
+            readonly property int  tickH:   Math.max(2, Math.round(root.slabH * 0.018))
+            readonly property int  stripW:  root.slabW - 2 * sl.pad
+            readonly property int  wCount:  root._activeWidgets().length
+            readonly property int  wGap:    Math.round(sl.pad * 1.1)
+            readonly property int  needed:  Math.round(2 * sl.pad
+                                            + Math.max(slabTime.implicitHeight + sl.tickGap + sl.tickH,
+                                                       slabRight.implicitHeight)
+                                            + (sl.wCount > 0 ? sl.stripH : 0))
+            readonly property int  drawH:   Math.max(root.slabH, sl.needed)
+            readonly property int  drawY:   Math.round((root.height - sl.drawH) / 2)
+            // Left half up to the divider, right half after it — both minus the padding.
+            readonly property real leftW:   root.slabW * 0.54 - 2 * sl.pad
+            readonly property real rightW:  root.slabW * 0.46 - 2 * sl.pad
+
+            // The shadow is cast by a stand-in of the slab's exact shape, blurred underneath it.
+            // Drawing it from the slab itself would mean layering the frosted content too, which
+            // costs a second full-size texture for no visual gain.
+            Rectangle {
+                id: slabShadowSrc
+                visible: false
+                x: root.slabX; y: sl.drawY
+                width: root.slabW; height: sl.drawH
+                radius: sl.radius
+                color: "black"
+            }
+            MultiEffect {
+                source: slabShadowSrc
+                x: slabShadowSrc.x; y: slabShadowSrc.y
+                width: slabShadowSrc.width; height: slabShadowSrc.height
+                shadowEnabled: true
+                shadowBlur: 1.0
+                shadowVerticalOffset: Math.round(root.slabH * 0.06)
+                shadowColor: Qt.rgba(0, 0, 0, 0.55)
+                shadowScale: 1.0
+                opacity: root.stagger(0)
+                transform: Translate { y: root.rise(0) }
+            }
+
+            Item {
+                id: slab
+                x: root.slabX; y: sl.drawY
+                width: root.slabW; height: sl.drawH
+                transform: Translate { y: root.rise(0) }
+
+                // Rounded material: the fill is layer-masked to the slab's own shape, so the frosted
+                // wallpaper inside cannot square off the corners the way a plain clip would.
+                Item {
+                    id: slabFill
+                    anchors.fill: parent
+                    layer.enabled: true
+                    layer.effect: MultiEffect { maskEnabled: true; maskSource: slabMask }
+                    Rectangle { anchors.fill: parent; color: Style.panelColor(VtlConfig.barColorful) }
+                    MultiEffect {
+                        width: root.width; height: root.height
+                        x: -slab.x; y: -slab.y
+                        visible: sl.frosted
+                        source: wpSource
+                        blurEnabled: true; blur: 1.0; blurMax: 64; autoPaddingEnabled: false
+                        brightness: -0.30
+                        opacity: 0.85
+                        // The slab is a window onto the same drifting image, so it takes the same
+                        // transform: the frost inside must not sit still while the backdrop moves.
+                        scale: root.driftScale
+                        transform: Translate { x: root.driftX; y: root.driftY }
+                    }
+                    Rectangle {
+                        anchors.fill: parent
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.10) }
+                            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.34) }
+                        }
+                    }
+                    Sheen {
+                        anchors { left: parent.left; right: parent.right; top: parent.top
+                                  leftMargin: sl.radius; rightMargin: sl.radius }
+                    }
+                }
+                Item {
+                    id: slabMask
+                    anchors.fill: parent
+                    visible: false
+                    layer.enabled: true
+                    Rectangle { anchors.fill: parent; radius: sl.radius; color: "white" }
+                }
+
+                // ── Left: the time ──────────────────────────────────────────────────────────────
+                Column {
+                    id: slabTime
+                    anchors { left: parent.left; leftMargin: sl.pad; top: parent.top; topMargin: sl.pad }
+                    spacing: Math.round(sl.pad * 0.18)
+                    opacity: root.stagger(1)
+                    Text {
+                        text: root.clockText; color: Colors.fgBright
+                        font.family: Style.font
+                        font.pixelSize: root._fitClock(root.slabH * 0.34, root.slabW * 0.44)
+                        font.weight: root.clockWeight; font.letterSpacing: root.clockSpacing
+                    }
+                    ScrollText {
+                        text: Qt.formatDate(root.now, root.cfgDateFormat)
+                        color: Colors.fgMuted
+                        pixelSize: sl.px
+                        avail: sl.leftW
+                    }
+                }
+                // Accent tick under the time — the one saturated mark on the whole surface.
+                Rectangle {
+                    anchors { left: parent.left; leftMargin: sl.pad; top: slabTime.bottom
+                              topMargin: Math.round(sl.pad * 0.45) }
+                    width: Math.round(root.slabW * 0.10)
+                    height: sl.tickH
+                    radius: height / 2
+                    color: LockState.failMsg !== "" ? Colors.fgUrgent : Style.accent
+                    opacity: root.stagger(1) * root.accentPulse
+                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
+                }
+
+                // ── The divider ─────────────────────────────────────────────────────────────────
+                Rectangle {
+                    anchors { verticalCenter: parent.verticalCenter }
+                    x: Math.round(root.slabW * 0.54)
+                    width: 1
+                    height: Math.round((sl.drawH - (sl.wCount > 0 ? sl.stripH : 0)) * 0.56)
+                    color: Style.tint(Colors.boNormal, 0.45)
+                    opacity: root.stagger(2)
+                }
+
+                // ── Right: who you are, and the field ───────────────────────────────────────────
+                Column {
+                    id: slabRight
+                    anchors { left: parent.left; leftMargin: Math.round(root.slabW * 0.54 + sl.pad)
+                              right: parent.right; rightMargin: sl.pad
+                              top: parent.top; topMargin: sl.pad }
+                    spacing: Math.round(sl.pad * 0.55)
+                    opacity: root.stagger(2)
+                    transform: Translate { x: root.shakeX }
+                    Row {
+                        spacing: Math.round(sl.pad * 0.55)
+                        Avatar {
+                            visible: root.cfgCardAvatar
+                            anchors.verticalCenter: parent.verticalCenter
+                            size: Math.round(Math.max(28, root.slabH * 0.26))
+                        }
+                        Column {
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 1
+                            // Budget is the right half minus the avatar and its gap.
+                            readonly property real avail: sl.rightW
+                                    - (root.cfgCardAvatar ? Math.max(28, root.slabH * 0.26) + sl.pad * 0.55 : 0)
+                            ScrollText {
+                                text: root._userName; color: Colors.fgBright
+                                pixelSize: root._titlePx(root.slabH * 0.115)
+                                avail: parent.avail
+                            }
+                            ScrollText {
+                                text: Wording.greeting(root.now.getHours())
+                                color: Colors.fgMuted
+                                pixelSize: sl.px
+                                avail: parent.avail
+                            }
+                        }
+                    }
+                    Dots { size: Math.round(Math.max(6, root.slabH * 0.055)) }
+                    FailText { font.pixelSize: sl.px }
+                }
+
+                // ── Bottom strip: the widgets, on their own shelf ───────────────────────────────
+                Rectangle {
+                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                    height: sl.stripH
+                    color: Qt.rgba(0, 0, 0, 0.22)
+                    visible: sl.wCount > 0
+                    opacity: root.stagger(3)
+                    Rectangle {
+                        anchors { left: parent.left; right: parent.right; top: parent.top }
+                        height: 1
+                        color: Style.tint(Colors.boNormal, 0.35)
+                    }
+                    Row {
+                        id: stripRow
+                        anchors { left: parent.left; leftMargin: sl.pad; verticalCenter: parent.verticalCenter }
+                        spacing: sl.wGap
+                        Repeater {
+                            model: root._activeWidgets()
+                            delegate: MiniWidget {
+                                required property var modelData
+                                anchors.verticalCenter: parent.verticalCenter
+                                name: modelData
+                                px: root._bodyPx(root.slabH * 0.085)
+                                avail: root._share(sl.stripW, sl.wCount, sl.wGap)
+                                fill: true
+                            }
+                        }
+                    }
+                }
+
+                // ── Outline last, over everything ───────────────────────────────────────────────
+                Rectangle {
+                    anchors.fill: parent
+                    radius: sl.radius
+                    color: "transparent"
+                    border.width: Math.max(1, Style.cardBorderW)
+                    border.color: Style.tint(Colors.boNormal, 0.55)
+                }
+            }
+        }
     }
 }

@@ -5,6 +5,7 @@ import QtQuick
 // the rates into UiState). Informational; keepOpenOnHover so the cursor can rest on the pill. One
 // per screen.
 BarGlide {
+    glideId: "network"
     id: g
     mine:            UiState.netMon === g.mon && g.mon !== ""
     shown:           UiState.netHover

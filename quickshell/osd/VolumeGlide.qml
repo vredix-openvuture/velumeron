@@ -5,6 +5,7 @@ import QtQuick
 // publishes the hover + anchor + level into UiState). keepOpenOnHover so the cursor can rest on the
 // pill without it closing. One per screen.
 BarGlide {
+    glideId: "volume"
     id: g
     mine:            UiState.volumeMon === g.mon && g.mon !== ""
     shown:           UiState.volumeHover

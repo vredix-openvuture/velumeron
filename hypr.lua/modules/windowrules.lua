@@ -25,7 +25,7 @@ popup_dialogs = "(" .. popup_dialogs .. ")"
 hl.window_rule({ name="browser",       match={class="(librewolf|firefox|chromium|brave|qutebrowser)"}, tag="+browser" })
 hl.window_rule({ name="browser_float", match={class="browser-float"}, float=true, center=true })
 hl.window_rule({ name="editor",      match={class="(codium|vscodium|code|neovide|zed)"},             tag="+editor"      })
-hl.window_rule({ name="terminal",    match={class="(kitty|alacritty|foot|wezterm|ghostty)"},         tag="+terminal"    })
+hl.window_rule({ name="terminal",    match={class="(kitty|alacritty|foot|wezterm|ghostty|rio|konsole)"}, tag="+terminal" })
 hl.window_rule({ name="filemanager", match={class="(thunar|nautilus|dolphin|nemo|pcmanfm)"},         tag="+filemanager" })
 hl.window_rule({ name="notes",       match={class="(obsidian|logseq|joplin)"},                       tag="+notes"       })
 hl.window_rule({ name="messaging",   match={class="(Element|discord|telegram|slack|signal)"},        tag="+messaging"   })
@@ -50,7 +50,7 @@ hl.window_rule({
 -- Terminals: xray makes the background see-through to the desktop
 hl.window_rule({
     name  = "terminal_xray",
-    match = { class = "(kitty|alacritty|foot|wezterm|ghostty)" },
+    match = { class = "(kitty|alacritty|foot|wezterm|ghostty|rio|konsole)" },
     xray  = true,
 })
 

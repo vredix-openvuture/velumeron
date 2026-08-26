@@ -129,8 +129,10 @@ Item {
             implicitHeight: item.expanded ? igroup.y + igroup.implicitHeight + 14
                                           : Math.max(54, ibody.y + ibody.implicitHeight + 14)
 
-            // Whole-card click: a stacked card expands/collapses; a single card opens its default
-            // action (✕ sits on top and keeps priority for dismiss).
+            // Whole-card click OPENS — every card, stacked or not. A stacked card used to only
+            // expand, which made the commonest case (an app that notified twice) a dead end: the
+            // stack opened, and nothing in it was clickable either. Expanding is what the count
+            // badge is for; the rows inside the open stack each open their own notification.
             MouseArea {
                 id: cardMa
                 anchors.fill: parent
@@ -138,8 +140,7 @@ Item {
                 // Clickable whenever there is a card: a single one now goes to the sender's window
                 // even without a default action, so keying the cursor on `actions` under-sold it.
                 cursorShape: Qt.PointingHandCursor
-                onClicked: item.stacked ? root.toggleExpand(item.modelData.app)
-                                        : root.openNotif(item.n)
+                onClicked: root.openNotif(item.n)
             }
 
             // App icon — the notification's own image/icon hint, else the sending app's desktop-entry
@@ -151,7 +152,7 @@ Item {
                 IconImage {
                     id: iicoImg
                     anchors.fill: parent
-                    visible: source != ""
+                    visible: source !== ""
                     source: NotifService.iconFor(item.n)
                 }
                 Text {
@@ -208,36 +209,69 @@ Item {
                 spacing: 10
                 Repeater {
                     model: item.expanded ? item.modelData.items.slice().reverse() : []
-                    delegate: Column {
+                    delegate: Item {
+                        id: entry
                         required property var modelData
                         width: igroup.width
-                        spacing: 3
-                        Text {
-                            width: parent.width
-                            text: modelData.summary; color: Colors.fgBright
-                            font.pixelSize: 13; font.bold: true; font.family: Style.font; elide: Text.ElideRight
+                        implicitHeight: ecol.implicitHeight
+
+                        // Each entry in an open stack is its own click target — the whole point of
+                        // opening the stack is to reach the one message you came for.
+                        StyledRect {
+                            anchors { fill: parent; leftMargin: -7; rightMargin: -7
+                                      topMargin: -4;  bottomMargin: -4 }
+                            radius: Style.rTile
+                            color: eHov.containsMouse ? Style.rowHover : "transparent"
+                            borderWidth: 0
+                            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                         }
-                        Text {
+                        Column {
+                            id: ecol
                             width: parent.width
-                            visible: text !== ""
-                            text: modelData.body; color: Colors.fgPrimary
-                            font.pixelSize: 12; font.family: Style.font
-                            wrapMode: Text.WordWrap; textFormat: Text.StyledText
-                            maximumLineCount: 5; elide: Text.ElideRight
+                            spacing: 3
+                            Text {
+                                width: parent.width
+                                text: entry.modelData.summary; color: Colors.fgBright
+                                font.pixelSize: 13; font.bold: true; font.family: Style.font; elide: Text.ElideRight
+                            }
+                            Text {
+                                width: parent.width
+                                visible: text !== ""
+                                text: entry.modelData.body; color: Colors.fgPrimary
+                                font.pixelSize: 12; font.family: Style.font
+                                wrapMode: Text.WordWrap; textFormat: Text.StyledText
+                                maximumLineCount: 5; elide: Text.ElideRight
+                            }
+                        }
+                        MouseArea {
+                            id: eHov
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.openNotif(entry.modelData)
                         }
                     }
                 }
             }
-            // Group count badge — doubles as the expand hint on stacked cards
+            // Group count badge — and THE expand control on stacked cards (the ▾ says so). Its hit
+            // area is grown past the chip so a 16px-tall badge is still an easy target.
             StyledRect {
                 id: badge
                 visible: item.stacked
                 anchors { right: ipin.left; rightMargin: 6; verticalCenter: iapp.verticalCenter }
                 width: cnt.implicitWidth + 12; height: 16; radius: 8
-                color: Colors.bgActive
+                color: bHov.containsMouse ? Qt.lighter(Colors.bgActive, 1.25) : Colors.bgActive
+                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                 Text { id: cnt; anchors.centerIn: parent
                        text: item.modelData.count + (item.expanded ? " ▴" : " ▾")
                        color: Colors.fgBright; font.pixelSize: 9; font.bold: true; font.family: Style.font }
+                MouseArea {
+                    id: bHov
+                    anchors { fill: parent; margins: -6 }
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.toggleExpand(item.modelData.app)
+                }
             }
             // Pin toggle — pinned rows float to the top and survive "clear all".
             StyledRect {

@@ -7,10 +7,17 @@ import QtQuick
 // Optional inherit mode (`inheritable`): the row shows a value it does not own yet — it follows a
 // global default. The value greys out while it does, and once the row carries its own value a ↺
 // hands it back. Callers that never set `inheritable` get the plain stepper.
+//
+// `hint` is the row's explanation — never drawn, exactly as on CardLabel / FieldLabel / Toggle:
+// the label underlines itself and hands the text over on hover, so a description costs no row.
 Row {
     id: st
     property string label:       ""
+    property string hint:        ""
     property string unit:        ""
+    // Overrides the numeric readout when a value has a name rather than a magnitude ("Auto", "Off").
+    // Empty = show the number, which is every other row on every page.
+    property string display:     ""
     property int    value:       0
     property int    step:        5
     property int    min:         0
@@ -37,15 +44,30 @@ Row {
     function _up()   { return Math.min(st.max, Math.max(st.min, (Math.floor(st.value / st.step) + 1) * st.step)) }
     function _down() { return Math.max(st.min, (Math.ceil(st.value / st.step) - 1) * st.step) }
 
-    Text { anchors.verticalCenter: parent.verticalCenter
+    Text { id: cap
+           anchors.verticalCenter: parent.verticalCenter
            width: Math.max(st.labelWidth, st.width - st._clusterW - st._resetW)
            text: st.label; elide: Text.ElideRight
-           color: Colors.fgPrimary; font.pixelSize: 12; font.family: Style.font }
+           color: Colors.fgPrimary; font.pixelSize: 12; font.family: Style.font
+
+           // Same affordance the labels carry: nothing at rest, a hairline while hovered.
+           Rectangle {
+               visible: st.hint !== ""
+               y:       cap.contentHeight + 1
+               width:   Math.min(cap.contentWidth, cap.width)
+               height:  1
+               color:   cap.color
+               opacity: capHover.containsMouse ? 0.6 : 0
+               Behavior on opacity { NumberAnimation { duration: Style.ctrlMs } }
+           }
+           MouseArea { id: capHover; anchors.fill: parent; enabled: st.hint !== ""
+                       hoverEnabled: true; acceptedButtons: Qt.NoButton }
+           HintTip { target: st; text: st.hint; hovered: capHover.containsMouse } }
     // Hand the value back to the global default — only there once the row owns a value.
     StepBtn { sym: "↺"; visible: st._canReset; onTap: st.reset() }
     StepBtn { sym: "−"; onTap: st.changed(st._down()) }
     Text { anchors.verticalCenter: parent.verticalCenter; width: 60; horizontalAlignment: Text.AlignHCenter
-           text: st.value + (st.unit !== "" ? " " + st.unit : "")
+           text: st.display !== "" ? st.display : st.value + (st.unit !== "" ? " " + st.unit : "")
            // Greyed out while the value is only inherited — it is not this row's own yet.
            color: st.inherited ? Colors.fgMuted : Colors.fgBright
            font.pixelSize: Style.fsValue; font.family: Style.font }

@@ -6,6 +6,7 @@ import QtQuick
 // (name · current · new) with no separators. keepOpenOnHover so the cursor can rest on and scroll the
 // pill. One per screen.
 BarGlide {
+    glideId: "updates"
     id: g
     mine:            UiState.updMon === g.mon && g.mon !== ""
     shown:           UiState.updHover

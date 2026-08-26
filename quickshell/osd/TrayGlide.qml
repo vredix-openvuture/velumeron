@@ -6,6 +6,7 @@ import QtQuick
 // Interactive (the icons are clickable) + keepOpenOnHover so the cursor can travel from the glyph
 // into the pill to reach them. One per screen.
 BarGlide {
+    glideId: "tray"
     id: g
     mine:            UiState.trayMon === g.mon && g.mon !== ""
     shown:           UiState.trayHover || g._menuOpen

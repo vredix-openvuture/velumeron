@@ -241,7 +241,7 @@ Flyout {
                 clip: true; color: Colors.bgPrimary
                 Image {
                     anchors.fill: parent
-                    source: mp.player?.trackArtUrl ?? ""
+                    source: mp.player ? (mp.player.trackArtUrl || "") : ""
                     fillMode: Image.PreserveAspectCrop
                     sourceSize.width: 96; sourceSize.height: 96
                     visible: status === Image.Ready; asynchronous: true

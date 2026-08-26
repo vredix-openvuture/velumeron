@@ -42,7 +42,12 @@ PanelWindow {
     // The vertical edge the tray docks to. A bar on that edge → the tray's fillet seam flows into the
     // bar; no bar → it curves into the bare monitor edge.
     readonly property string notifEdge: atTop ? "top" : "bottom"
-    readonly property bool   barOnEdge: dock && VtlConfig.edgeActiveFor(notifEdge, mon) && !fullscreen
+    // A fullscreen window takes the bar away, PEEK OR NOT — see the same note in osd/Osd.qml. Peek
+    // does not keep the strip on screen; it hides it and lifts it out of a 3 px edge on hover. With
+    // peek on (the default) this docked the toast onto an invisible bar, leaving it hovering a
+    // bar's thickness off the screen edge. Fullscreen ⇒ the toast comes out of the monitor edge.
+    readonly property bool   barShown: !root.fullscreen
+    readonly property bool   barOnEdge: dock && VtlConfig.edgeActiveFor(notifEdge, mon) && barShown
     // Distance from the screen edge to the bar's inner face (incl. the float gap for a floating bar);
     // 0 when there's no bar on the edge.
     readonly property int    barThk:    barOnEdge
@@ -52,7 +57,7 @@ PanelWindow {
     // Bar footprint on `side` regardless of the notif dock setting — a FLOATING tray must still clear
     // the bar rather than sit on top of it. 0 when there's no bar on that edge / fullscreen.
     function _barFootprint(side) {
-        if (fullscreen || !VtlConfig.edgeActiveFor(side, mon)) return 0
+        if (!root.barShown || !VtlConfig.edgeActiveFor(side, mon)) return 0
         return VtlConfig.edgeThicknessFor(side, mon)
              + (VtlConfig.barFloatingFor(mon) ? VtlConfig.barFloatGapFor(mon) : 0)
     }
@@ -64,51 +69,119 @@ PanelWindow {
     readonly property bool   isCorner:  atLeft || atRight
     readonly property bool   _mergeAll: VtlConfig.transitionMergeAllFor("notify_popup", root._tctx)
     function _edgeThk(side) {
-        return (dock && !fullscreen && VtlConfig.edgeActiveFor(side, mon))
+        return (dock && root.barShown && VtlConfig.edgeActiveFor(side, mon))
                ? VtlConfig.edgeThicknessFor(side, mon) : 0
     }
     readonly property int    hBarThk:    isCorner ? _edgeThk(hside) : 0
     readonly property int    sideBarThk: isCorner ? _barFootprint(hside) : 0
-    readonly property bool   perpStart:  isCorner && atLeft  && root._mergeAll
-    readonly property bool   perpEnd:    isCorner && atRight && root._mergeAll
+    // Merging sideways needs something to merge INTO: a bar on that side, or the bare screen edge
+    // when the toast really sits on it. Under a dock/float bar pulled in from its ends the toast
+    // touches neither — it stands at the bar's end, mid-screen — and this branch then drops the
+    // toast's own side border for a strip that is not there. Measured: the bar's line stopped dead
+    // at the seam and the toast had no left edge at all. Without a partner it is a free tab, and
+    // the flush rule closes it square against the end of the bar.
+    readonly property string perpSide:   atLeft ? "left" : atRight ? "right" : ""
+    readonly property bool   perpPartner: perpSide !== ""
+                                          && (VtlConfig.edgeActiveFor(perpSide, root.mon)
+                                              ? root.barShown
+                                              : (atLeft ? root.trayX <= 1
+                                                        : root.trayX + root.trayW >= root.scrW - 1))
+    readonly property bool   perpStart:  isCorner && atLeft  && root._mergeAll && perpPartner
+    readonly property bool   perpEnd:    isCorner && atRight && root._mergeAll && perpPartner
 
     readonly property int    scrW:    screen ? screen.width  : 1920
     readonly property int    scrH:    screen ? screen.height : 1080
     readonly property int    hMargin: 12
-    readonly property int    dockOff: dock ? barThk  : (edgeBarThk + hMargin)
-    readonly property int    hInset:  dock ? hBarThk : (sideBarThk + hMargin)
+    // Docked or free, and NOTHING else decides it — not what other surface happens to be open, not
+    // whether a border claim landed. The toast's own silhouette has to be a function of the user's
+    // settings alone, or the same notification looks different from one appearance to the next
+    // (measured: with the merge made conditional on other surfaces, one toast came out flush and
+    // filleted, the next one 12 px lower with a closed outline). Co-claiming the bar's border with
+    // another surface is safe — Bar.qml UNIONS every claim on an edge, so two surfaces asking for
+    // the same stretch simply open one longer gap.
+    readonly property bool   merged:  dock
+    readonly property int    dockOff: merged ? barThk  : (edgeBarThk + hMargin)
+    readonly property int    hInset:  merged ? hBarThk : (sideBarThk + hMargin)
+    // A merged toast leaves its outline OPEN on the docked edge — the bar's own line (interrupted
+    // for exactly this span, see the gap claim below) closes it there. A free one has no such line
+    // above it, so it closes itself instead (elRectPaths); leaving it open is what put the bar's
+    // border across the top of a toast that was not merged with it at all.
+    readonly property bool   freeCard: !root.merged
 
     // ── The tray: fixed width, height wraps the card column — which itself grows/shrinks as cards
     //    morph in and out — so the whole surface glides out of the bar and grows downward. ─────────
     readonly property int   trayW:   376
     readonly property int   trayPad: 8
-    readonly property real  trayH:   col.implicitHeight > 0 ? col.implicitHeight + 2 * trayPad : 0
-    readonly property int   trayX:   atLeft  ? hInset
-                                   : atRight ? (scrW - trayW - hInset)
-                                   : (scrW - trayW) / 2
+    // ROUNDED, and that is not cosmetic: the card column springs, so this height is fractional on
+    // every frame of a morph, and a 1 px outline drawn at y.5 splits its ink over two rows at half
+    // intensity each. Measured mid-morph: rows 125/126 at (81,101,65) and (76,96,61) instead of one
+    // row at (104,132,75) — which is exactly the "the border is missing / only shows up late" the
+    // stack was reported for. The cards keep their sub-pixel motion; only the chrome snaps.
+    readonly property real  trayH:   col.implicitHeight > 0 ? Math.round(col.implicitHeight + 2 * trayPad) : 0
+    // The stretch the bar actually covers on this edge. A dock or float inset from its ends is
+    // shorter than the screen, and a toast at the monitor's corner then lies in the gap NEXT to the
+    // bar instead of coming out of it — which is what "the notifications are just somewhere" was.
+    readonly property var   barSpan: VtlConfig.barSpanFor(root.notifEdge, root.mon, root.scrW)
+    readonly property int   spanLo:  root.barOnEdge ? root.barSpan[0] : 0
+    readonly property int   spanHi:  root.barOnEdge ? root.barSpan[1] : root.scrW
+    readonly property int   trayX:   atLeft  ? (spanLo + hInset)
+                                   : atRight ? (spanHi - trayW - hInset)
+                                   : (spanLo + spanHi - trayW) / 2
     readonly property real  trayY:   atTop ? dockOff : (scrH - trayH - dockOff)
 
     // Transition style depends on whether the tray hangs on a bar or a bare monitor edge.
     readonly property string _tctx:   barOnEdge ? "bar" : "edge"
+    // The concave dock fillet, same value _paths() builds its `f` from.
+    // Flush end, or curve — the rule every bar-grown surface follows: the fillet flares outward
+    // into the bar, which only works while there is bar left beside it. A toast sitting on the end
+    // of a dock/float strip closes flush with it instead; the flare would reach into the empty
+    // stretch next to the strip, which is the artefact.
+    readonly property bool   flushLo: root.barOnEdge && root.trayX <= root.spanLo + 1
+    readonly property bool   flushHi: root.barOnEdge && (root.trayX + root.trayW) >= root.spanHi - 1
+    // The bar's own line weight, so a toast docked to it continues that line at the same width.
+    readonly property int    borderW: Style.barBorderW(root.mon)
+    readonly property real   filletR: VtlConfig.transitionFilletFor("notify_popup", root._tctx)
+                                      ? Math.max(0, Math.min(root.flareR, root.trayW / 3, root.trayH / 3)) : 0
     readonly property int    flareR:  VtlConfig.barInnerRadiusFor(mon)
-    readonly property int    seam:     2
-    readonly property int    perpSeam: 2
+    // 0/0 — the tray abuts the bar instead of running into it; an overlapping seam is exactly the
+    // dark band this shell had at every dock edge (see the note in bar/Bar.qml).
+    readonly property int    seam:     0
+    readonly property int    perpSeam: 0
     readonly property int    pad:     flareR + Math.max(seam, perpSeam)
                                       + Math.ceil(Math.max(Style.elTopBulge, Style.elSideBulge))
 
 
+    // The two shapes the tray can be. Merged: the fillet tab below, open on the docked edge. Free:
+    // the shell's plain rounded rect (Style.elRectPaths with no dock edge), closed on all four
+    // sides, exactly like every other card that is not growing out of anything. `off` is the
+    // pixel-grid nudge and is applied to the BORDER only (Style.hairline, see CLAUDE.md) — for the
+    // rect it rides in on `pad`, which is what elRectPaths adds to every coordinate.
+    function _outline(off) {
+        off = off || 0
+        if (!root.freeCard) return root._paths(root.trayW, root.trayH, 0, 0, off)
+        return Style.elRectPaths(root.trayW, root.trayH, root.flareR, 0, 0, 0, "", 0, root.pad + off)
+    }
+
     // Fillet outline for the tray, built in (a, d) space — a runs along the docked edge, d is the depth
     // away from it (edge at d = 0) — then mapped onto the top/bottom edge. Returns [borderOpen,
     // fillClosed]; the free-tab outline the OSD / taskbar use. bT/bS = optional edge bulge (0 here).
-    function _paths(W, H, bT, bS) {
+    function _paths(W, H, bT, bS, off) {
+        off = off || 0    // pixel-grid nudge; border only (Style.hairline)
         var A = W, D = H
         var e = Math.max(0, Math.min(root.flareR, A / 3, D / 3))   // convex far corners
-        var f = VtlConfig.transitionFilletFor("notify_popup", root._tctx) ? e : 0
+        var f = root.filletR > 0 ? e : 0   // 0 while another surface owns this stretch of bar
         var sA = root.seam
         var sP = root.perpSeam
         var P = root.pad
         var bottom = (root.notifEdge === "bottom")
-        function XY(a, d)    { return (a + P) + "," + ((bottom ? (H - d) : d) + P) }
+        // The MOUTH (d = 0) is nudged the other way. Every other run takes the panel's own first
+        // row (+off, the pixel-grid rule); the mouth has to land on the row the BAR's line occupies,
+        // and that is one row further out — the bar insets its line into the strip, the panel insets
+        // its own into the panel, so the two sit on adjacent rows and the fillet has to climb a
+        // pixel to reach it. Measured: bar line row 39, panel outline row 40. Mirrored edges
+        // (bottom/right) count the other way, hence the sign.
+        function DOFF(d)     { return d === 0 ? (bottom ? off : -off) : off }
+        function XY(a, d)    { return (a + P + off) + "," + ((bottom ? (H - d) : d) + P + DOFF(d)) }
         var cur = [0, 0]
         function M(a, d)     { cur = [a, d]; return "M" + XY(a, d) }
         function L(a, d)     { cur = [a, d]; return " L" + XY(a, d) }
@@ -129,11 +202,12 @@ PanelWindow {
                + LB(0, f, -1, 0, bS) + A_(f, -f, 0, 0)
             close = L(-f, -sA) + L(A + sP, -sA) + L(A + sP, D + f) + " Z"
         } else {                         // centre — free tab, fillets on both anchored corners
-            bd = M(A + f, 0) + A_(f, A, f, 0)
+            var fH = root.flushHi ? 0 : f, fL = root.flushLo ? 0 : f
+            bd = M(A + fH, 0) + (fH > 0 ? A_(fH, A, fH, 0) : "")
                + LB(A, D - e,  1, 0, bS) + A_(e, A - e, D, 1)
                + LB(e, D,      0, 1, bT) + A_(e, 0, D - e, 1)
-               + LB(0, f,     -1, 0, bS) + A_(f, -f, 0, 0)
-            close = L(-f, -sA) + L(A + f, -sA) + " Z"
+               + LB(0, fL,    -1, 0, bS) + (fL > 0 ? A_(fL, -fL, 0, 0) : "")
+            close = L(-fL, -sA) + L(A + fH, -sA) + " Z"
         }
         return [bd, bd + close]
     }
@@ -156,6 +230,28 @@ PanelWindow {
     Region { id: hitRegion; x: root.trayX; y: root.trayY; width: root.trayW; height: root.trayH }
     mask: root.visible ? hitRegion : emptyMask
 
+    // Blur behind the tray, by protocol (ext-background-effect-v1) exactly as the bar and the
+    // notification centre ask for it — the toast reads as an extension of the bar, so it takes the
+    // bar's frost with its translucency. It covers the tray plus its fillet SKIRT — the same span
+    // the bar's border gap uses (gapFrom/gapTo below) — because those wedges are painted in the
+    // tray's own translucent fill and would otherwise hang off the frosted card unblurred. What it
+    // does NOT cover is the seam past the docked edge: that runs into the bar, the bar already
+    // frosts it, and two surfaces frosting one strip is the dark band at the mouth.
+    BackgroundEffect.blurRegion: (VtlConfig.barBlurFor(root.mon)
+                                  && VtlConfig.barOpacityEnabledFor(root.mon)
+                                  && root.visible && root.trayH > 1) ? trayBlur : null
+    Region {
+        id: trayBlur
+        // A free card has no fillet skirt to cover — its outline ends at the tray rect.
+        readonly property real mL: (root.freeCard || root.perpStart || root.flushLo) ? 0 : root.filletR
+        readonly property real mR: (root.freeCard || root.perpEnd   || root.flushHi) ? 0 : root.filletR
+        readonly property real mD: (!root.freeCard && (root.perpStart || root.perpEnd)) ? root.filletR : 0
+        x:      root.trayX - mL
+        y:      root.trayY - (root.atTop ? 0 : mD)
+        width:  root.trayW + mL + mR
+        height: root.trayH + mD
+    }
+
     // ── The tray surface — one fillet card, bar-coloured, merging into the bar / monitor edge. Its
     //    height follows the card column (which grows/shrinks as cards morph), so it glides out of the
     //    bar and grows downward. ─────────────────────────────────────────────────────────────────────
@@ -164,15 +260,55 @@ PanelWindow {
         x: root.trayX; y: root.trayY
         width: root.trayW; height: root.trayH
 
+        // Take the bar's border across the tray's mouth (UiState.setBarGap), exactly as the menus
+        // and glides do — otherwise the bar draws its line straight through the top of the toast.
+        // The span reaches to where the OUTLINE ends: plus the fillet on a side that curves into
+        // the bar, flush on a side that merges into the perpendicular arm at a screen corner.
+        readonly property real gapFrom: root.trayX               - ((root.perpStart || root.flushLo) ? 0 : root.filletR)
+        readonly property real gapTo:   root.trayX + root.trayW  + ((root.perpEnd   || root.flushHi) ? 0 : root.filletR)
+        readonly property bool gapLive: root.visible && root.barOnEdge && root.trayH > 1
+        // The merged FLANK needs the same treatment. At a corner the tray runs into the
+        // perpendicular strip too, and that strip kept drawing its border straight down the tray's
+        // side — a hard line between two surfaces that are supposed to be one shape, which is what
+        // the wrong-looking left edge was. Claimed under its own id so the two spans are
+        // independent, and only while a perpendicular bar is really there to merge with.
+        readonly property string perpEdge: root.atLeft ? "left" : "right"
+        readonly property bool   perpLive: gapLive && (root.perpStart || root.perpEnd)
+                                           && VtlConfig.edgeActiveFor(perpEdge, root.mon)
+        readonly property real   perpFrom: root.atTop ? root.trayY : root.trayY - root.filletR
+        readonly property real   perpTo:   root.atTop ? root.trayY + root.trayH + root.filletR
+                                                      : root.trayY + root.trayH
+        function pushGap() {
+            if (gapLive) UiState.setBarGap("notifpopup:" + root.mon, root.mon, root.notifEdge, gapFrom, gapTo)
+            else         UiState.clearBarGap("notifpopup:" + root.mon)
+            if (perpLive) UiState.setBarGap("notifpopupperp:" + root.mon, root.mon, perpEdge, perpFrom, perpTo)
+            else          UiState.clearBarGap("notifpopupperp:" + root.mon)
+        }
+        // Push once at construction too: every other trigger here is a CHANGE signal, so a tray that
+        // comes up with its span already final never claims anything — and an unclaimed span is the
+        // bar drawing its line straight across the toast's mouth.
+        Component.onCompleted: pushGap()
+        onGapFromChanged: pushGap()
+        onGapToChanged:   pushGap()
+        onGapLiveChanged: pushGap()
+        onPerpLiveChanged: pushGap()
+        onPerpFromChanged: pushGap()
+        onPerpToChanged:   pushGap()
+        Component.onDestruction: {
+            UiState.clearBarGap("notifpopup:" + root.mon)
+            UiState.clearBarGap("notifpopupperp:" + root.mon)
+        }
+
         // Fillet fill — the bar / panel colour (so it reads as an extension of the bar). Grown by -pad
         // so the fillet wedges + seam render outside the rect; GeometryRenderer fills reliably.
         Shape {
             anchors.fill: parent; anchors.margins: -root.pad
             preferredRendererType: Shape.GeometryRenderer
             ShapePath {
-                fillColor: Style.panelColor(VtlConfig.barColorful); strokeWidth: -1
+                fillColor: Style.barPanelColor(Style.panelColor(VtlConfig.barColorful), root.mon)
+                strokeWidth: -1
                 fillRule: ShapePath.WindingFill
-                PathSvg { path: root._paths(root.trayW, root.trayH, 0, 0)[1] }
+                PathSvg { path: root._outline(0)[1] }
             }
         }
         // Fillet border — stroke only the open content-side outline (the docked edge stays borderless).
@@ -180,8 +316,13 @@ PanelWindow {
             anchors.fill: parent; anchors.margins: -root.pad
             preferredRendererType: Shape.CurveRenderer
             ShapePath {
-                fillColor: "transparent"; strokeColor: Colors.boNormal; strokeWidth: Style.chromeBorderWidth
-                PathSvg { path: root._paths(root.trayW, root.trayH, 0, 0)[0] }
+                // Style.chromeBorder, not the card border colour: this outline CONTINUES the bar's
+                // own line where the toast docks onto it, and a different colour breaks that line
+                // at the seam just as surely as a different width does (measured: the bar's accent
+                // line simply stopped where the toast began, because the toast drew a near-black
+                // one). Every other bar-grown surface already uses the chrome colour.
+                fillColor: "transparent"; strokeColor: Style.chromeBorder; strokeWidth: root.borderW
+                PathSvg { path: root._outline(Style.hairline(root.borderW))[0] }
             }
         }
 
@@ -247,7 +388,14 @@ PanelWindow {
             card._behave = true
         }
         onTargetChanged: if (card._behave) card.reveal = card.target
-        onRevealChanged: if (card.target === 0 && card.reveal <= 0.02) NotifService.purge(card.notif)
+        // Qt.callLater, never a direct call: this fires from a SpringAnimation tick, and purge()
+        // shortens the popups array — which makes the Repeater above destroy and rebuild every
+        // card, including THIS one, from inside the animation that is still running. That is the
+        // crash the whole deferral in NotifService exists for; the service defers the array write
+        // itself, and this keeps the dismiss() D-Bus call out of the animation frame too. (The
+        // same reason Component.onCompleted below already defers its purge.)
+        onRevealChanged: if (card.target === 0 && card.reveal <= 0.02)
+                             Qt.callLater(NotifService.purge, card.notif)
 
         readonly property real r01: Math.max(0.0, Math.min(1.0, reveal))
         height:  card.fullH * r01

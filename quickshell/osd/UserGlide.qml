@@ -6,6 +6,7 @@ import Quickshell.Io
 // module. Interactive (the buttons are clickable) + keepOpenOnHover so the cursor can travel from
 // the module into the pill to reach them. One per screen.
 BarGlide {
+    glideId: "user"
     id: g
     mine:            UiState.userMon === g.mon && g.mon !== ""
     shown:           UiState.userHover

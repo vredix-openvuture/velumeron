@@ -57,7 +57,7 @@ Item {
         status   = "Applying " + stem(path.split("/").pop()) + " → " + mon
         applyProc.command = ["bash", "-c",
             "echo \"--- $(date +%T) apply --mon " + mon + " ---\" >>/tmp/vtl-wp.log; "
-            + "setsid -f bash \"$VELUMERON_DIR/assets/scripts/wallpaper-set.sh\" --no-waybar "
+            + "setsid -f bash \"$VELUMERON_DIR/assets/scripts/wallpaper-set.sh\" "
             + "--mon " + JSON.stringify(mon) + " --file " + JSON.stringify(path)
             + " >>/tmp/vtl-wp.log 2>&1"]
         applyProc.running = false; applyProc.running = true
@@ -211,12 +211,27 @@ Item {
             id: qsCol
             width: parent.width; spacing: Style.cardGap
 
+            // Which shape the quick-picker takes. Everything below is per-shape, so only the
+            // chosen one's settings are shown — a position grid means nothing to a picker that
+            // covers the screen, and a card size means nothing to a panel on the bar.
             Card {
+                CardLabel { text: "STYLE"
+                            hint: "Popout grows the grid out of the bar · Gallery fills the screen with a coverflow you scroll through." }
+                Segmented {
+                    equal: true
+                    current: VtlConfig.wallpaperQuickStyle
+                    segments: [{ label: "Popout", key: "popout" }, { label: "Gallery", key: "gallery" }]
+                    onPicked: root.save("wallpaper_quick_style", key)
+                }
+            }
+            Card {
+                visible: VtlConfig.wallpaperQuickStyle !== "gallery"
                 CardLabel { text: "POSITION" }
                 PosGrid { current: VtlConfig.wallpaperQuickPos
                           onPicked: root.save("wallpaper_quick_position", key) }
             }
             Card {
+                visible: VtlConfig.wallpaperQuickStyle !== "gallery"
                 CardLabel { text: "GRID" }
                 Stepper { label: "Columns"; step: 1; value: VtlConfig.wallpaperQuickCols; min: 1; max: 8
                           labelWidth: 78; onChanged: root.save("wallpaper_quick_cols", v) }
@@ -224,6 +239,25 @@ Item {
                           labelWidth: 78; onChanged: root.save("wallpaper_quick_rows", v) }
                 Stepper { label: "Preview"; unit: "px"; step: 5; min: 70; max: 300; labelWidth: 78
                           value: VtlConfig.wallpaperQuickPreview; onChanged: root.save("wallpaper_quick_preview", v) }
+            }
+            Card {
+                visible: VtlConfig.wallpaperQuickStyle === "gallery"
+                CardLabel { text: "GALLERY"
+                            hint: "Card height as a share of the screen — the width follows the target monitor's aspect." }
+                Segmented {
+                    equal: true
+                    current: VtlConfig.wallpaperGalleryAxis
+                    segments: [{ label: "Horizontal", key: "horizontal" }, { label: "Vertical", key: "vertical" }]
+                    onPicked: root.save("wallpaper_gallery_axis", key)
+                }
+                Stepper { label: "Card size"; unit: "%"; step: 2; min: 15; max: 70; labelWidth: 88
+                          value: VtlConfig.wallpaperGallerySize; onChanged: root.save("wallpaper_gallery_size", v) }
+                Toggle { label: "Play live wallpapers"; on: VtlConfig.wallpaperGalleryLive
+                         sub: "The centred live wallpaper plays instead of showing its first frame. One mpv player, kept alive for the session."
+                         onToggled: root.save("wallpaper_gallery_live", !VtlConfig.wallpaperGalleryLive) }
+                Toggle { label: "Blur behind"; on: VtlConfig.wallpaperGalleryBlur
+                         sub: "Frost the desktop behind the gallery (ext-background-effect-v1)."
+                         onToggled: root.save("wallpaper_gallery_blur", !VtlConfig.wallpaperGalleryBlur) }
             }
         }
     }

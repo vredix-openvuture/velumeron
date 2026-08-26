@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 # btop-drop.sh [monitor] [anchor_px] [edge] | close
-# Toggle a themed btop dropdown — a kitty window that drops out of the bar like the calendar
+# Toggle a themed btop dropdown — a terminal window that drops out of the bar like the calendar
 # flyout. Right-click the bar's Performance module (passes its monitor + along-edge anchor +
 # bar edge), or `qs ipc call btop toggle` / a keybind (no args → focused monitor, top centre).
 #
 # The window is a normal float (pinned, slide animation, positioned flush under the bar's
 # reserved strip), so it works where a layer surface can't: quickshell has no terminal widget,
-# but kitty + Hyprland rules get the same drop-out-of-the-bar feel. btop runs with
-# XDG_CONFIG_HOME pointed at the velumeron user dir, so it uses OUR btop.conf + a theme
-# generated live from the current wallust palette (colors.json) — accent colours included,
-# and the user's own ~/.config/btop stays untouched.
-source "$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)/lib/env.sh"
+# but a terminal + Hyprland rules get the same drop-out-of-the-bar feel. Which emulator that is
+# comes from lib/term.sh (the role app, NOT a hardcoded kitty). btop runs with XDG_CONFIG_HOME
+# pointed at the velumeron user dir, so it uses OUR btop.conf + a theme generated live from the
+# current wallust palette (colors.json) — accent colours included, and the user's own
+# ~/.config/btop stays untouched.
+_dir="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
+source "$_dir/lib/env.sh"
+source "$_dir/lib/term.sh"
 
 CLASS="velumeron-btop"
 GAP=8
@@ -25,8 +28,9 @@ if [[ -n "$pid" ]]; then
 fi
 [[ "${1:-}" == "close" ]] && exit 0
 
-command -v btop  >/dev/null || { notify-send "btop dropdown" "btop is not installed"; exit 1; }
-command -v kitty >/dev/null || { notify-send "btop dropdown" "kitty is not installed"; exit 1; }
+command -v btop >/dev/null || { notify-send "btop dropdown" "btop is not installed"; exit 1; }
+TERM_BIN="$(vtl_term_bin)"
+[[ -n "$TERM_BIN" ]] || { notify-send "btop dropdown" "No terminal emulator found"; exit 1; }
 
 MON="${1:-}"; ANCHOR="${2:-}"; EDGE="${3:-top}"
 
@@ -150,11 +154,14 @@ fi
 hyprctl eval "hl.window_rule({ name=\"btop_drop\", match={class=\"${CLASS}\"},
     float=true, size={\"${W}\",\"${H}\"}, animation=\"slide\" })" >/dev/null
 
-# ── Spawn: velumeron kitty config (wallust colours + blur), btop on the velumeron profile ───
-hyprctl dispatch "hl.dsp.exec_cmd([[kitty --class ${CLASS} --title sysmon-btop \
-  -c '$VELUMERON_USER_DIR/kitty/kitty.conf' \
-  -o remember_window_size=no -o window_padding_width=10 \
-  /usr/bin/env XDG_CONFIG_HOME='$VELUMERON_USER_DIR' btop]])" >/dev/null
+# ── Spawn: the user's terminal, btop on the velumeron profile ───────────────────────────────
+# The dropdown wants a fixed size and roomier padding; kitty takes that as `-o`, the others keep
+# their own look (see lib/term.sh). The colours are whatever that terminal is themed with —
+# switch it on in Settings → Integrations → Terminal to have it follow the wallpaper.
+VTL_TERM_OPTS=(-o remember_window_size=no -o window_padding_width=10)
+SPAWN="$(vtl_term_string "$TERM_BIN" "$CLASS" sysmon-btop \
+         "XDG_CONFIG_HOME='$VELUMERON_USER_DIR' btop")"
+hyprctl dispatch "hl.dsp.exec_cmd([[$SPAWN]])" >/dev/null
 
 # Post-map: the main config's float_cap rule centres every float, so place it explicitly at
 # the bar anchor once it exists, and pin it so it survives workspace switches.

@@ -38,6 +38,9 @@ public:
                 throw std::runtime_error("MpvVideo: failed to create mpv render context");
             // mpv calls this (possibly off-thread) when a new frame is ready → re-render on the GUI thread.
             mpv_render_context_set_update_callback(m_gl, &MpvRenderer::onMpvUpdate, m_obj);
+            // We are on the RENDER thread; hand the news to the item's own thread, where a file that
+            // was set before this moment is still waiting to be played.
+            QMetaObject::invokeMethod(m_obj, "renderContextCreated", Qt::QueuedConnection);
         }
         return QQuickFramebufferObject::Renderer::createFramebufferObject(size);
     }
@@ -62,7 +65,10 @@ private:
     static void onMpvUpdate(void *ctx)
     {
         auto *obj = static_cast<MpvVideo *>(ctx);
-        QMetaObject::invokeMethod(obj, [obj] { obj->update(); }, Qt::QueuedConnection);
+        // mpv has something new to show. Queued onto the item's thread, where it is also the one
+        // honest answer to "is there a picture yet" — mpv has no first-frame signal of its own.
+        QMetaObject::invokeMethod(obj, [obj] { obj->markFrameReady(); obj->update(); },
+                                  Qt::QueuedConnection);
     }
 
     MpvVideo *m_obj = nullptr;
@@ -78,8 +84,12 @@ MpvVideo::MpvVideo(QQuickItem *parent) : QQuickFramebufferObject(parent)
     m_mpv = mpv_create();
     if (!m_mpv) throw std::runtime_error("MpvVideo: mpv_create failed");
 
-    mpv_set_option_string(m_mpv, "terminal", "no");
-    mpv_set_option_string(m_mpv, "msg-level", "all=no");
+    // Silent by default — a wallpaper must not print to the shell's log on every frame. But silent
+    // also means a file that never plays says NOTHING anywhere, which is a black screen with no
+    // reason attached. VELUMERON_MPV_DEBUG=1 turns mpv's own log back on for one run.
+    const bool dbg = qEnvironmentVariableIsSet("VELUMERON_MPV_DEBUG");
+    mpv_set_option_string(m_mpv, "terminal", dbg ? "yes" : "no");
+    mpv_set_option_string(m_mpv, "msg-level", dbg ? "all=v" : "all=no");
     mpv_set_option_string(m_mpv, "config", "no");
     mpv_set_option_string(m_mpv, "vo", "libmpv");
     mpv_set_option_string(m_mpv, "hwdec", "auto");
@@ -102,14 +112,65 @@ QQuickFramebufferObject::Renderer *MpvVideo::createRenderer() const
     return new MpvRenderer(const_cast<MpvVideo *>(this));
 }
 
+// ── Why a file is not simply loaded when it is set ───────────────────────────
+// `vo=libmpv` has no output device of its own: it draws through the render context, and that
+// context can only be created once Qt hands us a GL context — which happens on the RENDER thread,
+// at the first frame, well after QML has finished setting properties. Hand mpv a file before that
+// and it tries to open the video output there and then, finds none, and gives up on the file for
+// good:
+//     [vo/libmpv] No render context set.
+//     Error opening/initializing the selected video_out (--vo) device.
+//     Video: no video
+// It never retries. The wallpaper surface then shows a black rectangle with no error anywhere,
+// because mpv is silent by default and everything else about it worked.
+//
+// That is a RACE, and which side wins depends only on when the source arrives: a wallpaper picked
+// while the shell runs lands on a surface that has been rendering for ages and plays; the SAME
+// wallpaper restored at startup is set during component construction, before the first frame, and
+// stays black — "live wallpapers work until you restart with one active".
+//
+// So the file waits here until there is something to play it into.
+void MpvVideo::loadNow()
+{
+    if (!m_mpv || m_source.isEmpty()) return;
+    QByteArray path = m_source.toUtf8();
+    const char *cmd[] = { "loadfile", path.constData(), nullptr };
+    mpv_command_async(m_mpv, 0, cmd);
+}
+
+void MpvVideo::markFrameReady()
+{
+    if (m_frameReady || m_source.isEmpty()) return;
+    m_frameReady = true;
+    emit frameReadyChanged();
+}
+
+void MpvVideo::renderContextCreated()
+{
+    m_renderReady = true;
+    if (m_pendingLoad) {
+        m_pendingLoad = false;
+        loadNow();
+    }
+}
+
 void MpvVideo::setSource(const QString &s)
 {
     if (m_source == s) return;
     m_source = s;
-    if (m_mpv && !s.isEmpty()) {
-        QByteArray path = s.toUtf8();
-        const char *cmd[] = { "loadfile", path.constData(), nullptr };
-        mpv_command_async(m_mpv, 0, cmd);
+    if (m_frameReady) { m_frameReady = false; emit frameReadyChanged(); }
+    if (m_mpv) {
+        if (s.isEmpty()) {
+            // Nothing to show: drop the file rather than leaving it decoded and paused (the picker
+            // parks its player this way between live wallpapers).
+            m_pendingLoad = false;
+            const char *cmd[] = { "stop", nullptr };
+            mpv_command_async(m_mpv, 0, cmd);
+        } else if (m_renderReady) {
+            loadNow();
+        } else {
+            m_pendingLoad = true;
+        }
     }
     emit sourceChanged();
 }

@@ -26,12 +26,30 @@ PanelWindow {
     readonly property int  sh: height
     readonly property bool floating: VtlConfig.barFloatingFor(root.mon)
     readonly property bool dockMode: VtlConfig.barModeFor(root.mon) === "dock"
+    // Two gaps, not one. `gap` is the distance to the edge the bar FACES (float only — a dock is
+    // flush there); `air` is the distance at the two ENDS, which a dock has as well. They were the
+    // same number, so a floating bar could only ever be inset evenly and a dock's ends moved
+    // whenever its face gap did. Both ends share one value on purpose — see barSideGapFor.
     readonly property int  gap: floating ? VtlConfig.barFloatGapFor(root.mon) : 0
-    // Dock leaves a little air at the two ends (reuses the gap value) and stays flush to its edge.
-    readonly property int  air: dockMode ? VtlConfig.barFloatGapFor(root.mon) : 0
+    readonly property int  air: (floating || dockMode) ? VtlConfig.barSideGapFor(root.mon) : 0
     readonly property int  r:   Style.chromeR(VtlConfig.barInnerRadiusFor(root.mon))
     readonly property real bgAlpha: VtlConfig.barOpacityEnabledFor(root.mon)
                                     ? VtlConfig.barOpacityValueFor(root.mon) : 1.0
+    // Outline thickness: the user's px value once they set one (0 = no outline), otherwise whatever
+    // the ui_style asks for. `hair` is the offset that keeps THAT width on the pixel grid, so the
+    // line stays crisp at every width instead of only at the one it was tuned for.
+    readonly property int  borderW: Style.barBorderW(root.mon)
+    readonly property real hair: Style.hairline(root.borderW)
+    // How far modules stay clear of a shared corner. NOT the neighbouring strip's thickness: that
+    // made the two ends of one strip unequal whenever the neighbours differed (40 on the left, 20
+    // on the right, on the same bar) and left a hole the size of a whole strip. The bar's inner
+    // radius instead — the geometry that makes a corner a corner at all — so every corner reserves
+    // the same square whatever the neighbour happens to weigh. The module margin lands on top of it
+    // through the group anchors. 0 puts modules back at the edge.
+    readonly property int  cornerZone: {
+        var v = VtlConfig.barCornerInsetFor(root.mon)
+        return (v === null || v === undefined) ? VtlConfig.barInnerRadiusFor(root.mon) : Math.max(0, v)
+    }
 
     // Bar background: optionally tinted with a little accent ("colorful"); neutral-frosted under
     // cupertino (Style.frost — the compositor blur supplies the colour, not the theme).
@@ -83,12 +101,19 @@ PanelWindow {
     onHoleRChanged: root._publishInner()
     Component.onCompleted:   root._publishInner()
     Component.onDestruction: UiState.setBarInner(root.mon, 0, 0, 0, 0)
+    // A FLOATING strip is inset from the screen, so the face a panel has to clear is the gap PLUS
+    // the thickness. This used to publish the bare thickness, and every docking surface added a gap
+    // of its own back on top — which looked right only for as long as nothing needed the two
+    // numbers to agree. They have to agree now that panels dock onto a floating bar, and this is
+    // also what VtlConfig.barInsetFor (the fallback for this very value) has always returned.
+    onGapChanged: root._publishInner()
     function _publishInner() {
+        var g = root.floating ? root.gap : 0
         UiState.setBarInner(root.mon,
-                            root.edgeOn("top")    ? root.holeT      : 0,
-                            root.edgeOn("bottom") ? root.sh - root.holeB : 0,
-                            root.edgeOn("left")   ? root.holeL      : 0,
-                            root.edgeOn("right")  ? root.sw - root.holeR : 0)
+                            root.edgeOn("top")    ? root.holeT + g : 0,
+                            root.edgeOn("bottom") ? root.sh - root.holeB + g : 0,
+                            root.edgeOn("left")   ? root.holeL + g : 0,
+                            root.edgeOn("right")  ? root.sw - root.holeR + g : 0)
     }
 
     // A hole corner is rounded only where both of its edges are active.
@@ -120,15 +145,38 @@ PanelWindow {
     }
     onPeekModeChanged: if (!root.peekMode) { peekOut.stop(); root.peeking = false }
 
-    readonly property bool barShown: !root.peekMode || root.peeking
+    // A panel grown FROM this bar holds the peek open. The pointer leaves the strip the instant it
+    // moves into the panel, so the 240 ms grace ran out and the bar faded away underneath a menu
+    // that is docked to it — the panel was left hanging on an edge with nothing there.
+    readonly property bool panelOpen: (UiState.openDropdown !== "" && UiState.menuMon === root.mon)
+                                      || (UiState.flyout !== "" && UiState.flyoutMon === root.mon)
+                                      || (UiState.notifCenterOpen && UiState.notifMon === root.mon)
+    readonly property bool barShown: !root.peekMode || root.peeking || root.panelOpen
     property real peekOpacity: root.barShown ? 1 : 0
     Behavior on peekOpacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
     color: "transparent"
     anchors { top: true; left: true; right: true; bottom: true }
-    // Above a fullscreen window only while peeking is armed — otherwise the bar belongs at the
-    // bottom, under every window.
-    WlrLayershell.layer:         root.peekMode ? WlrLayer.Overlay : WlrLayer.Bottom
+    // TOP, not Bottom. The strips are kept clear of windows by EdgeExclusiveZone, so on Bottom the
+    // bar looked fine standing still — but a workspace ANIMATION does not respect the reserved
+    // area: `slidefade` drags the whole workspace across the monitor, and a bar composited under
+    // that traffic gets disturbed by it. Measured on a slowed-down switch (speed 30), one frame in:
+    // 14.3% of the right strip lost its ink — the accent border line dropped from (107,163,159) to
+    // (34,43,47) and the fill washed out. That is the "bars go briefly invisible at the sides".
+    // On Top the bar composites after the workspace and the same measurement reads 0.2%, which is
+    // just the clock ticking.
+    //
+    // What this does NOT change:
+    //   • Fullscreen still covers the bar (verified: strips 100% overdrawn), so peekMode below and
+    //     everything keying off it are untouched. Hyprland renders a fullscreen window above Top.
+    //   • The frost is identical — pixel for pixel at rest. The blur is asked for by protocol
+    //     (see below), not by the compositor's layer blur, so it never depended on the level.
+    //   • Surfaces meant to sit ABOVE the bar still do. Everything interactive is on Overlay; the
+    //     two other Top surfaces (settings dim, window tags) are created when they become visible,
+    //     which is always after the bar exists, and Hyprland orders within a level by creation.
+    // What it does change: a floating window dragged onto a strip now passes UNDER the bar instead
+    // of over it — which is what a bar normally does.
+    WlrLayershell.layer:         root.peekMode ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.exclusiveZone: -1
     WlrLayershell.namespace:     "velumeron-bar"
 
@@ -157,35 +205,20 @@ PanelWindow {
     }
 
 
-    // The seam notch. A docked panel overlaps 2 px into the bar so the two fills meet without an
-    // antialiasing gap — but two TRANSLUCENT fills on one strip always read as a line: stacked
-    // alpha is darker, abutting edges are lighter, and every seam width from 0 to 2 px only chose
-    // between those two ghosts. So the bar cuts that strip out of its OWN fill along the gap span
-    // and exactly one surface paints there. Frame mode only, like the border gap itself.
-    function gapNotchPath() {
-        if (root.dockMode || root.floating || !root.anyGap) return ""
-        function rect(x0, y0, x1, y1) {
-            return " M" + x0 + "," + y0 + " L" + x1 + "," + y0 + " L" + x1 + "," + y1 + " L" + x0 + "," + y1 + " Z"
-        }
-        var d = 2                                   // must equal the panels' seam, or a hairline returns
-        var out = ""
-        var edges = ["top", "bottom", "left", "right"]
-        for (var i = 0; i < edges.length; i++) {
-            var e = edges[i]
-            var horiz = (e === "top" || e === "bottom")
-            var spans = root.gapSpans(e)
-            for (var j = 0; j < spans.length; j++) {
-                var f = Math.max(spans[j][0], horiz ? root.holeL : root.holeT)
-                var g = Math.min(spans[j][1], horiz ? root.holeR : root.holeB)
-                if (g - f < 0.5) continue
-                if (e === "top")         out += rect(f, root.holeT - d, g, root.holeT)
-                else if (e === "bottom") out += rect(f, root.holeB, g, root.holeB + d)
-                else if (e === "left")   out += rect(root.holeL - d, f, root.holeL, g)
-                else                     out += rect(root.holeR, f, root.holeR + d, g)
-            }
-        }
-        return out
-    }
+    // NO fill notch, and no overlap either — the two fills ABUT at the bar's inner face.
+    //
+    // Both earlier attempts (a 2 px panel overlap into the bar; then the bar cutting that strip
+    // back out of its own fill) drew the same dark line, and a 10 px test cut showed why: the
+    // strip is a TRANSLUCENT panel over a different backdrop than the panel's own body. Behind
+    // the bar sits the wallpaper, behind the body sits whatever the panel covers — measured
+    // (42,35,45) against (59,…). At 0.84 alpha those two grounds can never composite to the same
+    // colour, so ANY overlap paints a visible band, whichever surface is removed from under it.
+    //
+    // Abutting has no such band: the fill's GeometryRenderer draws an axis-aligned edge at an
+    // integer y with no antialiasing fringe (verified — the row above the hole is bar, the row
+    // below is backdrop, nothing in between), so the panels end their seam at d = 0 and the bar
+    // keeps its strip whole. Only the BORDER is still cut, so the popout's outline carries the
+    // line across (borderPath/cut).
 
     // ── Path builders (SVG strings) ─────────────────────────────────────────────
     function roundRectPath(x0, y0, x1, y1, rad) {
@@ -213,26 +246,40 @@ PanelWindow {
 
     // Dock: a strip flush to its edge, inset by `air` at the two ends, rounded only on the inner
     // side; the edge side runs straight into the monitor border ("docked bar" look).
+    // The strip's two INNER corners, with the rounding taken OFF an end a panel is flush against.
+    // A popout that closes flush at the end of the strip continues it: if the strip kept curving
+    // away there, the two would meet at a notch, one square edge against one arc. Squared off, the
+    // silhouette runs straight from the bar into the panel and the rounding carries on down the
+    // panel's own far corners — the curve travels out with the popout instead of staying behind.
+    // Returns [near-end radius, far-end radius] for the strip's low/high coordinate along `p`.
+    function _innerRadii(p, lo, hi, rad) {
+        if (rad <= 0) return [0, 0]
+        return [root._gapCovers(p, lo + rad) ? 0 : rad,
+                root._gapCovers(p, hi - rad) ? 0 : rad]
+    }
     function dockPath() {
-        var s = root.stripRect(VtlConfig.barPositionFor(root.mon))
+        var p  = VtlConfig.barPositionFor(root.mon)
+        var s  = root.stripRect(p)
         var x0 = s[0], y0 = s[1], x1 = s[0] + s[2], y1 = s[1] + s[3]
         var rad = Math.min(r, s[2] / 2, s[3] / 2)
-        switch (VtlConfig.barPositionFor(root.mon)) {
-        case "bottom": return rrPath(x0, y0, x1, y1, rad, rad, 0, 0)   // inner = top
-        case "left":   return rrPath(x0, y0, x1, y1, 0, rad, rad, 0)   // inner = right
-        case "right":  return rrPath(x0, y0, x1, y1, rad, 0, 0, rad)   // inner = left
-        default:       return rrPath(x0, y0, x1, y1, 0, 0, rad, rad)   // top → inner = bottom
+        var horiz = (p === "top" || p === "bottom")
+        var ir = root._innerRadii(p, horiz ? x0 : y0, horiz ? x1 : y1, rad)
+        switch (p) {
+        case "bottom": return rrPath(x0, y0, x1, y1, ir[0], ir[1], 0, 0)   // inner = top
+        case "left":   return rrPath(x0, y0, x1, y1, 0, ir[0], ir[1], 0)   // inner = right
+        case "right":  return rrPath(x0, y0, x1, y1, ir[0], 0, 0, ir[1])   // inner = left
+        default:       return rrPath(x0, y0, x1, y1, 0, 0, ir[1], ir[0])   // top → inner = bottom
         }
     }
 
-    // Single floating strip (inset by the gap), fully rounded.
+    // Single floating strip, fully rounded: `gap` from the edge it faces, `air` at the two ends.
     function floatRect() {
         var p = VtlConfig.barPositionFor(root.mon)
         var t = VtlConfig.barThicknessFor(root.mon)
-        if (p === "bottom") return [gap, sh - gap - t, sw - gap, sh - gap]
-        if (p === "left")   return [gap, gap, gap + t, sh - gap]
-        if (p === "right")  return [sw - gap - t, gap, sw - gap, sh - gap]
-        return [gap, gap, sw - gap, gap + t]   // top
+        if (p === "bottom") return [air, sh - gap - t, sw - air, sh - gap]
+        if (p === "left")   return [gap, air, gap + t, sh - air]
+        if (p === "right")  return [sw - gap - t, air, sw - gap, sh - air]
+        return [air, gap, sw - air, gap + t]   // top
     }
 
     // Hole as a (per-corner) rounded rectangle, traced clockwise.
@@ -253,56 +300,149 @@ PanelWindow {
     function fillPath() {
         if (dockMode) return dockPath()
         if (floating) {
+            // Outer corners keep the radius; an inner corner a panel is flush against squares off,
+            // exactly as a dock's does — see _innerRadii.
             var f = floatRect()
-            return roundRectPath(f[0], f[1], f[2], f[3], r)
+            var p = VtlConfig.barPositionFor(root.mon)
+            var hz = (p === "top" || p === "bottom")
+            var ir = root._innerRadii(p, hz ? f[0] : f[1], hz ? f[2] : f[3], r)
+            if (p === "bottom") return rrPath(f[0], f[1], f[2], f[3], ir[0], ir[1], r, r)
+            if (p === "left")   return rrPath(f[0], f[1], f[2], f[3], r, ir[0], ir[1], r)
+            if (p === "right")  return rrPath(f[0], f[1], f[2], f[3], ir[0], r, r, ir[1])
+            return rrPath(f[0], f[1], f[2], f[3], r, r, ir[1], ir[0])   // top → inner = bottom
         }
-        return "M0,0 L" + sw + ",0 L" + sw + "," + sh + " L0," + sh + " Z " + holePath() + gapNotchPath()
+        return "M0,0 L" + sw + ",0 L" + sw + "," + sh + " L0," + sh + " Z " + holePath()
+    }
+
+    // ── Where an open popout has claimed the border ─────────────────────────────────────────────
+    // A panel docked onto the bar carries the line for the stretch it covers and leaves its own
+    // edge off there, so the bar has to leave exactly that stretch out and the two read as ONE
+    // line. The FRAME path has always done this. The dock and float paths did not: they drew their
+    // outline straight through, so every popout under a dock or a float bar came out as a separate
+    // box hanging under an unbroken line — no matter what the panel did at its end. That is the
+    // whole of "docking does not work" outside frame mode.
+    function _gapCovers(edgeName, v) {
+        var spans = root.gapSpans(edgeName)
+        for (var i = 0; i < spans.length; i++) if (v >= spans[i][0] && v <= spans[i][1]) return true
+        return false
+    }
+    // The pieces of a straight run from `s` to `e` that survive every claim on `edgeName`, in the
+    // run's own direction. Slivers shorter than the stroke is thick are dropped — a stub that short
+    // renders as a dot rather than a line.
+    function _keepRuns(edgeName, s, e) {
+        var lo = Math.min(s, e), hi = Math.max(s, e)
+        var keep = [[lo, hi]]
+        var spans = root.gapSpans(edgeName)
+        for (var i = 0; i < spans.length; i++) {
+            var g0 = Math.max(lo, spans[i][0]), g1 = Math.min(hi, spans[i][1])
+            if (g1 <= g0) continue
+            var next = []
+            for (var j = 0; j < keep.length; j++) {
+                var a = keep[j][0], b = keep[j][1]
+                if (g1 <= a || g0 >= b) { next.push([a, b]); continue }
+                if (g0 > a) next.push([a, g0])
+                if (g1 < b) next.push([g1, b])
+            }
+            keep = next
+        }
+        var minRun = Math.max(1, root.borderW)
+        var out = []
+        for (var k = 0; k < keep.length; k++)
+            if (keep[k][1] - keep[k][0] > minRun) out.push(keep[k])
+        if (e < s) { out.reverse(); for (var m = 0; m < out.length; m++) out[m] = [out[m][1], out[m][0]] }
+        return out
+    }
+
+    // One strip's outline (dock or float) with the claims cut out of its INNER face — the only side
+    // anything ever docks onto. Traversal order and every arc sweep are the ones the hand-written
+    // dock path used, per position; `closed` adds the far side (a float is a ring, a dock runs into
+    // the monitor border and stays open there). Emitted as independent subpaths, which a STROKED
+    // path may be: nothing is filled here, so a cut piece can stand on its own.
+    function stripBorderPath(p, x0, y0, x1, y1, rad, closed) {
+        var horiz = (p === "top" || p === "bottom")
+        var lo    = horiz ? x0 : y0
+        var hi    = horiz ? x1 : y1
+        var inner = (p === "top") ? y1 : (p === "bottom") ? y0 : (p === "left") ? x1 : x0
+        var far   = (p === "top") ? y0 : (p === "bottom") ? y1 : (p === "left") ? x0 : x1
+        function XY(a, d) { return horiz ? (a + "," + d) : (d + "," + a) }
+        function arc(a, d) { return " " + Style.cornerSeg(rad, horiz ? a : d, horiz ? d : a) }
+
+        var rev  = (p === "top" || p === "right")
+        var a0   = rev ? hi : lo, a1 = rev ? lo : hi
+        var sgn  = (a1 > a0) ? 1 : -1
+        var dSgn = (far < inner) ? -1 : 1
+        var dIn  = inner + dSgn * rad             // where an inner arc leaves the end run
+        var dFar = far   - dSgn * rad             // …and where a far arc does, when closed
+        // An inner corner drops out entirely once a claim covers where it hands over to its run —
+        // otherwise the arc is left hanging in the panel's mouth as a stub with nothing to continue
+        // it. The run then reaches the corner point itself, so no second hole opens up.
+        var cLo = rad > 0 && !root._gapCovers(p, a0 + sgn * rad)
+        var cHi = rad > 0 && !root._gapCovers(p, a1 - sgn * rad)
+        // Where a corner squared off, the run does not stop half a stroke short of the inner face:
+        // the bar's line is inset INTO the strip, the panel's is offset the other way, so the two
+        // ends of what should be one straight line missed each other by a pixel and left a tiny
+        // step at the seam. Squared ends run the extra 2·hair and the lines overlap instead —
+        // collinear, same colour, so the overlap paints nothing new.
+        var dEdge = inner - dSgn * 2 * root.hair
+        var out = []
+        // End run 1 → inner corner 1
+        out.push("M" + XY(a0, closed ? dFar : far) + " L" + XY(a0, cLo ? dIn : dEdge))
+        if (cLo) out[out.length - 1] += arc(a0 + sgn * rad, inner)
+        // The inner face, in pieces
+        var runs = root._keepRuns(p, a0 + (cLo ? sgn * rad : 0), a1 - (cHi ? sgn * rad : 0))
+        for (var i = 0; i < runs.length; i++)
+            out.push("M" + XY(runs[i][0], inner) + " L" + XY(runs[i][1], inner))
+        // Inner corner 2 → end run 2 (→ around the far side when closed)
+        var tail = "M" + XY(a1 - (cHi ? sgn * rad : 0), cHi ? inner : dEdge)
+        if (cHi) tail += arc(a1, dIn)
+        tail += " L" + XY(a1, closed ? dFar : far)
+        if (closed && rad > 0) {
+            tail += arc(a1 - sgn * rad, far)
+                  + " L" + XY(a0 + sgn * rad, far)
+                  + arc(a0, dFar)
+        } else if (closed) {
+            tail += " L" + XY(a0, far)
+        }
+        out.push(tail)
+        return out.join(" ")
     }
 
     // Dock border: OPEN outline along the content side + the two ends only — the edge that
-    // touches the monitor border draws no line (a docked strip visually continues into the
-    // bezel). Clockwise, so cornerSeg's sweep matches rrPath's.
+    // touches the monitor border draws no line (a docked strip visually continues into the bezel).
     function dockBorderPath() {
         var p = VtlConfig.barPositionFor(root.mon)
         var s = root.stripRect(p)
-        var x0 = s[0], y0 = s[1], x1 = s[0] + s[2], y1 = s[1] + s[3]
-        var rad = Math.min(r, s[2] / 2, s[3] / 2)
-        if (p === "bottom")                                    // screen edge = bottom
-            return "M" + x0 + "," + y1 + " L" + x0 + "," + (y0 + rad)
-                 + " " + Style.cornerSeg(rad, x0 + rad, y0)
-                 + " L" + (x1 - rad) + "," + y0
-                 + " " + Style.cornerSeg(rad, x1, y0 + rad)
-                 + " L" + x1 + "," + y1
-        if (p === "left")                                      // screen edge = left
-            return "M" + x0 + "," + y0 + " L" + (x1 - rad) + "," + y0
-                 + " " + Style.cornerSeg(rad, x1, y0 + rad)
-                 + " L" + x1 + "," + (y1 - rad)
-                 + " " + Style.cornerSeg(rad, x1 - rad, y1)
-                 + " L" + x0 + "," + y1
-        if (p === "right")                                     // screen edge = right
-            return "M" + x1 + "," + y1 + " L" + (x0 + rad) + "," + y1
-                 + " " + Style.cornerSeg(rad, x0, y1 - rad)
-                 + " L" + x0 + "," + (y0 + rad)
-                 + " " + Style.cornerSeg(rad, x0 + rad, y0)
-                 + " L" + x1 + "," + y0
-        return "M" + x1 + "," + y0 + " L" + x1 + "," + (y1 - rad)   // top → screen edge = top
-             + " " + Style.cornerSeg(rad, x1 - rad, y1)
-             + " L" + (x0 + rad) + "," + y1
-             + " " + Style.cornerSeg(rad, x0, y1 - rad)
-             + " L" + x0 + "," + y0
+        // Inset by half a stroke so each run sits on a whole pixel — same reason as borderPath's
+        // outset, mirrored because here the fill is INSIDE the outline.
+        var h = root.hair
+        var rad = Math.max(0, Math.min(r, s[2] / 2, s[3] / 2) - h)
+        return root.stripBorderPath(p, s[0] + h, s[1] + h, s[0] + s[2] - h, s[1] + s[3] - h, rad, false)
     }
 
     // Border: the floating outline, or only the *interior* hole edges (the ones not on
     // the screen border), stitched with rounded corners between adjacent interior edges.
+    //
+    // Every run is nudged onto the pixel grid by half a stroke (Style.hairline) — outward here,
+    // into the bar's own fill, so the line takes the strip's last row and the desktop side stays
+    // untouched. Without it the bottom and right of a frame draw twice the ink of the top and left;
+    // see Style.hairline for the measurement and the reason. The corner radii grow by the same
+    // amount, which keeps every arc concentric with the one the fill cuts — so the run/arc
+    // junctions land exactly where they did before.
     function borderPath() {
+        var h = root.hair
         if (dockMode) return dockBorderPath()
         if (floating) {
+            // Closed ring, but with the same bite taken out of its inner face as a dock's.
             var f = floatRect()
-            return roundRectPath(f[0], f[1], f[2], f[3], r)
+            return root.stripBorderPath(VtlConfig.barPositionFor(root.mon),
+                                        f[0] + h, f[1] + h, f[2] - h, f[3] - h,
+                                        Math.max(0, r - h), true)
         }
         var top = edgeOn("top"), right = edgeOn("right"), bottom = edgeOn("bottom"), left = edgeOn("left")
         var cTL = left && top, cTR = top && right, cBR = right && bottom, cBL = bottom && left
-        var L = holeL, R = holeR, T = holeT, B = holeB
+        var L = holeL - h, R = holeR + h, T = holeT - h, B = holeB + h
+        var rTL = root.rTL > 0 ? root.rTL + h : 0, rTR = root.rTR > 0 ? root.rTR + h : 0
+        var rBR = root.rBR > 0 ? root.rBR + h : 0, rBL = root.rBL > 0 ? root.rBL + h : 0
         function ln(sx, sy, ex, ey)        { return { s: [sx, sy], e: [ex, ey], c: "L" + ex + "," + ey } }
         function ar(sx, sy, ex, ey, rad)   { return { s: [sx, sy], e: [ex, ey], c: Style.cornerSeg(rad, ex, ey) } }
         // Open popouts take bites out of the inner border on their edges; `cut` returns the pieces
@@ -327,21 +467,51 @@ PanelWindow {
                 }
                 keep = next
             }
+            // Drop slivers. A gap that starts a fraction of a pixel past the run's own beginning
+            // leaves a stub shorter than the line is thick, and a stroke that short is not a line
+            // at all — it renders as a DOT, which is what appeared in the corner as soon as popouts
+            // began claiming the perpendicular edge as well. Nothing under a stroke-width can read
+            // as anything but an artefact, so it never gets drawn.
+            var minRun = Math.max(1, root.borderW)
+            keep = keep.filter(function (k) { return k[1] - k[0] > minRun })
             function seg(a, b) { return horiz ? ln(a, sy, b, sy) : ln(sx, a, sx, b) }
             var out = []
             if (e >= s) for (var m = 0; m < keep.length; m++) out.push(seg(keep[m][0], keep[m][1]))
             else        for (var n = keep.length - 1; n >= 0; n--) out.push(seg(keep[n][1], keep[n][0]))
             return out
         }
+        // A corner arc is not a straight run, so `cut` cannot bite pieces out of it — it is pushed
+        // whole or not at all. Whole was wrong the moment a popout opened next to a corner: the
+        // popout's gap swallows the run it feeds into, and the arc is left hanging in the mouth as
+        // a stub with nothing to continue it (the notification tray at a top-left corner, with a
+        // left bar present, is the case that showed it). So a corner drops out entirely once a gap
+        // covers where it hands over to either of its two runs — and because the runs below are
+        // bounded by the SAME flag, whichever run survives then reaches the corner point itself
+        // instead of stopping a radius short and leaving a second hole.
+        function gapCovers(edgeName, v) {
+            var spans = root.gapSpans(edgeName)
+            for (var i = 0; i < spans.length; i++)
+                if (v >= spans[i][0] && v <= spans[i][1]) return true
+            return false
+        }
         var seq = []
-        if (cTL)    seq.push(ar(L, T + rTL, L + rTL, T, rTL))
-        if (top)    seq = seq.concat(cut("top",    L + (cTL ? rTL : 0), T, R - (cTR ? rTR : 0), T))
-        if (cTR)    seq.push(ar(R - rTR, T, R, T + rTR, rTR))
-        if (right)  seq = seq.concat(cut("right",  R, T + (cTR ? rTR : 0), R, B - (cBR ? rBR : 0)))
-        if (cBR)    seq.push(ar(R, B - rBR, R - rBR, B, rBR))
-        if (bottom) seq = seq.concat(cut("bottom", R - (cBR ? rBR : 0), B, L + (cBL ? rBL : 0), B))
-        if (cBL)    seq.push(ar(L + rBL, B, L, B - rBL, rBL))
-        if (left)   seq = seq.concat(cut("left",   L, B - (cBL ? rBL : 0), L, T + (cTL ? rTL : 0)))
+        // Live corner flags: rounded AND not swallowed by a popout's gap on either of its runs.
+        // BOTH edges, not either. A surface that merges around a corner claims the border on both
+        // of them, and only then has it taken the corner over. One claim alone is just a popout
+        // whose skirt happens to reach that far — dropping the arc for it left the corner square
+        // with nothing to fill it.
+        var aTL = cTL && !(gapCovers("top", L + rTL)    && gapCovers("left",  T + rTL))
+        var aTR = cTR && !(gapCovers("top", R - rTR)    && gapCovers("right", T + rTR))
+        var aBR = cBR && !(gapCovers("bottom", R - rBR) && gapCovers("right", B - rBR))
+        var aBL = cBL && !(gapCovers("bottom", L + rBL) && gapCovers("left",  B - rBL))
+        if (aTL)    seq.push(ar(L, T + rTL, L + rTL, T, rTL))
+        if (top)    seq = seq.concat(cut("top",    L + (aTL ? rTL : 0), T, R - (aTR ? rTR : 0), T))
+        if (aTR)    seq.push(ar(R - rTR, T, R, T + rTR, rTR))
+        if (right)  seq = seq.concat(cut("right",  R, T + (aTR ? rTR : 0), R, B - (aBR ? rBR : 0)))
+        if (aBR)    seq.push(ar(R, B - rBR, R - rBR, B, rBR))
+        if (bottom) seq = seq.concat(cut("bottom", R - (aBR ? rBR : 0), B, L + (aBL ? rBL : 0), B))
+        if (aBL)    seq.push(ar(L + rBL, B, L, B - rBL, rBL))
+        if (left)   seq = seq.concat(cut("left",   L, B - (aBL ? rBL : 0), L, T + (aTL ? rTL : 0)))
         if (!seq.length) return ""
         var d = "", prev = null
         for (var i = 0; i < seq.length; i++) {
@@ -352,6 +522,44 @@ PanelWindow {
         }
         if (top && right && bottom && left && !root.anyGap) d += " Z"
         return d
+    }
+
+    // ── The outline needs a repaint ONE FRAME AFTER it changes ────────────────────────────────
+    // A changed path does not, on its own, get this window repainted. The bar is a full-screen
+    // layer surface that is otherwise IDLE while a popout grows: the toast animates in ITS OWN
+    // window, nothing in the bar's own tree moves, and so no frame is ever scheduled here. The
+    // outline on screen then stays the one from the last repaint — measured with a single toast
+    // claiming x 38..424 of the top edge: the bar kept drawing its line straight across the
+    // toast's mouth for ~2.5 s, until an unrelated module tick happened to dirty the window and
+    // it caught up in one step. (That is also why it looked intermittent: the FIRST notification
+    // after a restart lights the tray badge, which repaints the bar by itself and hides the bug.)
+    //
+    // Dirtying the window in the SAME turn as the path change does nothing — measured, with both
+    // an opacity nudge on the Shape and a geometry change on an unrelated item: the extra dirty is
+    // absorbed into the update the path change already left pending, and no frame comes of it. One
+    // event-loop turn later the same nudge schedules a real frame and the cut is exact from the
+    // first 100 ms on. So the nudge is DEFERRED by a frame; the timer repeats only for as long as
+    // the path keeps changing (an animating claim re-arms it every frame) and stops one tick after
+    // it settles, which is why this is not the permanent 60 Hz repaint the first fix attempt used.
+    //
+    // This is a repaint problem, NOT a tessellation one: with a frame scheduled, one plain
+    // CurveRenderer Shape redraws the cut path correctly. An earlier reading of the same symptom
+    // as "Shape stops re-tessellating" led to splitting the outline across two renderers by
+    // segment type; that was unnecessary and is gone.
+    readonly property string borderD: root.borderPath()
+    property real repaintNudge: 0
+    Timer {
+        id: repaintPulse
+        interval: 16; repeat: true; running: false
+        property int left: 0
+        onTriggered: {
+            root.repaintNudge = root.repaintNudge === 0 ? 0.002 : 0
+            if (--repaintPulse.left <= 0) repaintPulse.stop()
+        }
+    }
+    onBorderDChanged: {
+        repaintPulse.left = 3          // one tick suffices (measured); two spare for a dropped frame
+        if (!repaintPulse.running) repaintPulse.start()
     }
 
     // Strip rectangle [x, y, w, h] for an edge (gap-inset when floating; 0 when inactive).
@@ -389,6 +597,7 @@ PanelWindow {
         Region { x: root.armRect("right")[0];  y: root.armRect("right")[1];  width: root.armRect("right")[2];  height: root.armRect("right")[3]  }
     }
 
+
     // ── Fill ───────────────────────────────────────────────────────────────────
     // GeometryRenderer (not CurveRenderer) — the latter does not reliably subtract an
     // even-odd hole that contains an arc, which left the whole screen filled in frame mode.
@@ -407,15 +616,17 @@ PanelWindow {
     // CurveRenderer for a smooth inner-edge stroke (a single open/closed outline, no hole).
     // Cupertino draws no bar outline at all — the macOS strip is just a frosted band.
     Shape {
-        opacity: root.peekOpacity
+        // The nudge is what buys the repaint (see borderD above); 0.002 of opacity is well under
+        // one 8-bit step on this stroke, so it costs the line nothing visible.
+        opacity: root.peekOpacity - root.repaintNudge
         anchors.fill: parent
         visible: !Style.isCupertino
         preferredRendererType: Shape.CurveRenderer
         ShapePath {
             fillColor:   "transparent"
             strokeColor: root.cBorder
-            strokeWidth: Style.chromeBorderWidth
-            PathSvg { path: root.borderPath() }
+            strokeWidth: root.borderW
+            PathSvg { path: root.borderD }
         }
     }
 
@@ -446,27 +657,48 @@ PanelWindow {
         opacity: root.peekOpacity
         enabled: root.barShown
 
-        ModGroup {
-            edge: em.edge; group: "start"
-            anchors.left:             em.horiz ? parent.left : undefined
-            anchors.leftMargin:       em.m
-            anchors.top:              em.horiz ? undefined : parent.top
-            anchors.topMargin:        em.m
-            anchors.verticalCenter:   em.horiz ? parent.verticalCenter : undefined
-            anchors.horizontalCenter: em.horiz ? undefined : parent.horizontalCenter
-        }
-        ModGroup {
-            edge: em.edge; group: "center"
-            anchors.centerIn: parent
-        }
-        ModGroup {
-            edge: em.edge; group: "end"
-            anchors.right:            em.horiz ? parent.right : undefined
-            anchors.rightMargin:      em.m
-            anchors.bottom:           em.horiz ? undefined : parent.bottom
-            anchors.bottomMargin:     em.m
-            anchors.verticalCenter:   em.horiz ? parent.verticalCenter : undefined
-            anchors.horizontalCenter: em.horiz ? undefined : parent.horizontalCenter
+        // ── The corner stays neutral ─────────────────────────────────────────────────────────────
+        // Where two strips meet, the corner square belongs to BOTH of them, and a module dropped in
+        // it reads as sitting in the wrong one — it is also the one place a popout has to be able to
+        // turn without covering anything. So modules never start there: each end of the lane is
+        // pulled in by the perpendicular strip's own thickness, which is exactly the square the two
+        // edges share. Nothing changes on an edge whose neighbour carries no bar.
+        readonly property int cornerLo: em.horiz ? (root.edgeOn("left") ? root.cornerZone : 0)
+                                                 : (root.edgeOn("top")  ? root.cornerZone : 0)
+        readonly property int cornerHi: em.horiz ? (root.edgeOn("right")  ? root.cornerZone : 0)
+                                                 : (root.edgeOn("bottom") ? root.cornerZone : 0)
+        // The lane the three groups actually live in — the strip minus those two squares. Centre
+        // stays centred IN THE LANE, so a corner on one side alone does not shove it off-centre by
+        // half a strip.
+        Item {
+            id: lane
+            x:      em.horiz ? em.cornerLo : 0
+            y:      em.horiz ? 0 : em.cornerLo
+            width:  em.horiz ? Math.max(0, em.width - em.cornerLo - em.cornerHi) : em.width
+            height: em.horiz ? em.height : Math.max(0, em.height - em.cornerLo - em.cornerHi)
+
+            ModGroup {
+                edge: em.edge; group: "start"
+                anchors.left:             em.horiz ? parent.left : undefined
+                anchors.leftMargin:       em.m
+                anchors.top:              em.horiz ? undefined : parent.top
+                anchors.topMargin:        em.m
+                anchors.verticalCenter:   em.horiz ? parent.verticalCenter : undefined
+                anchors.horizontalCenter: em.horiz ? undefined : parent.horizontalCenter
+            }
+            ModGroup {
+                edge: em.edge; group: "center"
+                anchors.centerIn: parent
+            }
+            ModGroup {
+                edge: em.edge; group: "end"
+                anchors.right:            em.horiz ? parent.right : undefined
+                anchors.rightMargin:      em.m
+                anchors.bottom:           em.horiz ? undefined : parent.bottom
+                anchors.bottomMargin:     em.m
+                anchors.verticalCenter:   em.horiz ? parent.verticalCenter : undefined
+                anchors.horizontalCenter: em.horiz ? undefined : parent.horizontalCenter
+            }
         }
     }
 
@@ -495,6 +727,25 @@ PanelWindow {
         implicitWidth:  mg.horiz ? (rowLay.implicitWidth  + 2 * mg.pad) : colLay.implicitWidth
         implicitHeight: mg.horiz ? rowLay.implicitHeight : (colLay.implicitHeight + 2 * mg.pad)
         width: implicitWidth; height: implicitHeight
+
+        // Report the stretch this group occupies along its edge, in screen coordinates, so a popout
+        // merging into a strip it does not grow from can tell chrome from content and stay off the
+        // latter (UiState.barModulesIn). Mapped through the bar window, which spans the output, so
+        // no coordinate translation is needed. Cleared while the group is empty or the edge is off,
+        // otherwise a removed module would keep reserving the stretch it used to hold.
+        readonly property string spanKey: "mod:" + root.mon + ":" + mg.edge + ":" + mg.group
+        readonly property real   spanFrom: mg.horiz ? mg.x + lane.x + em.x : mg.y + lane.y + em.y
+        readonly property real   spanTo:   mg.spanFrom + (mg.horiz ? mg.width : mg.height)
+        readonly property bool   spanLive: mg.hasAny && root.edgeOn(mg.edge) && root.mon !== ""
+        function pushSpan() {
+            if (mg.spanLive) UiState.setBarModuleSpan(mg.spanKey, root.mon, mg.edge, mg.spanFrom, mg.spanTo)
+            else             UiState.clearBarModuleSpan(mg.spanKey)
+        }
+        onSpanFromChanged: pushSpan()
+        onSpanToChanged:   pushSpan()
+        onSpanLiveChanged: pushSpan()
+        Component.onCompleted:   pushSpan()
+        Component.onDestruction: UiState.clearBarModuleSpan(mg.spanKey)
 
         StyledRect {
             visible: mg.groupBg && mg.hasAny
@@ -610,6 +861,29 @@ PanelWindow {
                 UiState.menuMon                = root.mon
                 UiState.openDropdown           = "vuture-icon"
             }
+        }
+
+        // ── The module status dot ─────────────────────────────────────────────────
+        // It belongs to the SLOT, not to the module: every module then carries it in the same
+        // corner of the same box, at the same size, instead of each one hanging its own dot off
+        // whatever glyph it happens to draw (which is what made three modules look like three
+        // different indicators). A module only declares the state:
+        //   dotOn   (bool)  — is there something to report
+        //   dotTone (color) — what it means; omitted = Style.dotTone
+        readonly property bool  dotOn:   ms.hasContent && ldr.item !== null && ldr.item.dotOn === true
+        readonly property color dotTone: (ldr.item && ldr.item.dotTone !== undefined) ? ldr.item.dotTone
+                                                                                      : Style.dotTone
+        // Right ON the corner, overhanging the box by a hair: a badge that breaks the module's
+        // outline is read as belonging to the module, while one tucked safely inside reads as part
+        // of the content. Nothing in the bar clips, so the overhang survives.
+        readonly property int dotOver: Math.max(2, Math.round(Style.dotSize(root.mon) * 0.25))
+        StatusDot {
+            barMon: root.mon
+            on:     ms.dotOn
+            tone:   ms.dotTone
+            z:      11
+            anchors { right: parent.right; top: parent.top
+                      rightMargin: -ms.dotOver; topMargin: -ms.dotOver }
         }
 
         Loader {

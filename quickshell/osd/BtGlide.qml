@@ -4,6 +4,7 @@ import QtQuick
 // Active Bluetooth connection gliding out of the bar on hover of the Bluetooth module (which
 // publishes the connected device names into UiState). keepOpenOnHover so the cursor can rest on it.
 BarGlide {
+    glideId: "bt"
     id: g
     mine:            UiState.btMon === g.mon && g.mon !== ""
     shown:           UiState.btHover

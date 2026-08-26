@@ -24,8 +24,16 @@ Item {
     property string position:   "top"
     property var    edges:      ["top", "left"]
     property int    thickness:  36
+    // gap = distance to the edge the bar faces (float only); sideGap = distance at the two ends,
+    // which a dock has too. One value per axis, so the strip cannot end up lopsided.
     property int    gap:        8
+    property int    sideGap:    8
     property int    radius:     16
+    // -1 = unset, i.e. follow the ui_style's own outline weight. The stepper offers it as "Auto"
+    // below 0 so a user who has touched it can get back to the style default.
+    property int    borderW:    -1
+    // -1 = unset, i.e. follow the bar's inner radius.
+    property int    cornerInset: -1
     property int    margin:     12
     property int    modSpacing: 10
     property int    iconSize:   18
@@ -39,6 +47,24 @@ Item {
     property string customizeKey: ""            // module key whose customization overlay is open
     property var    fonts:      []              // installed font families (lazy fc-list)
     property var    _fontBuf:   []
+
+    // Upper bound for the two gaps. NOT a round number picked by feel: a strip inset from both
+    // ends by more than half its screen has no length left, so the ceiling is derived from the
+    // screen actually being edited (the smallest side of it, since the bar can sit on any edge)
+    // and still leaves ~120 px of strip. On a 1440-tall screen that is 660 px per end — "as much
+    // as you want" in every practical sense, without a setting that can erase the bar.
+    readonly property int scrMin: {
+        var m = 0
+        for (var i = 0; i < root.monitors.length; i++) {
+            var s = root.monitors[i]
+            if (!s) continue
+            if (root.editMon !== "" && root.monName(s) !== root.editMon) continue
+            var d = Math.min(s.width, s.height)
+            if (m === 0 || d < m) m = d
+        }
+        return m === 0 ? 1080 : m
+    }
+    readonly property int maxGap: Math.max(40, Math.round(root.scrMin / 2) - 60)
 
     readonly property var allEdges:  ["top", "left", "bottom", "right"]
     readonly property var allGroups: ["start", "center", "end"]
@@ -120,7 +146,12 @@ Item {
         edges      = VtlConfig.barEdgesFor(mn).slice()
         thickness  = VtlConfig.barThicknessFor(mn)
         gap        = VtlConfig.barFloatGapFor(mn)
+        sideGap    = VtlConfig.barSideGapFor(mn)
         radius     = VtlConfig.barInnerRadiusFor(mn)
+        var bw     = VtlConfig.barBorderWidthFor(mn)
+        borderW    = (bw === null || bw === undefined) ? -1 : bw
+        var ci     = VtlConfig.barCornerInsetFor(mn)
+        cornerInset = (ci === null || ci === undefined) ? -1 : ci
         margin     = VtlConfig.barModuleMarginFor(mn)
         modSpacing = VtlConfig.barModuleSpacingFor(mn)
         iconSize   = VtlConfig.barIconSizeFor(mn)
@@ -195,53 +226,91 @@ Item {
         blurDebounce.restart()
     }
 
-    // Persist the module map under bar_modules_m.<currentMode> (per-monitor when editing one),
-    // merging so the other modes/monitors are left untouched. `purgeKey` (a "group:<n>" instance)
-    // additionally drops that key's module_settings entry IF it is no longer referenced anywhere —
-    // same script, so the purge can't race the map write.
-    function saveModules(map, purgeKey) {
-        var py = [
-            "import json,os,sys",
-            "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.join(os.environ.get('XDG_CONFIG_HOME','') or os.path.expanduser('~/.config'),'velumeron')",
-            "p=os.path.join(pu,'gui','settings.json')",
-            "os.makedirs(os.path.dirname(p),exist_ok=True)",
-            "d=json.load(open(p)) if os.path.exists(p) else {}",
-            "v=json.loads(sys.argv[1]);mode=sys.argv[2];m=sys.argv[3];k=sys.argv[4]",
-            "t=(d.setdefault('bar_monitors',{}).setdefault(m,{}) if m else d)",
-            "t.setdefault('bar_modules_m',{})[mode]=v",
-            "def arrs(node):",
-            " out=[]",
-            " for eg in (node or {}).values():",
-            "  if isinstance(eg,dict):",
-            "   for a in eg.values():",
-            "    if isinstance(a,list): out.extend(a)",
-            " return out",
-            "if k:",
-            " used=[]",
-            " for mm in (d.get('bar_modules_m') or {}).values(): used+=arrs(mm)",
-            " used+=arrs(d.get('bar_modules'))",
-            " for mo in (d.get('bar_monitors') or {}).values():",
-            "  for mm in ((mo or {}).get('bar_modules_m') or {}).values(): used+=arrs(mm)",
-            "  used+=arrs((mo or {}).get('bar_modules'))",
-            " if k not in used and isinstance(d.get('module_settings'),dict): d['module_settings'].pop(k,None)",
-            "t=p+'.tmp';open(t,'w').write(json.dumps(d,indent=2));os.replace(t,p)"
-        ].join("\n")
-        // NOT restarted with running=false: this walks every mode and every monitor to decide
-        // whether a removed group is still referenced anywhere, and killing that halfway through
-        // used to leave settings.json truncated. Queued instead, and written tmp+rename.
-        if (saveProc.running) { root._modsQueued = [map, purgeKey]; return }
-        saveProc.command = ["python3", "-c", py, JSON.stringify(map), root.mode, editMon, purgeKey || ""]
-        saveProc.running = true
-    }
-    property var _modsQueued: null
-    Process {
-        id: saveProc
-        onExited: {
-            if (!root._modsQueued) return
-            var q = root._modsQueued
-            root._modsQueued = null
-            root.saveModules(q[0], q[1])
+    // Persist the module map under bar_modules_m.<layoutKey> (per-monitor when editing one).
+    //
+    // Through SettingsStore, like every other key on this page. It used to run its OWN python merge,
+    // and two writers on one file cannot be made to agree: SettingsStore rewrites whole top-level
+    // keys from a clone taken when `set()` was called, so a `bar_monitors` batch in flight silently
+    // replaces an arrangement python wrote a moment earlier. That is exactly what left the bar
+    // rendering modules while the picker showed the layout as empty — toggleEdge pins the old
+    // arrangement and saves bar_edges in the same breath, so the two writers collided every time.
+    //
+    // `key` overrides which layout the map is filed under — toggleEdge uses it to pin what is on
+    // screen to the edge combination it was built for, BEFORE the combination changes.
+    // `purgeKey` (a "group:<n>" instance) drops that key's module_settings entry once no
+    // arrangement references it any more.
+    function saveModules(map, purgeKey, key) {
+        var lk = key || VtlConfig.barLayoutKeyOf(root.mode, root.edges)
+        if (!editMon) {
+            SettingsStore.set("bar_modules_m", root._storeWith(VtlConfig.barModulesMap, lk, map))
+        } else {
+            var all = {}
+            var cur = VtlConfig.barMonitors
+            for (var m in cur) {
+                all[m] = {}
+                for (var k in cur[m]) all[m][k] = cur[m][k]
+            }
+            if (!all[editMon]) all[editMon] = ({})
+            // A monitor without its own store inherits the global one WHOLESALE (see
+            // VtlConfig.barModulesForMode), so the first per-monitor arrangement has to start from
+            // a copy of it — writing only the edited layout would blank every other layout there.
+            all[editMon].bar_modules_m = root._storeWith(all[editMon].bar_modules_m || VtlConfig.barModulesMap,
+                                                        lk, map)
+            SettingsStore.set("bar_monitors", all)
         }
+        if (purgeKey) root._purgeModuleSettings(purgeKey)
+    }
+    function _storeWith(store, key, map) {
+        var out = {}
+        for (var k in store) out[k] = store[k]
+        out[key] = map
+        // Once a frame combination is filed under its own key, the pre-split single `frame` map has
+        // done its job as a fallback and must go — otherwise every OTHER combination would keep
+        // inheriting it instead of starting blank.
+        //
+        // Only when something was actually filed, though. Retiring the fallback while pinning an
+        // EMPTY arrangement would throw away the one copy of a pre-split frame that nothing else
+        // has recorded yet — the legacy map is the only place those modules exist.
+        if (("" + key).indexOf("frame:") === 0 && root._mapHasModules(map)) delete out["frame"]
+        return out
+    }
+    function _mapHasModules(map) {
+        for (var e in map) {
+            var eg = map[e]
+            if (!eg) continue
+            for (var g in eg) if (eg[g] && eg[g].length) return true
+        }
+        return false
+    }
+    // Every module key referenced by any arrangement anywhere: all layouts, the legacy flat map,
+    // every monitor override, and the map this page is holding but may not have written yet.
+    function _usedModuleKeys() {
+        var used = {}
+        function mark(node) {
+            if (!node) return
+            for (var e in node) { var eg = node[e]; if (!eg) continue
+                for (var g in eg) { var arr = eg[g]
+                    if (arr && arr.length) for (var i = 0; i < arr.length; i++) used[arr[i]] = true } }
+        }
+        var d = VtlConfig._data || {}
+        var mm = d.bar_modules_m || {}
+        for (var lk in mm) mark(mm[lk])
+        mark(d.bar_modules)
+        var bm = d.bar_monitors || {}
+        for (var mn in bm) {
+            var mmm = (bm[mn] || {}).bar_modules_m || {}
+            for (var l2 in mmm) mark(mmm[l2])
+            mark((bm[mn] || {}).bar_modules)
+        }
+        mark(root.modules)
+        return used
+    }
+    function _purgeModuleSettings(key) {
+        if (root._usedModuleKeys()[key]) return       // still on some bar somewhere
+        var ms = root._moduleSettingsClone()
+        if (ms[key] === undefined) return
+        delete ms[key]
+        SettingsStore.set("module_settings", ms)
     }
 
     // ── Per-module customization persistence (module_settings.<key>.<name>, global) ──
@@ -284,14 +353,31 @@ Item {
 
     function setPerMonitor(on) { perMonitor = on; saveKey("bar_per_monitor", on, ""); reload() }
     function setTargetMon(n)   { targetMon = n; reload() }
+    // Scope chips: "All monitors" IS per-monitor off, a screen name is per-monitor on aimed at that
+    // screen — one control instead of a switch plus a second row that only appears once it is on.
+    // setPerMonitor's write lands in VtlConfig immediately (SettingsStore.applyLocal), so the
+    // reload it triggers already reads the new scope and keeps the monitor picked here.
+    function pickMonitor(n) {
+        if (n === "") return
+        targetMon = n
+        if (!perMonitor) setPerMonitor(true)
+        else             reload()
+    }
 
     function reloadActiveEdge() { if (currentEdges().indexOf(activeEdge) < 0) activeEdge = currentEdges()[0] || "top" }
     // Switching mode shows that mode's saved module arrangement (and the dock/frame/float layout).
     function setMode(m)      { mode = m; save("bar_mode", m); reloadActiveEdge(); reloadModules() }
     function setPosition(p)  { position = p; save("bar_position", p); reloadActiveEdge() }
     function setThickness(v) { thickness = Math.max(16, Math.min(80, v)); save("bar_thickness", thickness) }
-    function setGap(v)       { gap = Math.max(0, Math.min(40, v)); save("bar_float_gap", gap) }
+    function setGap(v)       { gap = Math.max(0, Math.min(root.maxGap, v)); save("bar_float_gap", gap) }
+    // Writes its own key even when it still shows the face gap's value (barSideGapFor falls back to
+    // it), so touching it once is what makes the two independent — nothing changes behind the user.
+    function setSideGap(v)   { sideGap = Math.max(0, Math.min(root.maxGap, v)); save("bar_side_gap", sideGap) }
     function setRadius(v)    { radius = Math.max(0, Math.min(40, v)); save("bar_inner_radius", radius) }
+    // Below 0 means "Auto": clear the key so Bar.qml falls back to Style.chromeBorderWidth again.
+    function setBorderW(v)   { borderW = Math.max(-1, Math.min(8, v)); save("bar_border_width", borderW < 0 ? null : borderW) }
+    // Below 0 = "Auto": clear the key and follow the inner radius again.
+    function setCornerInset(v) { cornerInset = Math.max(-1, Math.min(40, v)); save("bar_corner_inset", cornerInset < 0 ? null : cornerInset) }
     function setMargin(v)    { margin = Math.max(0, Math.min(40, v)); save("bar_module_margin", margin) }
     function setSpacing(v)   { modSpacing = Math.max(0, Math.min(40, v)); save("bar_module_spacing", modSpacing) }
     function setIconSize(v)  { iconSize = Math.max(8, Math.min(48, v)); save("bar_icon_size", iconSize) }
@@ -300,13 +386,25 @@ Item {
     function setBgRadius(v)  { bgRadius = Math.max(0, Math.min(30, v)); save("bar_module_bg_radius", bgRadius) }
     function setBgOpacity(v) { save("bar_module_bg_opacity", Math.max(0, Math.min(100, v)) / 100) }
 
+    // Every EDGE COMBINATION keeps its own module arrangement (VtlConfig.barLayoutKeyOf). So the
+    // set cannot change without first pinning what is on screen to the combination it was built
+    // for — that write is also what migrates a pre-split `frame` map. The new combination then
+    // loads its own, which is empty until it is built: adding a second bar gives you two blank
+    // bars to fill, and going back restores what the single bar had.
     function toggleEdge(e) {
         var set = {}
         for (var i = 0; i < edges.length; i++) set[edges[i]] = true
         if (set[e]) { if (Object.keys(set).length <= 1) return; delete set[e] }
         else        set[e] = true
-        edges = allEdges.filter(function(x) { return set[x] })
+        var next = allEdges.filter(function(x) { return set[x] })
+        // Pin what is on screen to the combination it was built for BEFORE the set changes. Both
+        // writes go through SettingsStore, which applies locally and flushes as one batch, so the
+        // reload below already sees the pin — the picker and the bar can never disagree about which
+        // arrangement is live.
+        if (mode === "frame") saveModules(modules, "", VtlConfig.barLayoutKeyOf("frame", edges))
+        edges = next
         save("bar_edges", edges)
+        reloadModules()
         reloadActiveEdge()
     }
     function addModule(edge, group, key) {
@@ -330,26 +428,9 @@ Item {
     // Next free instance key: scan every arrangement (all modes, legacy map, every monitor
     // override, the possibly-unsaved local map) plus module_settings, then take g<N+…>.
     function nextGroupKey() {
-        var used = {}
-        function mark(node) {
-            if (!node) return
-            for (var e in node) { var eg = node[e]; if (!eg) continue
-                for (var g in eg) { var arr = eg[g]
-                    if (arr && arr.length) for (var i = 0; i < arr.length; i++) used[arr[i]] = true } }
-        }
-        var d = VtlConfig._data || {}
-        var mm = d.bar_modules_m || {}
-        for (var mo in mm) mark(mm[mo])
-        mark(d.bar_modules)
-        var bm = d.bar_monitors || {}
-        for (var mn in bm) {
-            var mmm = (bm[mn] || {}).bar_modules_m || {}
-            for (var md in mmm) mark(mmm[md])
-            mark((bm[mn] || {}).bar_modules)
-        }
-        var ms = d.module_settings || {}
-        for (var k in ms) used[k] = true
-        mark(root.modules)
+        var used = root._usedModuleKeys()
+        var ms = (VtlConfig._data || {}).module_settings || {}
+        for (var k in ms) used[k] = true      // a customized-but-unplaced group still owns its key
         var n = 1
         while (used["group:g" + n]) n++
         return "group:g" + n
@@ -427,67 +508,57 @@ Item {
         return null
     }
 
-    // ── Header: per-monitor toggle + monitor picker (fixed) ─────────────────────────
+    // ── Scope: which screens the settings below are written for (fixed) ─────────────
+    // ONE row of chips, where there used to be a switch plus a row that appeared under it: "All
+    // monitors" is per-monitor off, any screen name is per-monitor on aimed at that screen. The two
+    // behaviour switches that shared this header moved into the Form tab, where they belong — this
+    // strip has one job, and it stays visible across the tabs because it scopes every one of them.
+    // Hidden on a single-screen machine (nothing to scope) unless an override is still on.
     Column {
         id: header
         visible: root.customizeKey === "" && root.addTarget === ""
+                 && (root.monitors.length > 1 || root.perMonitor)
         anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 2 }
-        spacing: 8
+        spacing: 6
 
-        // Hand-rolled switch rows replaced by the shared Toggle: same behaviour, and the
-        // explanation moves into its hover hint instead of a permanent second line.
-        Toggle {
-            label: "Per monitor"
-            sub:   "Set each setting separately per monitor"
-            on:    root.perMonitor
-            onToggled: root.setPerMonitor(!root.perMonitor)
+        FieldLabel {
+            text: "Editing"
+            hint: "Which screens these settings are written for. \"All monitors\" keeps one shared set; "
+                + "pick a screen and everything you change from then on applies to that screen alone."
         }
-
-        // Minimal bar on every non-main monitor (only with more than one connected).
-        Toggle {
-            label: "Minimal secondary bars"
-            sub:   "Non-main monitors show only clock + submap / workspaces"
-            on:    VtlConfig.secondaryBarsMinimal
-            onToggled: root.saveKey("secondary_bars_minimal", !VtlConfig.secondaryBarsMinimal, "")
-        }
-
-        // Fullscreen peek — per monitor when "Per monitor" is on, so a media screen can keep the
-        // bar out of the way while the others still reveal it.
-        Toggle {
-            label: "Peek in fullscreen"
-            sub:   "A fullscreen window hides the bar; with this on it lifts above the window and "
-                 + "returns when the pointer touches its screen edge. Off: fullscreen hides it outright."
-            on:    VtlConfig.barFullscreenPeekFor(root.editMon)
-            onToggled: root.saveKey("bar_fullscreen_peek",
-                                    !VtlConfig.barFullscreenPeekFor(root.editMon), root.editMon)
-        }
-
-        // Which monitor is being edited (live screen list).
         Flow {
-            visible: root.perMonitor
             width: parent.width; spacing: 6
+            Chip {
+                label:    "All monitors"
+                selected: !root.perMonitor
+                onClicked: if (root.perMonitor) root.setPerMonitor(false)
+            }
             Repeater {
                 model: root.monitors
                 delegate: Chip {
                     required property var modelData
                     label:    root.monName(modelData)
-                    selected: root.targetMon === root.monName(modelData)
-                    onClicked: root.setTargetMon(root.monName(modelData))
+                    selected: root.perMonitor && root.targetMon === root.monName(modelData)
+                    onClicked: root.pickMonitor(root.monName(modelData))
                 }
             }
         }
     }
 
     // ── Tab bar (fixed) ───────────────────────────────────────────────────────────
+    // Anchored to the top with the header's height folded into the margin, not to header.bottom:
+    // a hidden Column still occupies its content height, so a single-monitor machine would get a
+    // block of empty space where the scope strip is not.
     Row {
         id: tabBar
         visible: root.customizeKey === "" && root.addTarget === ""
-        anchors { top: header.bottom; left: parent.left; right: parent.right; topMargin: 12 }
+        anchors { top: parent.top; left: parent.left; right: parent.right
+                  topMargin: header.visible ? header.height + 14 : 2 }
         height:  34
         spacing: 6
-        TabBtn { icon: "󰠱"; label: "Form";   key: "form"    }
-        TabBtn { icon: "󰏘"; label: "Stil";   key: "style"   }
-        TabBtn { icon: "󰕰"; label: "Module"; key: "modules" }
+        TabBtn { icon: "󰠱"; label: "Form";    key: "form"    }
+        TabBtn { icon: "󰏘"; label: "Style";   key: "style"   }
+        TabBtn { icon: "󰕰"; label: "Modules"; key: "modules" }
     }
 
     // ── Page content (one tab visible at a time) ────────────────────────────────────
@@ -503,174 +574,318 @@ Item {
             width: parent.width
             implicitHeight: Math.max(formPage.implicitHeight, stylePage.implicitHeight, modPage.implicitHeight)
 
-            // ─── FORM: mode + position/edges (dropdowns) ──────────────────────
+            // ─── FORM: where the bar sits and what shape it takes ─────────────
             Column {
                 id: formPage
                 visible: root.tab === "form"
                 width: parent.width
                 spacing: Style.cardGap
 
-                Column {
-                    width: parent.width; spacing: 6
-                    FieldLabel { text: "Mode" }
-                    Dropdown {
-                        summary: root.cap(root.mode)
-                        options: [{ label: "Dock",  key: "dock",  on: root.mode === "dock"  },
-                                  { label: "Float", key: "float", on: root.mode === "float" },
-                                  { label: "Frame", key: "frame", on: root.mode === "frame" }]
+                // The mode and everything the mode decides live on ONE card: a floating bar has a
+                // gap, a frame has edges and a shared corner, and neither means anything for the
+                // other. Splitting them into blocks of their own (which is what three stacked
+                // dropdowns did) made the reader hunt for the second half of one decision.
+                Card {
+                    CardLabel {
+                        text: "SHAPE"
+                        hint: "How the bar meets the screen. The indented rows under the mode belong to "
+                            + "it and change with it — the rest of the card holds for every mode."
+                    }
+                    Segmented {
+                        equal:   true
+                        current: root.mode
+                        segments: [
+                            { label: "Dock",  key: "dock",
+                              hint: "Flush against one screen edge, full length, with a little air left at the two ends." },
+                            { label: "Float", key: "float",
+                              hint: "One edge, but detached: a rounded strip inset from the screen border by a gap." },
+                            { label: "Frame", key: "frame",
+                              hint: "Several edges at once — an L, a U or a full ring — with rounded inner corners." },
+                            { label: "None",  key: "none",
+                              hint: "No bar at all. The rest of the shell stays: the launcher, the OSDs, "
+                                  + "notifications and this menu all still open, they just grow from the bare "
+                                  + "screen edge. Your module layout is kept for when you come back." }]
                         onPicked: root.setMode(key)
                     }
+
+                    // Unlocked by the mode above, so: same card, directly beneath, indented.
+                    SubGroup {
+                        FieldLabel {
+                            visible: root.mode === "dock" || root.mode === "float"
+                            text: "Position"; hint: "Which screen edge the bar lives on."
+                        }
+                        Segmented {
+                            visible:  root.mode === "dock" || root.mode === "float"
+                            equal:    true
+                            current:  root.position
+                            segments: [{ label: "Top",    key: "top"    }, { label: "Left",  key: "left"  },
+                                       { label: "Bottom", key: "bottom" }, { label: "Right", key: "right" }]
+                            onPicked: root.setPosition(key)
+                        }
+
+                        FieldLabel {
+                            visible: root.mode === "frame"
+                            text: "Edges"
+                            hint: "Every edge that carries a bar. An edge with no modules on it renders at half thickness."
+                        }
+                        Flow {
+                            visible: root.mode === "frame"
+                            width: parent.width; spacing: 6
+                            Repeater {
+                                model: root.allEdges
+                                delegate: Chip {
+                                    required property string modelData
+                                    label:    root.cap(modelData)
+                                    selected: root.edges.indexOf(modelData) >= 0
+                                    onClicked: root.toggleEdge(modelData)
+                                }
+                            }
+                        }
+
+                        // Two gaps for a floating bar (the edge it faces, and its two ends), one for
+                        // a dock (its ends — it is flush against the edge it sits on). The ends
+                        // always share a value: left and right of a horizontal bar, top and bottom
+                        // of a vertical one, so it stays symmetrical whatever you set.
+                        Stepper {
+                            visible: root.mode === "float"
+                            label: "Screen gap"; unit: "px"; step: 1; max: root.maxGap; value: root.gap
+                            hint:  "Distance to the screen edge the bar faces."
+                            onChanged: root.setGap(v)
+                        }
+                        // Steps of five, not one: this one runs to hundreds of pixels (a bar pulled
+                        // right in from both ends is a look), and a 1 px march to 300 is not a
+                        // control. The face gap keeps its single steps — it lives around 8-20.
+                        Stepper {
+                            visible: root.mode === "float" || root.mode === "dock"
+                            label: "End gap"; unit: "px"; step: 5; max: root.maxGap; value: root.sideGap
+                            hint:  root.mode === "dock"
+                                   ? "Distance to the two edges it is NOT docked against — the strip stops short "
+                                   + "of the screen by this much at both ends."
+                                   : "Distance at the two ends of the strip. Both ends move together, so the bar "
+                                   + "stays centred on its edge."
+                            onChanged: root.setSideGap(v)
+                        }
+                        Stepper {
+                            visible: root.mode === "frame"
+                            label: "Corner zone"; unit: root.cornerInset < 0 ? "" : "px"
+                            step: 1; min: -1; max: 40
+                            value: root.cornerInset; display: root.cornerInset < 0 ? "Auto" : ""
+                            hint:  root.cornerInset < 0
+                                   ? "How far modules stay clear where two bars meet. Auto = the inner radius."
+                                   : root.cornerInset === 0
+                                     ? "Modules run all the way into the shared corner."
+                                     : "The same square at every corner, whatever the neighbouring bar weighs."
+                            onChanged: root.setCornerInset(v)
+                        }
+                    }
+
+                    // The bar's own body — these hold in every mode that HAS a strip.
+                    Stepper { visible: root.mode !== "none"
+                              label: "Thickness"; unit: "px"; step: 1; value: root.thickness
+                              hint: "How deep the strip is across its short side."
+                              onChanged: root.setThickness(v) }
+                    Stepper { visible: root.mode !== "none"
+                              label: "Radius"; unit: "px"; step: 1; value: root.radius
+                              hint: "Corner rounding: the inner corners of a frame, the inner side of a dock, "
+                                  + "the whole strip when it floats."
+                              onChanged: root.setRadius(v) }
+                    Stepper { visible: root.mode !== "none"
+                              label: "Border"; unit: root.borderW < 0 ? "" : "px"; step: 1; min: -1; max: 8
+                              value: root.borderW; display: root.borderW < 0 ? "Auto" : ""
+                              hint: root.borderW < 0
+                                    ? "Auto follows the style; step down for none, up for a heavier line."
+                                    : root.borderW === 0
+                                      ? "No outline — the bar meets the desktop on its fill alone."
+                                      : "Stays crisp at any width: the outline is nudged onto the pixel grid."
+                              onChanged: root.setBorderW(v) }
                 }
 
-                Column {
-                    visible: root.mode !== "frame"
-                    width: parent.width; spacing: 6
-                    FieldLabel { text: "Position" }
-                    Dropdown {
-                        summary: root.cap(root.position)
-                        options: [{ label: "Top",    key: "top",    on: root.position === "top"    },
-                                  { label: "Left",   key: "left",   on: root.position === "left"   },
-                                  { label: "Bottom", key: "bottom", on: root.position === "bottom" },
-                                  { label: "Right",  key: "right",  on: root.position === "right"  }]
-                        onPicked: root.setPosition(key)
+                // When the bar gets out of the way, and what the screens you are not working on show.
+                Card {
+                    visible: root.mode !== "none"
+                    CardLabel {
+                        text: "VISIBILITY"
+                        hint: "What happens to the bar when something else wants the screen."
                     }
-                }
-
-                Column {
-                    visible: root.mode === "frame"
-                    width: parent.width; spacing: 6
-                    FieldLabel { text: "Edges" }
-                    Dropdown {
-                        multi:   true
-                        summary: root.edges.length ? root.edges.map(root.cap).join(", ") : "—"
-                        options: [{ label: "Top",    key: "top",    on: root.edges.indexOf("top") >= 0    },
-                                  { label: "Left",   key: "left",   on: root.edges.indexOf("left") >= 0   },
-                                  { label: "Bottom", key: "bottom", on: root.edges.indexOf("bottom") >= 0 },
-                                  { label: "Right",  key: "right",  on: root.edges.indexOf("right") >= 0  }]
-                        onPicked: root.toggleEdge(key)
+                    Toggle {
+                        label: "Peek in fullscreen"
+                        sub:   "A fullscreen window hides the bar; with this on it lifts above the window and "
+                             + "returns when the pointer touches its screen edge. Off: fullscreen hides it outright."
+                        on:    VtlConfig.barFullscreenPeekFor(root.editMon)
+                        onToggled: root.saveKey("bar_fullscreen_peek",
+                                                !VtlConfig.barFullscreenPeekFor(root.editMon), root.editMon)
                     }
-                    SubLabel { width: parent.width; text: "Edges without modules render half-thick." }
+                    // Only means anything with a second screen connected.
+                    Toggle {
+                        visible: root.monitors.length > 1
+                        label: "Minimal secondary bars"
+                        sub:   "Every screen but the main one carries just the clock and the submap / workspace "
+                             + "indicator. One setting for the whole machine, whichever screen you are editing."
+                        on:    VtlConfig.secondaryBarsMinimal
+                        onToggled: root.saveKey("secondary_bars_minimal", !VtlConfig.secondaryBarsMinimal, "")
+                    }
                 }
             }
 
-            // ─── STIL: size + layout ──────────────────────────────────────────
+            // ─── STYLE: what the bar and the things in it look like ───────────
+            // Every stepper on this page moves by ONE, against the shared default of five. The bar
+            // is tuned by eye against the wallpaper and the windows around it, and at that scale
+            // five is not a nudge — it is a redesign: a 14 px icon lands on 15 or 20 with nothing
+            // in between, and a radius you are matching to a window corner can simply not be hit.
             Column {
                 id: stylePage
                 visible: root.tab === "style"
                 width: parent.width
                 spacing: Style.cardGap
 
-                // Every stepper on this page moves by ONE, against the shared default of five.
-                // The bar is tuned by eye against the wallpaper and the windows around it, and at
-                // that scale five is not a nudge — it is a redesign: a 14 px icon lands on 15 or 20
-                // with nothing in between, and a radius you are matching to a window corner can
-                // simply not be hit.
-                Card {
-                    CardLabel { text: "SIZE" }
-                    Stepper { label: "Thickness"; unit: "px"; step: 1; value: root.thickness; onChanged: root.setThickness(v) }
-                    Stepper { label: root.mode === "dock" ? "End air" : "Gap"; unit: "px"; step: 1; value: root.gap
-                              visible: root.mode === "float" || root.mode === "dock"; onChanged: root.setGap(v) }
-                    Stepper { label: "Radius"; unit: "px"; step: 1; value: root.radius
-                              visible: root.mode === "frame" || root.mode === "dock"; onChanged: root.setRadius(v) }
-                    Stepper { label: "Icon size"; unit: "px"; step: 1; value: root.iconSize; onChanged: root.setIconSize(v) }
-                    Stepper { label: "Font size"; unit: "px"; step: 1; value: root.fontSize; onChanged: root.setFontSize(v) }
+                // An empty state is one of the few things that still belongs on the page itself
+                // rather than in a hover hint — the user has to see WHY the page is bare.
+                SubLabel {
+                    visible: root.mode === "none"
+                    width: parent.width
+                    text: "No bar in this mode — pick Dock, Float or Frame under Form and these come back."
                 }
-                Card {
-                    CardLabel { text: "LAYOUT" }
-                    Stepper { label: "Edge gap"; unit: "px"; step: 1; value: root.margin;     onChanged: root.setMargin(v) }
-                    Stepper { label: "Spacing";  unit: "px"; step: 1; value: root.modSpacing; onChanged: root.setSpacing(v) }
 
-                    FieldLabel { text: "Module background"
-                                 hint: "Whether each module gets its own little background pill, one pill per group, or none at all." }
-                    Segmented {
-                        equal: true
-                        current: root.bgMode
-                        segments: [{ label: "None",   key: "none"   },
-                                   { label: "Group",  key: "group"  },
-                                   { label: "Module", key: "module" }]
-                        onPicked: root.setBgMode(key)
-                    }
-                    Stepper { label: "BG radius";  unit: "px"; step: 1; value: root.bgRadius; visible: root.bgMode !== "none"; onChanged: root.setBgRadius(v) }
-                    Stepper { label: "BG opacity"; unit: "%"; step: 1; max: 100; value: Math.round(VtlConfig.barModuleBgOpacityFor(root.editMon) * 100)
-                              visible: root.bgMode !== "none"; onChanged: root.setBgOpacity(v) }
-                }
-                // ── BACKGROUND: how much of the desktop comes through, and how ────
-                // Two knobs that only make sense together. Opacity is ours and moves instantly;
-                // blur belongs to the compositor and is asked for per surface (Bar.qml swaps its
-                // layer namespace, layerrules.lua answers). At full opacity neither switch below
-                // changes anything visible, which is why they are disabled up there rather than
-                // silently doing nothing.
+                // Opacity is ours and moves instantly; blur belongs to the compositor and is asked
+                // for per surface (ext-background-effect-v1). At full opacity neither one changes
+                // anything visible, which is why both stay nested under the see-through switch
+                // instead of sitting there doing nothing.
                 Card {
-                    CardLabel { text: "BACKGROUND"
-                                hint: "Opacity is the bar’s own fill and applies instantly. Blur is asked of the compositor per surface; at full opacity neither one changes anything visible." }
+                    visible: root.mode !== "none"
+                    CardLabel {
+                        text: "BACKGROUND"
+                        hint: "The bar's own fill. Opacity applies instantly; the blur is requested from the "
+                            + "compositor per surface. On a solid bar neither one can change anything, so they "
+                            + "only appear once the fill lets the desktop through."
+                    }
                     Toggle {
-                        label: "Transparent background"
+                        label: "See-through"
                         sub:   "Let the desktop show through the bar. Off = the bar is solid."
                         on:    VtlConfig.barOpacityEnabledFor(root.editMon)
                         onToggled: root.save("bar_opacity_enabled", !VtlConfig.barOpacityEnabledFor(root.editMon))
                     }
-                    Slider {
-                        label:    "Opacity"
-                        visible:  VtlConfig.barOpacityEnabledFor(root.editMon)
-                        from:     0.15; to: 1.0; decimals: 2; step: 0.01
-                        value:    VtlConfig.barOpacityValueFor(root.editMon)
-                        onMoved:  v => root.save("bar_opacity_value", v)
-                    }
-                    Toggle {
-                        label:   "Blur behind the bar"
-                        sub:     "Frost whatever shows through. Off = you see the desktop sharply. "
-                               + "Applies immediately — the bar requests this itself, it is not compositor configuration."
+                    SubGroup {
                         visible: VtlConfig.barOpacityEnabledFor(root.editMon)
-                        on:      VtlConfig.barBlurFor(root.editMon)
-                        onToggled: root.save("bar_blur", !VtlConfig.barBlurFor(root.editMon))
-                    }
-                    Slider {
-                        label:   "Blur amount"
-                        visible: VtlConfig.barOpacityEnabledFor(root.editMon) && VtlConfig.barBlurFor(root.editMon)
-                        from:    1; to: 20; decimals: 0; step: 1
-                        value:   VtlConfig.windowBlurSize
-                        onMoved: v => root.saveBlurSize(v)
-                    }
-                    SubLabel {
-                        width:   parent.width
-                        visible: VtlConfig.barOpacityEnabledFor(root.editMon) && VtlConfig.barBlurFor(root.editMon)
-                        text:    "Shared with Window rules — one radius per compositor."
+                        Slider {
+                            label:   "Opacity"
+                            hint:    "1.00 is solid; the lower it goes, the more of the desktop comes through."
+                            from:    0.15; to: 1.0; decimals: 2; step: 0.01
+                            value:   VtlConfig.barOpacityValueFor(root.editMon)
+                            onMoved: v => root.save("bar_opacity_value", v)
+                        }
+                        Toggle {
+                            label: "Blur behind"
+                            sub:   "Frost whatever shows through. Off = you see the desktop sharply. "
+                                 + "Applies immediately — the bar requests this itself, it is not compositor configuration."
+                            on:    VtlConfig.barBlurFor(root.editMon)
+                            onToggled: root.save("bar_blur", !VtlConfig.barBlurFor(root.editMon))
+                        }
+                        SubGroup {
+                            visible: VtlConfig.barBlurFor(root.editMon)
+                            Slider {
+                                label:   "Blur amount"
+                                hint:    "Shared with Window rules — the compositor keeps one blur radius for everything."
+                                from:    1; to: 20; decimals: 0; step: 1
+                                value:   VtlConfig.windowBlurSize
+                                onMoved: v => root.saveBlurSize(v)
+                            }
+                        }
                     }
                 }
 
+                // How the things IN the bar are drawn. Which module sits where is the Modules tab.
                 Card {
-                    CardLabel { text: "MENU" }
-                    SubLabel {
-                        width: parent.width
-                        text: "Sized by the dashboard raster."
+                    visible: root.mode !== "none"
+                    CardLabel {
+                        text: "MODULES"
+                        hint: "How the contents of the bar are sized, spaced and backed. Which module sits "
+                            + "where is the Modules tab."
+                    }
+                    Stepper { label: "Icon size"; unit: "px"; step: 1; value: root.iconSize
+                              hint: "Glyph size for every module icon."
+                              onChanged: root.setIconSize(v) }
+                    Stepper { label: "Font size"; unit: "px"; step: 1; value: root.fontSize
+                              hint: "Text size for every module label."
+                              onChanged: root.setFontSize(v) }
+                    // "Padding", not "Edge gap": the Form tab now has two gaps of its own between
+                    // the bar and the SCREEN edge, and this is the one inside the bar.
+                    Stepper { label: "Padding"; unit: "px"; step: 1; value: root.margin
+                              hint: "Space between the bar's own edge and the first module."
+                              onChanged: root.setMargin(v) }
+                    Stepper { label: "Spacing"; unit: "px"; step: 1; value: root.modSpacing
+                              hint: "Space between neighbouring modules."
+                              onChanged: root.setSpacing(v) }
+
+                    FieldLabel {
+                        text: "Module background"
+                        hint: "Whether the modules sit on a little background pill of their own."
+                    }
+                    Segmented {
+                        equal:   true
+                        current: root.bgMode
+                        segments: [{ label: "None",   key: "none",
+                                     hint: "Modules sit straight on the bar." },
+                                   { label: "Group",  key: "group",
+                                     hint: "One pill behind each zone — start, center and end each get theirs." },
+                                   { label: "Module", key: "module",
+                                     hint: "One pill behind every single module." }]
+                        onPicked: root.setBgMode(key)
+                    }
+                    SubGroup {
+                        visible: root.bgMode !== "none"
+                        Stepper { label: "Pill radius"; unit: "px"; step: 1; value: root.bgRadius
+                                  hint: "Corner rounding of that pill."
+                                  onChanged: root.setBgRadius(v) }
+                        Stepper { label: "Pill opacity"; unit: "%"; step: 1; max: 100
+                                  value: Math.round(VtlConfig.barModuleBgOpacityFor(root.editMon) * 100)
+                                  hint: "How far the pill stands out from the bar behind it."
+                                  onChanged: root.setBgOpacity(v) }
                     }
                 }
             }
 
-            // ─── MODULE: per-edge placement ───────────────────────────────────
+            // ─── MODULES: which module sits where ─────────────────────────────
             Column {
                 id: modPage
                 visible: root.tab === "modules"
                 width: parent.width
                 spacing: Style.cardGap
 
-                // Edge to edit. This was a hand-rolled row of StyledRects that reimplemented
-                // Segmented — the same control used three cards higher up on this very page, with
-                // its own hover colours and its own hardcoded 100 ms fade. Same thing, drawn twice.
-                Column {
-                    width: parent.width; spacing: 6
-                    FieldLabel { text: "Edge" }
+                SubLabel {
+                    visible: root.mode === "none"
+                    width: parent.width
+                    text: "No bar in this mode — your module layout is kept and comes back with it."
+                }
+
+                Card {
+                    visible: root.mode !== "none"
+                    CardLabel {
+                        text: "PLACEMENT"
+                        hint: "Drag a chip to reorder it, or into another zone to move it there. The gear "
+                            + "opens that module's own settings, ✕ takes it off the bar."
+                    }
+                    // The edge picker is only a choice when the frame actually spans more than one
+                    // edge — a dock or a float has exactly one, and a selector with a single option
+                    // is just a row that cannot be used.
+                    FieldLabel {
+                        visible: root.currentEdges().length > 1
+                        text: "Edge"; hint: "Each edge of the frame carries its own set of modules."
+                    }
                     Segmented {
+                        visible:  root.currentEdges().length > 1
                         equal:    true
                         current:  root.activeEdge
                         segments: root.currentEdges().map(function (e) { return { label: root.cap(e), key: e } })
                         onPicked: root.activeEdge = key
                     }
-                }
 
-                Zone { title: "Start";  grp: "start"  }
-                Zone { title: "Center"; grp: "center" }
-                Zone { title: "End";    grp: "end"    }
+                    Zone { title: "Start";  grp: "start"
+                           hint: "The leading end of the bar — left on a horizontal bar, top on a vertical one." }
+                    Zone { title: "Center"; grp: "center"
+                           hint: "Centred on the bar, whatever the other two zones happen to hold." }
+                    Zone { title: "End";    grp: "end"
+                           hint: "The trailing end — right on a horizontal bar, bottom on a vertical one." }
+                }
             }
         }
     }
@@ -831,13 +1046,14 @@ Item {
         id: zone
         property string title: ""
         property string grp:   ""
+        property string hint:  ""
         readonly property var mods: root.modList(root.activeEdge, zone.grp)
         width:   parent ? parent.width : 0
         spacing: 6
 
         Row {
             width: parent.width; spacing: 8
-            FieldLabel { text: zone.title; anchors.verticalCenter: parent.verticalCenter }
+            FieldLabel { text: zone.title; hint: zone.hint; anchors.verticalCenter: parent.verticalCenter }
             StyledRect {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 22; height: 22; radius: 11
@@ -996,54 +1212,5 @@ Item {
             }
         }
     }
-
-    // A block whose top edge is a full-width segmented selector; content sits below.
-    component SelBlock: Rectangle {
-        id: blk
-        default property alias content: body.data
-        property var items: []          // [{label, key, on}]
-        signal picked(string key)
-
-        width:  parent ? parent.width : 0
-        radius: Style.rCard
-        color:  Style.cardFill
-        border.width: Style.cardBorderW
-        border.color: Style.cardBorderColor
-        height: 6 + hdr.height + (body.implicitHeight > 0 ? 8 + body.implicitHeight + 10 : 6)
-
-        Row {
-            id: hdr
-            anchors { top: parent.top; left: parent.left; right: parent.right; margins: 6 }
-            height: 32
-            spacing: 4
-            Repeater {
-                model: blk.items
-                delegate: StyledRect {
-                    required property var modelData
-                    width:  (hdr.width - (blk.items.length - 1) * hdr.spacing) / Math.max(1, blk.items.length)
-                    height: hdr.height
-                    radius: Style.rTile
-                    color: modelData.on ? Style.selFill
-                         : (sh.containsMouse ? Style.controlHover : Style.controlFill)
-                    borderWidth: modelData.on ? Style.selBorderW : Style.controlBorderW
-                    borderColor: modelData.on ? Style.selBorderColor : Style.controlBorderColor
-                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
-                    Text { anchors.centerIn: parent; text: modelData.label
-                           color: modelData.on ? Style.selText : Colors.fgPrimary
-                           font.pixelSize: 12; font.family: Style.font }
-                    MouseArea { id: sh; anchors.fill: parent; hoverEnabled: true; onClicked: blk.picked(modelData.key) }
-                }
-            }
-        }
-        Column {
-            id: body
-            anchors { top: hdr.bottom; topMargin: 8; left: parent.left; right: parent.right
-                      leftMargin: 12; rightMargin: 12 }
-            spacing: 8
-        }
-    }
-
-
-
 
 }

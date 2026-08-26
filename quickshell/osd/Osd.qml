@@ -40,6 +40,72 @@ PanelWindow {
     mask: Region {}                 // never take input
     visible: root.showable && (root.open || card.reveal > 0.01)
 
+    // Blur behind the card, by protocol (ext-background-effect-v1) exactly as the bar asks for it,
+    // so a translucent OSD frosts what shows through instead of being plain glass.
+    //
+    // Spelled out rather than `Region { item: card }`: the card lives inside the clip drawer and
+    // carries a Scale transform, so its own x/y/size are not what ends up on screen. The rect below
+    // is the SCALED card in window space (origin pinned at the docked side, exactly as the
+    // transform does it), which is also why the region shrinks into the edge with the card instead
+    // of standing at full size through the whole close.
+    //
+    // It also has to cover the SKIRT, not just the card. `_paths` runs the outline out past the card
+    // on every side that merges: the concave fillets reach `f` beyond both ends of the docked edge,
+    // and at a corner the perpendicular merge reaches `f` past the content edge as well. Those wedges
+    // are painted in the card's own (translucent) fill, so leaving them out of the region hangs
+    // unblurred nubs off a frosted card — bright where the frost is calm, which is what the OSD
+    // looked wrong as.
+    //
+    // It never reaches into the bar: openX/openY already sit at the bar's inner face, the merged
+    // side takes no extension (the outline goes into the bar there, and the bar blurs that itself),
+    // and the clamp below is the backstop. Two surfaces frosting one strip is what shows up as a
+    // dark band at the seam.
+    BackgroundEffect.blurRegion: (VtlConfig.barBlurFor(root.mon)
+                                  && VtlConfig.barOpacityEnabledFor(root.mon)
+                                  && root.showable && card.reveal > 0.02) ? cardBlur : null
+    Region {
+        id: cardBlur
+        // Skirt width, in the same (a, d) space `_paths` builds the outline in: `a` runs along the
+        // docked edge, `d` is the depth away from it.
+        readonly property bool hz: root.dockEdge === "top" || root.dockEdge === "bottom"
+        readonly property real aE: hz ? card.width  : card.height
+        readonly property real dE: hz ? card.height : card.width
+        readonly property real f:  (root.dock && VtlConfig.transitionFilletFor("osd", root._tctx))
+                                   ? Math.max(0, Math.min(root.flareR, aE / 3, dE / 3)) : 0
+        readonly property real xa0: root.perpStart ? 0 : f      // skirt at the a = 0 end
+        readonly property real xa1: root.perpEnd   ? 0 : f      // skirt at the a = A end
+        readonly property real xd:  (root.perpStart || root.perpEnd) ? f : 0   // past the content edge
+        // …mapped onto the card's own sides for the actual docked edge.
+        readonly property real mL: hz ? xa0 : (root.dockEdge === "right"  ? xd : 0)
+        readonly property real mR: hz ? xa1 : (root.dockEdge === "left"   ? xd : 0)
+        readonly property real mT: hz ? (root.dockEdge === "bottom" ? xd : 0) : xa0
+        readonly property real mB: hz ? (root.dockEdge === "top"    ? xd : 0) : xa1
+
+        // The Scale the card carries, applied by hand: the skirt scales with it, so the frost
+        // shrinks into the edge with the card instead of standing at full size through the close.
+        readonly property real s:  card.grow01
+        readonly property real ox: root.hside === "left" ? 0 : root.hside === "right" ? card.width  : card.width  / 2
+        readonly property real oy: root.vside === "top"  ? 0 : root.vside === "bottom" ? card.height : card.height / 2
+        readonly property real bx0: card.openX + ox + (-mL - ox) * s
+        readonly property real by0: card.openY + oy + (-mT - oy) * s
+        readonly property real bx1: card.openX + ox + (card.width  + mR - ox) * s
+        readonly property real by1: card.openY + oy + (card.height + mB - oy) * s
+
+        // The area the bar does NOT already blur (screen minus the docked strip on each side).
+        readonly property real cl: root.hside === "left"   ? root.hBarThk : 0
+        readonly property real cr: root.hside === "right"  ? root.scrW - root.hBarThk : root.scrW
+        readonly property real ct: root.vside === "top"    ? root.vBarThk : 0
+        readonly property real cb: root.vside === "bottom" ? root.scrH - root.vBarThk : root.scrH
+        x:      Math.max(cl, bx0)
+        y:      Math.max(ct, by0)
+        width:  Math.max(0, Math.min(bx1, cr) - Math.max(cl, bx0))
+        height: Math.max(0, Math.min(by1, cb) - Math.max(ct, by0))
+        // A free card is rounded on all four corners (the float background's radius), so the frost
+        // has to be too. The docked shape merges into the bar and keeps the plain rect, as the
+        // glides and flyouts do.
+        radius: root.dock ? 0 : 16
+    }
+
     PwObjectTracker { objects: [Pipewire.defaultAudioSink] }
 
     Timer { id: hideTimer; interval: VtlConfig.osdDuration; onTriggered: root.open = false }
@@ -109,13 +175,22 @@ PanelWindow {
     readonly property string dockEdge: root.vside !== "center" ? root.vside : root.hside
     // If a bar occupies that edge, dock onto the bar's inner face and let the fillet seam flow
     // into the bar (a real transition); otherwise sit flush at the screen edge.
-    readonly property bool   barOnEdge: root.dock && VtlConfig.edgeActiveFor(root.dockEdge, root.mon) && !root.fullscreen
-    readonly property int    barThk:    root.barOnEdge ? VtlConfig.edgeThicknessFor(root.dockEdge, root.mon) : 0
-    // Bar thickness on the side the card docks to (0 = no bar / floats / centre on that axis). Each
-    // docked side pins the card to that bar's inner face (or the bare screen edge when there's none).
+    // A fullscreen window takes the bar away, PEEK OR NOT. That read used to be
+    // `!fullscreen || barFullscreenPeekFor(mon)` — but peek does not mean "the bar is still there",
+    // it means the opposite: the strip is hidden at opacity 0 and lifts out of a 3 px edge only
+    // while the pointer is on it (Bar.qml `peekMode` / `barShown`). Since peek is ON by default,
+    // the card spent every fullscreen docking onto a bar nobody could see — a bar-thick band of
+    // empty air between it and the screen edge, which is the OSD "flying" in the corner.
+    // Fullscreen ⇒ the monitor edge is the edge, exactly as Taskbar.qml has always had it.
+    readonly property bool   barShown:  !root.fullscreen
+    readonly property bool   barOnEdge: root.dock && VtlConfig.edgeActiveFor(root.dockEdge, root.mon) && root.barShown
+    readonly property int    barThk:    root.barOnEdge ? UiState.barInnerFor(root.dockEdge, root.mon) : 0
+    // Distance from the screen edge to the bar's inner FACE on the side the card docks to (0 = no
+    // bar / floats / centre on that axis). barInnerFor, not the raw thickness: a floating bar sits
+    // a gap away from the screen, and the card has to clear both or it lands inside that gap.
     function _edgeThk(side) {
-        return (root.dock && !root.fullscreen && VtlConfig.edgeActiveFor(side, root.mon))
-               ? VtlConfig.edgeThicknessFor(side, root.mon) : 0
+        return (root.dock && root.barShown && VtlConfig.edgeActiveFor(side, root.mon))
+               ? UiState.barInnerFor(side, root.mon) : 0
     }
     readonly property int    vBarThk: (root.vside === "top"  || root.vside === "bottom") ? root._edgeThk(root.vside) : 0
     readonly property int    hBarThk: (root.hside === "left" || root.hside === "right")  ? root._edgeThk(root.hside) : 0
@@ -125,6 +200,8 @@ PanelWindow {
     readonly property bool   isCorner:  (root.vside === "top" || root.vside === "bottom")
                                          && (root.hside === "left" || root.hside === "right")
     // Transition style depends on whether the card hangs on a bar or a bare monitor edge.
+    // The bar's own line weight — the card continues that line where it docks onto it.
+    readonly property int    borderW:   Style.barBorderW(root.mon)
     readonly property string _tctx:     root.barOnEdge ? "bar" : "edge"
     // The "origin edge only" transition style suppresses the perpendicular (corner) merge.
     readonly property bool   _mergeAll: VtlConfig.transitionMergeAllFor("osd", root._tctx)
@@ -134,6 +211,14 @@ PanelWindow {
     // Per-axis insets: dock → the bar's inner face; float → the edge margin (centre axis: unused).
     readonly property int    vInset:    root.dock ? root.vBarThk : VtlConfig.osdMargin
     readonly property int    hInset:    root.dock ? root.hBarThk : VtlConfig.osdMargin
+    // The stretch the anchored bar covers. A dock or float inset from its ends is shorter than the
+    // screen, so a corner card pinned to the monitor corner would grow out of the empty stretch
+    // BESIDE the strip rather than out of the strip — the same rule the flyouts and toasts follow.
+    // No bar on that edge: the monitor edge is the anchor, exactly as before.
+    readonly property bool   vAnchored: root.barOnEdge && (root.vside === "top" || root.vside === "bottom")
+    readonly property var    _hspan:    VtlConfig.barSpanFor(root.dockEdge, root.mon, root.scrW)
+    readonly property int    hLo:       root.vAnchored ? Math.max(root.hInset, root._hspan[0]) : root.hInset
+    readonly property int    hHi:       root.vAnchored ? Math.max(root.hInset, root.scrW - root._hspan[1]) : root.hInset
     // Full screen extent (window spans the output via exclusiveZone -1) — the card positions in
     // screen space, then the clip drawer (which may not start at the screen origin) offsets it.
     readonly property int    scrW:      root.screen ? root.screen.width  : root.width
@@ -143,12 +228,10 @@ PanelWindow {
     readonly property bool   deviceLine:  root.kind === "volume" && VtlConfig.osdShowDevice && root.deviceName !== ""
     readonly property string displayMode: root.kind === "brightness" ? VtlConfig.osdBrightnessDisplay : VtlConfig.osdVolumeDisplay
 
-    readonly property color cardColor: {
-        var t = VtlConfig.osdColorful ? 0.12 : 0.0
-        return Qt.rgba(Colors.bgPrimary.r * (1 - t) + Colors.bgActive.r * t,
-                       Colors.bgPrimary.g * (1 - t) + Colors.bgActive.g * t,
-                       Colors.bgPrimary.b * (1 - t) + Colors.bgActive.b * t, 1)
-    }
+    // The card grows out of the bar's edge, so it is made of the bar's material: the shared panel
+    // fill (accent-tintable, frosted under cupertino) carrying the bar's translucency. This used to
+    // inline its own opaque mix, which is why a see-through bar handed out a solid OSD.
+    readonly property color cardColor: Style.barPanelColor(Style.panelColor(VtlConfig.osdColorful), root.mon)
 
     // ── Dock outline (concave fillets where the card meets its edge / the bar) ──────
     readonly property int flareR: VtlConfig.barInnerRadiusFor(root.mon)
@@ -166,7 +249,8 @@ PanelWindow {
     // the settings menu draws. With a bar each seam runs through it; with none the seam is a 24px
     // off-screen overshoot, so the fillets curve straight into the bare monitor edge(s).
     // bT / bS = live elastic bulge (px) for the content edge / free side edges; 0 at rest → straight.
-    function _paths(W, H, bT, bS) {
+    function _paths(W, H, bT, bS, off) {
+        off = off || 0    // pixel-grid nudge; border only (Style.hairline)
         var horiz = (root.dockEdge === "top" || root.dockEdge === "bottom")
         var A = horiz ? W : H
         var D = horiz ? H : W
@@ -178,12 +262,19 @@ PanelWindow {
         var P  = root.pad
         var flip = (root.dockEdge === "bottom" || root.dockEdge === "left")
         function XY(a, d) {
-            var x, y
-            if      (root.dockEdge === "bottom") { x = a;     y = H - d }
-            else if (root.dockEdge === "left")   { x = d;     y = a     }
-            else if (root.dockEdge === "right")  { x = W - d; y = a     }
-            else                                 { x = a;     y = d     }   // top
-            return (x + P) + "," + (y + P)
+            // The MOUTH (d = 0) is nudged the other way. Every other run takes this panel's own
+            // first row (+off, the pixel-grid rule); the mouth has to land on the row the BAR's
+            // line occupies, which is one row further out — the bar insets its line INTO the strip
+            // and the panel insets its own into the panel, so the two ended up on adjacent rows and
+            // a fillet had to climb a pixel to reach the line it is supposed to continue (measured:
+            // bar row 39, panel outline row 40, and the join visibly stepped). A mirrored edge
+            // (bottom / right) counts depth the other way, hence the sign.
+            var mirrored = (root.dockEdge === "bottom" || root.dockEdge === "right")
+            var dOff = (d === 0) ? (mirrored ? off : -off) : off
+            if      (root.dockEdge === "bottom") return (a + P + off)       + "," + ((H - d) + P + dOff)
+            else if (root.dockEdge === "left")   return (d + P + dOff)      + "," + (a + P + off)
+            else if (root.dockEdge === "right")  return ((W - d) + P + dOff) + "," + (a + P + off)
+            return (a + P + off) + "," + (d + P + dOff)   // top
         }
         var cur = [0, 0]
         function M(a, d)      { cur = [a, d]; return "M" + XY(a, d) }
@@ -265,8 +356,8 @@ PanelWindow {
             // Open position in screen space (docked edge pinned at the bar's inner face), expressed
             // relative to the drawer's origin. Content-driven size changes apply instantly — only
             // `reveal` is animated (no Behavior on width/height) — so a name change won't slide x.
-            readonly property real openX: root.hside === "left"  ? root.hInset
-                                        : root.hside === "right" ? (root.scrW - width - root.hInset)
+            readonly property real openX: root.hside === "left"  ? root.hLo
+                                        : root.hside === "right" ? (root.scrW - width - root.hHi)
                                         : (root.scrW - width) / 2
             readonly property real openY: root.vside === "top"    ? root.vInset
                                         : root.vside === "bottom" ? (root.scrH - height - root.vInset)
@@ -324,8 +415,8 @@ PanelWindow {
                 ShapePath {
                     fillColor: "transparent"
                     strokeColor: Style.chromeBorder
-                    strokeWidth: Style.chromeBorderWidth
-                    PathSvg { path: root._paths(card.width, card.height, card.bulgeT, card.bulgeS)[0] }
+                    strokeWidth: root.borderW
+                    PathSvg { path: root._paths(card.width, card.height, card.bulgeT, card.bulgeS, Style.hairline(root.borderW))[0] }
                 }
             }
 

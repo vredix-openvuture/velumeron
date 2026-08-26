@@ -13,8 +13,8 @@ Verbs:
   save <name> <settings-json>   → write a user preset from the given lock settings, then activate it
   duplicate <source> <id> <name>→ copy a preset into a new user preset
   rename <id> <name>            → rename a user preset (id/file kept)
-  delete <id>                   → remove a user preset (falls back to mirobo if it was active)
-  init                          → ensure an active marker exists (default mirobo)
+  delete <id>                   → remove a user preset (falls back to vitrine if it was active)
+  init                          → ensure an active marker exists (default vitrine)
 """
 import glob
 import json
@@ -32,6 +32,7 @@ MARKER = os.path.join(UD, "active-lockscreen.json")
 
 # The lock keys a preset owns — must stay in sync with VtlConfig.lockKeys.
 LOCK_KEYS = [
+    "lock_layout",
     "lock_reveal", "lock_blur", "lock_dim", "lock_card_wallpaper", "lock_card_avatar",
     "lock_uniform_wallpaper", "lock_widget_zones",
     "lock_card_pos", "lock_card_width_pct", "lock_card_height_pct",
@@ -64,7 +65,7 @@ def atomic_write(path, obj):
 
 def active():
     m = read_json(MARKER, {}) or {}
-    return m.get("id", "mirobo"), m.get("source", "builtin")
+    return m.get("id", "vitrine"), m.get("source", "builtin")
 
 
 def set_active(pid, source):
@@ -166,14 +167,14 @@ def main():
             os.remove(f)
         aid, asrc = active()
         if aid == pid and asrc == "user":
-            _, mp = find("builtin", "mirobo")
+            _, mp = find("builtin", "vitrine")
             if mp:
-                apply_settings(mp.get("settings", {}), "mirobo")
-            set_active("mirobo", "builtin")
+                apply_settings(mp.get("settings", {}), "vitrine")
+            set_active("vitrine", "builtin")
 
     elif verb == "init":
         if not os.path.exists(MARKER):
-            set_active("mirobo", "builtin")
+            set_active("vitrine", "builtin")
 
 
 if __name__ == "__main__":

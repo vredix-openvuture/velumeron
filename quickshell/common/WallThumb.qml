@@ -23,29 +23,51 @@ Item {
     property bool   active: false
     signal picked()
 
+    // Which cache tier this cell wants. 480 is the grid's — a 130 px cell needs nothing more — but
+    // the full-screen gallery draws the same picture nine times that size, where a 480 px thumbnail
+    // is visibly soft. Keep it to a few COARSE buckets: the tier is part of the cache path, so a
+    // per-cell pixel width would scatter the cache into a directory per card size.
+    property int thumbW: 480
     readonly property bool   isVid: /\.(mp4|webm|mkv|avi|mov)$/i.test(name)
-    readonly property string thumb: (Quickshell.env("HOME") ?? "") + "/.cache/velumeron/wp-thumbs/"
-                                    + Qt.md5(path) + ".jpg"
+    readonly property string _cache: (Quickshell.env("HOME") ?? "") + "/.cache/velumeron/"
+    readonly property string thumb:   cell._cache + "wp-thumbs/" + Qt.md5(path) + ".jpg"
+    readonly property string thumbHi: cell._cache + "wp-thumbs-" + cell.thumbW + "/" + Qt.md5(path) + ".jpg"
 
-    // 0 = the cached thumbnail · 1 = it wasn't there, so: the still shows itself while the queue
-    // works, a video shows the placeholder (an Image can't render one) and swaps in the thumbnail
-    // when it arrives. Driven through _apply() rather than a binding on `source`: re-reading the
-    // SAME url after the file appeared needs the imperative clear, a binding sees no change.
+    // The sources this cell will try, best first. Asking for a tier that isn't there yet queues it
+    // and falls through — so a card shows the small thumbnail (or the picture itself) IMMEDIATELY
+    // and sharpens when the big one lands, instead of sitting empty while ffmpeg works.
+    //   grid:    [480 thumb, the file itself]
+    //   gallery: [big thumb, 480 thumb, the file itself]
+    // A video has no last resort (an Image can't render one) — it shows the placeholder glyph.
+    readonly property var _chain: {
+        var out = []
+        if (cell.thumbW > 480) out.push(cell.thumbHi)
+        out.push(cell.thumb)
+        out.push(cell.isVid ? "" : cell.path)
+        return out
+    }
+    // Driven through _apply() rather than a binding on `source`: re-reading the SAME url after the
+    // file appeared needs the imperative clear, a binding sees no change.
     property int _stage: 0
-    property int _tries: 0            // one generation attempt per cell — never loop on a bad file
+    property var _tried: ({})         // one generation attempt per tier — never loop on a bad file
     function _apply() {
+        var s = cell._chain[cell._stage] || ""
         img.source = ""
-        img.source = cell._stage === 0 ? ("file://" + cell.thumb)
-                   : (cell.isVid ? "" : ("file://" + cell.path))
+        img.source = s === "" ? "" : ("file://" + s)
     }
     on_StageChanged: cell._apply()
-    onPathChanged:   { cell._tries = 0; cell._stage = 0; cell._apply() }
+    onPathChanged:   { cell._tried = ({}); cell._stage = 0; cell._apply() }
     Component.onCompleted: cell._apply()
 
     Connections {
-        target:  ThumbQueue
-        enabled: cell._stage === 1 && cell.isVid
-        function onDone(t) { if (t === cell.thumb) cell._stage = 0 }   // back to the thumbnail
+        target: ThumbQueue
+        // A tier we are already past just arrived — step back up to it.
+        function onDone(t) {
+            var i = cell._chain.indexOf(t)
+            if (i < 0) return
+            if (i < cell._stage) cell._stage = i
+            else if (i === cell._stage) cell._apply()
+        }
     }
 
     Rectangle {
@@ -62,13 +84,17 @@ Item {
             visible: status === Image.Ready
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
-            sourceSize.width: 480
+            sourceSize.width: cell.thumbW
             onStatusChanged: {
-                if (img.status !== Image.Error || cell._stage !== 0) return
-                // No cached thumbnail (or a second failure after one was made — a format ffmpeg
-                // won't touch). Ask once, then stop asking and live with the fallback.
-                if (cell._tries < 1) { cell._tries++; ThumbQueue.enqueue(cell.path, cell.thumb) }
-                cell._stage = 1
+                if (img.status !== Image.Error) return
+                var s = cell._chain[cell._stage] || ""
+                // A missing CACHE tier is one we can make (once — a format ffmpeg won't touch must
+                // not be asked for on every scroll); the original itself is the end of the line.
+                if (s !== "" && s !== cell.path && !cell._tried[s]) {
+                    cell._tried[s] = true
+                    ThumbQueue.enqueue(cell.path, s, s === cell.thumbHi ? cell.thumbW : 480)
+                }
+                if (cell._stage < cell._chain.length - 1) cell._stage++
             }
         }
         // Placeholder while a video's first frame is still being extracted.

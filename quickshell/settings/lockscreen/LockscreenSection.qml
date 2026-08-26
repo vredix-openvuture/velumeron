@@ -5,19 +5,35 @@ import Quickshell.Io
 
 // Lockscreen & suspend. The lockscreen is the native quickshell lock (lock/Lock.qml). Its look is a
 // PRESET — a named snapshot of the VtlConfig.lock* keys (LockPresets.qml / lockscreen-config.py),
-// shipped default "mirobo" + user presets built in the LockEditor overlay ("Build your own"). Mirrors
-// Settings → Style (templates + your palettes). The Timers card still writes hypr.lua/hypridle.conf.
+// six shipped builtins (Vitrine is the default) + user presets built in the LockEditor overlay
+// ("Build your own"). A preset carries the LAYOUT too, so switching one re-arranges the lock. Mirrors
+// Settings → Style (templates + your palettes). The two timings below are the LOCK's own: they are
+// written as plain settings.json keys and read by IdleService (ext-idle-notify-v1), so nothing here
+// rewrites hypr.lua/hypridle.conf any more. When the screensaver starts is on its own page — it
+// runs on a separate clock and shows over the lock as readily as over the desktop.
 Item {
     id: root
 
-    property int lockMin:    6
-    property int suspendMin: 14
 
-    Component.onCompleted: { reload(); LockPresets.refresh() }
-    onVisibleChanged: if (visible) { reload(); LockPresets.refresh() }
-    function reload() { readProc.running = false; readProc.running = true }
+    Component.onCompleted: LockPresets.refresh()
+    onVisibleChanged: if (visible) LockPresets.refresh()
 
     function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s }
+
+    // Stored in seconds, edited in minutes.
+    function _min(sec) { return Math.round(Math.max(0, sec) / 60) }
+    readonly property int lockMin:    root._min(VtlConfig.idleLockSec)
+    readonly property int suspendMin: root._min(VtlConfig.idleSuspendSec)
+
+    // Preview geometry — the monitor the settings menu is on, so a tile is a true miniature of the
+    // screen you will actually unlock instead of a 16:9 guess that lies on an ultrawide.
+    readonly property var _menuScreen: {
+        var ss = Quickshell.screens
+        for (var i = 0; i < ss.length; i++) if (ss[i].name === UiState.menuMon) return ss[i]
+        return ss.length ? ss[0] : null
+    }
+    readonly property int refW: root._menuScreen ? root._menuScreen.width  : 1920
+    readonly property int refH: root._menuScreen ? root._menuScreen.height : 1080
 
     // Open the build-your-own editor on the monitor the settings menu is on (mirrors StyleSection's
     // "Build your own" → PaletteEditor). seed = a preset object to edit, or null = fresh from live.
@@ -28,35 +44,6 @@ Item {
         UiState.lockEditorOpen = true
     }
 
-    // ── Timers: parse the two hypridle.conf timeouts (lock, then suspend) ────────────────────────
-    readonly property string _readPy: [
-        "import os,re",
-        "vd=os.environ.get('VELUMERON_DIR','')",
-        "pu=os.environ.get('VELUMERON_USER_DIR') or os.path.expanduser('~/.config/velumeron')",
-        "cf=os.path.join(pu,'hypr.lua/hypridle.conf')",
-        "cf=cf if os.path.exists(cf) else os.path.join(vd,'hypr.lua/hypridle.conf')",
-        "c=open(cf).read() if os.path.exists(cf) else ''",
-        "ts=[int(x) for x in re.findall(r'timeout\\s*=\\s*(\\d+)',c)]",
-        "print('LOCK\\t%d'%(ts[0] if ts else 360))",
-        "print('SUSPEND\\t%d'%(ts[1] if len(ts)>1 else 840))"
-    ].join("\n")
-    Process {
-        id: readProc
-        command: ["python3", "-c", root._readPy]
-        stdout: SplitParser { onRead: line => root._ingest(("" + line).trim()) }
-    }
-    function _ingest(t) {
-        var p = t.split("\t"); if (p.length < 2) return
-        if      (p[0] === "LOCK")    root.lockMin    = Math.max(1, Math.round(parseInt(p[1]) / 60))
-        else if (p[0] === "SUSPEND") root.suspendMin = Math.max(0, Math.round(parseInt(p[1]) / 60))
-    }
-    function commitTimes() {
-        timeProc.command = ["bash", "-c",
-            "\"$VELUMERON_DIR/assets/scripts/hypridle-set.sh\" "
-            + (root.lockMin * 60) + " " + (root.suspendMin * 60)]
-        timeProc.running = false; timeProc.running = true
-    }
-    Process { id: timeProc }
 
     Flickable {
         anchors.fill: parent
@@ -85,6 +72,28 @@ Item {
                 }
                 TextButton { width: parent.width; label: "󰏘  Build your own"; primary: true
                              onClicked: root.openEditor(null) }
+            }
+
+            // ── Timers ────────────────────────────────────────────────────────
+            Card {
+                CardLabel { text: "TIMERS"
+                            hint: "Idle time before the screen locks, and before the machine "
+                                  + "suspends. Both are counted from the last input, not from each "
+                                  + "other. 0 switches a stage off." }
+                Stepper { label: "Lock after"; unit: root.lockMin > 0 ? "min" : "off"
+                          min: 0; max: 240; step: 1; labelWidth: 130
+                          value: root.lockMin
+                          onChanged: (v) => SettingsStore.set("idle_lock_sec", v * 60) }
+                Stepper { label: "Suspend after"; unit: root.suspendMin > 0 ? "min" : "off"
+                          min: 0; max: 480; step: 1; labelWidth: 130
+                          value: root.suspendMin
+                          onChanged: (v) => SettingsStore.set("idle_suspend_sec", v * 60) }
+                SubLabel {
+                    width: parent.width
+                    visible: root.suspendMin > 0 && root.lockMin > 0 && root.suspendMin <= root.lockMin
+                    color: Colors.fgUrgent
+                    text: "Suspend is not after the lock, so the machine sleeps as it locks."
+                }
             }
 
             // ── Your lockscreens (user presets) ───────────────────────────────
@@ -121,16 +130,6 @@ Item {
                 }
             }
 
-            // ── Timers ────────────────────────────────────────────────────────
-            Card {
-                CardLabel { text: "TIMERS"
-                            hint: "Idle time before the lockscreen appears, then before the system suspends." }
-                Stepper { label: "Lock after"; unit: "min"; min: 1; max: 120; labelWidth: 110
-                          value: root.lockMin; onChanged: { root.lockMin = v; root.commitTimes() } }
-                Stepper { label: "Suspend after"; unit: root.suspendMin > 0 ? "min" : "off"; min: 0; max: 240
-                          labelWidth: 110
-                          value: root.suspendMin; onChanged: { root.suspendMin = v; root.commitTimes() } }
-            }
         }
     }
 
@@ -141,7 +140,15 @@ Item {
         id: lc
         property var preset
         readonly property bool active: preset.active
-        height: 128
+        height: inner.implicitHeight + 20
+
+        // A preset may leave a key out — the builtins deliberately omit the weather city so
+        // switching a look cannot wipe it — so every lookup falls back to the live value.
+        function sv(key, live) {
+            var st = (lc.preset && lc.preset.settings) ? lc.preset.settings : null
+            return (st && st[key] !== undefined && st[key] !== null) ? st[key] : live
+        }
+
         StyledRect {
             anchors.fill: parent
             radius: Style.rCard
@@ -149,28 +156,47 @@ Item {
             borderWidth: lc.active ? Style.selBorderW : Style.controlBorderW
             borderColor: lc.active ? Style.selBorderColor : Style.controlBorderColor
             Column {
-                anchors.fill: parent; anchors.margins: 10; spacing: 8
-                // mini mock: dark blurred backdrop with a small centred card + dots
+                id: inner
+                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                spacing: 8
+                // The real lock, rendered at monitor size and scaled down into the tile. Every
+                // layout measure is a fraction of the screen, so the miniature is the thing itself
+                // rather than a drawing of it — including this monitor's wallpaper. Loader-gated:
+                // six LockContents exist only while this page is actually on screen.
                 Rectangle {
-                    width: parent.width; height: parent.height - lblRow.height - parent.spacing
-                    radius: Style.rControl; clip: true
-                    color: Qt.rgba(0, 0, 0, 0.5)
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: Qt.rgba(Colors.bgActive.r, Colors.bgActive.g, Colors.bgActive.b, 0.35) }
-                        GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.6) }
-                    }
-                    StyledRect {
-                        anchors.centerIn: parent
-                        width: parent.height * 0.62; height: width
-                        radius: Style.rTile
-                        color: Style.cardFill
-                        borderWidth: 1; borderColor: Style.cardBorderColor
-                        Column {
-                            anchors.centerIn: parent; spacing: 4
-                            Rectangle { anchors.horizontalCenter: parent.horizontalCenter
-                                        width: 16; height: 16; radius: 8; color: Colors.bgElement }
-                            Row { anchors.horizontalCenter: parent.horizontalCenter; spacing: 3
-                                  Repeater { model: 3; delegate: Rectangle { width: 4; height: 4; radius: 2; color: Colors.fgBright } } }
+                    id: shot
+                    width: parent.width
+                    height: Math.round(width * root.refH / root.refW)
+                    radius: Style.rControl
+                    clip: true
+                    color: Colors.bgPrimary
+                    Loader {
+                        active: root.visible
+                        width: root.refW; height: root.refH
+                        transformOrigin: Item.TopLeft
+                        scale: shot.width / root.refW
+                        sourceComponent: LockContent {
+                            preview:    true
+                            baseLayer:  false          // the stage covers it; skip a second decode
+                            screenName: UiState.menuMon
+                            cfgReveal:  "none"         // a thumbnail has no iris to play
+                            cfgLayout:        lc.sv("lock_layout",              VtlConfig.lockLayout)
+                            cfgBlur:          lc.sv("lock_blur",                VtlConfig.lockBlur)
+                            cfgDim:           lc.sv("lock_dim",                 VtlConfig.lockDim)
+                            cfgCardWallpaper: lc.sv("lock_card_wallpaper",      VtlConfig.lockCardWallpaper)
+                            cfgCardAvatar:    lc.sv("lock_card_avatar",         VtlConfig.lockCardAvatar)
+                            cfgUniformWall:   lc.sv("lock_uniform_wallpaper",   VtlConfig.lockUniformWall)
+                            cfgCardPos:       lc.sv("lock_card_pos",            VtlConfig.lockCardPos)
+                            cfgCardWPct:      lc.sv("lock_card_width_pct",      VtlConfig.lockCardWidthPct)
+                            cfgCardHPct:      lc.sv("lock_card_height_pct",     VtlConfig.lockCardHeightPct)
+                            cfgWidgetZones:   lc.sv("lock_widget_zones",        VtlConfig.lockWidgetZones)
+                            cfgWxForecast:    lc.sv("lock_weather_forecast",    VtlConfig.lockWeatherForecast)
+                            cfgWxDays:        lc.sv("lock_weather_forecast_days", VtlConfig.lockWeatherForecastDays)
+                            cfgClockFormat:   lc.sv("lock_clock_format",        VtlConfig.lockClockFormat)
+                            cfgDateFormat:    lc.sv("lock_date_format",         VtlConfig.lockDateFormat)
+                            cfgClockScale:    lc.sv("lock_clock_scale",         VtlConfig.lockClockScale)
+                            cfgClockStyle:    lc.sv("lock_clock_style",         VtlConfig.lockClockStyle)
+                            cfgBlurTarget:    lc.sv("lock_blur_target",         VtlConfig.lockBlurTarget)
                         }
                     }
                 }
@@ -180,7 +206,7 @@ Item {
                     Text { text: root.cap(lc.preset.name); color: lc.active ? Style.selText : Colors.fgPrimary
                            font.family: Style.font; font.pixelSize: 13; elide: Text.ElideRight
                            width: parent.width - (lc.active ? checkT.width + parent.spacing : 0) }
-                    Text { id: checkT; visible: lc.active; text: "✓"; color: Style.selText
+                    Text { id: checkT; visible: lc.active; text: "\u2713"; color: Style.selText
                            font.family: Style.font; font.pixelSize: 13 }
                 }
             }

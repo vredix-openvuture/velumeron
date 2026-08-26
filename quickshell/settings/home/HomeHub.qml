@@ -95,7 +95,14 @@ Item {
         // remainder is the cheaper price.
         DashGrid {
             id: grid
-            width: parent.width
+            // ITS OWN width (cols x cell width + gaps), NOT the viewport's. Filling the viewport
+            // meant the menu size decided how wide a dashboard cell is, so making the menu bigger
+            // under Style → Menu grew the dashboard with it. The two carry their own size settings
+            // and neither may move the other; a menu wider than the raster simply has room to
+            // spare. Left-aligned on purpose: centring it would depend on the viewport width, which
+            // sweeps from nothing to full while the menu opens, and the whole grid would slide
+            // into place on every reveal.
+            width: Style.dashGridW
             height: implicitHeight
             items: root.modules
             rowsPerPage: viewport.rowsPerPage

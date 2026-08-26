@@ -7,6 +7,7 @@ import Quickshell.Widgets
 // publishes the hovered workspace id + anchor into UiState). Informational; keepOpenOnHover so the
 // cursor can rest on the pill. One per screen.
 BarGlide {
+    glideId: "workspace"
     id: g
     mine:            UiState.wsMon === g.mon && g.mon !== ""
     shown:           UiState.wsHover

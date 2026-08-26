@@ -28,6 +28,7 @@ PanelWindow {
     function close() { UiState.lockEditorOpen = false }
 
     // ── Draft state (seed from an existing preset, else the live VtlConfig.lock* values) ─────────
+    property string dLayout:        VtlConfig.lockLayout
     property string dReveal:        VtlConfig.lockReveal
     property real   dBlur:          VtlConfig.lockBlur
     property real   dDim:           VtlConfig.lockDim
@@ -53,6 +54,7 @@ PanelWindow {
     onActiveChanged: if (root.active) {
         var s = UiState.lockEditorSeed
         var cfg = (s && s.settings) ? s.settings : null
+        root.dLayout        = root._sv(cfg, "lock_layout",         VtlConfig.lockLayout)
         root.dReveal        = root._sv(cfg, "lock_reveal",         VtlConfig.lockReveal)
         root.dBlur          = root._sv(cfg, "lock_blur",           VtlConfig.lockBlur)
         root.dDim           = root._sv(cfg, "lock_dim",            VtlConfig.lockDim)
@@ -87,6 +89,7 @@ PanelWindow {
 
     function _draftSettings() {
         return {
+            lock_layout: root.dLayout,
             lock_reveal: root.dReveal, lock_blur: root.dBlur, lock_dim: root.dDim,
             lock_card_wallpaper: root.dCardWallpaper, lock_card_avatar: root.dCardAvatar,
             lock_uniform_wallpaper: root.dUniformWall, lock_widget_zones: root.dWidgetZones,
@@ -103,12 +106,42 @@ PanelWindow {
         var d = root._draftSettings()
         for (var k in d) SettingsStore.set(k, d[k])
     }
+    // The six arrangements, in the order the picker shows them. Keys match VtlConfig.lockLayout;
+    // the names are the presets that ship with each, so the grid and the preset list agree.
+    readonly property var layoutOptions: [
+        { key: "band",  label: "Vitrine" },
+        { key: "slab",  label: "Mirobo" },
+        { key: "card",  label: "Classic" },
+        { key: "edge",  label: "Marginalia" },
+        { key: "hud",   label: "Console" },
+        { key: "focus", label: "Focus" },
+        { key: "split", label: "Diptych" }
+    ]
+    function _layoutLabel(k) {
+        for (var i = 0; i < root.layoutOptions.length; i++)
+            if (root.layoutOptions[i].key === k) return root.layoutOptions[i].label
+        return k
+    }
+    // Which layouts can actually use the card keys. Mirobo's slab and the classic card both draw a
+    // surface with an avatar and an optional wallpaper; Diptych only takes a side and a share.
+    readonly property bool layoutHasCard:  root.dLayout === "card" || root.dLayout === "slab"
+    readonly property bool layoutHasPanel: root.layoutHasCard || root.dLayout === "split"
+    // Only the classic card places widgets by zone; the slab has one strip, like every other layout.
+    readonly property bool layoutHasZones: root.dLayout === "card"
+
     function _zoneOf(widget) { var z = root.dWidgetZones; return (z && z[widget]) ? z[widget] : "off" }
     function _setZone(widget, zone) {
         var z = {}, cur = root.dWidgetZones || {}
         for (var k in cur) z[k] = cur[k]
         z[widget] = zone
         root.dWidgetZones = z          // new object reference so bindings re-evaluate
+    }
+    // Only Mirobo places widgets by zone. Everywhere else the same map is read as a plain on/off
+    // switch, so the collapsed header must not promise a placement that nothing will honour.
+    function _widgetSummary(w) {
+        var z = root._zoneOf(w)
+        if (root.layoutHasZones) return root._zoneLabel(z)
+        return z === "off" ? "Off" : "On"
     }
     // "bottom-center" → "Bottom centre" for the collapsed section headers.
     function _zoneLabel(z) {
@@ -202,6 +235,72 @@ PanelWindow {
         }
     }
 
+    // Layout tile: a schematic of where the arrangement puts its weight. The names alone
+    // ("Vitrine", "Diptychon") say nothing about where anything sits, so each tile draws it.
+    component LayoutTile: StyledRect {
+        id: lt
+        property var opt
+        readonly property bool on: root.dLayout === lt.opt.key
+        readonly property color ink: lt.on ? Style.selText : Colors.fgMuted
+        height: 64
+        radius: Style.rTile
+        color:       lt.on ? Style.selFill : (ltHov.containsMouse ? Style.controlHover : Style.controlFill)
+        borderWidth: lt.on ? Style.selBorderW : Style.controlBorderW
+        borderColor: lt.on ? Style.selBorderColor : Style.controlBorderColor
+        Column {
+            anchors.centerIn: parent
+            spacing: 5
+            Item {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 34; height: 21
+                Rectangle {
+                    anchors.fill: parent; radius: 2; color: "transparent"
+                    border.width: 1; border.color: lt.ink; opacity: 0.5
+                }
+                Rectangle {   // Vitrine: the band across the bottom
+                    visible: lt.opt.key === "band"; color: lt.ink; radius: 1
+                    x: 2; y: parent.height - 8; width: parent.width - 4; height: 6
+                }
+                Rectangle {   // Mirobo: the wide shallow slab
+                    visible: lt.opt.key === "slab"; color: lt.ink; radius: 1
+                    anchors.centerIn: parent; width: 24; height: 8
+                }
+                Rectangle {   // Classic: the centred card
+                    visible: lt.opt.key === "card"; color: lt.ink; radius: 1
+                    anchors.centerIn: parent; width: 12; height: 12
+                }
+                Rectangle {   // Randnotiz: weight in the top corner
+                    visible: lt.opt.key === "edge"; color: lt.ink; radius: 1
+                    x: 3; y: 3; width: 12; height: 5
+                }
+                Rectangle {   // Kommandozeile: the inset frame
+                    visible: lt.opt.key === "hud"; color: "transparent"
+                    anchors.fill: parent; anchors.margins: 4
+                    border.width: 1; border.color: lt.ink
+                }
+                Rectangle {   // Fokus: the ring
+                    visible: lt.opt.key === "focus"; color: "transparent"
+                    anchors.centerIn: parent; width: 11; height: 11; radius: 5.5
+                    border.width: 2; border.color: lt.ink
+                }
+                Rectangle {   // Diptychon: the panel down one side
+                    visible: lt.opt.key === "split"; color: lt.ink; radius: 1
+                    x: 2; y: 2; width: 10; height: parent.height - 4
+                }
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: lt.opt.label; color: lt.ink
+                font.family: Style.font; font.pixelSize: 10
+            }
+        }
+        MouseArea {
+            id: ltHov
+            anchors.fill: parent; hoverEnabled: true
+            onClicked: root.dLayout = lt.opt.key
+        }
+    }
+
     // Per-widget placement picker: a 2×3 mini-screen (top/bottom × left/center/right) + Off.
     component ZonePicker: Column {
         property string title
@@ -212,19 +311,39 @@ PanelWindow {
         Item {
             width: parent.width; height: 22
             FieldLabel { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: title }
-            StyledRect {
+            // Mirobo gets Off here and the zone grid below. Every other layout has exactly one
+            // place for widgets already, so it gets the only choice that means anything: Off or On.
+            Row {
                 anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                width: 46; height: 22; radius: Style.rTile
-                readonly property bool on: cur === "off"
-                color: on ? Style.selFill : Style.controlFill
-                borderWidth: on ? Style.selBorderW : Style.controlBorderW
-                borderColor: on ? Style.selBorderColor : Style.controlBorderColor
-                Text { anchors.centerIn: parent; text: "Off"; color: parent.on ? Style.selText : Colors.fgMuted
-                       font.pixelSize: 11; font.family: Style.font }
-                MouseArea { anchors.fill: parent; onClicked: root._setZone(widget, "off") }
+                spacing: 5
+                Repeater {
+                    model: root.layoutHasZones ? [{ k: "off", l: "Off" }]
+                                               : [{ k: "off", l: "Off" }, { k: "on", l: "On" }]
+                    delegate: StyledRect {
+                        required property var modelData
+                        width: 46; height: 22; radius: Style.rTile
+                        readonly property bool sel: modelData.k === "off" ? (cur === "off") : (cur !== "off")
+                        color:       sel ? Style.selFill : Style.controlFill
+                        borderWidth: sel ? Style.selBorderW : Style.controlBorderW
+                        borderColor: sel ? Style.selBorderColor : Style.controlBorderColor
+                        Text {
+                            anchors.centerIn: parent; text: modelData.l
+                            color: parent.sel ? Style.selText : Colors.fgMuted
+                            font.pixelSize: 11; font.family: Style.font
+                        }
+                        // Turning one on outside Mirobo still writes a zone, because that map IS the
+                        // storage; bottom-center is the neutral one the grid would have picked.
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: root._setZone(widget, modelData.k === "off" ? "off"
+                                                           : (cur === "off" ? "bottom-center" : cur))
+                        }
+                    }
+                }
             }
         }
         Grid {
+            visible: root.layoutHasZones
             width: parent.width; columns: 3; rowSpacing: 5; columnSpacing: 5
             Repeater {
                 model: ["top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right"]
@@ -270,6 +389,7 @@ PanelWindow {
                     LockContent {
                         preview: true
                         screenName: root.mon
+                        cfgLayout:        root.dLayout
                         cfgReveal:        root.dReveal
                         cfgBlur:          root.dBlur
                         cfgDim:           root.dDim
@@ -312,6 +432,25 @@ PanelWindow {
 
                     Text { text: "BUILD YOUR OWN LOCKSCREEN"; color: Colors.fgBright
                            font.family: Style.font; font.pixelSize: 15; font.weight: Font.Medium }
+
+                    Card {
+                        CardLabel { text: "LAYOUT"
+                                    hint: "Where the lock puts its weight. Blur, clock and widgets "
+                                          + "apply to all six; the card settings further down only "
+                                          + "mean something in Mirobo and Diptychon." }
+                        Grid {
+                            width: parent.width
+                            columns: 3; rowSpacing: 6; columnSpacing: 6
+                            Repeater {
+                                model: root.layoutOptions
+                                delegate: LayoutTile {
+                                    required property var modelData
+                                    width: (parent.width - 2 * 6) / 3
+                                    opt: modelData
+                                }
+                            }
+                        }
+                    }
 
                     Card {
                         CardLabel { text: "LOOK" }
@@ -358,15 +497,19 @@ PanelWindow {
                     }
 
                     Card {
-                        CardLabel { text: "PASSWORD CARD"
-                                    hint: "Percent of the monitor, so the card lands the same on every screen. "
+                        CardLabel { text: "CLOCK & CARD"
+                                    hint: "The clock applies to every layout. Placement and appearance below "
+                                          + "belong to the card, so they show only for the layouts that draw "
+                                          + "one — percent of the monitor, so it lands the same on every screen. "
                                           + "Widgets sharing a column with it slide toward their own edge; if the "
                                           + "card grows so large that a zone can no longer clear it, that zone's "
                                           + "widgets step aside — the preview shows it live." }
                         Fold {
-                            title: "Placement"
+                            visible: root.layoutHasPanel
+                            title: root.dLayout === "split" ? "Panel" : "Placement"
                             summary: (root.dCardPos === "left" ? "Left" : root.dCardPos === "right" ? "Right" : "Centre")
-                                     + " · " + root.dCardWPct + " × " + root.dCardHPct + " %"
+                                     + " · " + root.dCardWPct + " %"
+                                     + (root.layoutHasCard ? " × " + root.dCardHPct + " %" : "")
                             Segmented {
                                 width: parent.width; equal: true
                                 segments: [{ key: "left", label: "Left" }, { key: "center", label: "Centre" },
@@ -376,10 +519,27 @@ PanelWindow {
                             }
                             Stepper { label: "Width";  unit: "%"; min: 20; max: 70; step: 5; labelWidth: 70
                                       value: root.dCardWPct; onChanged: (v) => root.dCardWPct = v }
-                            Stepper { label: "Height"; unit: "%"; min: 20; max: 70; step: 5; labelWidth: 70
+                            Stepper { visible: root.layoutHasCard
+                                      label: "Height"; unit: "%"; min: 20; max: 70; step: 5; labelWidth: 70
                                       value: root.dCardHPct; onChanged: (v) => root.dCardHPct = v }
+                            // Diptychon has no centre: the panel is pinned to one side, and the
+                            // width is its share of the screen rather than a card's size.
+                            SubLabel {
+                                width: parent.width
+                                visible: root.dLayout === "slab"
+                                text: "Mirobo is a slab: the height is clamped to a letterbox band, "
+                                      + "so the top of this range stops taking effect."
+                            }
+                            SubLabel {
+                                width: parent.width
+                                visible: root.dLayout === "split"
+                                text: root.dCardPos === "center"
+                                      ? "Diptychon has no centre — the panel sits on the left."
+                                      : "The panel runs full height; the width is its share of the screen."
+                            }
                         }
                         Fold {
+                            visible: root.layoutHasCard
                             title: "Appearance"
                             summary: (root.dCardWallpaper ? "Wallpaper" : "Plain")
                                      + (root.dCardAvatar ? " · avatar" : "")
@@ -416,9 +576,10 @@ PanelWindow {
                             FieldLabel { text: "Date" }
                             Dropdown {
                                 summary: root.dDateFormat
-                                options: [{ key: "dddd, dd. MMMM", label: "Monday, 21. July", on: root.dDateFormat === "dddd, dd. MMMM" },
+                                options: [{ key: "dddd, dd MMMM", label: "Monday, 21 July", on: root.dDateFormat === "dddd, dd MMMM" },
+                                          { key: "MMMM d, yyyy", label: "July 21, 2026", on: root.dDateFormat === "MMMM d, yyyy" },
                                           { key: "ddd dd", label: "Mon 21", on: root.dDateFormat === "ddd dd" },
-                                          { key: "dd.MM.yyyy", label: "21.07.2026", on: root.dDateFormat === "dd.MM.yyyy" }]
+                                          { key: "yyyy-MM-dd", label: "2026-07-21", on: root.dDateFormat === "yyyy-MM-dd" }]
                                 onPicked: (k) => root.dDateFormat = k
                             }
                         }
@@ -428,18 +589,24 @@ PanelWindow {
                         CardLabel { text: "WIDGETS"
                                     hint: "Each module carries its own settings — open one to place it."
                                           + "\n\n" + "Avatar + account name."
-                                          + "\n\n" + "Shows while something is playing; hidden otherwise." }
+                                          + "\n\n" + "Shows while something is playing; hidden otherwise."
+                                          + "\n\n" + "How many notifications are waiting — the count only, "
+                                          + "never what they say." }
                         Fold {
-                            title: "User"; summary: root._zoneLabel(root._zoneOf("user"))
+                            title: "User"; summary: root._widgetSummary("user")
                             ZonePicker { title: "Zone"; widget: "user" }
                         }
                         Fold {
-                            title: "Media player"; summary: root._zoneLabel(root._zoneOf("media"))
+                            title: "Media player"; summary: root._widgetSummary("media")
                             ZonePicker { title: "Zone"; widget: "media" }
                         }
                         Fold {
+                            title: "Notifications"; summary: root._widgetSummary("notifs")
+                            ZonePicker { title: "Zone"; widget: "notifs" }
+                        }
+                        Fold {
                             title: "Weather"
-                            summary: root._zoneLabel(root._zoneOf("weather"))
+                            summary: root._widgetSummary("weather")
                                      + (root.dWeatherCity !== "" ? " · " + root.dWeatherCity : "")
                                      + (root.dWxForecast ? " · " + root.dWxDays + "d" : "")
                             ZonePicker { title: "Zone"; widget: "weather" }
@@ -483,11 +650,11 @@ PanelWindow {
                                       value: root.dWxDays; onChanged: (v) => root.dWxDays = v }
                         }
                         Fold {
-                            title: "Battery"; summary: root._zoneLabel(root._zoneOf("battery"))
+                            title: "Battery"; summary: root._widgetSummary("battery")
                             ZonePicker { title: "Zone"; widget: "battery" }
                         }
                         Fold {
-                            title: "Session actions"; summary: root._zoneLabel(root._zoneOf("session"))
+                            title: "Session actions"; summary: root._widgetSummary("session")
                             SubLabel {
                                 width: parent.width
                                 text: "A power glyph that unfolds into suspend · logout · reboot · shut down "

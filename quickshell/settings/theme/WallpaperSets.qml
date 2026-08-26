@@ -74,7 +74,7 @@ Item {
     function applySet(images) {
         var cmd = ""
         for (var mon in images)
-            cmd += "bash \"$VELUMERON_DIR/assets/scripts/wallpaper-set.sh\" --no-waybar --no-showcase "
+            cmd += "bash \"$VELUMERON_DIR/assets/scripts/wallpaper-set.sh\" --no-showcase "
                  + "--mon " + JSON.stringify(mon) + " --file " + JSON.stringify(images[mon]) + "; "
         applyProc.command = ["bash", "-c", "setsid bash -c " + JSON.stringify(cmd) + " </dev/null >/dev/null 2>&1 &"]
         applyProc.running = false; applyProc.running = true

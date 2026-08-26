@@ -110,6 +110,21 @@ def emit(cache):
 
 # ── Source resolution (which Vikunja, which token) ────────────────────────────
 
+def _looks_like_vikunja(path):
+    """Does this CalDAV path belong to a Vikunja server?
+
+    Matching on "ends with /dav" is not enough: Nextcloud and ownCloud sit at
+    /remote.php/dav and match it too. When a Nextcloud account happens to come
+    first in the list, the REST base becomes the Nextcloud host and every
+    /api/v1/... call 404s — which silently takes project backgrounds with it.
+    Vikunja serves DAV from a plain `dav` path segment, so require that and
+    exclude the PHP entry point the ownCloud family uses.
+    """
+    if "remote.php" in path or ".php" in path:
+        return False
+    return "dav" in [seg for seg in path.split("/") if seg]
+
+
 def resolve_source():
     """{name, base, host, token} or None. gui/vikunja.json wins; else the
     caldav account that looks like Vikunja (/dav/ path) + the token file."""
@@ -122,7 +137,7 @@ def resolve_source():
         for a in accounts:
             au = (a.get("url") or "").strip()
             p = urllib.parse.urlsplit(au)
-            if "/dav/" in p.path or p.path.rstrip("/").endswith("/dav"):
+            if _looks_like_vikunja(p.path):
                 if not url:
                     url = f"{p.scheme}://{p.netloc}"
                     name = a.get("name") or name

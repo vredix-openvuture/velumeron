@@ -539,6 +539,51 @@ QtObject {
                                         : isStraight   ? Colors.boNormal
                                                        : Colors.boNormal
     readonly property int chromeBorderWidth: (isFuturistic || isGrimoire || isNostalgic) ? 2 : 1
+    // The width the BAR's chrome is actually drawn at on `mon` — the user's px value from Settings →
+    // Bar → Border once they set one (0 = no outline), the ui_style's own weight otherwise.
+    //
+    // Every surface that grows out of the bar draws with THIS, not with the style default: a menu,
+    // a flyout, a toast and the OSD all continue the bar's own line, and two different widths meet
+    // at the seam as a visible step — the bar's 6 px line running into a popout's 1 px one. One
+    // knob, one weight, everywhere. (Bar.qml derives the same value; it is the definition.)
+    function barBorderW(mon) {
+        var v = VtlConfig.barBorderWidthFor(mon)
+        return (v === null || v === undefined) ? root.chromeBorderWidth : Math.max(0, v)
+    }
+    // The offset that puts an axis-aligned chrome line ON a pixel instead of BETWEEN two.
+    //
+    // A stroke is centred on its path, so an ODD-width line at an integer coordinate straddles two
+    // pixel rows and each gets half the ink. That alone is merely soft. What makes it a bug is that
+    // Qt's CurveRenderer cannot antialias an axis-aligned run at large coordinates: measured on a
+    // 2560x1440 output with a ladder of identical 1px lines, runs at y≤500 split the ink 50/50 as
+    // they should and runs from y≈700 down saturate BOTH rows. So one path, one stroke width, one
+    // renderer produced a frame twice as heavy along its bottom and right as along its top and left.
+    //
+    // Nudging every axis-aligned run by this much lands the stroke on exactly one row and takes the
+    // antialiaser out of the loop: identical weight at every coordinate, and crisper than the
+    // "correct" result was. Curves are unaffected by the renderer bug and keep their AA, so only
+    // straight runs need it. An EVEN width already ends on pixel boundaries when centred on an
+    // integer, hence 0 — offsetting those would move the line without making it any crisper.
+    function hairline(w) { return (Math.round(w) % 2) * 0.5 }
+    // A panel that lands within a pixel of the strip's end is treated as FLUSH with it: it drops
+    // its concave fillet and the bar hands its line over instead of curving away. That tolerance
+    // was only ever read, never enforced — so the panel kept the position it happened to have and
+    // the two "continuous" lines ran one pixel apart.
+    //
+    // Measured on the settings menu (2560x1440, dock with a 15 px side gap): bar border in column
+    // 15, panel border in column 16. The panel tracks its ICON, and the icon slot starts inside the
+    // bar's own border — icon centre 36, minus half a bar thickness, is 16. One pixel, and it reads
+    // as a step at the seam. So snap the position onto the end it claims to be flush with; the
+    // tolerance is the same ±1 every flushLo/flushHi uses.
+    //
+    // `lo`/`hi` are the two extremes of the along-the-bar travel (the strip's span, less the panel).
+    // A panel longer than the strip has hi < lo and no end to be flush with — left alone.
+    function flushSnap(v, lo, hi) {
+        if (hi < lo) return v
+        if (v <= lo + 1) return lo
+        if (v >= hi - 1) return hi
+        return v
+    }
     // Free-corner radius for a chrome outline (the bar hole corners, the menu's content corners).
     // Strict/retro variants square them off; the rest keep the user's bar inner-radius. Merge
     // fillets (how a panel flows into the bar) stay governed by the transition-style setting.
@@ -548,4 +593,24 @@ QtObject {
     readonly property color trackOn:  root.accent
     readonly property color trackOff: Colors.bgPrimary
     readonly property color knob:     Colors.fgBright
+
+    // ── Status dot (common/StatusDot.qml) ─────────────────────────────────────────
+    // The bar's ONE indicator: unread notifications on the bell, a due task on the clock, a linked
+    // device on the phone. It is deliberately sized off the bar's icon size and not off the glyph
+    // it happens to sit on — the modules run at different font and icon sizes, so per-glyph sizing
+    // is exactly what made three dots of 5, 6 and 7 px read as three different indicators.
+    // Sized to be SEEN from a metre away: a 5-6 px dot on a 1440p bar is a speck of dust, not a
+    // signal. Roughly two thirds of the icon it marks, with a floor that survives a small bar.
+    function dotSize(mon) { return Math.max(8, Math.round(VtlConfig.barIconSizeFor(mon) * 0.62)) }
+    readonly property int dotRing: 1   // punches the dot out of whatever it sits on
+    // The dot's default meaning-colour. NOT `accent` (= bgActive): that one is a SURFACE colour, so
+    // on a dark bar it disappears into the panel it is drawn on. boActive is the palette's
+    // "this is live" colour and is picked to sit on top of that surface.
+    readonly property color dotTone: Colors.boActive
+
+    // A real red, for FAULT states — the paired phone is gone, the battery is about to die.
+    // Colors.fgUrgent is a wallust SLOT, and wallust fills it from the wallpaper: in the current
+    // theme it lands on olive green (#6E8B4E), so "urgent" reads as "fine". Whether a fault looks
+    // like a fault cannot depend on the wallpaper, so this one colour stays out of the palette.
+    readonly property color danger: isCupertino ? "#ff453a" : "#E5484D"
 }

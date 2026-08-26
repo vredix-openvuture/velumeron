@@ -3,6 +3,10 @@ import QtQuick
 
 // Row of mutually-exclusive segments (tabs / mode pickers). `segments` = [{ label, key }];
 // `equal` fills the parent width with equal-width segments, otherwise each hugs its label.
+//
+// A segment may carry its own `hint`: what THAT choice does, shown in a hover bubble. It is the
+// right place for the explanation whenever the options differ in kind ("Dock" vs "Float" vs
+// "Frame") — one bubble per option beats one paragraph describing all of them.
 Row {
     id: sg
     property var    segments: []
@@ -16,8 +20,10 @@ Row {
     Repeater {
         model: sg.segments
         delegate: StyledRect {
+            id: seg
             required property var modelData
             readonly property bool on: sg.current === modelData.key
+            readonly property string segHint: modelData.hint !== undefined ? "" + modelData.hint : ""
             // Split a leading icon glyph so it renders in the icon font with a real gap (see Style).
             readonly property string segIcon: Style.splitIcons ? Style.leadIcon(modelData.label) : ""
             readonly property string segText: segIcon !== "" ? Style.stripIcon(modelData.label) : modelData.label
@@ -37,6 +43,7 @@ Row {
                        color: segFg; font.pixelSize: 12; font.bold: true; font.family: Style.font }
             }
             MouseArea { id: h; anchors.fill: parent; hoverEnabled: true; onClicked: sg.picked(modelData.key) }
+            HintTip { target: seg; text: seg.segHint; hovered: h.containsMouse }
         }
     }
 }

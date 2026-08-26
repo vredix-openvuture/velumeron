@@ -15,6 +15,14 @@ QS_PKG_DIR="$VELUMERON_DIR/quickshell"
 QS_USER_DIR="$VELUMERON_USER_DIR/quickshell"
 mkdir -p "$QS_USER_DIR"
 
+# Scrub environment variables that must never reach the apps the shell launches. Everything the
+# launcher starts inherits OUR environment, so anything odd in it becomes an odd environment for
+# every program on the desktop. ELECTRON_RUN_AS_NODE=1 is the one that bites: VS Code / VSCodium
+# set it for their child processes, so a shell restarted from an editor terminal hands it to every
+# Electron app it later starts — those then run as plain Node, fail on `require('electron')` and
+# die instantly. From the outside the launcher simply "does nothing" (seen with Obsidian).
+unset ELECTRON_RUN_AS_NODE ELECTRON_NO_ATTACH_CONSOLE
+
 # Drop any inherited file descriptors before (re)launching the long-lived shell. This script is
 # also invoked by wallust's `qs_reload` hook, which runs *inside* a `flock`-held wallust (see
 # wallpaper-set.sh). Without this, quickshell would inherit the still-open lock fd and hold the

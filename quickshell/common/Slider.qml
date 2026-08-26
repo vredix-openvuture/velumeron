@@ -12,6 +12,8 @@ Item {
     id: sl
 
     property string label:      ""
+    // Explanation, shown on hover over the label (HintTip) — never drawn as a line of its own.
+    property string hint:       ""
     property real   from:       0
     property real   to:         1
     property real   value:      0
@@ -58,6 +60,19 @@ Item {
         font.pixelSize: Style.fsLabel
         font.family: Style.font
         elide: Text.ElideRight
+
+        Rectangle {
+            visible: sl.hint !== ""
+            y:       cap.contentHeight + 1
+            width:   Math.min(cap.contentWidth, cap.width)
+            height:  1
+            color:   cap.color
+            opacity: capHover.containsMouse ? 0.6 : 0
+            Behavior on opacity { NumberAnimation { duration: Style.ctrlMs } }
+        }
+        MouseArea { id: capHover; anchors.fill: parent; enabled: sl.hint !== ""
+                    hoverEnabled: true; acceptedButtons: Qt.NoButton }
+        HintTip { target: sl; text: sl.hint; hovered: capHover.containsMouse }
     }
 
     Text {

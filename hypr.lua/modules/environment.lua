@@ -21,6 +21,13 @@ hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION","1")
 -- and video wallpapers fall back to a black surface.
 hl.env("QML_IMPORT_PATH", VTL_DIR .. "/quickshell/plugins")
 
+-- …and the other half of the same promise. mpv's render API draws through OpenGL, so the scene
+-- graph has to be on the GL backend; launch-quickshell.sh exports this, which means a shell
+-- started ANY other way (a bare `quickshell -p …` from a terminal after a crash, an editor, a
+-- session file) renders live wallpapers as a black surface — with no error anywhere, because the
+-- plugin itself loaded perfectly well. Setting it for the session removes that difference.
+hl.env("QSG_RHI_BACKEND", "opengl")
+
 -- Toolkit backends
 hl.env("GDK_BACKEND",    "wayland,x11,*")
 hl.env("SDL_VIDEODRIVER", "wayland")

@@ -2,6 +2,7 @@ pragma Singleton
 import ".."
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Notifications
 
 // The org.freedesktop.Notifications server + shared state. Owns the D-Bus name (so the old
@@ -24,6 +25,45 @@ Singleton {
     property var  pinned: ({})                     // notification.id → true; pinned entries sort to the
                                                    // top of the centre and survive "clear all"
     readonly property var model: serverLoader.item ? serverLoader.item.trackedNotifications : null   // history (null while the notifications component is off)
+
+    // ── `popups` is a Repeater model, so writing it REBUILDS the whole toast stack ───────────────
+    // Every assignment makes QQuickRepeater destroy and re-incubate every delegate. Doing that from
+    // inside a callback Qt is still unwinding crashes the process in QtQmlModels — and this file had
+    // two of them: the D-Bus dispatch that delivers a notification (`onNotification`) and a
+    // SpringAnimation tick reporting a card finished retracting (`purge` from `onRevealChanged`).
+    // Five SIGSEGVs in four days, all with the same QQuickRepeater::regenerate frame. quickshell is
+    // ONE process, so that is also what "the bar just disappeared" was.
+    //
+    // Nothing writes `popups` directly any more. Writes queue and land on the next event-loop turn,
+    // which is the only moment a tree rebuild is safe. Reads go through livePopups(), so a second
+    // change queued in the same turn still sees the first one instead of the stale array.
+    property var _queued: null
+    function livePopups() { return root._queued !== null ? root._queued : root.popups }
+    function _setPopups(a) {
+        root._queued = a
+        Qt.callLater(root._flushPopups)
+    }
+    function _flushPopups() {
+        if (root._queued === null) return
+        var a = root._queued
+        root._queued = null
+        root.popups = a
+    }
+
+    // A notification the sender withdrew (CloseNotification) or the server expired is DESTROYED,
+    // and a toast still holding that object renders as a card with no app, no summary and no body —
+    // the "dead notification". It never leaves either: every timer here matches on `n.id`, and a
+    // destroyed object has no id, so neither the deadline sweep nor `_leaving` can ever find it.
+    // The id is captured while the object is still alive, because `closed` fires on its way out.
+    function _forget(n, id) {
+        var live = root.livePopups()
+        var a = live.filter(function (x) { return x !== n })
+        if (a.length !== live.length) root._setPopups(a)
+        if (root._deadlines[id] !== undefined) delete root._deadlines[id]
+        if (root._leaving[id] !== undefined)        { var m = Object.assign({}, root._leaving);        delete m[id]; root._leaving = m }
+        if (root._dismissOnPurge[id] !== undefined) { var d = Object.assign({}, root._dismissOnPurge); delete d[id]; root._dismissOnPurge = d }
+        if (root._seen[id] !== undefined)           { var s = Object.assign({}, root._seen);           delete s[id]; root._seen = s }
+    }
 
     function isPinned(n) { return !!(n && root.pinned[n.id]) }
     function togglePin(n) {
@@ -125,14 +165,57 @@ Singleton {
         return true
     }
 
+    // ── "The notification is ABOUT a file" ──────────────────────────────────────────────────────
+    // A screenshot toast has no window to focus and no app to raise: the thing you want is the PNG,
+    // in whatever viewer this system opens PNGs with. Two sources say which file, in order of how
+    // deliberately the sender meant it — the explicit x-velumeron-open hint (our own screenshot.sh
+    // sets it), then the picture the notification carries, because a screenshot tool passes the
+    // shot itself as the notification image/icon.
+    function _fileTarget(s) {
+        var p = "" + (s ?? "")
+        if (p.indexOf("file://") === 0) p = decodeURIComponent(p.substring(7))
+        if (p.indexOf("/") !== 0) return ""                  // an icon NAME, or an image:// uri
+        // A themed icon is a real file too, and opening telegram.svg in an image viewer is not what
+        // clicking a chat message meant. Only documents outside the icon dirs qualify.
+        if (p.indexOf("/icons/") >= 0 || p.indexOf("/pixmaps/") >= 0) return ""
+        if (/\.(svg|svgz|xpm|ico)$/i.test(p)) return ""
+        return p
+    }
+    function openTargetOf(n) {
+        if (!n) return ""
+        var h = n.hints
+        var v = h ? h["x-velumeron-open"] : null
+        if (v) return root._fileTarget(v)
+        return root._fileTarget(n.image) || root._fileTarget(n.appIcon)
+    }
+    // setsid -f, so the viewer outlives this process and never becomes our child.
+    Process { id: openProc }
+    function openTarget(n) {
+        var p = root.openTargetOf(n)
+        if (p === "") return false
+        openProc.running = false
+        openProc.command = ["setsid", "-f", "xdg-open", p]
+        openProc.running = true
+        return true
+    }
+
     // Returns true when the click led somewhere — the callers use that to decide between dropping
     // just the toast and dismissing the notification outright.
     function activate(n) {
         if (!n) return false
         var acted = false
+        // An explicit open target beats the freedesktop action, and is NOT combined with it: both
+        // would open the same file twice. It also outlives the action — `notify-send -A` only
+        // answers while that process is alive, and a notification you come back to in the centre
+        // an hour later has long lost it. That is why clicking an old screenshot did nothing.
+        var h = n.hints
+        if (h && h["x-velumeron-open"] && root.openTarget(n)) return true
         var a = root.defaultActionOf(n)
         if (a) { a.invoke(); acted = true }
         if (root.focusWindowOf(n)) acted = true
+        // Nothing claimed the click: the file the notification is about is the last thing left to
+        // go to (a screenshot from any other tool lands here).
+        if (!acted) acted = root.openTarget(n)
         return acted
     }
 
@@ -165,6 +248,11 @@ Singleton {
                 onNotification: function (n) {
                     n.tracked = true
                     root.unread++
+                    // Withdrawn / expired notifications have to leave the toast list themselves —
+                    // see NotifService._forget. Connected before anything else so a notification
+                    // closed in the same breath as it arrived is still caught.
+                    var nid = n.id
+                    n.closed.connect(function () { root._forget(n, nid) })
                     if (!root.dnd) {
                         var critical = (n.urgency === NotificationUrgency.Critical)
                         // Split by urgency deliberately: the everyday one is off by default and the
@@ -182,9 +270,9 @@ Singleton {
                             SoundService.play(critical ? "notification-critical" : "notification")
                         var to = (n.expireTimeout > 0 ? n.expireTimeout : 5000)
                         root._deadlines[n.id] = critical ? 0 : (Date.now() + to)
-                        var a = root.popups.filter(function (x) { return x !== n })
+                        var a = root.livePopups().filter(function (x) { return x !== n })
                         a.unshift(n)
-                        root.popups = a
+                        root._setPopups(a)      // deferred — we are inside the D-Bus dispatch
                     }
                 }
             }
@@ -198,10 +286,18 @@ Singleton {
         interval: 250; repeat: true; running: root.popups.length > 0
         onTriggered: {
             var now = Date.now()
+            var live = root.livePopups()
+            // Belt and braces for the dead card: anything whose object is gone reads back with no
+            // id, which means neither the deadline pass below nor `_leaving` can ever match it —
+            // it would sit there blank forever. `closed` normally catches these (see _forget); this
+            // catches one that slipped through, e.g. a notification already on its way out when the
+            // server was created.
+            var alive = live.filter(function (n) { return n && n.id !== undefined })
+            if (alive.length !== live.length) { root._setPopups(alive); live = alive }
             // Start the retract on anything past its deadline (it stays in `popups` until it has
             // finished animating out and its delegate calls purge()).
-            for (var i = 0; i < root.popups.length; i++) {
-                var n  = root.popups[i]
+            for (var i = 0; i < live.length; i++) {
+                var n  = live[i]
                 var dl = root._deadlines[n.id]
                 if (dl && dl > 0 && now >= dl) root.startLeave(n, false)
             }
@@ -210,8 +306,8 @@ Singleton {
             for (var id in root._leaving) {
                 if (now - root._leaving[id] <= 800) continue
                 var victim = null
-                for (var k = 0; k < root.popups.length; k++)
-                    if (("" + root.popups[k].id) === ("" + id)) { victim = root.popups[k]; break }
+                for (var k = 0; k < live.length; k++)
+                    if (("" + live[k].id) === ("" + id)) { victim = live[k]; break }
                 if (victim) root.purge(victim)
                 else { var m = Object.assign({}, root._leaving); delete m[id]; root._leaving = m }
             }
@@ -241,8 +337,9 @@ Singleton {
     function purge(n) {
         if (!n) return
         var doDismiss = !!root._dismissOnPurge[n.id]
-        if (root.popups.indexOf(n) >= 0)
-            root.popups = root.popups.filter(function (x) { return x !== n })
+        var live = root.livePopups()
+        if (live.indexOf(n) >= 0)
+            root._setPopups(live.filter(function (x) { return x !== n }))
         if (root._leaving[n.id]        !== undefined) { var a = Object.assign({}, root._leaving);        delete a[n.id]; root._leaving = a }
         if (root._dismissOnPurge[n.id] !== undefined) { var b = Object.assign({}, root._dismissOnPurge); delete b[n.id]; root._dismissOnPurge = b }
         if (root._seen[n.id]           !== undefined) { var c = Object.assign({}, root._seen);           delete c[n.id]; root._seen = c }
@@ -260,10 +357,11 @@ Singleton {
         // Pinned entries are kept — "clear all" only sweeps the un-pinned history + toasts. Visible
         // toasts retract (dismissed on purge); the rest are dismissed straight away.
         var vs = serverLoader.item ? serverLoader.item.trackedNotifications.values : []
+        var live = root.livePopups()
         for (var i = vs.length - 1; i >= 0; i--) {
             var n = vs[i]
             if (root.isPinned(n)) continue
-            if (root.popups.indexOf(n) >= 0) root.startLeave(n, true)
+            if (live.indexOf(n) >= 0) root.startLeave(n, true)
             else if (n.dismiss) n.dismiss()
         }
     }

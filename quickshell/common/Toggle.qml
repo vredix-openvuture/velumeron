@@ -29,14 +29,15 @@ StyledRect {
         Text { id: labelText
                text: tg.label; color: Colors.fgPrimary; font.pixelSize: Style.fsLabel
                font.family: Style.font; elide: Text.ElideRight; width: parent.width }
-        // "There is more to read here" — font-independent, so it holds under any display font.
+        // "There is more to read here" — shown only while the row is hovered. Permanent, it made
+        // every switch on a page look like a link; the pointer is already there when it matters.
         Rectangle {
             visible: tg.sub !== ""
             width:  Math.min(labelText.contentWidth, labelText.width)
             height: 1
-            color:  Qt.rgba(Colors.fgMuted.r, Colors.fgMuted.g, Colors.fgMuted.b,
-                            rowHover.containsMouse ? 0.75 : 0.35)
-            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
+            color:  Colors.fgMuted
+            opacity: rowHover.containsMouse ? 0.7 : 0
+            Behavior on opacity { NumberAnimation { duration: Style.ctrlMs } }
         }
     }
 

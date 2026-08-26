@@ -31,6 +31,12 @@ Item {
 
     readonly property int _sz: VtlConfig.moduleIconSizeFor("phone", root.barMon)
 
+    // Link state → the bar's status dot, drawn by the slot (Bar.qml's ModSlot). Always shown, and
+    // only its colour carries the meaning: reachable in the shared tone, nothing paired in red.
+    // The icon itself stays out of it, so the module reads as "phone" first and as a state second.
+    readonly property bool  dotOn:   true
+    readonly property color dotTone: root.connected ? Style.dotTone : Style.danger
+
     implicitWidth:  content.implicitWidth
     implicitHeight: content.implicitHeight
     width:  implicitWidth
@@ -42,33 +48,18 @@ Item {
         anchors.centerIn: parent
         spacing: 5
 
-        Item {
+        Text {
+            id: glyph
             anchors.verticalCenter: parent.verticalCenter
-            width:  glyph.implicitWidth
-            height: glyph.implicitHeight
-
-            Text {
-                id: glyph
-                text:  PhoneService.icon(root.dev)
-                color: root.low ? Colors.fgUrgent
-                     : (mouse.containsMouse || root.open) ? Colors.fgBright
-                     : root.connected ? root._col : Colors.fgMuted
-                font.family:    root._font
-                font.pixelSize: root._sz
-                opacity: root.connected ? 1.0 : 0.75
-                Behavior on color   { ColorAnimation  { duration: 120 } }
-                Behavior on opacity { NumberAnimation { duration: 120 } }
-            }
-            // Link state, so the two states differ by more than a shade of grey: filled while a
-            // device is reachable, a hollow ring while none is.
-            Rectangle {
-                anchors { right: parent.right; top: parent.top; rightMargin: -1; topMargin: -1 }
-                width: 6; height: 6; radius: 3
-                color:        root.connected ? Style.accent : "transparent"
-                border.width: root.connected ? 0 : 1
-                border.color: Colors.fgMuted
-                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
-            }
+            text:  PhoneService.icon(root.dev)
+            color: root.low ? Colors.fgUrgent
+                 : (mouse.containsMouse || root.open) ? Colors.fgBright
+                 : root.connected ? root._col : Colors.fgMuted
+            font.family:    root._font
+            font.pixelSize: root._sz
+            opacity: root.connected ? 1.0 : 0.75
+            Behavior on color   { ColorAnimation  { duration: 120 } }
+            Behavior on opacity { NumberAnimation { duration: 120 } }
         }
 
         Text {

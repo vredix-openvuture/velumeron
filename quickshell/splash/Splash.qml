@@ -32,9 +32,31 @@ PanelWindow {
     anchors { top: true; left: true; right: true; bottom: true }
     WlrLayershell.layer:         WlrLayer.Overlay
     WlrLayershell.namespace:     "velumeron-splash"
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    // Nothing the user does may reach the half-built session behind the curtain. The pointer is
+    // already swallowed by the input region (`mask`, below); this takes the KEYBOARD too, so a
+    // keystroke into a desktop that is still assembling itself lands nowhere instead of in whatever
+    // window happens to have focus. Given back the moment the tear starts — from there on the
+    // desktop is what you are looking at — and unconditionally when SplashState drops `active` and
+    // these surfaces are destroyed, so a wedged shell cannot sit on the keyboard (the reason the
+    // lockscreen once needed a reboot). Hyprland's own keybinds are compositor-side and NOT covered:
+    // blocking those means a submap switch, which outlives a crashed shell and takes the keyboard
+    // with it.
+    WlrLayershell.keyboardFocus: SplashState.shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     WlrLayershell.exclusiveZone: -1
     visible: SplashState.active
+
+    // The bar waits behind the curtain, and "created" is not the same as "on screen": the surface
+    // exists a good while before the compositor has anything from it. So the gate is opened by an
+    // actual rendered frame of this window. Window.window is still null at Component.onCompleted
+    // and fills in once the item is in the backing window, so the target has to stay a binding.
+    Item {
+        id: probe
+        Connections {
+            target: probe.Window.window
+            enabled: !SplashState.curtainUp
+            function onFrameSwapped() { SplashState.painted() }
+        }
+    }
 
     Region { id: whole; x: 0; y: 0; width: root.width; height: root.height }
     Region { id: nothing }
@@ -89,7 +111,19 @@ PanelWindow {
         layer.effect: MultiEffect { maskEnabled: true; maskInverted: true; maskSource: circleMask }
         opacity: root._bubble ? 1 : (1 - root.tear)  // "fade" / "none" ride the same number
 
-        MouseArea { anchors.fill: parent; onClicked: SplashState.finish() }
+        // No pointer on a closed door: the cursor is the one thing that would still move over the
+        // curtain, and a cursor over a blank screen is what makes a splash look like a hang. The
+        // shape belongs to THIS surface, so it needs no compositor call and comes back by itself
+        // when the splash goes away — nothing to restore, nothing to leak if the shell dies.
+        // Every button, not just the left one: a click is swallowed either way, and cutting the
+        // curtain short is the one input that stays deliberate — it is also the way out if a start
+        // ever hangs with the keyboard held.
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.BlankCursor
+            acceptedButtons: Qt.AllButtons
+            onClicked: SplashState.finish()
+        }
 
         // ── Centre: the OpenVuture mascot, static ────────────────────────────────────────────────
         Image {

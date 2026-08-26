@@ -112,7 +112,6 @@ sync_templates() {
         "assets/colors_gtk.css"
         "assets/colors_hyprland.conf"
         "hypr.lua/colors.lua"
-        "kitty/colors.conf"
         # Device-specific config (monitors/workspaces/…): a repo/package copy
         # of this untracked file must never clobber the user's machine setup
         # via the mtime rule below.
@@ -124,8 +123,11 @@ sync_templates() {
         return 1
     }
 
-    # Sync these subtrees
-    for _dir in kitty hypr.lua; do
+    # Sync these subtrees. `kitty` used to be one of them: velumeron shipped a kitty.conf into the
+    # user dir and pointed the terminal role at it, which made one emulator part of the desktop.
+    # Terminals are integrations now (Settings -> Integrations -> Terminal) and each writes that
+    # emulator's OWN config, so there is nothing to seed.
+    for _dir in hypr.lua; do
         local src="$VELUMERON_DIR/$_dir"
         local dst="$VELUMERON_USER_DIR/$_dir"
         [[ -d "$src" ]] || continue
@@ -189,12 +191,17 @@ sync_templates() {
         fi
     done
 
-    # hypridle ignores the --config flag on some versions — it only reads
-    # $XDG_CONFIG_HOME/hypr/hypridle.conf. Symlink ours into the standard path so
-    # the daemon can always find the config.
-    mkdir -p "$HOME/.config/hypr"
+    # Symlink our hypridle.conf into the standard path as a convenience for anyone running the
+    # daemon by hand; velumeron-services.sh passes `-c` and does not depend on it.
+    #
+    # XDG_CONFIG_HOME, never a hardcoded $HOME/.config: run under an isolated profile (the trailer
+    # pipeline does exactly that) this used to re-point the REAL link at the throwaway profile, and
+    # when that profile was deleted the link dangled — hypridle then exited at every login with "no
+    # config" and took the logind bridge with it. Seen 2026-08-16, found 2026-08-19.
+    local _cfg_home="${XDG_CONFIG_HOME:-$HOME/.config}"
+    mkdir -p "$_cfg_home/hypr"
     for _f in hypridle.conf; do
-        local _link="$HOME/.config/hypr/$_f"
+        local _link="$_cfg_home/hypr/$_f"
         local _target="$VELUMERON_USER_DIR/hypr.lua/$_f"
         [[ -f "$_target" ]] || continue
         # Re-point unless it's already our symlink. This also replaces a plain
@@ -428,7 +435,11 @@ say "Package installation"
 
 REQUIRED_PKGS=(
     hypridle hyprpolkitagent
-    quickshell kitty
+    quickshell
+    # A terminal has to exist for the keybind to open something; kitty is the DEFAULT pick, not a
+    # dependency. Any of foot/alacritty/wezterm/ghostty works, and velumeron can theme all five
+    # (Settings -> Integrations -> Terminal). Drop this line if you already have one.
+    kitty
     wallust hypremoji
     mpv qt6-multimedia qt6-declarative cmake ninja   # native wallpaper engine (libmpv→QtQuick plugin)
     playerctl jq socat fastfetch tmux

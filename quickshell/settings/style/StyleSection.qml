@@ -23,6 +23,28 @@ Item {
     // "" = main page, "build" = the theme-builder sub-page.
     property string page: ""
 
+    // Menu size (per placement) as a % of the monitor. Anything under the floor would be a panel
+    // nobody can read, so stepping below it clears the key instead — which is also the way back to
+    // Auto, without a separate reset button for four steppers.
+    readonly property int menuPctFloor: 15
+    // Which screen the size steppers are writing for. "" = the value every screen starts from; a
+    // monitor name overrides that one. Same shape the bar's per-monitor map uses: clone and
+    // replace, because the store writes whole keys and merging in place is what lets one screen's
+    // edit drop another's.
+    property string menuMon: ""
+    readonly property var menuScreens: Quickshell.screens
+    function saveMenuPct(key, v) {
+        var val = v < root.menuPctFloor ? null : Math.min(100, v)
+        if (root.menuMon === "") { SettingsStore.set(key, val); return }
+        var all = {}
+        var cur = VtlConfig.menuMonitors
+        for (var m in cur) { all[m] = ({}); for (var k in cur[m]) all[m][k] = cur[m][k] }
+        if (!all[root.menuMon]) all[root.menuMon] = ({})
+        all[root.menuMon][key] = val
+        SettingsStore.set("menu_monitors", all)
+    }
+    function menuPct(key) { return VtlConfig.menuPctFor(key, root.menuMon) }
+
     // ── Colours (wallust mode) ──
     property bool   autoMode:    true
     property var    schemes:     []
@@ -646,8 +668,12 @@ Item {
                 Segmented {
                     equal: true
                     current: VtlConfig.settingsFloat ? "float" : "docked"
-                    segments: [{ label: "Docked", key: "docked" },
-                               { label: "Floating", key: "float" }]
+                    segments: [{ label: "Docked", key: "docked",
+                                 hint: "Attached to the bar, growing out of the icon you opened it from." },
+                               { label: "Floating", key: "float",
+                                 hint: VtlConfig.settingsNavMode === "sidebar"
+                                       ? "Opens centred, as a window of its own."
+                                       : "The dashboard stays on the bar; the pages open as a centred window." }]
                     onPicked: {
                         SettingsStore.set("settings_float", key === "float")
                         // Migrate the legacy combined value in the same breath, so the old "float"
@@ -656,10 +682,84 @@ Item {
                             SettingsStore.set("settings_nav_mode", VtlConfig.settingsNavMode)
                     }
                 }
-                SubLabel {
-                    text: !VtlConfig.settingsFloat ? "Attached to the bar."
-                        : VtlConfig.settingsNavMode === "sidebar" ? "Opens centred, as a window."
-                        : "Dashboard stays on the bar; pages float."
+
+                // Size belongs to the placement that has it: the docked panel and the floating
+                // window are two different shapes with two different jobs, and one number for both
+                // is what forced the docked panel to be derived from the dashboard instead of set.
+                // Auto is the old behaviour kept as an option, not a coupling: docked Auto is as big
+                // as a dashboard page needs, floating Auto is 74% of the monitor. Step once and it
+                // is yours — the dashboard's own size settings never move either way.
+                SubGroup {
+                    // Which screen these two are for. A percentage is a share of the screen it
+                    // lands on, so one number cannot fit a 2560 desk monitor and a 1080 portrait
+                    // one at once — hence the chips rather than a single global value.
+                    FieldLabel {
+                        visible: root.menuScreens.length > 1
+                        text: "Size for"
+                        hint: "Which screen the two rows below are written for. \"All monitors\" is the "
+                            + "value every screen starts from; pick one to override just that screen."
+                    }
+                    Flow {
+                        visible: root.menuScreens.length > 1
+                        width: parent.width; spacing: 6
+                        Chip {
+                            label: "All monitors"
+                            selected: root.menuMon === ""
+                            onClicked: root.menuMon = ""
+                        }
+                        Repeater {
+                            model: root.menuScreens
+                            delegate: Chip {
+                                required property var modelData
+                                label:    modelData.name
+                                selected: root.menuMon === modelData.name
+                                onClicked: root.menuMon = modelData.name
+                            }
+                        }
+                    }
+
+                    Stepper {
+                        visible: !VtlConfig.settingsFloat
+                        label: "Width"; unit: root.menuPct("menu_dock_width_pct") > 0 ? "%" : ""
+                        step: 2; min: -1; max: 100
+                        value:   root.menuPct("menu_dock_width_pct") > 0
+                                 ? root.menuPct("menu_dock_width_pct") : UiState.menuPctDockW
+                        display: root.menuPct("menu_dock_width_pct") > 0 ? "" : "Auto"
+                        hint: "Width of the docked menu, as a share of this monitor. Auto = as wide as a "
+                            + "dashboard page needs."
+                        onChanged: root.saveMenuPct("menu_dock_width_pct", v)
+                    }
+                    Stepper {
+                        visible: !VtlConfig.settingsFloat
+                        label: "Height"; unit: root.menuPct("menu_dock_height_pct") > 0 ? "%" : ""
+                        step: 2; min: -1; max: 100
+                        value:   root.menuPct("menu_dock_height_pct") > 0
+                                 ? root.menuPct("menu_dock_height_pct") : UiState.menuPctDockH
+                        display: root.menuPct("menu_dock_height_pct") > 0 ? "" : "Auto"
+                        hint: "Height of the docked menu, as a share of this monitor. Auto = as tall as a "
+                            + "dashboard page needs; set it shorter and the dashboard pages what no longer fits."
+                        onChanged: root.saveMenuPct("menu_dock_height_pct", v)
+                    }
+                    Stepper {
+                        visible: VtlConfig.settingsFloat
+                        label: "Width"; unit: root.menuPct("menu_float_width_pct") > 0 ? "%" : ""
+                        step: 2; min: -1; max: 100
+                        value:   root.menuPct("menu_float_width_pct") > 0
+                                 ? root.menuPct("menu_float_width_pct") : UiState.menuPctFloatW
+                        display: root.menuPct("menu_float_width_pct") > 0 ? "" : "Auto"
+                        hint: "Width of the floating settings window, as a share of this monitor. Auto = 74%."
+                        onChanged: root.saveMenuPct("menu_float_width_pct", v)
+                    }
+                    Stepper {
+                        visible: VtlConfig.settingsFloat
+                        label: "Height"; unit: root.menuPct("menu_float_height_pct") > 0 ? "%" : ""
+                        step: 2; min: -1; max: 100
+                        value:   root.menuPct("menu_float_height_pct") > 0
+                                 ? root.menuPct("menu_float_height_pct") : UiState.menuPctFloatH
+                        display: root.menuPct("menu_float_height_pct") > 0 ? "" : "Auto"
+                        hint: "Height of the floating settings window, as a share of this monitor. Auto = 74%."
+                        onChanged: root.saveMenuPct("menu_float_height_pct", v)
+                    }
                 }
             }
 

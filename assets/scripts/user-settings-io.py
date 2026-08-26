@@ -32,10 +32,36 @@ import sys
 SECTIONS = ("monitors", "workspaces", "autostart", "quickaccess",
             "peripherals", "windowrules", "roleapps")
 
-# Utility workspaces owned by the system — never exposed to the GUI, always
-# preserved on write. (111/112 were the old hyprlock lock workspaces; kept
-# reserved for compatibility though the native lockscreen no longer uses them.)
-RESERVED_WS = ("10", "90", "99", "111", "112", "1111")
+# Utility workspaces owned by the system. Empty since the block scheme: every id
+# belongs to exactly one monitor's hundred (see WS_BLOCK), and the old reserved
+# numbers sat in the middle of those blocks — 10 is monitor 1's slot 10 and
+# 111/112 (the retired hyprlock workspaces) are monitor 2's slots 11 and 12.
+# The tuple stays so the reserved round-trip below keeps working for old files.
+RESERVED_WS = ()
+
+# ── Workspace blocks ─────────────────────────────────────────────────────────
+# Monitor n owns the ids (n-1)*100 + 1 … +99: mon1 1-99, mon2 101-199, mon3
+# 201-299. The SLOT is what the user presses (SUPER+1…0 = slots 1-10 of the
+# monitor under the focus, see hypr.lua/modules/workspaces.lua); the id is
+# base + slot. Everything here works in ids and derives the slot, so the file on
+# disk stays the plain Hyprland numbering.
+WS_BLOCK = 100
+
+
+def ws_base(monitor_var):
+    """Base id of a monitor variable's block: mon1 → 0, mon2 → 100, mon3 → 200."""
+    try:
+        return (int(str(monitor_var)[3:]) - 1) * WS_BLOCK
+    except (ValueError, TypeError):
+        return 0
+
+
+def ws_in_block(num, monitor_var):
+    try:
+        slot = int(num) - ws_base(monitor_var)
+    except (ValueError, TypeError):
+        return False
+    return 1 <= slot <= WS_BLOCK - 1
 
 ROLEAPP_KEYS = (
     "terminal", "browser", "browser_float", "filemanager", "messenger",
@@ -199,6 +225,10 @@ def parse_workspaces(body):
         mon = re.search(r"monitor\s*=\s*([A-Za-z_][A-Za-z0-9_]*)", ln)
         if not m or not mon:
             continue
+        # The generated block rules ("r[101-199]") are machinery, not entries:
+        # they are re-emitted from the monitor list on every write.
+        if not lua_unquote(m.group(1)).isdigit():
+            continue
         name = re.search(r"default_name\s*=\s*" + QSTR, ln)
         layout = re.search(r"layout\s*=\s*" + QSTR, ln)
         rules.append({
@@ -343,12 +373,20 @@ def validate_workspaces(data, monitors_json=None):
         known_vars = {m["var"] for m in monitors_json.get("monitors", []) if m.get("var")}
     for r in rules:
         n = str(r.get("workspace", ""))
+        mon = r.get("monitor")
         if not n.isdigit():
             errors.append("workspace %r: not a number" % n)
         elif n in RESERVED_WS:
             errors.append("workspace %s is reserved for the system" % n)
-        if known_vars is not None and r.get("monitor") not in known_vars:
-            errors.append("workspace %s: unknown monitor %r" % (n, r.get("monitor")))
+        elif not ws_in_block(n, mon):
+            # The number IS the monitor: 3 is monitor 1's, 103 monitor 2's. A
+            # rule outside its monitor's hundred would put a workspace on a
+            # screen whose keys cannot reach it.
+            base = ws_base(mon)
+            errors.append("workspace %s does not belong to %s (its block is %d-%d)"
+                          % (n, mon, base + 1, base + WS_BLOCK - 1))
+        if known_vars is not None and mon not in known_vars:
+            errors.append("workspace %s: unknown monitor %r" % (n, mon))
     return errors
 
 
@@ -454,6 +492,17 @@ def ws_rule_line(r):
 def emit_workspaces(data):
     rules = sorted(data.get("rules", []), key=lambda r: int(r["workspace"]))
     out = []
+    # One catch-all per monitor FIRST, so the specific rules below still win:
+    # anything created inside a monitor's hundred homes on that monitor, even a
+    # workspace nobody configured (SUPER+7 on the second screen, say).
+    mon_vars = data.get("_monitor_vars") or sorted({r["monitor"] for r in rules})
+    if mon_vars:
+        out.append("-- Blocks: each monitor owns one hundred ids (mon1 1-99, mon2 101-199, …)")
+        for mv in mon_vars:
+            base = ws_base(mv)
+            out.append('hl.workspace_rule({ workspace = "r[%d-%d]", monitor = %s })'
+                       % (base + 1, base + WS_BLOCK - 1, mv))
+        out.append("")
     prev = None
     for r in rules:
         if r["monitor"] != prev:
@@ -554,14 +603,30 @@ def get_section(name):
 
 
 def fix_workspaces(data, monitor_vars):
-    """Normalize a workspaces payload in place: strip reserved numbers from
-    the editable rules, enforce one default per monitor, remap dangling
-    monitor vars, and make sure the lockscreen workspaces 111/112 exist."""
+    """Normalize a workspaces payload in place: strip reserved numbers from the
+    editable rules, renumber strays into their monitor's block, enforce one
+    default per monitor and remap dangling monitor vars."""
     rules = [r for r in data.get("rules", []) if str(r.get("workspace")) not in RESERVED_WS]
     fallback = monitor_vars[0] if monitor_vars else "mon1"
     for r in rules:
         if r.get("monitor") not in monitor_vars:
             r["monitor"] = fallback
+    # Blocks. A rule that sits outside its monitor's hundred (a file from before
+    # the scheme, or a rule dragged to another monitor) is moved to the first
+    # free slot of the block it now belongs to — the same renumbering the
+    # migration does, so an old config heals itself on the next write.
+    taken = {str(r.get("workspace")) for r in rules}
+    for r in rules:
+        if ws_in_block(r.get("workspace"), r["monitor"]):
+            continue
+        base = ws_base(r["monitor"])
+        for slot in range(1, WS_BLOCK):
+            cand = str(base + slot)
+            if cand not in taken:
+                taken.discard(str(r.get("workspace")))
+                r["workspace"] = cand
+                taken.add(cand)
+                break
     per_mon = {}
     for r in rules:
         per_mon.setdefault(r["monitor"], []).append(r)
@@ -576,14 +641,12 @@ def fix_workspaces(data, monitor_vars):
     for r in reserved.values():
         if r.get("monitor") not in monitor_vars:
             r["monitor"] = fallback
-    if "111" not in reserved:
-        reserved["111"] = {"workspace": "111", "monitor": fallback, "persistent": False,
-                           "default": False, "default_name": "", "layout": ""}
-    if "112" not in reserved and len(monitor_vars) > 1:
-        reserved["112"] = {"workspace": "112", "monitor": monitor_vars[1], "persistent": False,
-                           "default": False, "default_name": "", "layout": ""}
     data["rules"] = rules
     data["reserved"] = list(reserved.values())
+    # The emitter writes one catch-all rule per block and needs the monitor
+    # order for it; the rules alone would miss a monitor with no persistent
+    # workspace of its own.
+    data["_monitor_vars"] = list(monitor_vars)
     return data
 
 

@@ -3,9 +3,9 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Launcher settings — the Super+Space app launcher (quickshell/launcher/Launcher.qml). Placement,
-// size and list-vs-grid layout. Writes live to settings.json; the launcher follows via VtlConfig's
-// poll. Uses the shared common components.
+// Launcher settings — the Super+Space app launcher (quickshell/launcher/Launcher.qml). Search
+// behaviour, the sidebar rail, the windowed card and the fullscreen board. Writes live to
+// settings.json; the launcher follows via VtlConfig's poll. Uses the shared common components.
 Item {
     id: root
 
@@ -18,7 +18,31 @@ Item {
                                       "center-left", "center", "center-right",
                                       "bottom-left", "bottom-center", "bottom-right"]
 
+    readonly property var imageModes: [
+        { key: "mini",   label: "Wallpaper, cropped" },
+        { key: "window", label: "Wallpaper window" },
+        { key: "custom", label: "Own image" },
+        { key: "off",    label: "Plain panel" }
+    ]
+    function imageLabel(k) {
+        var m = root.imageModes.filter(function (o) { return o.key === k })[0]
+        return m ? m.label : k
+    }
+
     function save(key, value) { SettingsStore.set(key, value) }
+    // The rail's button set is a LIST in settings.json, so a toggle is a rewrite of that list —
+    // kept in catalogue order (VtlConfig.launcherModes), never in click order.
+    function toggleMode(key) {
+        var have = (VtlConfig.launcherSidebarModes || []).slice()
+        var out = []
+        for (var i = 0; i < VtlConfig.launcherModes.length; i++) {
+            var k = VtlConfig.launcherModes[i].key
+            var on = have.indexOf(k) >= 0
+            if (k === key) on = !on
+            if (on) out.push(k)
+        }
+        root.save("launcher_sidebar_modes", out)
+    }
 
     Flickable {
         anchors.fill: parent
@@ -45,12 +69,16 @@ Item {
 
             // ── Mode ──────────────────────────────────────────────────────────
             Card {
-                CardLabel { text: "MODE" }
-                Toggle {
-                    label: "Fullscreen"
-                    sub:   "Cover the screen with a large app grid"
-                    on:    VtlConfig.launcherFullscreen
-                    onToggled: root.save("launcher_fullscreen", !VtlConfig.launcherFullscreen)
+                CardLabel { text: "MODE"
+                            hint: "Which shape every opening starts in. The sidebar's Fullscreen "
+                                + "button (and its function key) switches shape while the launcher "
+                                + "is open, without changing this." }
+                FieldLabel { text: "Opens as" }
+                Segmented {
+                    equal: true
+                    current: VtlConfig.launcherFullscreen ? "fullscreen" : "windowed"
+                    segments: [{ label: "Windowed", key: "windowed" }, { label: "Fullscreen", key: "fullscreen" }]
+                    onPicked: root.save("launcher_fullscreen", key === "fullscreen")
                 }
                 Toggle {
                     label: "Blur backdrop"
@@ -60,10 +88,112 @@ Item {
                 }
             }
 
-            // ── Window (windowed mode only) ───────────────────────────────────
+            // ── Sidebar rail ──────────────────────────────────────────────────
             Card {
-                visible: !VtlConfig.launcherFullscreen
-                CardLabel { text: "WINDOW" }
+                CardLabel { text: "SIDEBAR"
+                            hint: "The rail beside the results: a cut of the wallpaper carrying one "
+                                + "button per launcher mode, each with the function key that reaches "
+                                + "it (F1 down the list). Against a vertical bar it becomes a band "
+                                + "above the results instead; fullscreen shows the same buttons as a "
+                                + "strip under the search field." }
+                Toggle {
+                    label: "Sidebar"
+                    sub:   "Off = the plain search card, results only"
+                    on:    VtlConfig.launcherSidebar
+                    onToggled: root.save("launcher_sidebar", !VtlConfig.launcherSidebar)
+                }
+
+                SubGroup {
+                    visible: VtlConfig.launcherSidebar
+
+                    FieldLabel { text: "Side" }
+                    Segmented {
+                        equal: true
+                        current: VtlConfig.launcherSidebarSide
+                        segments: [{ label: "Left", key: "left" }, { label: "Right", key: "right" }]
+                        onPicked: root.save("launcher_sidebar_side", key)
+                    }
+                    Slider {
+                        label: "Share"; hint: "How much of the card the rail takes. The results keep "
+                                            + "their configured Width — the rail is added beside them."
+                        from: 20; to: 50; step: 1; decimals: 0
+                        value: VtlConfig.launcherSidebarPct
+                        onMoved: v => root.save("launcher_sidebar_pct", Math.round(v))
+                    }
+
+                    FieldLabel {
+                        text: "Background"
+                        hint: "Cropped = a cut of the active wallpaper that fills the rail exactly, "
+                            + "scaled to cover and centred. Wallpaper window = the piece of wallpaper "
+                            + "the rail actually covers, so the card reads as a hole through to the "
+                            + "desktop. Own image = any file, cut the same way. Plain panel = no "
+                            + "image at all."
+                    }
+                    Dropdown {
+                        summary: root.imageLabel(VtlConfig.launcherSidebarImage)
+                        options: root.imageModes.map(function (m) {
+                            return { label: m.label, key: m.key, on: VtlConfig.launcherSidebarImage === m.key }
+                        })
+                        onPicked: root.save("launcher_sidebar_image", key)
+                    }
+                    InputField {
+                        visible: VtlConfig.launcherSidebarImage === "custom"
+                        text: VtlConfig.launcherSidebarCustom
+                        placeholder: "/path/to/image.png"
+                        onEdited: v => root.save("launcher_sidebar_custom", v)
+                    }
+                    Slider {
+                        visible: VtlConfig.launcherSidebarImage !== "off"
+                        label: "Dim"; hint: "Darkens the image so the buttons stay readable on a bright wallpaper."
+                        from: 0; to: 90; step: 1; decimals: 0
+                        value: VtlConfig.launcherSidebarDim
+                        onMoved: v => root.save("launcher_sidebar_dim", Math.round(v))
+                    }
+                    Slider {
+                        visible: VtlConfig.launcherSidebarImage !== "off"
+                        label: "Blur"
+                        from: 0; to: 100; step: 1; decimals: 0
+                        value: VtlConfig.launcherSidebarBlur
+                        onMoved: v => root.save("launcher_sidebar_blur", Math.round(v))
+                    }
+
+                    Toggle {
+                        label: "Mode names"
+                        sub:   "Off = icons only, a narrow rail"
+                        on:    VtlConfig.launcherSidebarLabels
+                        onToggled: root.save("launcher_sidebar_labels", !VtlConfig.launcherSidebarLabels)
+                    }
+                    Toggle {
+                        label: "Velumeron mark"
+                        sub:   "The logo at the top of the rail"
+                        on:    VtlConfig.launcherSidebarLogo
+                        onToggled: root.save("launcher_sidebar_logo", !VtlConfig.launcherSidebarLogo)
+                    }
+
+                    FieldLabel { text: "Buttons"
+                                 hint: "Which modes get a button. They are drawn in this order "
+                                     + "whatever order you switch them on in, and that order is also "
+                                     + "the function keys: first button F1, second F2, and so on." }
+                    Flow {
+                        width: parent.width; spacing: 6
+                        Repeater {
+                            model: VtlConfig.launcherModes
+                            delegate: Chip {
+                                required property var modelData
+                                label:    modelData.icon + "  " + modelData.label
+                                selected: (VtlConfig.launcherSidebarModes || []).indexOf(modelData.key) >= 0
+                                onClicked: root.toggleMode(modelData.key)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Window (the windowed card) ────────────────────────────────────
+            Card {
+                CardLabel { text: "WINDOW"
+                            hint: "The windowed card. Width and rows are remembered per view, so Grid "
+                                + "and List each keep their own size." }
                 FieldLabel { text: "Position" }
                 Dropdown {
                     summary: root.posLabel(VtlConfig.launcherPosition)
@@ -83,9 +213,8 @@ Item {
                     segments: [{ label: "Grid", key: "grid" }, { label: "List", key: "list" }]
                     onPicked: root.save("launcher_view", key)
                 }
-                // Width / visible rows are remembered per view — switching Grid ↔ List keeps each
-                // one's own size instead of the two fighting over a single shared value.
                 Stepper { label: "Width"; unit: "px"; step: 20; min: 320; max: 1200; labelWidth: 96
+                          hint: "The width of the RESULTS. With the sidebar on, the rail is added beside it."
                           value: VtlConfig.launcherWidth
                           onChanged: root.save(VtlConfig.launcherView === "grid" ? "launcher_grid_width" : "launcher_list_width", v) }
                 Stepper { label: "Visible rows"; step: 1; min: 3; max: 16; labelWidth: 96
@@ -96,13 +225,53 @@ Item {
                           value: VtlConfig.launcherCols; onChanged: root.save("launcher_cols", v) }
             }
 
-            // ── Fullscreen grid ───────────────────────────────────────────────
+            // ── Fullscreen board ──────────────────────────────────────────────
             Card {
-                visible: VtlConfig.launcherFullscreen
-                CardLabel { text: "FULLSCREEN GRID"
-                            hint: "Number of app columns in the fullscreen grid." }
+                CardLabel { text: "FULLSCREEN"
+                            hint: "The full-page app board: one big grid over the whole screen, bar "
+                                + "included. Reachable from the mode buttons at any time, and the "
+                                + "default when Opens as is set to Fullscreen." }
+                FieldLabel { text: "Style"
+                             hint: "Board = the app grid alone. Overview = a strip of workspace "
+                                 + "miniatures above the grid (the GNOME activities layout): every "
+                                 + "workspace with the windows on it, click one to jump there." }
+                Segmented {
+                    equal: true
+                    current: VtlConfig.launcherFsStyle
+                    segments: [{ label: "Board", key: "board" }, { label: "Overview", key: "overview" }]
+                    onPicked: root.save("launcher_fs_style", key)
+                }
+
+                SubGroup {
+                    visible: VtlConfig.launcherFsStyle === "overview"
+
+                    Slider {
+                        label: "Strip height"; hint: "How much of the board the workspace strip takes; "
+                                                   + "the app grid keeps the rest. One workspace is "
+                                                   + "centred at a time, its neighbours peeking in "
+                                                   + "at both sides."
+                        from: 15; to: 60; step: 1; decimals: 0
+                        value: VtlConfig.launcherFsWsHeight
+                        onMoved: v => root.save("launcher_fs_ws_height", Math.round(v))
+                    }
+                    Toggle {
+                        label: "Live window previews"
+                        sub:   "Show the real window contents in the miniatures. Off (or where the compositor hands back no frame) = the app icon instead."
+                        on:    VtlConfig.launcherFsWsLive
+                        onToggled: root.save("launcher_fs_ws_live", !VtlConfig.launcherFsWsLive)
+                    }
+                }
+
                 Stepper { label: "Columns"; step: 1; min: 3; max: 12; labelWidth: 96
                           value: VtlConfig.launcherFsCols; onChanged: root.save("launcher_fs_cols", v) }
+                Stepper { label: "Icon size"; unit: "px"; step: 4; min: 32; max: 128; labelWidth: 96
+                          value: VtlConfig.launcherFsIcon; onChanged: root.save("launcher_fs_icon", v) }
+                Toggle {
+                    label: "App names"
+                    sub:   "Off = icons only"
+                    on:    VtlConfig.launcherFsLabels
+                    onToggled: root.save("launcher_fs_labels", !VtlConfig.launcherFsLabels)
+                }
             }
         }
     }

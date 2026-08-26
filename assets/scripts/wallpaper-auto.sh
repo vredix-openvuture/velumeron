@@ -88,5 +88,5 @@ sc_flag="--no-showcase"
 
 # Detached so it survives the wallust qs_reload that restarts quickshell.
 # shellcheck disable=SC2086
-setsid -f bash "$VELUMERON_DIR/assets/scripts/wallpaper-set.sh" --no-waybar $sc_flag \
+setsid -f bash "$VELUMERON_DIR/assets/scripts/wallpaper-set.sh" $sc_flag \
     --mon "$main" --file "$next" >>/tmp/vtl-wp.log 2>&1

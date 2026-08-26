@@ -27,14 +27,28 @@ source "$SCRIPT_DIR/lib/env.sh"
 #   stop  — command to shut it down (best-effort)
 # Fields are split on '|'; no snippet below may contain a literal '|'.
 SERVICES=(
-    "hypridle|pgrep -x hypridle|hypridle|pkill -x hypridle"
+    # -c is not optional: hypridle otherwise looks only in ~/.config/hypr, which reaches our config
+    # through a symlink the installer seeds. A dangling link there (the trailer pipeline re-pointed
+    # it at its throwaway profile on 2026-08-16 and the profile was deleted) makes the daemon exit
+    # at every login with "no config", and with it the logind bridge — lock-session, before-sleep,
+    # resume-wake — goes away silently. Naming the file removes that whole failure mode.
+    "hypridle|pgrep -x hypridle|hypridle -c \"$VELUMERON_USER_DIR/hypr.lua/hypridle.conf\"|pkill -x hypridle"
     "lid-inhibit|pgrep -f 'systemd-inhibit.*handle-lid-switch'|systemd-inhibit --what=handle-lid-switch --who=velumeron --why='Hyprland handles the lid' --mode=block sleep infinity|pkill -f 'systemd-inhibit.*handle-lid-switch'"
     "nm-applet|pgrep -x nm-applet|nm-applet|pkill -x nm-applet"
     "polkit|systemctl --user is-active --quiet hyprpolkitagent|systemctl --user start hyprpolkitagent|systemctl --user stop hyprpolkitagent"
     "keyring|pgrep -x gnome-keyring-d|gnome-keyring-daemon --start --components=secrets|pkill -x gnome-keyring-d"
-    "brightness|pgrep -f assets/scripts/brightness.sh|bash $VELUMERON_DIR/assets/scripts/brightness.sh warm|pkill -f assets/scripts/brightness.sh"
+    # ONE-SHOT: `warm` pre-builds the DDC bus cache and exits, so there is no process to find
+    # afterwards. `check` is deliberately false-forever (it never matches) — before the start check
+    # below existed that only made the status table say "down"; now it would claim a failure, so it
+    # is spelled out as a one-shot instead: run it every time, never expect it to stay up.
+    "brightness|false|bash $VELUMERON_DIR/assets/scripts/brightness.sh warm|true"
     "clipvault|pgrep -f 'wl-paste --watch clipvault'|wl-paste --watch clipvault store|pkill -f 'wl-paste --watch clipvault'"
     "float-cascade|pgrep -f float-cascade.sh|bash $VELUMERON_DIR/assets/scripts/float-cascade.sh|pkill -f float-cascade.sh"
+    # Lighting. A no-op unless Settings → Integrations switched OpenRGB on AND a startup profile is
+    # picked — `boot` checks both and exits. Stop is deliberately `true`: the user may have opened
+    # OpenRGB themselves, and killing it would not turn the lights off anyway (the hardware keeps
+    # the last colours), so ending the session has nothing to undo here.
+    "openrgb|pgrep -x openrgb|bash $VELUMERON_DIR/assets/scripts/openrgb.sh boot|true"
     "shell|pgrep -x quickshell|bash $VELUMERON_DIR/assets/scripts/launch-shell.sh|pkill -x quickshell"
 )
 
@@ -61,7 +75,20 @@ start_svc() {
     # Self-daemonising / one-shot commands (keyring, systemctl, launch-shell)
     # simply exit inside it — harmless.
     setsid -f bash -c "$start" >/dev/null 2>&1
-    log "$label" "started"
+    # "started" used to mean "the command was launched", which is not the same thing: a daemon that
+    # dies on a bad config exits within milliseconds and the table still reported it as up. Give it
+    # a beat and ask the check again, so a service that refuses to run says so at login.
+    # One-shots (check = false) have nothing to still be running; everything else is asked again.
+    if [[ "$check" == "false" ]]; then
+        log "$label" "ran"
+        return
+    fi
+    sleep 0.4
+    if eval "$check" >/dev/null 2>&1; then
+        log "$label" "started"
+    else
+        log "$label" "FAILED to stay up — run its start command by hand to see why"
+    fi
 }
 
 stop_svc() {
@@ -72,6 +99,11 @@ stop_svc() {
 
 status_svc() {
     local label="$1" check="$2"
+    # A one-shot has no process to look for; "down" would read as broken.
+    if [[ "$check" == "false" ]]; then
+        log "$label" "one-shot"
+        return
+    fi
     if eval "$check" >/dev/null 2>&1; then
         log "$label" "up"
     else

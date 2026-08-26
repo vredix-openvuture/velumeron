@@ -17,6 +17,14 @@ QtObject {
     property bool active: false     // surfaces exist (kept until the fade has played)
     property bool shown:  false     // opacity target — false starts the fade-out
 
+    // The gate the rest of the shell builds behind. False means "anything mapping right now would
+    // be SEEN" — either no curtain has painted yet, or one is on its way. It only ever goes
+    // false→true: no splash this start, or the curtain has actually put pixels on the screen
+    // (Splash.qml reports its first rendered frame). shell.qml holds the bar back until then, so
+    // the bar assembles itself hidden instead of flashing in the frames before the curtain lands.
+    // Monotonic on purpose: a preview replay from the settings page must not tear the bar down.
+    property bool curtainUp: false
+
     property int holdMs: 4000       // latched when the splash begins, see begin()
     readonly property int fadeMs: 760      // the tear (640 ms) plus a little slack
 
@@ -33,6 +41,15 @@ QtObject {
 
     readonly property Timer _hold: Timer { interval: st.holdMs; onTriggered: st.shown = false }
     readonly property Timer _gone: Timer { interval: st.holdMs + st.fadeMs; onTriggered: st.active = false }
+
+    // Safety net for the gate: if no splash surface ever reports a frame — a screen that never
+    // renders, a compositor that withholds the first commit — the shell still has to come up.
+    // Kept under the shortest possible splash (900 ms total), so the worst case is the old
+    // behaviour — a bar that mapped without waiting — never a shell that stays bar-less.
+    readonly property Timer _wait: Timer { interval: 800; onTriggered: st.curtainUp = true }
+
+    // Called by every Splash surface on its first rendered frame; the first one through wins.
+    function painted() { st._wait.stop(); st.curtainUp = true }
 
     // The setting is the TOTAL time on screen, tear included — that's the number you actually
     // experience, so the fade is subtracted here rather than added on top.
@@ -60,7 +77,9 @@ QtObject {
     Component.onCompleted: {
         var d = {}
         try { d = JSON.parse(st._cfg.text()) || {} } catch (e) { d = {} }
-        if (d.splash_enabled === false) return
+        // No curtain: nothing to hide behind, so the bar comes up immediately.
+        if (d.splash_enabled === false) { st.curtainUp = true; return }
+        st._wait.restart()
         st.begin(d.splash_seconds)
     }
 }

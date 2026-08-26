@@ -107,8 +107,13 @@ fi
     # x-velumeron-silent: the shutter has already sounded (ShotRunner plays it the moment grim
     # exits 0). Without this the "saved" toast fires the notification sound straight after it, so
     # one screenshot made two different noises.
+    # x-velumeron-open: the file this notification is ABOUT. `-A` only answers while THIS process
+    # lives, so the notification centre — where you click a shot from an hour ago — had a dead
+    # action and did nothing. The hint has no such lifetime: velumeron's own service reads it off
+    # the stored notification and opens the file with xdg-open whenever you click it.
     act=$(notify-send -a Velumeron -t 8000 -A default=Open -i "$file" \
                       -h string:x-velumeron-silent:1 \
+                      -h "string:x-velumeron-open:$file" \
                       "Screenshot saved" "$(basename "$file")$($copy && echo ' · copied')" 2>/dev/null)
     [[ "$act" == "default" ]] && ! $open_after && setsid -f xdg-open "$file" >/dev/null 2>&1
 ) >/dev/null 2>&1 &

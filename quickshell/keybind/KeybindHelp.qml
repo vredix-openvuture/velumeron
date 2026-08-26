@@ -91,7 +91,8 @@ PanelWindow {
                 { k: "Enter",    d: "Scratchpad" },
                 { k: ".",        d: "Emoji" },
                 { k: ",",        d: "Submap leader → W/A/S" },
-                { k: "1 – 9",    d: "Switch workspace" },
+                { k: "1 – 0",    d: "Workspace slot on THIS monitor" },
+                { k: "Wheel",    d: "Workspace ← / → on this monitor" },
                 { k: "F1 – F12", d: "Quick app" }
             ] },
             { title: "SUPER + SHIFT", binds: [
@@ -100,14 +101,15 @@ PanelWindow {
                 { k: "M",     d: "Window → next monitor" },
                 { k: "S",     d: "Screenshot" },
                 { k: "R",     d: "Screen record" },
-                { k: "1 – 9", d: "Window → workspace" },
+                { k: "1 – 0", d: "Window → slot on this monitor" },
                 { k: "/",     d: "Keybind help" }
             ] },
             { title: "SUPER + ALT", binds: [
                 { k: "F",             d: "Fullscreen" },
                 { k: "M",             d: "Maximize" },
                 { k: "P",             d: "Pin" },
-                { k: "H / J / K / L", d: "Resize" }
+                { k: "H / J / K / L", d: "Resize" },
+                { k: "1 / 2 / 3…",    d: "Aim the number row at monitor n, then 1 – 0" }
             ] },
             { title: "SUPER + CTRL", binds: [
                 { k: "L",   d: "Lockscreen" },
@@ -196,7 +198,14 @@ PanelWindow {
     }
 
     // ── Keyboard ──────────────────────────────────────────────────────────────
-    Shortcut { sequence: "Escape"; onActivated: root.searching ? (root.searching = false, root.query = "") : root.close() }
+    Shortcut {
+        sequence: "Escape"
+        onActivated: {
+            if (!root.searching) { root.close(); return }
+            root.searching = false
+            root.query = ""
+        }
+    }
     Shortcut { sequence: "c"; enabled: !root.searching; onActivated: root.close() }
     Shortcut { sequence: "/"; enabled: !root.searching; onActivated: root.openSearch() }
     Shortcut { sequence: "?"; enabled: !root.searching; onActivated: root.openSearch() }

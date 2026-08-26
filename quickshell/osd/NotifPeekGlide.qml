@@ -6,6 +6,7 @@ import Quickshell.Widgets
 // its anchor into UiState). Hover preview only — clicking the bell opens the full notification centre,
 // which supersedes this. keepOpenOnHover so the cursor can rest on the pill. One per screen.
 BarGlide {
+    glideId: "notifpeek"
     id: g
     mine:            UiState.npkMon === g.mon && g.mon !== ""
     shown:           UiState.npkHover && !UiState.notifCenterOpen
