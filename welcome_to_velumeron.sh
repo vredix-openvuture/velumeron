@@ -62,7 +62,7 @@ for arg in "$@"; do
         # restarting quickshell here would kill the caller and re-trigger the
         # sync on the next start — an endless loop.
         --no-restart) NO_RESTART=true ;;
-        # Fully unattended bootstrap, run by velumeron-session before Hyprland
+        # Fully unattended bootstrap, run by the package hand-off on a fresh install
         # starts: no prompts (packages come from the AUR dependency list), no
         # daemon/shell launching (autostart.lua does that in-session).
         --auto) AUTO_MODE=true ;;
@@ -70,7 +70,7 @@ for arg in "$@"; do
             echo "Usage: $(basename "$0") [--sync [--no-restart]] [--auto]"
             echo "  --sync         Refresh package templates without re-running setup"
             echo "  --no-restart   With --sync: don't restart the running shell"
-            echo "  --auto         Unattended bootstrap (used by velumeron-session)"
+            echo "  --auto         Unattended bootstrap (used by the package hand-off)"
             exit 0 ;;
     esac
 done

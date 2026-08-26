@@ -38,7 +38,12 @@ spot (config, monitors, services, shell) and the wizard opens for the few things
 answer. No re-login, no second command. Everything it asks is changeable later under Settings
 (`Super+X`).
 
-Installing from somewhere else, like a TTY or a fresh box? Start it once with `velumeron-session`.
+Installing from somewhere else, like a TTY or over SSH? Run `velumeron-setup` once, then start
+Hyprland as you always do.
+
+Velumeron is a shell for the Hyprland you already run, not a session of its own — there is no extra
+entry at your login screen. The bootstrap writes `~/.config/hypr/hyprland.lua`, and Hyprland loads
+it on the next start.
 
 From a checkout instead: `sudo make install`, same behaviour.
 
