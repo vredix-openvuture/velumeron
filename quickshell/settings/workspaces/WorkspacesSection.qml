@@ -50,7 +50,12 @@ Item {
             spacing: Style.cardGap
 
             Card {
-                CardLabel { text: "WORKSPACES" }
+                CardLabel { text: "WORKSPACES"
+                            hint: "Each monitor owns one hundred workspace ids: the first 1-99, the "
+                                + "second 101-199, and so on. The big number on a row is the SLOT — "
+                                + "SUPER+1…0 always reaches slots 1-10 of the monitor you are on, "
+                                + "and SUPER+ALT+<n> aims the same keys at monitor n. Pin a slot "
+                                + "(󰐃) to keep it alive when it is empty." }
                 WorkspaceRuleEditor {
                     width: parent.width
                     rules: root.rules

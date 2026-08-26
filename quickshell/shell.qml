@@ -2,16 +2,81 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import Quickshell.Wayland
 import Quickshell.Io
 import Quickshell.Hyprland
 
 ShellRoot {
+    id: root
+
     // Touch the Templates singleton on startup so its copy-on-write watcher + one-time migration run
     // even before any settings UI is opened (a singleton only instantiates once referenced).
     // OnboardingState decides whether to open the first-run wizard / post-update changelog.
     // SoundService.boot() builds the sound cache and — once per session, never per shell restart —
     // fires the login sound. Like the others it has to be TOUCHED, or the singleton is never created.
-    Component.onCompleted: { Templates.boot(); LockPresets.boot(); void Hyprwindows.windows
+    Timer {
+        interval: 2500; repeat: true; running: true
+        onTriggered: console.warn("[saverdbg] poll enabled", saverMon.enabled, "timeout", saverMon.timeout,
+                                  "svc.saverSec", IdleService.saverSec, "isIdle", saverMon.isIdle)
+    }
+    // ── Idle chain: screensaver → lock → suspend (ext-idle-notify-v1) ────────────────────────
+    // Every stage is BUILT, not bound. Measured, three times, in one process against a reference
+    // monitor on the same seat: an IdleMonitor whose `enabled` or `timeout` is a binding ends up
+    // reporting the right values and never delivering an idle, while one created with literal
+    // values fires on time. Changing a property after creation kills it just as dead. So each
+    // stage is instantiated with its timeout as an INITIAL property, parented to this root (the
+    // only place they arm at all — inside a singleton or an Item they stay silent), and a settings
+    // change destroys the old object and builds a new one instead of touching it.
+    // [saverdbg] reference monitor, literal values
+    IdleMonitor {
+        enabled: true; timeout: 10; respectInhibitors: true
+        onIsIdleChanged: console.warn("[saverdbg] REF", new Date().toLocaleTimeString(), "isIdle", this.isIdle)
+    }
+    Component {
+        id: idleStage
+        IdleMonitor { enabled: true }
+    }
+    property var saverMon:   null
+    property var lockMon:    null
+    property var suspendMon: null
+
+    function _stage(old, sec, respect, onIdle) {
+        if (old) old.destroy()
+        if (sec <= 0) return null
+        var m = idleStage.createObject(root, { timeout: sec, respectInhibitors: respect })
+        if (m) m.isIdleChanged.connect(function () { onIdle(m.isIdle) })
+        return m
+    }
+    function rebuildIdle() {
+        var r = IdleService.respect
+        root.saverMon = root._stage(root.saverMon, IdleService.saverSec, r, function (idle) {
+            // The screensaver is the one stage that also has to come DOWN by itself: `isIdle` going
+            // false is the resume signal, which is why neither surface has to grab the keyboard.
+            console.warn("[saverdbg] SAVER", new Date().toLocaleTimeString(), "idle", idle)
+            UiState.screensaverOn = idle && !IdleService.awake
+        })
+        root.lockMon = root._stage(root.lockMon, IdleService.lockSec, r, function (idle) {
+            // engageRequested (not `locked = true`) so the pre-lock screenshot pass still runs and
+            // the iris grows out of the real desktop, exactly as it does for a manual lock.
+            if (idle && !IdleService.awake && !LockState.locked) LockState.engageRequested()
+        })
+        root.suspendMon = root._stage(root.suspendMon, IdleService.suspendSec, r, function (idle) {
+            // Still guarded by idle-suspend.sh: "no input" is not "no work".
+            if (idle && !IdleService.awake) IdleService.runSuspend()
+        })
+    }
+    // Keep-awake and the lock state are checked in the handlers above, never in `enabled`: they can
+    // flip while you sit still, and rebuilding a monitor mid-idle would lose that idle period.
+    Connections {
+        target: IdleService
+        function onSaverSecChanged()   { root.rebuildIdle() }
+        function onLockSecChanged()    { root.rebuildIdle() }
+        function onSuspendSecChanged() { root.rebuildIdle() }
+        function onRespectChanged()    { root.rebuildIdle() }
+    }
+
+    Component.onCompleted: { root.rebuildIdle()
+                             Templates.boot(); LockPresets.boot(); void Hyprwindows.windows
                              OnboardingState.boot(); SoundService.boot() }
 
     // Cold-start resync: Quickshell.Hyprland builds its workspace→monitor /
@@ -92,6 +157,12 @@ ShellRoot {
         function toggle(): void { UiState.openDropdown = UiState.openDropdown === "vuture-icon" ? "" : "vuture-icon" }
         function open():   void { UiState.openDropdown = "vuture-icon" }
         function close():  void { UiState.openDropdown = "" }
+        // Jump straight to one settings page, the way the in-shell shortcuts into Settings
+        // already do (`velumeron --settings workspaces`). An unknown name lands on Home.
+        function section(name: string): void {
+            UiState.settingsRequestSection = name
+            UiState.openDropdown = "vuture-icon"
+        }
     }
 
     // IPC: show the volume / brightness OSD (poked by osd-show.sh):
@@ -132,14 +203,17 @@ ShellRoot {
     // rofi wallpaper switcher). Anchors at the centre of that monitor's first active bar edge.
     IpcHandler {
         target: "wallpaper"
+        // Either shape may be up (Settings → Wallpaper → Quickselect → Style), so "is it open" is
+        // two questions. openWallpaperQuick() picks the shape and toggles it on the right monitor.
         function toggle(): void {
+            if (UiState.wallpaperGalleryOpen) { UiState.wallpaperGalleryOpen = false; return }
             if (UiState.flyout === "wallpaper") { UiState.flyout = ""; return }
             var m = Hyprland.focusedMonitor
             if (!m) return
             UiState.openWallpaperQuick(m.name, m.width, m.height)
         }
-        function open():  void { if (UiState.flyout !== "wallpaper") toggle() }
-        function close(): void { UiState.flyout = "" }
+        function open():  void { if (UiState.flyout !== "wallpaper" && !UiState.wallpaperGalleryOpen) toggle() }
+        function close(): void { UiState.flyout = ""; UiState.wallpaperGalleryOpen = false }
     }
 
     // IPC: application launcher (replaces the rofi drun launcher; bound to Super+Space).
@@ -152,6 +226,14 @@ ShellRoot {
         }
         function open():   void { UiState.launcherMon = Hyprland.focusedMonitor?.name ?? ""; UiState.launcherOpen = true }
         function close():  void { UiState.launcherOpen = false }
+        // Straight to the full-page board, whatever `launcher_fullscreen` says — a keybind can aim
+        // at the big grid without the setting. Order matters: opening seeds launcherFs from the
+        // setting (Launcher.qml), so the override has to land after it.
+        function fullscreen(): void {
+            if (!UiState.launcherOpen) UiState.launcherMon = Hyprland.focusedMonitor?.name ?? ""
+            UiState.launcherOpen = true
+            UiState.launcherFs   = true
+        }
     }
 
     // IPC: rofi successors — clipboard history (Super+V), window switcher (Super+Tab), session menu
@@ -212,7 +294,7 @@ ShellRoot {
         function close(): void { ZonesState.hide() }
     }
 
-    // IPC: btop dropdown — a themed kitty+btop window dropping out of the bar (btop-drop.sh).
+    // IPC: btop dropdown — a themed terminal+btop window dropping out of the bar (btop-drop.sh).
     // No anchor here, so it opens top-centre on the focused monitor; the Performance module's
     // right-click passes its exact module anchor instead.
     Process { id: btopDropProc }
@@ -307,9 +389,15 @@ ShellRoot {
         delegate: WallpaperWindow { required property var modelData; screen: modelData }
     }
 
-    // Bar visual: full-screen transparent surface, no exclusive zone (dynamic, multi-edge)
+    // Bar visual: full-screen transparent surface, no exclusive zone (dynamic, multi-edge).
+    // Held back until the splash curtain is actually on screen — SplashState.curtainUp is already
+    // true on the first evaluation when the splash is switched off, so an unsplashed start puts the
+    // bar up as immediately as before. With the splash on, the bar builds itself UNDER the curtain
+    // (strips, tray icons, workspace pills) and is simply there when the curtain tears open,
+    // instead of assembling in the frames before the curtain lands. The reserving surfaces below
+    // are invisible, so they stay ungated and the window layout settles during the splash too.
     Variants {
-        model: VtlConfig.componentEnabled("bar") ? Quickshell.screens : []
+        model: (VtlConfig.componentEnabled("bar") && SplashState.curtainUp) ? Quickshell.screens : []
         delegate: Bar {
             required property var modelData
             screen: modelData
@@ -381,6 +469,12 @@ ShellRoot {
     Variants { model: VtlConfig.componentEnabled("windowswitcher") ? Quickshell.screens : []; delegate: LayoutQuickSwitcher { required property var modelData; screen: modelData } }
     Variants { model: VtlConfig.componentEnabled("clipboard") ? Quickshell.screens : []; delegate: ClipboardMenu  { required property var modelData; screen: modelData } }
     Variants { model: VtlConfig.componentEnabled("session") ? Quickshell.screens : []; delegate: SessionOverlay { required property var modelData; screen: modelData } }
+    // Screensaver — one surface per output; each shows ITS OWN monitor's wallpaper folder.
+    Variants { model: Quickshell.screens; delegate: Screensaver { required property var modelData; screen: modelData } }
+    // The idle chain has no visual of its own, so nothing else would ever instantiate the
+    // singleton. A binding that reads it is what brings the three IdleMonitors up — and it has to
+    // be a property, not a second Component.onCompleted: this root already has one, and QML rejects
+    // the whole file for a repeated handler rather than merging them.
 
     // Startup splash — the curtain over the shell's own start (once per session; SplashState makes
     // that call). The surfaces only exist while it plays, so it costs nothing afterwards.
@@ -548,6 +642,12 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         delegate: WallpaperQuick { required property var modelData; screen: modelData }
+    }
+    // The same picker's full-screen shape (Settings → Wallpaper → Quickselect → Style = Gallery).
+    // Both surfaces exist on every screen; UiState.openWallpaperQuick() opens exactly one of them.
+    Variants {
+        model: Quickshell.screens
+        delegate: WallpaperGallery { required property var modelData; screen: modelData }
     }
     Variants {
         model: VtlConfig.componentEnabled("calendar") ? Quickshell.screens : []

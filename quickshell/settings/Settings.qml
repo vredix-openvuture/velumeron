@@ -25,7 +25,13 @@ PanelWindow {
     readonly property bool   vert:   mEdge === "left" || mEdge === "right"
     // Offset from the screen edge to sit on the bar's inner face. When the anchored edge has
     // no bar — or a fullscreen window is hiding it — sit flush at the edge (no empty column).
-    readonly property bool   edgeBar: VtlConfig.edgeActiveFor(mEdge, root.mon) && !root.monFullscreen
+    // A real fullscreen window hides the bar — unless "Peek in fullscreen" is on, in which case the
+    // bar lifts ABOVE that window and is right there at the edge. Treating the edge as bare while a
+    // visible strip sits on it is why nothing docked during a fullscreen video: the panel grew from
+    // the monitor's bezel, through the bar, with its own full outline. Bar.qml holds the peek open
+    // for as long as one of these panels is up, so the strip cannot fade out from under it.
+    readonly property bool   edgeBar: VtlConfig.edgeActiveFor(mEdge, root.mon)
+                                      && (!root.monFullscreen || VtlConfig.barFullscreenPeekFor(root.mon))
     readonly property int    barT:   edgeBar ? UiState.barInnerFor(mEdge, root.mon) : 0
     readonly property int    sw:     screen ? screen.width  : 1920
     readonly property int    sh:     screen ? screen.height : 1080
@@ -39,24 +45,75 @@ PanelWindow {
     // NARROW (e.g. portrait) monitor collapses the menu until the content truncates, so guard both
     // axes: never smaller than a usable floor, never larger than 94% of the screen (so the floor
     // itself can't overflow a small monitor either).
-    // Sized BY the dashboard raster (Style.dashGrid*), not by a percentage the user sets
-    // separately: two independent numbers could never divide evenly, and the remainder
-    // showed as dead space under the last row. Still clamped to the monitor — a big raster
-    // on a small screen must not grow a menu that does not fit.
-    //
-    // A FLOATING page is sized by neither of those. It stopped being a bar surface the moment it
-    // left the bar, so the raster that fits the dashboard has no say over it: 74% of the monitor,
-    // both ways, whatever the dashboard happens to be.
+    // Docked and floating are sized SEPARATELY (Settings → Style → Menu), each as a % of the
+    // monitor, and either can be left on Auto:
+    //   · Auto docked   = as big as the dashboard page needs (Style.dashGrid* + chrome)
+    //   · Auto floating = 74% of the monitor, which is what the detached window always was
+    // A hand-set size wins over the raster and the dashboard fits ITSELF into it instead (see the
+    // dashFit* publication below) — that is what "the dashboard no longer decides the menu size"
+    // means in practice. Both stay clamped to 94% of the monitor: a percentage typed for a wide
+    // screen must not grow a menu that does not fit on a small one.
+    // A percentage is a share of THIS monitor, and the setting is one number for all of them: 30%
+    // of a 2560 screen is a comfortable 768 px, 30% of a 1080-wide portrait screen is 324 — and the
+    // labelled rail alone eats 169 of those, which is how the pages ended up as a column of elided
+    // headings. So the size has a floor as well as its 94% ceiling: never narrower than the chrome
+    // plus a readable column, never shorter than a usable page. The ceiling still wins on a screen
+    // too small for even that.
+    function _pctOr(pct, px, span, minPx) {
+        var want = pct > 0 ? Math.round(span * pct / 100) : px
+        return Math.min(Math.round(span * 0.94), Math.max(want, minPx))
+    }
+    readonly property int minContentW: 320
+    readonly property int minContentH: 360
+    // HOME IS NOT SIZED BY THAT SETTING. The dashboard is built from its own raster (rows, columns,
+    // cell size — its editor owns those), and a menu size applied to it would either stretch the
+    // page around the grid or cut it off. So the size the user sets is the size of the SETTINGS
+    // PAGES; Home stays exactly as big as its raster says, whatever the pages are set to.
+    readonly property bool dockHome: root.shownSection === "home" && !root.shownNavPage
     readonly property int dockW:  !screen ? 300
-        : Math.min(Math.round(screen.width  * 0.94), Style.menuContentW + root.railW)
+        : root.dockHome ? Math.min(Math.round(screen.width * 0.94), Style.menuContentW + root.railSpace)
+                        : root._pctOr(VtlConfig.menuDockWidthPctFor(root.mon),  Style.menuContentW + root.railSpace,
+                                      screen.width,  root.railSpace + root.minContentW)
     readonly property int dockH:  !screen ? 540
-        : Math.min(Math.round(screen.height * 0.94), Style.dashGridH + Style.dashChromeH)
-    readonly property int floatW: !screen ? 300 : Math.round(screen.width  * 0.74)
-    readonly property int floatH: !screen ? 540 : Math.round(screen.height * 0.74)
+        : root.dockHome ? Math.min(Math.round(screen.height * 0.94), Style.dashGridH + Style.dashChromeH)
+                        : root._pctOr(VtlConfig.menuDockHeightPctFor(root.mon), Style.dashGridH + Style.dashChromeH,
+                                      screen.height, root.minContentH)
+    readonly property int floatW: !screen ? 300
+        : root._pctOr(VtlConfig.menuFloatWidthPctFor(root.mon),  Math.round(screen.width  * 0.74),
+                      screen.width,  root.railSpace + root.minContentW)
+    readonly property int floatH: !screen ? 540
+        : root._pctOr(VtlConfig.menuFloatHeightPctFor(root.mon), Math.round(screen.height * 0.74),
+                      screen.height, root.minContentH)
+
+    // The dashboard keeps its OWN size settings (rows, columns, cell size — in its editor) and is
+    // not touched by any of this: the menu size and the raster are simply two independent things
+    // now. Auto is where they still meet, and that is the only place they do.
+    //
+    // ONE instance publishes the numbers below: this surface exists once per screen, and two
+    // monitors of different sizes would otherwise take turns overwriting them. `when` keeps every
+    // instance but the one the menu is actually on inactive.
+    readonly property bool _publishes: root.onActiveMonitor && root.screen !== null
+    // The current size in percent, so the Style page's steppers can step out of "Auto" from where
+    // the menu actually is rather than from a default.
+    Binding { when: root._publishes; target: UiState; property: "menuPctDockW"
+              value: root.screen ? Math.round(100 * root.dockW  / root.screen.width)  : 0 }
+    Binding { when: root._publishes; target: UiState; property: "menuPctDockH"
+              value: root.screen ? Math.round(100 * root.dockH  / root.screen.height) : 0 }
+    Binding { when: root._publishes; target: UiState; property: "menuPctFloatW"
+              value: root.screen ? Math.round(100 * root.floatW / root.screen.width)  : 0 }
+    Binding { when: root._publishes; target: UiState; property: "menuPctFloatH"
+              value: root.screen ? Math.round(100 * root.floatH / root.screen.height) : 0 }
     // The live size is the two BLENDED by floatT, not one or the other: leaving Home is a single
     // interpolation, so the size can never fall out of step with the position (see floatT below).
-    readonly property int menuW:  Math.round(dockW + (floatW - dockW) * root.floatT)
-    readonly property int menuH:  Math.round(dockH + (floatH - dockH) * root.floatT)
+    // The docked size now changes ON NAVIGATION (Home's raster ⇄ the pages' own size), and a hard
+    // cut between two panel sizes reads as the menu flinching. A Behavior on a bound property
+    // animates binding changes, so the panel grows into the page and back to Home's raster.
+    property int dockWAnim: root.dockW
+    property int dockHAnim: root.dockH
+    Behavior on dockWAnim { NumberAnimation { duration: Math.round(220 * Style.motionSlow); easing.type: Easing.OutCubic } }
+    Behavior on dockHAnim { NumberAnimation { duration: Math.round(220 * Style.motionSlow); easing.type: Easing.OutCubic } }
+    readonly property int menuW:  Math.round(dockWAnim + (floatW - dockWAnim) * root.floatT)
+    readonly property int menuH:  Math.round(dockHAnim + (floatH - dockHAnim) * root.floatT)
 
     // ── How the menu merges into the bar ─────────────────────────────────────────
     // The menu butts against its anchored edge (mEdge) and, on an L-bar, also blends into the
@@ -87,14 +144,31 @@ PanelWindow {
     // started — an 8 px hop plus a shape that popped before anything had moved.
     // Leaving Home no longer reads a flag at all: it is a degree (root.detachT), so this one only
     // has to answer for the docked panel.
-    readonly property bool dockDetached: root.edgeBar && (VtlConfig.barFloatingFor(root.mon) || Style.isCupertino)
-    readonly property int  dockGap:   root.dockDetached
-                                      ? Math.max(6, VtlConfig.barFloatingFor(root.mon)
-                                                    ? VtlConfig.barFloatGapFor(root.mon) : 8) : 0
+    // A floating bar no longer detaches its menu: the panel meets the strip's inner face (which
+    // includes the float gap since Bar._publishInner) and reads as attached, the same as on a dock.
+    // Cupertino still detaches always — that is the style, not the bar's doing.
+    readonly property bool dockDetached: root.edgeBar && Style.isCupertino
+    readonly property int  dockGap:   root.dockDetached ? 8 : 0
     // The perpendicular (corner) merge is suppressed by the "origin edge only" transition style.
     readonly property bool _mergeAll:  VtlConfig.transitionMergeAllFor("menu", root._tctx)
-    readonly property bool mergeStart: mGroup === "start" && root.edgeBar && _mergeAll && !dockDetached
-    readonly property bool mergeEnd:   mGroup === "end"   && root.edgeBar && _mergeAll && !dockDetached
+    // See Flyout.endsFree: no corner in the screen corner, no corner merge. A float never reaches
+    // one, a dock only while its ends are not pulled in; otherwise the menu tracks the icon that
+    // opened it and the span clamp keeps it on the strip.
+    readonly property bool endsFree:   VtlConfig.barModeFor(root.mon) !== "frame"
+                                       && (VtlConfig.barModeFor(root.mon) === "float"
+                                           || VtlConfig.barSideGapFor(root.mon) > 0)
+    readonly property var  barSpan:    VtlConfig.barSpanFor(root.mEdge, root.mon,
+                                                            root.vert ? root.sh : root.sw)
+    // ── Flush end, or curve ─────────────────────────────────────────────────────────────────────
+    // The concave fillet flares OUTWARD past the panel, into the bar it hangs on. That only works
+    // while there is bar left beside it: an icon at the very end of a dock/float strip puts the
+    // menu's edge on the end of the bar, and the flare then reaches into the empty stretch next to
+    // the strip. So a side that lands on the end of the bar closes FLUSH with it; a side that stops
+    // short of it keeps its curve.
+    readonly property bool flushLo: root.edgeBar && !root.dockDetached && menu.along <= root.barSpan[0] + 1
+    readonly property bool flushHi: root.edgeBar && !root.dockDetached && (menu.along + menu.alongSize) >= root.barSpan[1] - 1
+    readonly property bool mergeStart: mGroup === "start" && root.edgeBar && _mergeAll && !dockDetached && !endsFree
+    readonly property bool mergeEnd:   mGroup === "end"   && root.edgeBar && _mergeAll && !dockDetached && !endsFree
     readonly property int  sideStart:  (mergeStart && VtlConfig.edgeActiveFor(startEdge, root.mon)) ? VtlConfig.edgeThicknessFor(startEdge, root.mon) : 0
     readonly property int  sideEnd:    (mergeEnd   && VtlConfig.edgeActiveFor(endEdge,   root.mon)) ? VtlConfig.edgeThicknessFor(endEdge,   root.mon)   : 0
 
@@ -109,7 +183,12 @@ PanelWindow {
     // span (Bar.gapNotchPath) — exactly ONE translucent surface paints that strip. Every smaller
     // seam still showed a ghost line on a translucent bar: overlap stacks alpha (darker), abutting
     // antialiases (lighter); only removing the second paint layer removes the line.
-    readonly property int seam:   2
+        // 0, not 2: the seam that used to run into the bar IS the dark line. A translucent panel
+    // over the bar's ground and the same panel over its own ground composite to different
+    // colours, so the overlap always showed as a band (see the note in bar/Bar.qml). The fills
+    // abut at the bar's inner face instead — GeometryRenderer's edges are crisp at an integer
+    // coordinate, so nothing shows through between them.
+    readonly property int seam:   0
     // ── How fast the merge corners let go ────────────────────────────────────────────────────────
     // The concave fillets are what tie this panel into the bar's edge. Clamping them to A/3 and D/3
     // means they shrink IN STEP with the panel, so on the way out they are gone while the panel is
@@ -146,6 +225,10 @@ PanelWindow {
     readonly property bool railLabels: VtlConfig.settingsSidebarLabels && root.navMode === "sidebar"
     readonly property int  railW:    root.railLabels ? 168
                                    : (_leftBar ? VtlConfig.edgeThicknessFor("left", root.mon) : 52)
+    // What the rail COSTS the panel. Page mode draws no rail, so reserving its width there left a
+    // rail-shaped strip of nothing down the right of the dashboard — the menu was 52 px wider than
+    // anything in it. One number, used by the width and by the content's own offset below.
+    readonly property int  railSpace: root.navMode === "sidebar" ? root.railW + 1 : 0
 
     // ── Outline builder ──────────────────────────────────────────────────────────
     // Returns [borderD, fillD, seamD] in Shape-local coords (menu-local + pad). Geometry is built once in
@@ -154,7 +237,8 @@ PanelWindow {
     // closes it back through the merged bar edges, seam-extended into the bar.
     // bT / bS = live elastic bulge (px) for the far edge / the free side edges. At rest they
     // are 0 and every LB() degenerates to a straight L (identical to the settled geometry).
-    function _paths(W, H, bT, bS) {
+    function _paths(W, H, bT, bS, off) {
+        off = off || 0    // pixel-grid nudge; border only (Style.hairline)
         var horizA = (mEdge === "top" || mEdge === "bottom")
         var A = horizA ? W : H        // extent along the bar
         var D = horizA ? H : W        // depth away from the bar
@@ -170,16 +254,30 @@ PanelWindow {
         // Concave merge fillets collapse to 0 (straight corners) for the non-fillet styles.
         var f = (VtlConfig.transitionFilletFor("menu", root._tctx) ? Math.max(0, Math.min(flareR * root.filletF, Math.max(A, D) / 2)) : 0) * mf
         var s = seam * mf
-        var ca0 = mergeStart ? sideStart * mf     : 0      // near-end content boundary
-        var ca1 = mergeEnd   ? (A - sideEnd * mf) : A      // far-end content boundary
+        // The merged ends ABUT the perpendicular strip — they no longer swallow it. The panel's
+        // box now starts AT that strip's inner face (see `along`), so the content boundary is the
+        // box edge itself and the outline simply turns the corner there, exactly the treatment the
+        // anchored edge already gets (`seam: 0` — this file decided against running into a bar at
+        // all, because two translucent surfaces on one strip is the dark line it spent a long time
+        // removing). What unwinds the merge over the peel is the fillet `f`, which already scales
+        // with `mf`, plus the free corners rounding in through `cf`.
+        var ca0 = 0                                        // near-end content boundary
+        var ca1 = A                                        // far-end content boundary      // far-end content boundary
         var flip = (mEdge === "bottom" || mEdge === "left")   // reflection → invert arc sweep
         function XY(a, d) {
-            var x, y
-            if      (mEdge === "bottom") { x = a;     y = H - d }
-            else if (mEdge === "left")   { x = d;     y = a     }
-            else if (mEdge === "right")  { x = W - d; y = a     }
-            else                         { x = a;     y = d     }   // top
-            return (x + pad) + "," + (y + pad)
+            // The MOUTH (d = 0) is nudged the other way. Every other run takes this panel's own
+            // first row (+off, the pixel-grid rule); the mouth has to land on the row the BAR's
+            // line occupies, which is one row further out — the bar insets its line INTO the strip
+            // and the panel insets its own into the panel, so the two ended up on adjacent rows and
+            // a fillet had to climb a pixel to reach the line it is supposed to continue (measured:
+            // bar row 39, panel outline row 40, and the join visibly stepped). A mirrored edge
+            // (bottom / right) counts depth the other way, hence the sign.
+            var mirrored = (mEdge === "bottom" || mEdge === "right")
+            var dOff = (d === 0) ? (mirrored ? off : -off) : off
+            if      (mEdge === "bottom") return (a + pad + off)       + "," + ((H - d) + pad + dOff)
+            else if (mEdge === "left")   return (d + pad + dOff)      + "," + (a + pad + off)
+            else if (mEdge === "right")  return ((W - d) + pad + dOff) + "," + (a + pad + off)
+            return (a + pad + off) + "," + (d + pad + dOff)   // top
         }
         // Track the current pen position in (a, d) so a bulged edge can place its control point
         // at the segment's midpoint, pushed out along the edge's outward normal.
@@ -234,13 +332,14 @@ PanelWindow {
             endA = cur[0]; endD = cur[1]
             close = L(0, D + f) + L(0, -s) + L(A, -s) + L(A, D + f)
         } else {                                  // free tab — concave fillets on both bar corners
-            startA = A + f; startD = 0
-            bd = M(A + f, 0) + A_(f, A, f, 0)
+            var fH = root.flushHi ? 0 : f, fL = root.flushLo ? 0 : f
+            startA = A + fH; startD = 0
+            bd = M(A + fH, 0) + (fH > 0 ? A_(fH, A, fH, 0) : "")
                + LB(A, D - e,  1, 0, bS) + A_(e, A - e, D, 1)   // right edge bows out
                + LB(e, D,      0, 1, bT) + A_(e, 0, D - e, 1)   // far edge bows out
-               + LB(0, f,     -1, 0, bS) + A_(f, -f, 0, 0)      // left edge bows out
+               + LB(0, fL,    -1, 0, bS) + (fL > 0 ? A_(fL, -fL, 0, 0) : "")
             endA = cur[0]; endD = cur[1]
-            close = L(-f, -s) + L(A + f, -s)
+            close = L(-fL, -s) + L(A + fH, -s)
         }
         // `close` is a polyline from the outline's open end back along the bar; re-walked from
         // that same end (endA/endD, taken before it moved `cur` on) it is exactly the missing
@@ -250,11 +349,12 @@ PanelWindow {
         return [bd, bd + close + " Z",
                 "M" + XY(endA, endD) + close + " L" + XY(startA, startD)]
     }
-    function borderPath(W, H, bT, bS) { return _paths(W, H, bT, bS)[0] }
+    readonly property int borderW: Style.barBorderW(root.mon)
+    function borderPath(W, H, bT, bS) { return _paths(W, H, bT, bS, Style.hairline(root.borderW))[0] }
     function fillPath(W, H, bT, bS)   { return _paths(W, H, bT, bS)[1] }
     // The bar edge a merged outline leaves open. Stroked as its own path so it can FADE in while
     // the panel peels off, instead of the fourth border side appearing whole in a single frame.
-    function seamPath(W, H, bT, bS)   { return _paths(W, H, bT, bS)[2] }
+    function seamPath(W, H, bT, bS)   { return _paths(W, H, bT, bS, Style.hairline(root.borderW))[2] }
 
     // Which section's content is shown.
     property string activeSection: "home"
@@ -262,31 +362,31 @@ PanelWindow {
     // ── Section registry — ONE list drives the rail, the page loader and the titles ──
     // (rail: false → reachable only via navigation, e.g. the home hub's sub-pages; comp: null →
     // the placeholder page with `hint`.) Component ids resolve file-wide, so forward refs are fine.
-    // Rail order groups by altitude: hardware/system first (monitors → peripherals),
-    // then the shell chrome and look, then window behaviour. Info stays pinned at
-    // the rail bottom regardless of its position here.
+    // Order here is only the fallback: what the rail and the nav list actually show is grouped by
+    // `navGroups` below. Info stays pinned at the rail bottom regardless of its position here.
     readonly property var sections: [
         { key: "home",          icon: "󰋜", title: "Velumeron",     comp: homeComp },
-        // ── Hardware & system ──
         { key: "monitors",      icon: "󰍺", title: "Monitors",      comp: monitorsComp },
         { key: "workspaces",    icon: "󱂬", title: "Workspaces",    comp: workspacesComp },
         { key: "peripherals",   icon: "󰍽", title: "Peripherals",   comp: peripheralsComp },
+        { key: "defaults",      icon: "󰙵", title: "Default apps",  comp: defaultAppsComp },
         { key: "boot",          icon: "󰘚", title: "Boot & Login",  comp: bootComp },
         { key: "autostart",     icon: "󱓞", title: "Autostart",     comp: autostartComp },
         { key: "quickaccess",   icon: "󱊫", title: "Quick access",  comp: quickAccessComp },
         { key: "integrations",  icon: "󰐱", title: "Integrations",  comp: integrationsComp },
-        // ── Shell chrome & look ──
+        // Appears only once the OpenRGB integration is switched on — see sectionShown().
+        { key: "openrgb",       icon: "󰌵", title: "OpenRGB",       comp: openrgbComp },
         { key: "bar",           icon: "󰕮", title: "Bar",           comp: barComp },
         { key: "taskbar",       icon: "󱂩", title: "Taskbar",       comp: taskbarComp },
         { key: "style",         icon: "󰏘", title: "Style",         comp: styleComp },
         { key: "wallpaper",     icon: "󰸉", title: "Wallpaper",     comp: wallpaperComp },
         { key: "lockscreen",    icon: "󰌾", title: "Lockscreen",    comp: lockComp },
+        { key: "screensaver",   icon: "󰤄", title: "Screensaver",   comp: screensaverComp },
         { key: "launcher",      icon: "󰀻", title: "Launcher",      comp: launcherComp },
         { key: "osd",           icon: "󰍹", title: "OSD",           comp: osdComp },
         { key: "notifications", icon: "󰂚", title: "Notifications", comp: notifyComp },
         { key: "sounds",        icon: "󰕾", title: "Sounds",        comp: soundsComp },
         { key: "calendar",      icon: "󰃭", title: "Calendar",      comp: calendarComp },
-        // ── Windows & input behaviour ──
         { key: "keybinds",      icon: "󰌌", title: "Keybindings",   comp: keybindsComp },
         { key: "corners",       icon: "󰊓", title: "Hot corners",   comp: cornersComp },
         { key: "zones",         icon: "󰝘", title: "Zones",         comp: zonesComp },
@@ -312,7 +412,11 @@ PanelWindow {
     // in `sections`: that array is deliberately non-reactive (a reactive entry reloads the
     // open page on every unrelated change), while navSections below is recomputed anyway.
     function sectionShown(key) {
-        if (key === "boot") return VtlConfig.anyBootComponent
+        if (key === "boot")    return VtlConfig.anyBootComponent
+        // A whole menu that only exists because an integration is on. Nothing about lighting is
+        // worth a permanent entry on a machine with no RGB in it, and a page that would only ever
+        // say "OpenRGB is not installed" is worse than no page.
+        if (key === "openrgb") return VtlConfig.openrgbEnabled
         return true
     }
     // Leaving the page you are standing on hidden would strand you on it — the rail would
@@ -322,16 +426,26 @@ PanelWindow {
         function onAnyBootComponentChanged() {
             if (!VtlConfig.anyBootComponent && root.activeSection === "boot") root.activeSection = "home"
         }
+        function onOpenrgbEnabledChanged() {
+            if (!VtlConfig.openrgbEnabled && root.activeSection === "openrgb")
+                root.activeSection = "integrations"
+        }
     }
 
     // ── Section grouping — shared by the sidebar rail AND the page-mode nav list ──
+    // Grouped by the question someone arrives with, not by which part of the tree implements it.
+    // The old cut had "Look" holding autostart and integrations while eleven unrelated pages sat
+    // under "Services", which is a name nobody searches for. Each group is now four to seven
+    // entries with a heading you would guess.
     readonly property var navGroups: [
-        { name: "System",   keys: ["home", "monitors", "workspaces", "peripherals", "boot", "keybinds"] },
-        { name: "Look",     keys: ["autostart", "quickaccess", "integrations", "style", "wallpaper"] },
-        { name: "Services", keys: ["bar", "osd", "notifications", "sounds", "launcher", "taskbar",
-                                   "windowtags", "lockscreen", "calendar", "corners"] },
-        { name: "Windows",  keys: ["windowrules", "layouts", "zones"] },
-        { name: "Velumeron", keys: ["velumeron"] }
+        { name: "System",     keys: ["home", "monitors", "workspaces", "peripherals", "boot",
+                                     "openrgb"] },
+        { name: "Appearance", keys: ["style", "wallpaper", "lockscreen", "screensaver", "sounds"] },
+        { name: "Shell",      keys: ["bar", "taskbar", "launcher", "osd", "notifications",
+                                     "calendar", "corners"] },
+        { name: "Windows",    keys: ["layouts", "zones", "windowrules", "windowtags", "keybinds"] },
+        { name: "Apps",       keys: ["defaults", "autostart", "quickaccess", "integrations"] },
+        { name: "Velumeron",  keys: ["velumeron"] }
     ]
     // Resolve each group's keys → section metas; any rail-eligible section not placed lands in a
     // trailing "More" group so nothing ever vanishes from navigation.
@@ -576,13 +690,29 @@ PanelWindow {
 
         // Sit on the content side of the icon's edge; centre the morph nub on the icon and
         // clamp the along-edge position so the panel stays on screen.
-        readonly property real alongMax: root.vert ? (root.sh - height) : (root.sw - width)
+        // Bounded by the STRIP, not the screen: a bar inset from its ends is shorter than the
+        // monitor, and a menu clamped to the monitor slid off the end of it (see Flyout).
+        readonly property real alongSize: root.vert ? height : width
+        readonly property real alongLo:   root.edgeBar ? root.barSpan[0] : 0
+        readonly property real alongHi:   (root.edgeBar ? root.barSpan[1]
+                                                        : (root.vert ? root.sh : root.sw)) - alongSize
+        readonly property real alongMax:  Math.max(alongLo, alongHi)
         // Along the bar: an icon in the start/end group snaps the menu to that end (the screen
         // corner — merging into a perpendicular bar there, or into the bare screen edge if none);
         // a centre-group icon tracks the icon position. This pins corner menus to the corner.
-        readonly property real along: root.mergeStart ? 0
-                                    : root.mergeEnd   ? alongMax
-                                    : Math.max(0, Math.min(root.mStart - collapsed / 2, alongMax))
+        // Snap to the perpendicular strip's INNER FACE, not to the screen corner. Zero was the
+        // inner face back when the anchored edge was the only bar there was; add a second strip and
+        // the panel grew out of the monitor's bezel instead of out of the bar, and swallowed the
+        // strip on the way. `barInnerFor` is the number the bar itself published.
+        readonly property real along: root.mergeStart ? Math.max(alongLo, UiState.barInnerFor(root.startEdge, root.mon))
+                                    : root.mergeEnd   ? alongMax - UiState.barInnerFor(root.endEdge, root.mon)
+                                    : (alongHi < alongLo
+                                       ? (alongLo + alongHi) / 2
+                                       // …and if that lands within a pixel of either end of the
+                                       // strip, sit ON the end — see Style.flushSnap. The panel
+                                       // then closes flush AND is where flush means.
+                                       : Style.flushSnap(Math.max(alongLo, Math.min(root.mStart - collapsed / 2, alongHi)),
+                                                         alongLo, alongHi))
         // Docked position: on the content side of the icon's edge, at the gap the docked panel
         // keeps (dockGap — NOT the float one, or the move would start with an 8 px hop).
         readonly property real dockX: root.mEdge === "left"  ? root.barT + root.dockGap
@@ -601,22 +731,48 @@ PanelWindow {
         // that stretch out of its own outline and the two read as one line (UiState.setBarGap).
         // Only while genuinely docked: a floating panel is not touching the bar at all, and one
         // that has detached mid-flight (floatT > 0) must hand the border straight back.
-        // Exactly the panel's extent — NO allowance for the fillet skirt. Adding one widened the cut
-        // on BOTH sides, but a corner-docked panel has a fillet on one side only (the other merges
-        // into the perpendicular arm). The surplus side left bar border cut away with nothing
-        // covering it: a permanent notch, which is worse than the closing-frame overlap it fixed.
-        readonly property real gapFrom: root.vert ? y : x
-        readonly property real gapTo:   root.vert ? y + height : x + width
+        // The span runs to where the OUTLINE reaches, not to the panel's box: a side that ends in a
+        // concave fillet carries the border `skirt` px further along the bar before it turns away,
+        // and the bar's own line has to stop there — otherwise it runs on straight through the arc
+        // and leaves a stub across the corner. A MERGED side has no arc and gets no allowance;
+        // widening both sides blindly (the earlier attempt) cut bar border away with nothing in
+        // front of it, which is the notch that had to be reverted. `mf` is the peel's merge scale,
+        // so the allowance melts away exactly as the fillets do.
+        readonly property real skirt: (VtlConfig.transitionFilletFor("menu", root._tctx)
+                                       ? Math.max(0, Math.min(root.flareR * root.filletF,
+                                                              Math.max(width, height) / 2)) : 0)
+                                      * Math.max(0, 1 - root.detachT * 2)
+        readonly property real gapFrom: (root.vert ? y : x)                  - ((root.mergeStart || root.flushLo) ? 0 : skirt)
+        readonly property real gapTo:   (root.vert ? y + height : x + width) + ((root.mergeEnd   || root.flushHi) ? 0 : skirt)
         readonly property bool gapLive: root.onActiveMonitor && root.edgeBar && !root.dockDetached
                                         && root.floatT < 0.02
+        // The MERGED flank needs its own claim on the perpendicular edge. Now that the panel abuts
+        // that strip instead of swallowing it, the strip is still there — and it kept drawing its
+        // border straight down the panel's side, a hard line between two surfaces that are meant to
+        // read as one. Same claim the notification tray and the glides make, own id so the two
+        // spans cannot clear each other. It reaches `skirt` past the panel because that is where
+        // the outline's concave fillet finally turns away from the bar.
+        readonly property string perpEdge: root.mergeStart ? root.startEdge : root.endEdge
+        readonly property bool   perpLive: gapLive && (root.mergeStart || root.mergeEnd)
+                                           && VtlConfig.edgeActiveFor(perpEdge, root.mon)
+        readonly property real   perpFrom: root.vert ? x : y
+        readonly property real   perpTo:   (root.vert ? x + width : y + height) + skirt
         function pushGap() {
             if (gapLive) UiState.setBarGap("menu:" + root.mon, root.mon, root.mEdge, gapFrom, gapTo)
             else         UiState.clearBarGap("menu:" + root.mon)
+            if (perpLive) UiState.setBarGap("menuperp:" + root.mon, root.mon, perpEdge, perpFrom, perpTo)
+            else          UiState.clearBarGap("menuperp:" + root.mon)
         }
         onGapFromChanged: menu.pushGap()
         onGapToChanged:   menu.pushGap()
         onGapLiveChanged: menu.pushGap()
-        Component.onDestruction: UiState.clearBarGap("menu:" + root.mon)
+        onPerpLiveChanged: menu.pushGap()
+        onPerpFromChanged: menu.pushGap()
+        onPerpToChanged:   menu.pushGap()
+        Component.onDestruction: {
+            UiState.clearBarGap("menu:" + root.mon)
+            UiState.clearBarGap("menuperp:" + root.mon)
+        }
 
         // Block click-through to the desktop, but stay BELOW the rail/content widgets
         // (declared first + z:0) so their MouseAreas still receive clicks.
@@ -782,12 +938,9 @@ PanelWindow {
                             required property int index
                             width: railCol.width
                             spacing: 8
-                            Rectangle {
-                                visible: index > 0
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                width: Math.round(railCol.width * 0.44); height: 1
-                                color: Style.tint(Colors.boNormal, 0.35)
-                            }
+                            // No divider between the groups: the 8 px the Column already puts
+                            // between them separates them plainly enough, and a rule every few
+                            // icons turned the rail into a ruled list.
                             Repeater {
                                 model: modelData.metas
                                 delegate: RailIcon {
@@ -850,7 +1003,7 @@ PanelWindow {
             id: content
             opacity: menu.contentReveal * root.contentFade
             // Explicit geometry rather than anchors, because of the freeze below.
-            readonly property real railGap: root.navMode === "sidebar" ? root.railW + 1 : 0
+            readonly property real railGap: root.railSpace
             // While the handover has the page faded to nothing, the pane is pinned to the size
             // the panel is HEADING for instead of following it: the page is then laid out once,
             // rather than re-flowed on every frame of the travel — which is what you used to
@@ -1003,6 +1156,7 @@ PanelWindow {
             Component { id: notifyComp;    NotifSettings    {} }
             Component { id: soundsComp;    SoundsSection    {} }
             Component { id: lockComp;      LockscreenSection {} }
+            Component { id: screensaverComp; ScreensaverSection {} }
             Component { id: cornersComp;   CornerActionsSection {} }
             Component { id: taskbarComp;   TaskbarSection {} }
             Component { id: windowTagsComp; WindowTagsSection {} }
@@ -1014,10 +1168,12 @@ PanelWindow {
             Component { id: workspacesComp;  WorkspacesSection {} }
             Component { id: autostartComp;   AutostartSection {} }
             Component { id: integrationsComp; IntegrationsSection {} }
+            Component { id: openrgbComp;      OpenRgbSection {} }
             Component { id: quickAccessComp; QuickAccessSection {} }
             Component { id: peripheralsComp; PeripheralsSection {} }
             Component { id: bootComp;        BootSection {} }
             Component { id: windowRulesComp; WindowRulesSection {} }
+            Component { id: defaultAppsComp; DefaultAppsSection {} }
 
             // Placeholder for registry entries without a page yet (comp: null).
             Column {
