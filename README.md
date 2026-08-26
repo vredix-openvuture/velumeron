@@ -138,6 +138,9 @@ of them on the same desk.
   Presets, a card you place and size in percent, wallpaper crop, avatar, blur on the background or
   on the card, your clock format and weight, and widgets you drop into six zones (media, weather
   with a forecast, battery, user, session). Build your own in a live editor.
+- **Screensaver**: your wallpapers, slowly, after a while away. It runs as a normal overlay while
+  the session is unlocked and inside the lock screen once it is locked, so it looks the same either
+  side of the password prompt.
 - **Sounds**: a native pack for login, logout, lock, unlock, screenshot, notification and critical
   notification. Per event on or off, one volume, or fall back to the installed system theme.
 - **Splash**: a curtain over the shell's own start, so the bar is finished before you see it.
@@ -161,7 +164,8 @@ of them on the same desk.
 - List, grid or a fullscreen app grid. Docked to a bar edge, in any of nine slots, or standalone in
   the middle of the screen.
 - The **fullscreen board** is one button away at any time, covers the screen bar and all, and can
-  be what the launcher opens as.
+  be what the launcher opens as. Its **overview** style puts a row of workspace cards above the
+  grid — each one a miniature of the monitor with your real windows in their real places.
 - Width and rows are remembered per view, so list and grid do not fight over one size.
 - One window doing four jobs, instead of four separate tools.
 
@@ -214,10 +218,14 @@ of them on the same desk.
 
 <table><tr><td width="33%"><img src="docs/img/settings-bar.png" alt="Bar layout"></td><td width="33%"><img src="docs/img/settings-style.png" alt="Style and colours"></td><td width="33%"><img src="docs/img/settings-dashboard.png" alt="The dashboard"></td></tr></table>
 
-- One menu for the whole desktop: Monitors, Workspaces, Peripherals, Boot and login, Autostart,
-  Quick access, Integrations, OpenRGB, Bar, Taskbar, Style, Wallpaper, Lockscreen, Launcher, OSD,
-  Notifications, Sounds, Calendar, Keybindings, Hot corners, Zones, Layouts, Window tags, Window
-  rules, Shell, Info, plus Network and Bluetooth managers.
+- One menu for the whole desktop, in six groups: Monitors, Workspaces, Peripherals, Boot and
+  login, OpenRGB; Style, Wallpaper, Lockscreen, Screensaver, Sounds; Bar, Taskbar, Launcher, OSD,
+  Notifications, Calendar, Hot corners; Layouts, Zones, Window rules, Window tags, Keybindings;
+  Default apps, Autostart, Quick access, Integrations; Shell and Info, plus Network and Bluetooth
+  managers.
+- **Default apps** are the system's, not ours: which app opens a link, a folder, a picture or a
+  song is written through `xdg-mime`, so every `xdg-open` on the machine follows it — the same
+  choice a GNOME or KDE panel would make.
 - It writes the same files you could edit by hand, and the shell reacts while you are still
   looking at it.
 - Navigate by an icon rail or page by page, glued to the bar or floating as a window, sized in
