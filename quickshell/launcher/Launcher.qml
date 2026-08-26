@@ -9,6 +9,10 @@ import Quickshell.Wayland
 // types to filter Quickshell.DesktopEntries, arrows to move, Enter to launch, Esc / click-out to close.
 // One per screen; shows on the focused monitor. Toggled via UiState.launcherOpen (the `launcher` IPC /
 // Super+Space). Placement / size / list-vs-grid / fullscreen come from the Launcher settings page.
+//
+// The card is in two parts: the RAIL (LauncherRail — a slice of the wallpaper carrying one button per
+// mode) and the RESULTS beside it. The rail is a share of the width, the results keep the configured
+// Width, and either part can be turned off — sidebar off is exactly the plain card this used to be.
 PanelWindow {
     id: root
 
@@ -211,13 +215,43 @@ PanelWindow {
     }
 
     // ── Layout config (Settings → Launcher) ─────────────────────────────────────────────────────
-    readonly property bool fs:    VtlConfig.launcherFullscreen
+    // Fullscreen is a per-OPENING state, not the setting: the rail's Fullscreen button switches the
+    // card's shape for as long as it is open, and `launcher_fullscreen` is only what each opening
+    // starts from (seeded in onIsOpenChanged). So "try the big grid" costs a click, not a settings
+    // trip, and never rewrites the user's default behind their back.
+    readonly property bool fs:    UiState.launcherFs
+    // The full-page board has two styles (Settings → Launcher → Fullscreen → Style): the plain app
+    // grid, or the GNOME-style overview — a strip of workspace miniatures above the same grid.
+    readonly property bool fsOverview: fs && VtlConfig.launcherFsStyle === "overview"
     // Fullscreen is always a grid; windowed mode follows the explicit View picker.
     readonly property bool grid:  fs || VtlConfig.launcherView === "grid"
     readonly property int  cols:  fs ? Math.max(3, VtlConfig.launcherFsCols) : (grid ? Math.max(2, VtlConfig.launcherCols) : 1)
     readonly property int  rows:  Math.max(3, VtlConfig.launcherRows)
-    readonly property int  cellH: grid ? 96 : 54
+    // Board cells are roomy on purpose: icon, its label, and then real air around both, so the
+    // page reads as a grid of apps rather than a mosaic. (24 px of padding put the icons close
+    // enough that the selection squares nearly touched.)
+    readonly property int  cellH: fs ? (VtlConfig.launcherFsIcon + (VtlConfig.launcherFsLabels ? 26 : 0) + 54)
+                                     : (grid ? 96 : 54)
     readonly property int  _m:    64   // edge margin in windowed (floating) mode
+
+    // ── The sidebar rail (Settings → Launcher → Sidebar) ────────────────────────────────────────
+    // Fullscreen has no rail: its modes ride as a horizontal strip under the search field instead
+    // (the same component), because a vertical third of a full screen is a corridor, not a rail.
+    readonly property bool sidebar:   !fs && VtlConfig.launcherSidebar && rail.buttons.length > 0
+    readonly property bool railRight: VtlConfig.launcherSidebarSide === "right"
+    readonly property int  railGap:   12
+    readonly property int  railPct:   Math.max(15, Math.min(55, VtlConfig.launcherSidebarPct))
+    // Against a VERTICAL bar the picker moves to the TOP: that card grows out of a side edge and is
+    // tall and narrow, so a rail down one side would leave a sliver for the results. Same share,
+    // same buttons, rotated — wallpaper band on top, results under it.
+    readonly property bool railTop:  sidebar && (slideEdge === "left" || slideEdge === "right")
+    readonly property bool railSide: sidebar && !railTop
+    // The configured Width keeps meaning the width of the RESULTS, and the rail is added beside it
+    // at its share of the total — so switching the sidebar on widens the card instead of squeezing
+    // the list the user already sized. The band does the same to the height.
+    readonly property int  railW: railSide ? Math.round(VtlConfig.launcherWidth * railPct / (100 - railPct)) : 0
+    readonly property int  railH: railTop  ? Math.round(root.resultsH * railPct / (100 - railPct)) : 0
+    readonly property int  resultsH: 28 + 46 + 10 + rows * cellH
     readonly property bool dock:  !fs && VtlConfig.launcherDock
     // Bar offset for an edge (thickness + float gap), 0 when that edge has no bar.
     // ONE source for this (VtlConfig.barInsetFor). Hand-rolling it here is what put the card 20 px
@@ -270,7 +304,7 @@ PanelWindow {
     readonly property real sizeF:    Style.elSizeF(reveal, active ? 1.0 : 0.0)
     readonly property real grow01:   Style.elG01(reveal)
     readonly property int  elFillet: VtlConfig.barInnerRadiusFor(root.mon)   // concave dock-flare radius
-    readonly property int  elSeam:   2   // covered by Bar.gapNotchPath — see the seam note in Flyout
+    readonly property int  elSeam:   0   // abuts the bar, never overlaps it — see the seam note in Flyout
     readonly property int  elPad: Math.ceil(Math.max(Style.elTopBulge, Style.elSideBulge)) + elFillet + elSeam + 4
     readonly property real elDim:  Math.min(card.width, card.height)
     readonly property real bulgeT: Style.elBulge(reveal, active ? 1.0 : 0.0, Style.elTopBulge,  elDim)
@@ -280,14 +314,27 @@ PanelWindow {
 
     // Final card rect (full size + resting position). The morph grows the card from a `collapsed` nub
     // at `slideEdge` up to this rect; fullscreen uses it directly (centred, plain fade — no edge).
-    readonly property int  fullW: fs ? width - 160 : Math.min(VtlConfig.launcherWidth, width - 80)
-    readonly property int  fullH: fs ? height - 140
-                                     : Math.min(height - 80, 28 + 46 + 10 + rows * cellH)
-    readonly property real fx: fs ? (width - fullW) / 2
+    // Fullscreen is EDGE TO EDGE — it covers the bar too. The surface is an overlay layer with no
+    // exclusive zone, so the whole screen is already ours; the old 160/140 inset was the only thing
+    // leaving the bar (and a frame of desktop) visible around the board.
+    readonly property int  fullW: fs ? width
+                                     : Math.min(width - 80,
+                                                VtlConfig.launcherWidth + (railSide ? railW + railGap : 0))
+    // The RESULTS decide the height. The rail takes what is left and scrolls if its buttons want
+    // more — growing the card to fit the rail is how a seven-button rail would have dictated the
+    // size of a three-row list.
+    readonly property int  fullH: fs ? height
+                                     : Math.min(height - 80,
+                                                root.resultsH + (railTop ? railH + railGap : 0))
+    // Inner padding of the card: roomier on the full-page board, where the content is not fighting
+    // a bar edge for space.
+    readonly property int  bodyPad: fs ? 34 : 14
+    readonly property int  cardRadius: fs ? 0 : Style.rCard
+    readonly property real fx: fs ? 0
         : (VtlConfig.launcherPosition.indexOf("left")  >= 0 ? mLeft
          : VtlConfig.launcherPosition.indexOf("right") >= 0 ? width - mRight - fullW
          : (width - fullW) / 2)
-    readonly property real fy: fs ? (height - fullH) / 2
+    readonly property real fy: fs ? 0
         : (VtlConfig.launcherPosition.indexOf("top")    >= 0 ? mTop
          : VtlConfig.launcherPosition.indexOf("bottom") >= 0 ? height - mBottom - fullH
          : (height - fullH) / 2)
@@ -318,7 +365,12 @@ PanelWindow {
         : (VtlConfig.launcherBlur ? launcherBlur : null)
     Region { id: launcherBlur; x: 0; y: 0; width: root.width; height: root.height }
     Region { id: cardBlur;     item: card }
-    WlrLayershell.keyboardFocus: active ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    // Dropped early when the overview switches workspace: the compositor restores the previous
+    // window focus the moment this grab ends, and that restore has to happen while the board is
+    // still covering the screen — see the pick sequence in LauncherOverview.qml.
+    property bool focusReleased: false
+    WlrLayershell.keyboardFocus: (active && !root.focusReleased) ? WlrKeyboardFocus.Exclusive
+                                                                 : WlrKeyboardFocus.None
     // -1, like every other bar-docked popout (Flyout, Settings, NotifCenter). At 0 this surface
     // HONOURS the exclusive zones the bar reserves, so the compositor already hands it a rect with
     // the bar cut off — and the card then subtracted the bar's thickness a second time. The result
@@ -362,23 +414,51 @@ PanelWindow {
         })
         return scored.map(function (o) { return o.a })
     }
-    onFilteredChanged: list.currentIndex = 0
+    onFilteredChanged: { list.currentIndex = 0; list.page = 0; list.contentX = 0; list.contentY = 0 }
+
+    // What the grid actually shows. In the windowed card that is the filtered list itself; on the
+    // full-page board it is the same apps RE-ORDERED for a sideways-paging grid.
+    //
+    // A GridView that scrolls horizontally fills its columns downward, so feeding it the plain
+    // list would make the names read top-to-bottom per column. The remap below puts flow position
+    // (page p, column c, row r) back onto the app that belongs at reading position (p, r, c), so
+    // the board reads left to right per page, the way an app board is expected to.
+    //
+    // The tail is padded with nulls up to a whole page: with the model an exact multiple of one
+    // page, the content is exactly `pages` pages wide and every page is the same fixed grid — no
+    // margin fudge, and the last page cannot come to rest showing the tail of the one before it.
+    readonly property var apps: {
+        var src = root.filtered
+        if (!root.fs) return src
+        var R = Math.max(1, list.rowsPerPage), C = Math.max(1, root.cols)
+        var P = R * C
+        var total = Math.ceil(src.length / P) * P
+        var out = []
+        for (var k = 0; k < total; k++) {
+            var page = Math.floor(k / P), j = k % P
+            var idx = page * P + (j % R) * C + Math.floor(j / R)
+            out.push(idx < src.length ? src[idx] : null)
+        }
+        return out
+    }
 
     Process { id: termProc }    // Terminal=true entries — see launch()
 
     function launch(i) {
-        var a = root.filtered[i]
+        var a = root.apps[i]
         if (!a) return
         // Terminal entries (btop, htop, nvim, ranger, …) carry Terminal=true: their Exec line
         // expects a tty. DesktopEntry.execute() runs the bare command, which dies instantly with
-        // no terminal attached — from the outside the launcher just did nothing. Run those in the
-        // velumeron kitty instead, the same invocation btop-drop.sh uses.
+        // no terminal attached — from the outside the launcher just did nothing. Hand those to
+        // term-run.sh, which opens WHATEVER emulator this user has (the role app) — the launcher
+        // must not name one.
         if (a.runInTerminal) {
-            var ud = Quickshell.env("VELUMERON_USER_DIR") || (Quickshell.env("HOME") + "/.config/velumeron")
-            var cmd = ["setsid", "-f", "kitty", "-c", ud + "/kitty/kitty.conf"]
-            var ac = a.command || []
-            for (var k = 0; k < ac.length; k++) cmd.push("" + ac[k])
-            termProc.command = cmd
+            var vd = Quickshell.env("VELUMERON_DIR") || ""
+            var line = (a.command || []).map(function (w) {
+                return "'" + ("" + w).replace(/'/g, "'\\''") + "'"
+            }).join(" ")
+            termProc.command = ["setsid", "-f", "bash", vd + "/assets/scripts/term-run.sh",
+                                "velumeron-term", a.name || "Terminal", line]
             termProc.running = false; termProc.running = true
         } else {
             a.execute()
@@ -398,20 +478,51 @@ PanelWindow {
         root._ptr = p
         return true
     }
-    // Arrow navigation that respects the grid width (cols).
+    // Arrow navigation. The step is not the same on both layouts: the windowed grid flows
+    // left-to-right (one row down = +cols), the board flows down its columns (one row down = +1,
+    // one column across = +rows). `sideStep`/`downStep` name those two so the key handlers do not
+    // have to know which layout is up.
+    readonly property int sideStep: root.fs ? Math.max(1, list.rowsPerPage) : 1
+    readonly property int downStep: root.fs ? 1 : root.cols
+    // On the paged board the view is not scrolled to the item — the PAGE holding it is turned to,
+    // or the selection would drag the grid half a row out of alignment. Padding holes are skipped
+    // so the selection never lands on an empty cell of the last page.
     function move(d) {
-        var n = root.filtered.length
-        if (n === 0) return
-        var i = Math.max(0, Math.min(n - 1, list.currentIndex + d))
-        list.currentIndex = i
-        list.positionViewAtIndex(i, GridView.Contain)
+        var n = root.apps.length
+        if (n === 0 || d === 0) return
+        var i = list.currentIndex
+        var step = d > 0 ? 1 : -1
+        var want = i + d
+        while (want >= 0 && want < n && root.apps[want] === null) want += step
+        if (want < 0 || want >= n) return
+        list.currentIndex = want
+        if (list.paged) list.toPage(list.pageFor(want))
+        else            list.positionViewAtIndex(want, GridView.Contain)
     }
 
     onIsOpenChanged: {
+        root.focusReleased = false
         if (!isOpen) return
         // The IPC handler latches launcherMon; fall back to the focused instance if opened another way.
         if (UiState.launcherMon === "" && root.onFocused) UiState.launcherMon = root.mon
-        if (root.mon === UiState.launcherMon) { search.text = ""; list.currentIndex = 0; search.forceActiveFocus() }
+        if (root.mon === UiState.launcherMon) {
+            UiState.launcherFs = VtlConfig.launcherFullscreen   // every opening starts from the setting
+            search.text = ""; list.currentIndex = 0; search.forceActiveFocus()
+        }
+    }
+
+    // A rail button: type its prefix into the search field (so the keyboard route and the click
+    // route end in exactly the same state), or switch the card's shape for the Fullscreen button.
+    function pickMode(key) {
+        if (key === "fullscreen") {
+            UiState.launcherFs = !UiState.launcherFs
+            search.forceActiveFocus()
+            return
+        }
+        var m = VtlConfig.launcherModes.filter(function (x) { return x.key === key })[0]
+        search.text = m ? ("" + m.prefix) : ""
+        search.cursorPosition = search.text.length
+        search.forceActiveFocus()
     }
 
     // Dim backdrop — click outside the card closes. The dim is tied to the blur setting so that with
@@ -443,18 +554,23 @@ PanelWindow {
             fillColor: Style.barPanelColor(Style.panelColor(VtlConfig.menuColorful), root.mon)
             strokeWidth: -1
             fillRule: ShapePath.WindingFill
-            PathSvg { path: Style.elRectPaths(card.width, card.height, Style.rCard, root.elFillet,
+            PathSvg { path: Style.elRectPaths(card.width, card.height, root.cardRadius, root.elFillet,
                             root.bulgeT, root.bulgeS, root.dockEdge, root.elSeam, root.elPad)[1] }
         }
     }
     Shape {
         x: cardFill.x; y: cardFill.y; width: cardFill.width; height: cardFill.height
         opacity: card.opacity
+        // No outline on the full-page board — it would run along the screen's own edge.
+        visible: !root.fs
         preferredRendererType: Shape.CurveRenderer
         ShapePath {
             fillColor: "transparent"; strokeColor: Style.chromeBorder; strokeWidth: Style.chromeBorderWidth
-            PathSvg { path: Style.elRectPaths(card.width, card.height, Style.rCard, root.elFillet,
-                            root.bulgeT, root.bulgeS, root.dockEdge, root.elSeam, root.elPad)[0] }
+            // `pad` shifts the whole outline, so adding the pixel-grid nudge to it lands every
+            // axis-aligned run on a whole pixel — border only, the fill above keeps the plain pad.
+            PathSvg { path: Style.elRectPaths(card.width, card.height, root.cardRadius, root.elFillet,
+                            root.bulgeT, root.bulgeS, root.dockEdge, root.elSeam,
+                            root.elPad + Style.hairline(Style.chromeBorderWidth))[0] }
         }
     }
 
@@ -537,12 +653,14 @@ PanelWindow {
         onWidthChanged:   pushGap()
         onHeightChanged:  pushGap()
         Component.onDestruction: UiState.clearBarGap("launcher:" + root.mon)
-        radius: Style.rCard
+        // Edge to edge on the full-page board: a rounded corner there would only show a crumb of
+        // desktop at each corner of the screen.
+        radius: root.cardRadius
         // Square the corners on the docked edge so the card visually merges into the bar/edge.
-        radiusTL: (root.dockEdge === "top"    || root.dockEdge === "left")  ? 0 : Style.rCard
-        radiusTR: (root.dockEdge === "top"    || root.dockEdge === "right") ? 0 : Style.rCard
-        radiusBL: (root.dockEdge === "bottom" || root.dockEdge === "left")  ? 0 : Style.rCard
-        radiusBR: (root.dockEdge === "bottom" || root.dockEdge === "right") ? 0 : Style.rCard
+        radiusTL: (root.dockEdge === "top"    || root.dockEdge === "left")  ? 0 : root.cardRadius
+        radiusTR: (root.dockEdge === "top"    || root.dockEdge === "right") ? 0 : root.cardRadius
+        radiusBL: (root.dockEdge === "bottom" || root.dockEdge === "left")  ? 0 : root.cardRadius
+        radiusBR: (root.dockEdge === "bottom" || root.dockEdge === "right") ? 0 : root.cardRadius
         color:  "transparent"                            // fill + border drawn by the bowable Shapes behind
         clip:    true                                     // clip content to the morphing card
         // Background fades in fast so you see the nub grow out of the edge (matches the bar flyouts).
@@ -555,297 +673,527 @@ PanelWindow {
                : ((root.growV ? height : width) > 1 ? 1 : 0)
         MouseArea { anchors.fill: parent }   // swallow clicks so the backdrop doesn't close
 
-        Column {
+        Item {
+            id: body
             // NOT anchors.fill: the drawer works because the content keeps its full-size layout
             // and is pinned to the card's top — it rides down with the card and is clipped at the
             // bar's inner face, instead of re-flowing into whatever height is left.
-            anchors { top: parent.top; left: parent.left; margins: 14 }
-            width:  root.fullW - 28
-            height: root.fullH - 28
-            spacing: 10
+            anchors { top: parent.top; left: parent.left; margins: root.bodyPad }
+            width:  root.fullW - 2 * root.bodyPad
+            height: root.fullH - 2 * root.bodyPad
             // Full presence while docked — content is part of the drawer. Fullscreen keeps its fade.
             opacity: root.fs ? root.contentReveal : 1
 
-            // Search field.
-            StyledRect {
-                width: parent.width; height: 46; radius: Style.rControl; color: Style.controlFill
-                borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
-                Text { anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
-                       text: "󰍉"; color: Colors.fgMuted; font.pixelSize: 18; font.family: Style.font }
-                TextInput {
-                    id: search
-                    anchors { left: parent.left; leftMargin: 46; right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
-                    color: Colors.fgBright; font.pixelSize: 16; font.family: Style.font; clip: true
-                    focus: true
-                    Keys.onDownPressed: { if (root.utilMode) root.utilIndex = Math.min(root.utilRows.length - 1, root.utilIndex + 1); else root.move(root.cols) }
-                    Keys.onUpPressed:   { if (root.utilMode) root.utilIndex = Math.max(0, root.utilIndex - 1); else root.move(-root.cols) }
-                    Keys.onLeftPressed:  e => { if (!root.utilMode && root.grid) root.move(-1); else e.accepted = false }
-                    Keys.onRightPressed: e => { if (!root.utilMode && root.grid) root.move(1);  else e.accepted = false }
-                    Keys.onReturnPressed: { if (root.utilMode) root.activateUtil(root.utilIndex); else root.launch(list.currentIndex) }
-                    Keys.onEnterPressed:  { if (root.utilMode) root.activateUtil(root.utilIndex); else root.launch(list.currentIndex) }
-                    Keys.onEscapePressed: UiState.launcherOpen = false
-                    Text { anchors.fill: parent; verticalAlignment: Text.AlignVCenter; visible: search.text === ""
-                           text: Wording.s("launcher.search"); color: Colors.fgMuted; font: search.font }
-                }
+            // The rail. Always instantiated (the card reads `rail.needH` and `rail.buttons` for its
+            // own size), drawn only when the sidebar is on.
+            LauncherRail {
+                id: rail
+                visible: root.sidebar
+                vertical: !root.railTop
+                width:  root.railTop ? parent.width : root.railW
+                height: root.railTop ? root.railH   : parent.height
+                x: (root.railSide && root.railRight) ? parent.width - width : 0
+                mon:  root.mon
+                mode: root.mode
+                fs:   root.fs
+                labels:     VtlConfig.launcherSidebarLabels
+                logo:       VtlConfig.launcherSidebarLogo
+                imageMode:  VtlConfig.launcherSidebarImage
+                customPath: VtlConfig.launcherSidebarCustom
+                dimAmt:     VtlConfig.launcherSidebarDim  / 100
+                blurAmt:    VtlConfig.launcherSidebarBlur / 100
+                // Where the rail sits on the screen, for the "window" image mode — card position
+                // included, so the wallpaper slice pans while the drawer rides out of the bar.
+                originX: card.x + root.bodyPad + x
+                originY: card.y + root.bodyPad + y
+                screenW: root.width
+                screenH: root.height
+                onPicked: key => root.pickMode(key)
             }
 
-            // "?" cheatsheet — logo + the query-prefix reference. Swaps in over the results area.
-            Flickable {
-                width: parent.width; height: Math.max(0, parent.height - 56)
-                visible: root.helpMode
-                clip: true
-                contentWidth: width
-                contentHeight: help.implicitHeight
-                boundsBehavior: Flickable.StopAtBounds
+            Column {
+                id: content
+                x: (root.railSide && !root.railRight) ? root.railW + root.railGap : 0
+                y: root.railTop ? root.railH + root.railGap : 0
+                width:  parent.width  - (root.railSide ? root.railW + root.railGap : 0)
+                height: parent.height - (root.railTop  ? root.railH + root.railGap : 0)
+                spacing: 10
+                // What is left for the results once the search field (46 + 10 spacing) and, in
+                // fullscreen, the mode strip (and the workspace overview) have taken their share.
+                readonly property int viewH: Math.max(0, height - 56 - (root.fs ? fsRail.height + 10 : 0)
+                                                              - (root.fsOverview ? overview.height + 10 : 0)
+                                                              - (root.fs ? 26 + 28 : 0))
+                // The overview strip is a SHARE of the board, not a pixel height — the cards inside
+                // it are miniatures of the screen and size themselves off it.
+                readonly property int wsH: Math.round(height * Math.max(15, Math.min(60, VtlConfig.launcherFsWsHeight)) / 100)
 
-                Column {
-                    id: help
-                    width: parent.width
-                    topPadding: 12
-                    spacing: 20
-
-                    Image {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        source: "file://" + root.vtlDir + "/assets/icons/vuture.png"
-                        width: 56; height: 56
-                        sourceSize.width: 112; sourceSize.height: 112
-                        fillMode: Image.PreserveAspectFit
-                        smooth: true; mipmap: true; antialiasing: true
+                // Search field.
+                StyledRect {
+                    width: parent.width; height: 46; radius: Style.rControl; color: Style.controlFill
+                    borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
+                    Text { anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
+                           text: "󰍉"; color: Colors.fgMuted; font.pixelSize: 18; font.family: Style.font }
+                    TextInput {
+                        id: search
+                        anchors { left: parent.left; leftMargin: 46; right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+                        color: Colors.fgBright; font.pixelSize: 16; font.family: Style.font; clip: true
+                        focus: true
+                        Keys.onDownPressed: { if (root.utilMode) root.utilIndex = Math.min(root.utilRows.length - 1, root.utilIndex + 1); else root.move(root.downStep) }
+                        Keys.onUpPressed:   { if (root.utilMode) root.utilIndex = Math.max(0, root.utilIndex - 1); else root.move(-root.downStep) }
+                        Keys.onLeftPressed:  e => { if (!root.utilMode && root.grid) root.move(-root.sideStep); else e.accepted = false }
+                        Keys.onRightPressed: e => { if (!root.utilMode && root.grid) root.move(root.sideStep);  else e.accepted = false }
+                        Keys.onReturnPressed: { if (root.utilMode) root.activateUtil(root.utilIndex); else root.launch(list.currentIndex) }
+                        Keys.onEnterPressed:  { if (root.utilMode) root.activateUtil(root.utilIndex); else root.launch(list.currentIndex) }
+                        Keys.onEscapePressed: UiState.launcherOpen = false
+                        // F1…Fn ARE the modes now — in rail order, which is what each button's
+                        // chip shows. The prefixes still parse if you type them, but nobody has to
+                        // learn "!v" to find the actions any more.
+                        Keys.onPressed: e => {
+                            // The board pages; Page Up/Down are what a paged surface is expected
+                            // to answer to (they do nothing in the windowed card, which scrolls).
+                            if (list.paged && (e.key === Qt.Key_PageDown || e.key === Qt.Key_PageUp)) {
+                                list.toPage(list.page + (e.key === Qt.Key_PageDown ? 1 : -1))
+                                // Land on the first cell of the page that is now up.
+                                list.currentIndex = Math.min(root.apps.length - 1,
+                                                             list.page * root.cols * list.rowsPerPage)
+                                e.accepted = true
+                                return
+                            }
+                            if (e.key < Qt.Key_F1 || e.key > Qt.Key_F12) return
+                            var bs = rail.buttons
+                            var i = e.key - Qt.Key_F1
+                            if (i >= bs.length) return
+                            root.pickMode(bs[i].key)
+                            e.accepted = true
+                        }
+                        Text { anchors.fill: parent; verticalAlignment: Text.AlignVCenter; visible: search.text === ""
+                               text: Wording.s("launcher.search"); color: Colors.fgMuted; font: search.font }
                     }
+                }
+
+                // Fullscreen has no rail beside the results — the same buttons ride here instead, so
+                // the big grid can switch modes and get back to the windowed card.
+                LauncherRail {
+                    id: fsRail
+                    visible: root.fs
+                    width:  parent.width
+                    height: root.fs ? 40 : 0
+                    vertical: false
+                    plate:    false            // the desktop behind the board is backdrop enough
+                    mon:  root.mon
+                    mode: root.mode
+                    fs:   root.fs
+                    onPicked: key => root.pickMode(key)
+                }
+
+                // The workspace overview — only on the full-page board, and only in that style.
+                // It sits between the mode strip and the apps, which is the GNOME order: search on
+                // top, the workspaces you can jump to, then everything you can start.
+                LauncherOverview {
+                    id: overview
+                    visible: root.fsOverview && root.mode === "apps"
+                    width:  parent.width
+                    height: visible ? content.wsH : 0
+                    mon:    root.mon
+                    // Layout coordinates of this monitor — window positions arrive in that space.
+                    screenX: root.screen ? root.screen.x : 0
+                    screenY: root.screen ? root.screen.y : 0
+                    screenW: root.screen ? root.screen.width  : root.width
+                    screenH: root.screen ? root.screen.height : root.height
+                    previews: VtlConfig.launcherFsWsLive
+                    active:   root.active && root.fsOverview
+                    // The rail already watches wallpapers.json for this monitor; one reader, so the
+                    // cards and the rail can never show different wallpapers.
+                    wallpaper: rail.wallPath
+                    onActed: UiState.launcherOpen = false
+                    onReleaseGrab: root.focusReleased = true
+                }
+
+                // "?" cheatsheet — logo + the query-prefix reference. Swaps in over the results area.
+                Flickable {
+                    width: parent.width; height: content.viewH
+                    visible: root.helpMode
+                    clip: true
+                    contentWidth: width
+                    contentHeight: help.implicitHeight
+                    boundsBehavior: Flickable.StopAtBounds
 
                     Column {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: Math.min(parent.width - 40, 420)
-                        spacing: 10
+                        id: help
+                        width: parent.width
+                        topPadding: 12
+                        spacing: 20
 
-                        Repeater {
-                            model: [
-                                { p: ">",  d: "Run a command" },
-                                { p: "!v", d: "Available Velumeron IPC calls (menu, notify centre, …)" },
-                                { p: "!k", d: "Current keybind cheatsheet" },
-                                { p: "!f", d: "Browse your files" },
-                            ]
-                            delegate: Row {
-                                required property var modelData
-                                width: parent.width
+                        Image {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            source: "file://" + root.vtlDir + "/assets/icons/vuture.png"
+                            width: 56; height: 56
+                            sourceSize.width: 112; sourceSize.height: 112
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true; mipmap: true; antialiasing: true
+                        }
+
+                        Column {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: Math.min(parent.width - 40, 420)
+                            spacing: 10
+
+                            Repeater {
+                                // Built from the rail's own button list, so the cheatsheet cannot
+                                // advertise a key the rail does not have — and it teaches the F-keys,
+                                // with the old prefix only as a footnote for people who knew it.
+                                model: rail.buttons.map(function (m, i) {
+                                    return { p: "F" + (i + 1),
+                                             d: m.label + " — " + m.hint
+                                                + (("" + m.prefix).trim() !== ""
+                                                   ? "  (or type " + ("" + m.prefix).trim() + ")" : "") }
+                                })
+                                delegate: Row {
+                                    required property var modelData
+                                    width: parent.width
+                                    spacing: 12
+                                    StyledRect {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: 40; height: 26; radius: Style.rControl
+                                        color: Style.controlFill
+                                        borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
+                                        Text { anchors.centerIn: parent; text: modelData.p; color: Colors.fgBright
+                                               font.pixelSize: 12; font.bold: true; font.family: Style.font }
+                                    }
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width - 52
+                                        text: modelData.d; color: Colors.fgMuted
+                                        font.pixelSize: 12; font.family: Style.font; wrapMode: Text.WordWrap
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // "cmd" / "ipc" / "keybind" / "files" — one flat list of selectable rows, driven by utilRows.
+                ListView {
+                    id: utilList
+                    width: parent.width; height: content.viewH
+                    visible: root.utilMode
+                    clip: true
+                    model: root.utilRows
+                    currentIndex: root.utilIndex
+                    highlightMoveDuration: 80
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    // Current folder, so you always know where you are without retracing clicks.
+                    header: Text {
+                        visible: root.mode === "files"
+                        width: utilList.width
+                        bottomPadding: 6
+                        text: root.filesDir
+                        color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
+                        elide: Text.ElideMiddle
+                    }
+
+                    delegate: Item {
+                        id: uRow
+                        required property var modelData
+                        required property int index
+                        readonly property bool preview: (uRow.modelData.preview || "") !== ""
+                        readonly property bool isDir:   !!uRow.modelData.dir
+                        width: utilList.width; height: root.mode === "files" ? 62 : 54
+
+                        StyledRect {
+                            anchors.fill: parent; anchors.margins: 0
+                            radius: Style.rControl
+                            // Folders also get a faint background tint (on top of their coloured badge) so
+                            // they read as a distinct group from files at a glance, not just up close.
+                            color: uRow.index === root.utilIndex ? Style.accent
+                                 : (uHov.containsMouse ? Style.controlHover
+                                    : (uRow.isDir ? Style.tint(Colors.bgActive, 0.10) : "transparent"))
+
+                            Row {
+                                anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: 12
+                                          verticalCenter: parent.verticalCenter }
                                 spacing: 12
+                                // Real preview for images/videos ("!f") — first-frame thumbnail for video,
+                                // shares the wallpaper picker's cache so nothing is generated twice.
+                                WallThumb {
+                                    visible: uRow.preview
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 44; height: 44
+                                    path: uRow.modelData.path || ""
+                                    name: uRow.modelData.label || ""
+                                }
                                 StyledRect {
+                                    visible: !uRow.preview
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: 40; height: 26; radius: Style.rControl
-                                    color: Style.controlFill
-                                    borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
-                                    Text { anchors.centerIn: parent; text: modelData.p; color: Colors.fgBright
-                                           font.pixelSize: 12; font.bold: true; font.family: Style.font }
+                                    // Folders get a solid accent badge so they read as "enter" targets at a
+                                    // glance instead of blending into the plain grey file chips next to them.
+                                    color: uRow.isDir ? Colors.bgActive : Style.controlFill
+                                    borderWidth: Style.controlBorderW
+                                    borderColor: uRow.isDir ? Colors.bgActive : Style.controlBorderColor
+                                    Text { anchors.centerIn: parent; text: uRow.modelData.chip
+                                           color: uRow.isDir ? Colors.bgPrimary : Colors.fgBright
+                                           font.pixelSize: 11; font.bold: true; font.family: Style.font }
                                 }
-                                Text {
+                                Column {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: parent.width - 52
-                                    text: modelData.d; color: Colors.fgMuted
-                                    font.pixelSize: 12; font.family: Style.font; wrapMode: Text.WordWrap
+                                    spacing: 1
+                                    Text { text: uRow.modelData.label; color: Colors.fgBright; font.pixelSize: 14
+                                           font.family: Style.font; elide: Text.ElideRight; width: parent.width }
+                                    Text { visible: (uRow.modelData.sub || "") !== ""; text: uRow.modelData.sub || ""
+                                           color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
+                                           elide: Text.ElideRight; width: parent.width }
                                 }
+                            }
+
+                            MouseArea {
+                                id: uHov; anchors.fill: parent; hoverEnabled: true
+                                onPositionChanged: e => { if (root.pointerMoved(uHov, e.x, e.y)) root.utilIndex = uRow.index }
+                                onClicked: { root.utilIndex = uRow.index; root.activateUtil(uRow.index) }
+                                // Let the list underneath do the scrolling — a MouseArea accepts
+                                // wheel events by default, and every row of this list is one.
+                                onWheel: e => e.accepted = false
                             }
                         }
                     }
-                }
-            }
-
-            // "cmd" / "ipc" / "keybind" / "files" — one flat list of selectable rows, driven by utilRows.
-            ListView {
-                id: utilList
-                width: parent.width; height: Math.max(0, parent.height - 56)
-                visible: root.utilMode
-                clip: true
-                model: root.utilRows
-                currentIndex: root.utilIndex
-                highlightMoveDuration: 80
-                boundsBehavior: Flickable.StopAtBounds
-
-                // Current folder, so you always know where you are without retracing clicks.
-                header: Text {
-                    visible: root.mode === "files"
-                    width: utilList.width
-                    bottomPadding: 6
-                    text: root.filesDir
-                    color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
-                    elide: Text.ElideMiddle
+                    Text { visible: root.utilRows.length === 0 && root.mode !== "cmd"; anchors.centerIn: parent
+                           text: root.mode === "files" && root.filesEntries.length === 0 ? "Empty folder" : Wording.s("launcher.noMatches")
+                           color: Colors.fgMuted; font.pixelSize: 13; font.family: Style.font }
+                    Text { visible: root.mode === "cmd" && root.utilRows.length === 0; anchors.centerIn: parent
+                           text: "Type a command…"; color: Colors.fgMuted; font.pixelSize: 13; font.family: Style.font }
                 }
 
-                delegate: Item {
-                    id: uRow
-                    required property var modelData
-                    required property int index
-                    readonly property bool preview: (uRow.modelData.preview || "") !== ""
-                    readonly property bool isDir:   !!uRow.modelData.dir
-                    width: utilList.width; height: root.mode === "files" ? 62 : 54
+                // Air between the strip / mode buttons and the icons (board only) — the Column's
+                // 10 px spacing is a gap, not a margin, and the board has room for a margin.
+                Item { width: 1; height: root.fs ? 18 : 0; visible: root.fs }
 
-                    StyledRect {
-                        anchors.fill: parent; anchors.margins: 0
-                        radius: Style.rControl
-                        // Folders also get a faint background tint (on top of their coloured badge) so
-                        // they read as a distinct group from files at a glance, not just up close.
-                        color: uRow.index === root.utilIndex ? Style.accent
-                             : (uHov.containsMouse ? Style.controlHover
-                                : (uRow.isDir ? Style.tint(Colors.bgActive, 0.10) : "transparent"))
+                // Results — one GridView drives both list (cols = 1) and grid (cols > 1) layouts.
+                GridView {
+                    id: list
+                    // Air down both sides of the board — the icons are the content, the screen
+                    // edge is not a margin. Zero in the windowed card, which has its own padding.
+                    readonly property int gpad: root.fs ? 40 : 0
+                    x: list.gpad
+                    width: parent.width - 2 * list.gpad
+                    // WHOLE ROWS only on the board. A view one-and-a-bit rows too tall leaves the
+                    // next row peeking in at the bottom, and hovering that row made the view
+                    // scroll to reveal it — which is the entries shifting under the cursor.
+                    height: list.paged ? list.rowsPerPage * cellHeight : content.viewH
+                    visible: root.mode === "apps"
+                    clip: true
+                    model: root.apps
+                    cellWidth:  Math.floor(width / root.cols)
+                    cellHeight: root.cellH
+                    boundsBehavior: Flickable.StopAtBounds
+                    highlightMoveDuration: 80
 
-                        Row {
-                            anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: 12
-                                      verticalCenter: parent.verticalCenter }
-                            spacing: 12
-                            // Real preview for images/videos ("!f") — first-frame thumbnail for video,
-                            // shares the wallpaper picker's cache so nothing is generated twice.
-                            WallThumb {
-                                visible: uRow.preview
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 44; height: 44
-                                path: uRow.modelData.path || ""
-                                name: uRow.modelData.label || ""
-                            }
-                            StyledRect {
-                                visible: !uRow.preview
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 40; height: 26; radius: Style.rControl
-                                // Folders get a solid accent badge so they read as "enter" targets at a
-                                // glance instead of blending into the plain grey file chips next to them.
-                                color: uRow.isDir ? Colors.bgActive : Style.controlFill
-                                borderWidth: Style.controlBorderW
-                                borderColor: uRow.isDir ? Colors.bgActive : Style.controlBorderColor
-                                Text { anchors.centerIn: parent; text: uRow.modelData.chip
-                                       color: uRow.isDir ? Colors.bgPrimary : Colors.fgBright
-                                       font.pixelSize: 11; font.bold: true; font.family: Style.font }
-                            }
-                            Column {
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: parent.width - 52
-                                spacing: 1
-                                Text { text: uRow.modelData.label; color: Colors.fgBright; font.pixelSize: 14
-                                       font.family: Style.font; elide: Text.ElideRight; width: parent.width }
-                                Text { visible: (uRow.modelData.sub || "") !== ""; text: uRow.modelData.sub || ""
-                                       color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
-                                       elide: Text.ElideRight; width: parent.width }
-                            }
-                        }
-
-                        MouseArea {
-                            id: uHov; anchors.fill: parent; hoverEnabled: true
-                            onPositionChanged: e => { if (root.pointerMoved(uHov, e.x, e.y)) root.utilIndex = uRow.index }
-                            onClicked: { root.utilIndex = uRow.index; root.activateUtil(uRow.index) }
-                        }
+                    // ── Paging (full-page board only) ───────────────────────────────────────
+                    // The board pages SIDEWAYS. The grid itself never moves: the same rows by
+                    // columns on every page, and the wheel, a drag or a dot moves one whole page
+                    // across. The windowed card keeps its ordinary vertical scrolling; a short
+                    // list has nothing to page through.
+                    //
+                    // Sideways paging means the view scrolls horizontally, which in a GridView
+                    // means it fills its COLUMNS downward — the reading order is put back by the
+                    // page-ordered model (root.apps), which also pads the last page so the content
+                    // is an exact number of pages wide.
+                    readonly property bool paged: root.fs
+                    flow: list.paged ? GridView.FlowTopToBottom : GridView.FlowLeftToRight
+                    readonly property int rowsPerPage: Math.max(1, Math.floor(content.viewH / cellHeight))
+                    readonly property int pageW: Math.max(1, root.cols * cellWidth)
+                    readonly property int pages: Math.max(1, Math.ceil(list.count / (root.cols * list.rowsPerPage)))
+                    readonly property real maxX: Math.max(0, contentWidth - width)
+                    property int page: 0
+                    snapMode: list.paged ? GridView.SnapToRow : GridView.NoSnap
+                    onPageChanged:  if (list.paged) contentX = Math.min(list.page * list.pageW, list.maxX)
+                    onPagesChanged: if (list.page > list.pages - 1) list.page = list.pages - 1
+                    // Never while the finger is on it: an animation on contentX during a drag
+                    // fights the drag. Only the programmatic page changes are animated.
+                    Behavior on contentX {
+                        enabled: list.paged && !list.moving
+                        NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
                     }
-                }
-                Text { visible: root.utilRows.length === 0 && root.mode !== "cmd"; anchors.centerIn: parent
-                       text: root.mode === "files" && root.filesEntries.length === 0 ? "Empty folder" : Wording.s("launcher.noMatches")
-                       color: Colors.fgMuted; font.pixelSize: 13; font.family: Style.font }
-                Text { visible: root.mode === "cmd" && root.utilRows.length === 0; anchors.centerIn: parent
-                       text: "Type a command…"; color: Colors.fgMuted; font.pixelSize: 13; font.family: Style.font }
-            }
+                    // A drag/flick is free while it lasts and settles onto the nearest page.
+                    onMovementEnded: if (list.paged) list.toPage(Math.round(contentX / list.pageW))
+                    function toPage(p) {
+                        var t = Math.max(0, Math.min(list.pages - 1, p))
+                        if (t === list.page) contentX = Math.min(t * list.pageW, list.maxX)   // re-settle
+                        else list.page = t
+                    }
+                    // Keep the keyboard selection on screen: arrows move the index, the page
+                    // follows it (the windowed card positions the view instead — see root.move).
+                    function pageFor(i) { return Math.floor(i / Math.max(1, root.cols * list.rowsPerPage)) }
+                    // A wheel notch is one page. Touchpads send many small deltas, so they are
+                    // accumulated to a notch's worth (120) before the page turns — otherwise one
+                    // two-finger flick would run through the whole board.
+                    //
+                    // A FUNCTION, not just a handler: every app cell carries a MouseArea, a
+                    // MouseArea accepts wheel events, and an accepted event never reaches a
+                    // handler further up — so the wheel worked only over the gaps between the
+                    // icons. The cells forward here (see the delegate's MouseArea).
+                    property real _wheelAcc: 0
+                    function wheelStep(dy, dx) {
+                        if (!list.paged) return
+                        list._wheelAcc += (dy !== 0 ? dy : (dx || 0))
+                        if (Math.abs(list._wheelAcc) < 120) return
+                        list.toPage(list.page + (list._wheelAcc < 0 ? 1 : -1))
+                        list._wheelAcc = 0
+                    }
+                    WheelHandler {
+                        enabled: list.paged
+                        onWheel: e => list.wheelStep(e.angleDelta.y, e.angleDelta.x)
+                    }
 
-            // Results — one GridView drives both list (cols = 1) and grid (cols > 1) layouts.
-            GridView {
-                id: list
-                width: parent.width; height: Math.max(0, parent.height - 56)
-                visible: root.mode === "apps"
-                clip: true
-                model: root.filtered
-                cellWidth:  Math.floor(width / root.cols)
-                cellHeight: root.cellH
-                boundsBehavior: Flickable.StopAtBounds
-                highlightMoveDuration: 80
+                    delegate: Item {
+                        id: row
+                        required property var modelData
+                        required property int index
+                        width: list.cellWidth; height: list.cellHeight
+                        // The board's last page is padded with empty cells (root.apps) so every
+                        // page is the same grid; those cells draw nothing and take no input.
+                        visible: row.modelData !== null
+                        enabled: row.modelData !== null
 
-                delegate: Item {
-                    id: row
-                    required property var modelData
-                    required property int index
-                    width: list.cellWidth; height: list.cellHeight
+                        StyledRect {
+                            anchors.fill: parent; anchors.margins: root.grid ? 8 : 0
+                            radius: Style.rControl
+                            // On the fullscreen board the selection is a SQUARE behind the icon
+                            // (drawn inside gIco below), not this slab: a cell there is three times
+                            // as wide as it is tall, so filling it paints a long rectangle around a
+                            // small icon and the whole page reads as a colour grid rather than apps.
+                            color: root.fs ? "transparent"
+                                 : row.index === list.currentIndex ? Style.accent
+                                 : (rHov.containsMouse ? Style.controlHover : "transparent")
 
-                    StyledRect {
-                        anchors.fill: parent; anchors.margins: root.grid ? 4 : 0
-                        radius: Style.rControl
-                        color: row.index === list.currentIndex ? Style.accent
-                             : (rHov.containsMouse ? Style.controlHover : "transparent")
-
-                        // List layout — icon left, name + comment.
-                        Row {
-                            visible: !root.grid
-                            anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: 12
-                                      verticalCenter: parent.verticalCenter }
-                            spacing: 12
-                            Item {
-                                id: lIco
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 34; height: 34
-                                // "" when the app's icon doesn't resolve in the active theme, so we
-                                // draw a neutral monogram instead of the theme's missing-icon placeholder.
-                                readonly property string ic: Quickshell.iconPath(row.modelData.icon, true)
-                                Image {
-                                    anchors.fill: parent; visible: lIco.ic !== ""
-                                    source: lIco.ic
-                                    sourceSize.width: 64; sourceSize.height: 64; asynchronous: true
-                                }
-                                Rectangle {
-                                    anchors.fill: parent; visible: lIco.ic === ""
-                                    radius: Style.rControl; color: Colors.bgElement
-                                    border.width: Style.controlBorderW; border.color: Style.controlBorderColor
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: (row.modelData.name || "?").charAt(0).toUpperCase()
-                                        color: Colors.fgMuted; font.pixelSize: 16; font.bold: true; font.family: Style.font
+                            // List layout — icon left, name + comment.
+                            Row {
+                                visible: !root.grid
+                                anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: 12
+                                          verticalCenter: parent.verticalCenter }
+                                spacing: 12
+                                Item {
+                                    id: lIco
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 34; height: 34
+                                    // "" when the app's icon doesn't resolve in the active theme, so we
+                                    // draw a neutral monogram instead of the theme's missing-icon placeholder.
+                                    readonly property string ic: row.modelData ? Quickshell.iconPath(row.modelData.icon, true) : ""
+                                    Image {
+                                        anchors.fill: parent; visible: lIco.ic !== ""
+                                        source: lIco.ic
+                                        sourceSize.width: 64; sourceSize.height: 64; asynchronous: true
+                                    }
+                                    Rectangle {
+                                        anchors.fill: parent; visible: lIco.ic === ""
+                                        radius: Style.rControl; color: Colors.bgElement
+                                        border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: ((row.modelData ? row.modelData.name : "") || "?").charAt(0).toUpperCase()
+                                            color: Colors.fgMuted; font.pixelSize: 16; font.bold: true; font.family: Style.font
+                                        }
                                     }
                                 }
-                            }
-                            Column {
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: parent.width - 46
-                                spacing: 1
-                                Text { text: row.modelData.name || ""; color: Colors.fgBright; font.pixelSize: 14
-                                       font.family: Style.font; elide: Text.ElideRight; width: parent.width }
-                                Text { visible: (row.modelData.comment || "") !== ""; text: row.modelData.comment || ""
-                                       color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
-                                       elide: Text.ElideRight; width: parent.width }
-                            }
-                        }
-
-                        // Grid layout — icon top, name below.
-                        Column {
-                            visible: root.grid
-                            anchors.centerIn: parent
-                            width: parent.width - 12
-                            spacing: 6
-                            Item {
-                                id: gIco
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                width: 44; height: 44
-                                readonly property string ic: Quickshell.iconPath(row.modelData.icon, true)
-                                Image {
-                                    anchors.fill: parent; visible: gIco.ic !== ""
-                                    source: gIco.ic
-                                    sourceSize.width: 96; sourceSize.height: 96; asynchronous: true
+                                Column {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: parent.width - 46
+                                    spacing: 1
+                                    Text { text: (row.modelData ? row.modelData.name : "") || ""; color: Colors.fgBright; font.pixelSize: 14
+                                           font.family: Style.font; elide: Text.ElideRight; width: parent.width }
+                                    Text { visible: !!(row.modelData && row.modelData.comment); text: (row.modelData ? row.modelData.comment : "") || ""
+                                           color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
+                                           elide: Text.ElideRight; width: parent.width }
                                 }
-                                Rectangle {
-                                    anchors.fill: parent; visible: gIco.ic === ""
-                                    radius: Style.rControl; color: Colors.bgElement
-                                    border.width: Style.controlBorderW; border.color: Style.controlBorderColor
-                                    Text {
+                            }
+
+                            // Grid layout — icon top, name below.
+                            Column {
+                                visible: root.grid
+                                anchors.centerIn: parent
+                                width: parent.width - 12
+                                spacing: 6
+                                Item {
+                                    id: gIco
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    // The fullscreen grid is the macOS-style board, so its icon size
+                                    // is its own setting; the windowed grid keeps the compact 44.
+                                    readonly property int edge: root.fs ? Math.max(32, VtlConfig.launcherFsIcon) : 44
+                                    width: gIco.edge; height: gIco.edge
+                                    readonly property string ic: row.modelData ? Quickshell.iconPath(row.modelData.icon, true) : ""
+                                    // The board's selection: a square around the icon, sized off the
+                                    // icon itself so it stays square whatever the cell does. Behind
+                                    // the icon (z: -1) and clear of the label underneath.
+                                    StyledRect {
+                                        visible: root.fs
+                                        z: -1
                                         anchors.centerIn: parent
-                                        text: (row.modelData.name || "?").charAt(0).toUpperCase()
-                                        color: Colors.fgMuted; font.pixelSize: 20; font.bold: true; font.family: Style.font
+                                        width:  gIco.edge + 30; height: gIco.edge + 30
+                                        radius: Style.rControl
+                                        color: row.index === list.currentIndex ? Style.accent
+                                             : (rHov.containsMouse ? Style.controlHover : "transparent")
+                                    }
+                                    Image {
+                                        anchors.fill: parent; visible: gIco.ic !== ""
+                                        source: gIco.ic
+                                        sourceSize.width: 2 * gIco.edge; sourceSize.height: 2 * gIco.edge; asynchronous: true
+                                    }
+                                    Rectangle {
+                                        anchors.fill: parent; visible: gIco.ic === ""
+                                        radius: Style.rControl; color: Colors.bgElement
+                                        border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: ((row.modelData ? row.modelData.name : "") || "?").charAt(0).toUpperCase()
+                                            color: Colors.fgMuted; font.pixelSize: Math.round(gIco.edge * 0.45)
+                                            font.bold: true; font.family: Style.font
+                                        }
                                     }
                                 }
+                                Text { anchors.horizontalCenter: parent.horizontalCenter
+                                       visible: !root.fs || VtlConfig.launcherFsLabels
+                                       text: (row.modelData ? row.modelData.name : "") || ""; color: Colors.fgBright
+                                       font.pixelSize: root.fs ? 13 : 12
+                                       font.family: Style.font; elide: Text.ElideRight; width: parent.width
+                                       horizontalAlignment: Text.AlignHCenter }
                             }
-                            Text { anchors.horizontalCenter: parent.horizontalCenter
-                                   text: row.modelData.name || ""; color: Colors.fgBright; font.pixelSize: 12
-                                   font.family: Style.font; elide: Text.ElideRight; width: parent.width
-                                   horizontalAlignment: Text.AlignHCenter }
-                        }
 
-                        MouseArea {
-                            id: rHov; anchors.fill: parent; hoverEnabled: true
-                            onPositionChanged: e => { if (root.pointerMoved(rHov, e.x, e.y)) list.currentIndex = row.index }
-                            onClicked: { list.currentIndex = row.index; root.launch(row.index) }
+                            MouseArea {
+                                id: rHov; anchors.fill: parent; hoverEnabled: true
+                                onPositionChanged: e => { if (root.pointerMoved(rHov, e.x, e.y)) list.currentIndex = row.index }
+                                onClicked: { list.currentIndex = row.index; root.launch(row.index) }
+                                // Over an icon is where the wheel actually is most of the time.
+                                onWheel: e => { if (list.paged) list.wheelStep(e.angleDelta.y, e.angleDelta.x); else e.accepted = false }
+                            }
                         }
                     }
+                    Text { visible: root.filtered.length === 0; anchors.centerIn: parent
+                           text: Wording.s("launcher.noMatches"); color: Colors.fgMuted; font.pixelSize: 13; font.family: Style.font }
                 }
-                Text { visible: root.filtered.length === 0; anchors.centerIn: parent
-                       text: Wording.s("launcher.noMatches"); color: Colors.fgMuted; font.pixelSize: 13; font.family: Style.font }
+
+            }
+
+            // Page dots — the board's whole scrollbar. Pinned to the BOTTOM of the page rather
+            // than hung under the grid: it is the page's indicator, so it belongs at the page's
+            // edge, and the grid above it is free to be as tall as its rows need. (The height it
+            // costs is reserved in content.viewH, which is why it never overlaps the icons.)
+            Row {
+                id: pageDots
+                visible: root.fs && root.mode === "apps"
+                anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
+                height: 16
+                spacing: 9
+                Repeater {
+                    model: list.pages
+                    delegate: Rectangle {
+                        required property int index
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 9; height: 9; radius: 5
+                        color: index === list.page ? Style.accent : Style.tint(Colors.fgMuted, 0.35)
+                        MouseArea { anchors.fill: parent; onClicked: list.toPage(index) }
+                    }
+                }
             }
         }
     }

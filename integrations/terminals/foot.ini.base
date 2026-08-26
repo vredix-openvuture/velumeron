@@ -1,0 +1,21 @@
+# Velumeron — foot.
+#
+# GENERATED. The sections here are shipped with velumeron; [colors] below is rendered from the live
+# wallust palette on every theme change. Your own foot.ini was moved to foot.ini.velumeron-bak when
+# you switched this on and comes back byte-for-byte when you switch it off
+# (Settings → Integrations → Terminal).
+#
+# [colors] MUST stay last — an INI key belongs to whatever section it stands under. foot writes its
+# colours WITHOUT a leading '#', and the window transparency lives in [colors] as `alpha`.
+
+[main]
+pad=8x8
+selection-target=clipboard
+
+[bell]
+urgent=no
+
+[cursor]
+blink=yes
+
+@VELUMERON_COLORS@

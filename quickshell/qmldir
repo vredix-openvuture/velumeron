@@ -15,6 +15,8 @@ singleton Hyprwindows 1.0 Hyprwindows.qml
 singleton VpnService 1.0 VpnService.qml
 singleton ThumbQueue 1.0 ThumbQueue.qml
 singleton CavaService 1.0 CavaService.qml
+singleton CaffeineService 1.0 CaffeineService.qml
+singleton IdleService 1.0 IdleService.qml
 singleton SoundService 1.0 SoundService.qml
 singleton LockState 1.0 lock/LockState.qml
 singleton LockPresets 1.0 LockPresets.qml
@@ -23,6 +25,7 @@ singleton LockPresets 1.0 LockPresets.qml
 StyledRect  1.0 common/StyledRect.qml
 Card        1.0 common/Card.qml
 CardLabel   1.0 common/CardLabel.qml
+SubGroup    1.0 common/SubGroup.qml
 FieldLabel  1.0 common/FieldLabel.qml
 SubLabel    1.0 common/SubLabel.qml
 MarqueeText 1.0 common/MarqueeText.qml
@@ -60,10 +63,16 @@ StatCell    1.0 common/StatCell.qml
 SectionRule 1.0 common/SectionRule.qml
 Plate       1.0 common/Plate.qml
 VinylArt    1.0 common/VinylArt.qml
+StatusDot   1.0 common/StatusDot.qml
 
-# Native wallpaper engine (per-monitor background surface)
+# Native wallpaper engine (per-monitor background surface) + the picker's shared catalogue and its
+# full-screen shape (the bar-docked shape lives in osd/WallpaperQuick.qml)
 WallpaperWindow   1.0 WallpaperWindow.qml
+WallpaperFeed     1.0 wallpaper/WallpaperFeed.qml
+WallpaperGallery  1.0 wallpaper/WallpaperGallery.qml
 Launcher          1.0 launcher/Launcher.qml
+LauncherRail      1.0 launcher/LauncherRail.qml
+LauncherOverview  1.0 launcher/LauncherOverview.qml
 HotCorners        1.0 corners/HotCorners.qml
 WindowSwitcher    1.0 windowswitcher/WindowSwitcher.qml
 LayoutQuickSwitcher 1.0 layoutswitcher/LayoutQuickSwitcher.qml
@@ -73,6 +82,8 @@ SessionOverlay    1.0 session/SessionOverlay.qml
 # Native lockscreen (replaces hyprlock) — WlSessionLock + PAM
 Lock              1.0 lock/Lock.qml
 LockContent       1.0 lock/LockContent.qml
+Screensaver       1.0 screensaver/Screensaver.qml
+ScreensaverView   1.0 screensaver/ScreensaverView.qml
 
 # Bar (dynamic, multi-edge)
 Bar               1.0 bar/Bar.qml
@@ -120,6 +131,7 @@ TaskEdit                1.0 calendar/TaskEdit.qml
 DatePicker              1.0 calendar/DatePicker.qml
 CalendarMenu            1.0 calendar/CalendarMenu.qml
 CalendarSection         1.0 settings/calendar/CalendarSection.qml
+ScreensaverSection      1.0 settings/screensaver/ScreensaverSection.qml
 LayoutsSection          1.0 settings/layouts/LayoutsSection.qml
 KeybindsSection         1.0 settings/keybinds/KeybindsSection.qml
 
@@ -219,6 +231,7 @@ LockEditor           1.0 settings/lockscreen/LockEditor.qml
 BootSection          1.0 settings/boot/BootSection.qml
 AutostartSection     1.0 settings/autostart/AutostartSection.qml
 IntegrationsSection  1.0 settings/integrations/IntegrationsSection.qml
+OpenRgbSection       1.0 settings/openrgb/OpenRgbSection.qml
 WorkspacesSection    1.0 settings/workspaces/WorkspacesSection.qml
 WorkspaceRuleEditor  1.0 settings/workspaces/WorkspaceRuleEditor.qml
 MonitorsSection      1.0 settings/monitors/MonitorsSection.qml
@@ -236,5 +249,6 @@ ChangelogPage        1.0 onboarding/pages/ChangelogPage.qml
 QuickAccessSection   1.0 settings/quickaccess/QuickAccessSection.qml
 PeripheralsSection   1.0 settings/peripherals/PeripheralsSection.qml
 WindowRulesSection   1.0 settings/windowrules/WindowRulesSection.qml
+DefaultAppsSection   1.0 settings/defaults/DefaultAppsSection.qml
 WallpaperFolders     1.0 settings/theme/WallpaperFolders.qml
 WallpaperSets        1.0 settings/theme/WallpaperSets.qml

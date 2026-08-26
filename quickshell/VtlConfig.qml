@@ -142,6 +142,18 @@ Item {
                                           || bootComponentEnabled("grub")
                                           || bootComponentEnabled("sddm")
 
+    // ── OpenRGB (Settings → Integrations → Hardware) ──────────────────────────
+    // Off by default and off on every machine that never asks for it: with the switch off there is
+    // no OpenRGB page in the menu and the session starts nothing. Switched on, the page appears and
+    // velumeron-services.sh applies `openrgbProfile` at login — profiles themselves stay OpenRGB's
+    // to author, which is right, because it is the tool that can draw your keyboard.
+    readonly property bool   openrgbEnabled:   _data.openrgb_enabled ?? false
+    readonly property string openrgbProfile:   _data.openrgb_profile ?? ""
+    // The ARGB zone-size workaround (see openrgb-restore.sh). Empty board ⇒ auto: resize only the
+    // headers that enumerate as ZERO LEDs, which is always the bug and never a deliberate size.
+    readonly property string openrgbZoneBoard: _data.openrgb_zone_board ?? ""
+    readonly property int    openrgbZoneSize:  _data.openrgb_zone_size  ?? 15
+
     // The raw enable map, for UIs that clone-and-write it (Settings → Features).
     readonly property var componentEnabledMap: (_data.component_enabled && typeof _data.component_enabled === "object") ? _data.component_enabled : ({})
 
@@ -259,7 +271,14 @@ Item {
     // interrupted first-run init) otherwise boot into a surprise top+left frame.
     function barEdgesFor(mon)         { return _bv("bar_edges", mon)         ?? ["top"] }
     function barThicknessFor(mon)     { return _bv("bar_thickness", mon)     ?? 36 }
+    // The gap a floating bar keeps to the screen edge it FACES (dock is flush there, frame has no
+    // gap at all), so it is also what every docked surface has to clear to touch the bar's face.
     function barFloatGapFor(mon)      { return _bv("bar_float_gap", mon)     ?? 8 }
+    // The gap at the two ENDS of a dock/float strip — the edges it is not anchored to. ONE value
+    // for both ends by design: a strip that keeps 20 px on the left and 8 on the right is not a
+    // look, it is a mistake, so the two ends of an axis always move together. Falls back to the
+    // face gap, so a configuration written before this key keeps the uniform inset it had.
+    function barSideGapFor(mon)       { return _bv("bar_side_gap", mon)      ?? barFloatGapFor(mon) }
     function barInnerRadiusFor(mon)   { return _bv("bar_inner_radius", mon)  ?? 16 }
     function barFloatingFor(mon)      { return barModeFor(mon) === "float" }
     // A REAL fullscreen window covers the bar (it lives on the Bottom layer). With peek on, the bar
@@ -273,11 +292,32 @@ Item {
     function barModuleBgOpacityFor(mon){return _bv("bar_module_bg_opacity", mon) ?? 0.22 }
     function barIconSizeFor(mon)      { return _bv("bar_icon_size", mon)     ?? 18 }
     function barFontSizeFor(mon)      { return _bv("bar_font_size", mon)     ?? 13 }
-    // Corner-menu size as a % of the monitor (so vertical monitors can go wider).
-    // menu_width_pct / menu_height_pct are GONE. The settings menu is sized by the
-    // dashboard raster instead (Style.dashGridW/H + Style.dashChromeH): a menu size the
-    // user set independently of the cell raster could never divide evenly, and the
-    // leftover showed up as dead space under the last row. Rows and columns now decide.
+    // ── Settings-menu size, per placement, as a % of the monitor ──────────────────────────────
+    // -1 = Auto, and the two Autos mean different things because the two panels are different
+    // animals: docked = exactly as big as the dashboard page needs (Style.dashGrid* + chrome),
+    // floating = 74% of the monitor, which is what the detached window always was.
+    //
+    // The single menu_width_pct / menu_height_pct pair this replaces was dropped because a size the
+    // user set independently of the cell raster left a remainder under the last dashboard row. That
+    // is now solved the other way round: when a size IS set here, the dashboard's rows divide the
+    // space the menu offers (UiState.dashCellH), so nothing is left over and nothing is cut off —
+    // the raster no longer dictates the menu, and the menu no longer breaks the raster.
+    // Per monitor, because a percentage is a share of the screen it lands on: 30% of a 2560 wide
+    // desk monitor and 30% of a 1080 wide portrait one are not the same panel at all. The top-level
+    // key is the value for every screen; menu_monitors.<name> overrides one of them. No enable
+    // flag — an override exists or it does not.
+    readonly property var menuMonitors: (_data.menu_monitors && typeof _data.menu_monitors === "object")
+                                        ? _data.menu_monitors : ({})
+    function menuPctFor(key, mon) {
+        var m = mon ? menuMonitors[mon] : null
+        if (m && m[key] !== undefined && m[key] !== null) return m[key]
+        var v = _data[key]
+        return (v === undefined || v === null) ? -1 : v
+    }
+    function menuDockWidthPctFor(mon)   { return menuPctFor("menu_dock_width_pct", mon) }
+    function menuDockHeightPctFor(mon)  { return menuPctFor("menu_dock_height_pct", mon) }
+    function menuFloatWidthPctFor(mon)  { return menuPctFor("menu_float_width_pct", mon) }
+    function menuFloatHeightPctFor(mon) { return menuPctFor("menu_float_height_pct", mon) }
 
     // ── Dashboard (the settings menu's home page) ─────────────────────────────
     // A cell raster, not a fixed stack: every module carries its size in GRID CELLS (w columns ×
@@ -335,9 +375,31 @@ Item {
     }
     function edgeActiveFor(edge, mon) { return activeEdgesFor(mon).indexOf(edge) >= 0 }
 
-    // Per-edge module model, stored separately per bar mode so dock / float / frame each keep
-    // their own arrangement (switching modes never disturbs the others):
-    //   bar_modules_m.<mode>.<edge>.<group>  (per-monitor override → global)
+    // The key an arrangement is stored under. Dock and float carry ONE bar, so the mode is enough
+    // (which edge it is on lives inside the map). FRAME carries several at once, and a set of bars
+    // is a different desk from any other set: top alone wants a full bar, top+left wants the same
+    // modules split across two. So a frame layout is keyed by the exact SET of edges, sorted —
+    // "top+left" and "left+top" are the same desk. Adding an edge therefore lands on a blank
+    // arrangement, and taking it away again brings the old one straight back.
+    function barLayoutKeyOf(mode, edges) {
+        if (mode !== "frame") return mode
+        var es = (edges || []).slice().sort()
+        return es.length ? "frame:" + es.join("+") : "frame"
+    }
+    function barLayoutKey(mode, mon) { return barLayoutKeyOf(mode, barEdgesFor(mon)) }
+    // The raw arrangement store, so the settings page can write a layout through SettingsStore
+    // (clone → change → set) instead of a second writer of its own. See BarSection.saveModules.
+    readonly property var barModulesMap: (_data.bar_modules_m && typeof _data.bar_modules_m === "object")
+                                         ? _data.bar_modules_m : ({})
+    function barHasLayout(key, mon) {
+        var o = _monObj(mon)
+        var store = (o && o.bar_modules_m) ? o.bar_modules_m : _data.bar_modules_m
+        return !!(store && store[key])
+    }
+
+    // Per-edge module model, stored separately per layout key so dock / float / every frame edge
+    // combination keeps its own arrangement (switching never disturbs the others):
+    //   bar_modules_m.<layoutKey>.<edge>.<group>  (per-monitor override → global)
     // Falls back to the old flat bar_modules.<edge>.<group>, then to the legacy top/sidebar keys.
     function barModulesForMode(edge, group, mon, mode) {
         // Non-main monitors (multi-monitor) get the minimal bar on their primary edge only:
@@ -352,8 +414,23 @@ Item {
         }
         var o = _monObj(mon)
         var store = (o && o.bar_modules_m) ? o.bar_modules_m : _data.bar_modules_m
-        var m = (store && store[mode]) ? store[mode] : null
+        var key = barLayoutKey(mode, mon)
+        var m = (store && store[key]) ? store[key] : null
+        // A configuration written before frame layouts were split per edge combination kept ONE
+        // `frame` map. It stands in until the combination it belongs to is saved under its own key
+        // (BarSection does that the moment the edge set changes) — otherwise upgrading would look
+        // like the bar had been emptied.
+        if (!m && mode === "frame" && store && store["frame"]) m = store["frame"]
         if (m && m[edge] && Array.isArray(m[edge][group])) return m[edge][group]
+        // The pre-store maps below are a MIGRATION fallback, not a default. Once this configuration
+        // holds any arrangement for THIS mode, a layout with no entry is an empty layout — that is
+        // what makes a new frame edge combination start blank instead of inheriting whatever the
+        // old flat map happens to carry. A config that only ever saved, say, a dock arrangement
+        // still gets its legacy map when it switches to frame.
+        var family = false
+        for (var lk in (store || {}))
+            if (lk === mode || lk.indexOf(mode + ":") === 0) { family = true; break }
+        if (family) return []
         var flat = (o && o.bar_modules) ? o.bar_modules : _data.bar_modules
         if (flat && flat[edge] && Array.isArray(flat[edge][group])) return flat[edge][group]
         if (!o) {
@@ -403,28 +480,39 @@ Item {
              + (barFloatingFor(mon) ? barFloatGapFor(mon) : 0)
     }
 
+    // How far a panel docked to `edge` may reach ALONG that edge: the stretch the strip actually
+    // covers, as [start, end] in screen coordinates. A frame runs corner to corner; a dock or float
+    // stops short of both ends by the side gap, and a panel that ignored that hung off the end of
+    // the very bar it grows out of. `len` is the screen size along that edge.
+    function barSpanFor(edge, mon, len) {
+        if (barModeFor(mon) === "frame") return [0, len]
+        var s = Math.min(barSideGapFor(mon), Math.max(0, len / 2 - 40))
+        return [s, len - s]
+    }
+
     // ── Bar footprint geometry (shared by Bar.qml's own strips + the overlay interaction-lock
     // input masks) ────────────────────────────────────────────────────────────────────────────
     // One bar strip's rect [x, y, w, h] on screen (sw × sh). Mirrors Bar.stripRect: dock = flush
-    // to the edge inset by `air` at the ends; float = inset by the gap on all sides; frame = flush
-    // with per-edge (possibly half) thickness. Inactive edge → [0,0,0,0].
+    // to the edge, inset by the side gap at the two ends; float = inset by the face gap on the edge
+    // it faces and by the side gap at its ends; frame = flush with per-edge (possibly half)
+    // thickness. Inactive edge → [0,0,0,0].
     function barStripRect(e, mon, sw, sh) {
         if (!edgeActiveFor(e, mon)) return [0, 0, 0, 0]
         var floating = barFloatingFor(mon)
         var dock     = barModeFor(mon) === "dock"
         var gap      = floating ? barFloatGapFor(mon) : 0
-        var air      = dock     ? barFloatGapFor(mon) : 0
+        var side     = (floating || dock) ? barSideGapFor(mon) : 0
         var t        = floating ? barThicknessFor(mon) : edgeThicknessFor(e, mon)
         if (dock) {
-            if (e === "bottom") return [air, sh - t, sw - 2 * air, t]
-            if (e === "left")   return [0, air, t, sh - 2 * air]
-            if (e === "right")  return [sw - t, air, t, sh - 2 * air]
-            return [air, 0, sw - 2 * air, t]   // top
+            if (e === "bottom") return [side, sh - t, sw - 2 * side, t]
+            if (e === "left")   return [0, side, t, sh - 2 * side]
+            if (e === "right")  return [sw - t, side, t, sh - 2 * side]
+            return [side, 0, sw - 2 * side, t]   // top
         }
-        if (e === "bottom") return [gap, sh - gap - t, sw - 2 * gap, t]
-        if (e === "left")   return [gap, gap, t, sh - 2 * gap]
-        if (e === "right")  return [sw - gap - t, gap, t, sh - 2 * gap]
-        return [gap, gap, sw - 2 * gap, t]   // top
+        if (e === "bottom") return [side, sh - gap - t, sw - 2 * side, t]
+        if (e === "left")   return [gap, side, t, sh - 2 * side]
+        if (e === "right")  return [sw - gap - t, side, t, sh - 2 * side]
+        return [side, gap, sw - 2 * side, t]   // top
     }
 
     // Inner content area [x, y, w, h] = the full screen minus the bar frame. Overlays grab input
@@ -447,6 +535,7 @@ Item {
     readonly property var    barEdges:       barEdgesFor("")
     readonly property int    barThickness:   barThicknessFor("")
     readonly property int    barFloatGap:    barFloatGapFor("")
+    readonly property int    barSideGap:     barSideGapFor("")
     readonly property int    barInnerRadius: barInnerRadiusFor("")
     readonly property bool   barFloating:    barFloatingFor("")
     readonly property var    activeEdges:    activeEdgesFor("")
@@ -539,10 +628,41 @@ Item {
     readonly property int    notifyCenterHeight: _data.notify_center_height ?? 0     // px, 0 = auto-fill
 
     // ── Lockscreen (Settings → Lockscreen) ────────────────────────────────────
-    // The native quickshell lock (lock/Lock.qml) reads these live. Defaults = the shipped "mirobo"
+    // ── Idle staging: screensaver → lock → suspend ──────────────────────────────────────────────
+    // Compositor-INDEPENDENT. Driven by IdleService's IdleMonitor (the ext-idle-notify-v1 protocol),
+    // not by hypridle: velumeron is meant to coexist with whatever Wayland compositor is running,
+    // and an idle chain that only works under Hyprland is exactly the kind of coupling we are
+    // removing. Each value is an absolute timeout measured from the last input, so the three stages
+    // cascade as long as they ascend. 0 switches a stage off entirely.
+    readonly property int  idleScreensaverSec: _data.idle_screensaver_sec ?? 240
+    readonly property int  idleLockSec:        _data.idle_lock_sec        ?? 360
+    readonly property int  idleSuspendSec:     _data.idle_suspend_sec     ?? 840
+    // Honour idle inhibitors (a video player asking not to be interrupted). Applies to all three.
+    readonly property bool idleRespectInhibitors: _data.idle_respect_inhibitors ?? true
+
+    // ── Screensaver look ────────────────────────────────────────────────────────────────────────
+    readonly property int    screensaverIntervalSec:  _data.screensaver_interval_sec ?? 15   // dwell per image
+    readonly property int    screensaverFadeMs:       _data.screensaver_fade_ms      ?? 1400 // crossfade
+    readonly property bool   screensaverShuffle:      _data.screensaver_shuffle      ?? true
+    readonly property bool   screensaverClock:        _data.screensaver_clock        ?? true
+    readonly property string screensaverClockFormat:  _data.screensaver_clock_format ?? "hh:mm"
+    readonly property int    screensaverClockScale:   _data.screensaver_clock_scale  ?? 100  // 50..200 %
+    readonly property real   screensaverDim:          _data.screensaver_dim          ?? 0.15
+
+    // The native quickshell lock (lock/Lock.qml) reads these live. Defaults = the shipped "vitrine"
     // preset; a preset is a named snapshot of exactly these keys (see LockPresets.qml), applied by
     // writing them back through SettingsStore, so switching a preset recolours the lock instantly.
-    readonly property string lockPreset:        _data.lock_preset         ?? "mirobo"
+    readonly property string lockPreset:        _data.lock_preset         ?? "vitrine"
+    // Which arrangement LockContent draws. Everything else (blur, clock, widgets) is shared; the
+    // layout decides WHERE those pieces sit, and which of the card keys below still mean anything:
+    //   band   Vitrine     — frosted band across the lower third, no card          (default)
+    //   card   Mirobo      — the classic centred card                (card_* keys apply)
+    //   edge   Randnotiz   — clock in the top corner, input appears on the first keystroke
+    //   hud    Kommandozeile — chamfered frame, status lines, prompt with a block cursor
+    //   focus  Fokus       — avatar in a ring, nothing else
+    //   split  Diptychon   — solid panel down one side  (card_pos picks the side, card_width_pct
+    //                        its share)
+    readonly property string lockLayout:        _data.lock_layout         ?? "band"
     readonly property string lockReveal:        _data.lock_reveal         ?? "bubble"   // bubble | fade | none
     readonly property real   lockBlur:          _data.lock_blur           ?? 0.85       // 0..1 backdrop blur strength
     readonly property real   lockDim:           _data.lock_dim            ?? 0.1        // 0..1 backdrop darken (kept light — the point is blur, not darkness)
@@ -556,7 +676,7 @@ Item {
     // user card (avatar + name) is off by default because the centre card already carries the avatar.
     // `session` defaults to off: it powers the machine down from a locked screen, so it
     // has to be something you place deliberately, not something that appears on upgrade.
-    readonly property var    lockWidgetZones:   _data.lock_widget_zones   ?? ({ media: "bottom-left", weather: "bottom-center", battery: "bottom-right", user: "off", session: "off" })
+    readonly property var    lockWidgetZones:   _data.lock_widget_zones   ?? ({ media: "bottom-left", weather: "bottom-center", battery: "bottom-right", notifs: "off", user: "off", session: "off" })
     // ── Password card (the centre card): where it sits and how big it is, as a percentage of the
     // monitor so one preset fits every screen. Widgets get out of its way — see LockContent's
     // zone collision rule. The range is clamped where it's used, not here (a preset may carry
@@ -571,7 +691,7 @@ Item {
     readonly property bool   lockWeatherForecast:     _data.lock_weather_forecast      ?? false
     readonly property int    lockWeatherForecastDays: _data.lock_weather_forecast_days ?? 3
     readonly property string lockClockFormat:   _data.lock_clock_format   ?? "hh:mm"
-    readonly property string lockDateFormat:    _data.lock_date_format    ?? "dddd, dd. MMMM"
+    readonly property string lockDateFormat:    _data.lock_date_format    ?? "dddd, dd MMMM"
     // Clock size is a PERCENTAGE of the size the card would pick on its own, so it keeps scaling
     // with the card instead of freezing at a pixel value. Style = weight / letter-spacing of the
     // display font (no extra font families, so it holds on any machine).
@@ -584,6 +704,7 @@ Item {
     function lockWidgetEnabled(name) { return lockWidgetZone(name) !== "off" }
     // The ordered set of lock keys a preset snapshots / an editor writes — one source of truth.
     readonly property var lockKeys: [
+        "lock_layout",
         "lock_reveal", "lock_blur", "lock_dim", "lock_card_wallpaper", "lock_card_avatar",
         "lock_uniform_wallpaper", "lock_widget_zones",
         "lock_card_pos", "lock_card_width_pct", "lock_card_height_pct",
@@ -603,11 +724,25 @@ Item {
     readonly property bool clipboardDim:   _data.clipboard_dim   ?? true
     readonly property bool clipboardBlur:  _data.clipboard_blur  ?? false
 
-    // Wallpaper quick-menu (the grow-from-bar picker, opened by IPC / keybind / hub).
+    // Wallpaper quick-menu (opened by IPC / keybind / hub / the bar module). Two shapes of the SAME
+    // picker: "popout" grows the grid out of the bar (position/cols/rows/preview below), "gallery"
+    // takes the whole screen and turns the folder into a coverflow you scroll through.
+    readonly property string wallpaperQuickStyle:   _data.wallpaper_quick_style    ?? "popout"   // popout | gallery
     readonly property string wallpaperQuickPos:     _data.wallpaper_quick_position ?? "top-center"
     readonly property int    wallpaperQuickCols:    _data.wallpaper_quick_cols     ?? 3
     readonly property int    wallpaperQuickRows:    _data.wallpaper_quick_rows     ?? 3
     readonly property int    wallpaperQuickPreview: _data.wallpaper_quick_preview  ?? 130   // cell width px
+    // Gallery: card height as a PERCENT of the screen (the cards are miniatures of the monitor, so
+    // the width follows from its aspect) — a pixel size would mean something else on every screen.
+    readonly property int    wallpaperGallerySize:  _data.wallpaper_gallery_size   ?? 46
+    readonly property bool   wallpaperGalleryBlur:  _data.wallpaper_gallery_blur   ?? true
+    // Which way the stack runs: a row you scroll left/right, or a column you scroll up/down.
+    readonly property string wallpaperGalleryAxis:  _data.wallpaper_gallery_axis   ?? "horizontal"  // horizontal | vertical
+    // Play the centred live wallpaper instead of showing its first frame (needs the mpv plugin;
+    // without it the card simply stays on the thumbnail). The player is a real mpv instance and
+    // mpv's destructor aborts the process, so the gallery creates at most ONE and never destroys
+    // it — see the note at the player in WallpaperGallery.qml.
+    readonly property bool   wallpaperGalleryLive:  _data.wallpaper_gallery_live   ?? true
 
     // Wallpaper auto-change. mode: off | silent (no workspace switch) | show (with showcase switch).
     // order: alpha_all | alpha_per | random_all | random_per (subfolder-aware).
@@ -644,8 +779,50 @@ Item {
     readonly property int    launcherRows:       launcherView === "grid" ? launcherGridRows  : launcherListRows
     readonly property int    launcherWidth:      launcherView === "grid" ? launcherGridWidth : launcherListWidth
     readonly property int    launcherFsCols:     _data.launcher_fs_cols    ?? 6     // columns in fullscreen grid
+    readonly property int    launcherFsIcon:     _data.launcher_fs_icon    ?? 72    // icon edge in the fullscreen grid
+    readonly property bool   launcherFsLabels:   _data.launcher_fs_labels  ?? true  // app names under the fullscreen icons
+    // The full-page board has two shapes: "board" is the plain app grid, "overview" puts a strip of
+    // workspace miniatures above it (the GNOME activities layout) — see launcher/LauncherOverview.qml.
+    readonly property string launcherFsStyle:    _data.launcher_fs_style     ?? "board"  // board | overview
+    readonly property int    launcherFsWsHeight: _data.launcher_fs_ws_height ?? 50    // % of the board the strip takes
+    readonly property bool   launcherFsWsLive:   _data.launcher_fs_ws_live   ?? true  // live window captures in the miniatures
     readonly property bool   launcherBlur:       _data.launcher_blur       ?? true  // blur the backdrop (Hyprland)
     readonly property bool   launcherDock:       _data.launcher_dock       ?? false // snap flush against the bar/edge
+
+    // Launcher sidebar — the rail beside the results. It carries a slice of the wallpaper and the
+    // mode buttons, so the prefixes (`!f`, `>`, `!v`, `!k`, `?`) are something you can SEE and click
+    // instead of having to remember. Off = the plain search card the launcher used to be.
+    readonly property bool   launcherSidebar:       _data.launcher_sidebar        ?? true
+    readonly property string launcherSidebarSide:   _data.launcher_sidebar_side   ?? "left"    // left | right
+    // A SHARE of the card, not a pixel width (see the relative-sizing rule): the configured width
+    // stays the width of the results, and the rail is added beside it at this share of the total.
+    readonly property int    launcherSidebarPct:    _data.launcher_sidebar_pct    ?? 25        // 20…50 %
+    // window = the wallpaper region the rail actually covers, so the card reads as a hole punched
+    // through to the desktop · mini = the whole wallpaper fitted into the rail · custom = own file ·
+    // off = the plain panel colour.
+    readonly property string launcherSidebarImage:  _data.launcher_sidebar_image  ?? "mini"    // window | mini | custom | off
+    readonly property string launcherSidebarCustom: _data.launcher_sidebar_custom ?? ""
+    readonly property int    launcherSidebarDim:    _data.launcher_sidebar_dim    ?? 0         // % scrim, if a bright wallpaper needs one
+    readonly property int    launcherSidebarBlur:   _data.launcher_sidebar_blur   ?? 0         // % of the max blur
+    readonly property bool   launcherSidebarLabels: _data.launcher_sidebar_labels ?? true      // mode names beside the icons
+    readonly property bool   launcherSidebarLogo:   _data.launcher_sidebar_logo   ?? true      // the Vuture mark at the top
+    readonly property var    launcherSidebarModes:  (_data.launcher_sidebar_modes instanceof Array)
+                                                    ? _data.launcher_sidebar_modes
+                                                    : ["apps", "files", "cmd", "ipc", "keybind", "help", "fullscreen"]
+    // The mode catalogue the rail draws AND the settings page offers — one source, so a mode can
+    // never exist in one and not the other. The rail assigns the FUNCTION KEYS from this order
+    // (first button = F1), which is the route users are told about; `prefix` is what the button
+    // types into the search field, and typing it by hand still works for anyone who knows it.
+    // "fullscreen" carries no prefix because it switches the launcher's shape, not its query.
+    readonly property var launcherModes: [
+        { key: "apps",       label: "Apps",       icon: "󰀻", prefix: "",     hint: "Search your applications" },
+        { key: "files",      label: "Files",      icon: "󰉋", prefix: "!f ",  hint: "Browse your files" },
+        { key: "cmd",        label: "Command",    icon: "󰆍", prefix: "> ",   hint: "Run a command" },
+        { key: "ipc",        label: "Actions",    icon: "󰉁", prefix: "!v ",  hint: "The shell's own actions (menu, notification centre, …)" },
+        { key: "keybind",    label: "Keybinds",   icon: "󰌌", prefix: "!k ",  hint: "The keybind cheatsheet" },
+        { key: "help",       label: "Help",       icon: "󰋗", prefix: "?",    hint: "This page" },
+        { key: "fullscreen", label: "Fullscreen", icon: "󰊓", prefix: "",     hint: "The full-page app board" }
+    ]
 
     // ── System sounds (Settings → Sounds) ─────────────────────────────────────
     // The pack is a NAME, not a path: "freedesktop" means the installed XDG sound theme, anything
@@ -865,6 +1042,14 @@ Item {
     function barOpacityEnabledFor(mon) { return _bv("bar_opacity_enabled", mon) ?? false }
     function barOpacityValueFor(mon)   { return _bv("bar_opacity_value", mon)   ?? 0.88 }
     function barBlurFor(mon)           { return _bv("bar_blur", mon)            ?? true }
+    // Bar outline thickness in px. UNSET (null) means "follow the ui_style", which is the only
+    // thing that knows a futuristic frame wants a heavier line than a flat one — so the fallback
+    // cannot live here (VtlConfig must not import Style; the cycle is real). Bar.qml resolves it.
+    // 0 is a legitimate stored value: no outline at all.
+    function barBorderWidthFor(mon)    { var v = _bv("bar_border_width", mon); return (v === undefined) ? null : v }
+    // How far modules stay clear of a corner two strips share. UNSET = follow the bar's inner
+    // radius, which is what makes that corner special in the first place; 0 = modules run to the edge.
+    function barCornerInsetFor(mon)    { var v = _bv("bar_corner_inset", mon); return (v === undefined) ? null : v }
     // Global reads, for surfaces that are not per-monitor themselves (the settings page's own
     // preview state). Prefer the …For(mon) form anywhere a monitor is known.
     readonly property bool barOpacityEnabled: _data.bar_opacity_enabled ?? false

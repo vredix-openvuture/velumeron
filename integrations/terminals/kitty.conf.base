@@ -1,0 +1,20 @@
+# Velumeron — kitty.
+#
+# GENERATED. Everything above the colour block is this file, shipped with velumeron; the block
+# itself is rendered from the live wallust palette on every theme change. Your own kitty.conf was
+# moved to kitty.conf.velumeron-bak when you switched this on and comes back byte-for-byte when you
+# switch it off (Settings → Integrations → Terminal).
+#
+# No font is set on purpose: forcing one we cannot know is installed is how a terminal ends up in
+# fallback glyphs. kitty's own choice stays.
+
+confirm_os_window_close 0
+window_padding_width    8
+enable_audio_bell       no
+background_opacity      0.86
+background_blur         20
+tab_bar_style           powerline
+tab_powerline_style     slanted
+cursor_trail            0
+
+@VELUMERON_COLORS@

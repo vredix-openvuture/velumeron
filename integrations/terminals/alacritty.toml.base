@@ -1,0 +1,22 @@
+# Velumeron — alacritty.
+#
+# GENERATED. The tables here are shipped with velumeron; the [colors.*] tables below are rendered
+# from the live wallust palette on every theme change. Your own alacritty.toml was moved to
+# alacritty.toml.velumeron-bak when you switched this on and comes back byte-for-byte when you
+# switch it off (Settings → Integrations → Terminal).
+#
+# The colour tables MUST stay last: TOML puts every following key inside the table it is under.
+
+[window]
+opacity = 0.86
+blur = true
+dynamic_title = true
+padding = { x = 8, y = 8 }
+
+[bell]
+duration = 0
+
+[cursor]
+style = { shape = "Block", blinking = "On" }
+
+@VELUMERON_COLORS@

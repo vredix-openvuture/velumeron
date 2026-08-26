@@ -7,10 +7,19 @@ QtObject {
     // Canonical session actions — ONE list shared by the session overlay (Super+Ctrl+Q), the bar's
     // User-module glide and the settings home hub, so their icons/commands/order never diverge.
     readonly property var sessionActions: [
-        { icon: "󰌾", label: "Lock",     cmd: "loginctl lock-session" },
-        // Lock via logind: loginctl lock-session → hypridle lock_cmd → the native quickshell lock.
-        // (Locking through logind, not a direct launch, also keeps the before_sleep_cmd +
-        // inhibit_sleep=3 suspend sequencing consistent.)
+        // Lock straight through the shell's own IPC, which is also what SUPER+CTRL+L runs
+        // (hypr.lua `on_lock`) and what `velumeron --lock` runs. ONE path for every manual lock.
+        //
+        // It used to be `loginctl lock-session`, which reaches the same lock the long way round:
+        // logind emits Lock → hypridle runs its lock_cmd → that pokes this very IPC. Every step is
+        // a process that has to be alive, and if hypridle is not, the button does nothing at all,
+        // silently. A lock control is the wrong place for that failure mode.
+        //
+        // Nothing is lost by shortening it: hypridle still owns the idle lock and before_sleep_cmd,
+        // so the inhibit_sleep=3 sequencing that keeps the machine from sleeping unlocked runs
+        // exactly as before. The one thing the short path skips is logind's locked-hint, which only
+        // matters to other software asking logind whether this session is locked.
+        { icon: "󰌾", label: "Lock",     cmd: "qs -p \"$VELUMERON_DIR/quickshell\" ipc call lock lock" },
         // Suspend goes through suspend.sh: it locks and WAITS until the lockscreen has actually
         // drawn before pulling the plug (inhibit_sleep=3 only waits for the lock surfaces to
         // exist, not to paint — the machine used to go down mid-reveal). Falls back to a bare
@@ -41,6 +50,10 @@ QtObject {
     property bool   notifCenterOpen: false  // notification centre panel (the bar's bell)
     property bool   launcherOpen:    false  // application launcher (Super+Space / `launcher` IPC)
     property string launcherMon:     ""     // monitor the launcher latched to when opened
+    // Windowed ⇄ fullscreen for THIS opening only. The launcher seeds it from launcher_fullscreen
+    // every time it opens (Launcher.qml), so the rail's Fullscreen button is a look at the big grid
+    // and back, never a silent edit of the setting.
+    property bool   launcherFs:      false
 
     // rofi successors — each latches to the monitor focused at open time (like the launcher).
     property bool   clipboardOpen:      false  // clipboard history (Super+V / `clipboard` IPC)
@@ -66,6 +79,9 @@ QtObject {
     // Full-screen overlay that renders a live LockContent preview (no WlSessionLock/PAM) beside the
     // controls. seed = { id, source, name, settings } to edit an existing preset; null = fresh from
     // the live VtlConfig.lock* values. Cleared by the editor once read.
+    // Screensaver — one flag for every monitor: it is a whole-desk state, not a per-screen one.
+    // Set by IdleService when the seat goes idle and cleared the moment anything happens.
+    property bool   screensaverOn:  false
     property bool   lockEditorOpen: false
     property string lockEditorMon:  ""
     property var    lockEditorSeed: null
@@ -124,6 +140,13 @@ QtObject {
     // changing the row height in the editor can't leave a stale page size behind.
     property real   dashWidth:    0
     property real   dashHeight:   0
+    // The size the menu currently HAS, as a % of its monitor — what the steppers on the Style page
+    // start from when they leave "Auto", so the first step lands next to the current size instead
+    // of teleporting the panel to some default.
+    property int    menuPctDockW:  0
+    property int    menuPctDockH:  0
+    property int    menuPctFloatW: 0
+    property int    menuPctFloatH: 0
     function openDashEdit(mon) {
         ui._dashEditReturn = ui.openDropdown
         ui.dashEditMon  = mon
@@ -144,6 +167,12 @@ QtObject {
     property string wpSwitcherGroup: "start"
     property real   wpSwitcherX:     0
     property real   wpSwitcherY:     0
+
+    // The wallpaper picker's OTHER shape (Settings → Wallpaper → Quickselect → Style = Gallery): a
+    // full-screen coverflow instead of a panel on the bar. It is the same picker, so it is never
+    // open alongside the popout — openWallpaperQuick() below routes to one or the other.
+    property bool   wallpaperGalleryOpen: false
+    property string wallpaperGalleryMon:  ""
 
     // ── Corner-menu morph progress ────────────────────────────────────────────
     // 0 = fully closed, 1 = fully open. Animated centrally so the menu panel (CornerMenu)
@@ -188,6 +217,41 @@ QtObject {
     function barInnerFor(edge, mon) {
         var e = barInner[mon]
         return (e && e[edge] !== undefined) ? e[edge] : VtlConfig.barInsetFor(edge, mon)
+    }
+
+    // ── Where a strip's MODULES actually sit ─────────────────────────────────────────────────────
+    // A popout that merges into a bar it does not grow from would otherwise lie across whatever is
+    // in that strip. Knowing the edge is "active" is not enough — an empty strip is pure chrome and
+    // merging into it is exactly right, a strip carrying modules is CONTENT and nothing may cover
+    // it. So each module group reports the stretch it occupies along its edge, keyed by owner like
+    // the border gaps, and a popout can ask whether the piece of strip it wants is free.
+    // from/to are screen coordinates ALONG the edge: x for top/bottom, y for left/right.
+    property var barModules: ({})
+    function setBarModuleSpan(id, mon, edge, from, to) {
+        if (!id || !mon) return
+        if (to - from < 0.5) { clearBarModuleSpan(id); return }
+        var cur = barModules[id]
+        if (cur && cur.mon === mon && cur.edge === edge
+                && Math.abs(cur.from - from) < 0.25 && Math.abs(cur.to - to) < 0.25) return
+        var m = {}
+        for (var k in barModules) m[k] = barModules[k]
+        m[id] = { mon: mon, edge: edge, from: from, to: to }
+        barModules = m
+    }
+    function clearBarModuleSpan(id) {
+        if (!(id in barModules)) return
+        var m = {}
+        for (var k in barModules) if (k !== id) m[k] = barModules[k]
+        barModules = m
+    }
+    // Is any module on `edge` inside [from, to]? Reading the whole map keeps this a live binding.
+    function barModulesIn(mon, edge, from, to) {
+        var m = barModules
+        for (var k in m) {
+            var c = m[k]
+            if (c.mon === mon && c.edge === edge && c.to > from && c.from < to) return true
+        }
+        return false
     }
 
     // ── The gap a popout tears in the bar's border ──────────────────────────────────────────────
@@ -372,6 +436,10 @@ QtObject {
     // asked for it. Rule: grow from the switcher module when one sits on this monitor's bar,
     // otherwise from Settings → Wallpaper → Quickselect position.
     function openWallpaperQuick(monName, mw, mh) {
+        // Style first: the gallery belongs to the screen, not to the bar, so none of the anchor
+        // work below applies to it. Same toggle semantics either way — asking for the picker a
+        // second time puts it away.
+        if (VtlConfig.wallpaperQuickStyle === "gallery") { ui.toggleWallpaperGallery(monName); return }
         if (ui.wpSwitcherMon === monName && monName !== "") {
             ui.toggleFlyout("wallpaper", ui.wpSwitcherX, ui.wpSwitcherY,
                             ui.wpSwitcherEdge, ui.wpSwitcherGroup, monName)
@@ -379,6 +447,17 @@ QtObject {
         }
         var a = ui.wallpaperAnchor(mw, mh, VtlConfig.wallpaperQuickPos)
         ui.toggleFlyout("wallpaper", a.ax, a.ay, a.edge, a.group, monName)
+    }
+
+    // Full-screen picker: latched to the monitor it was asked for, so it stays there even if the
+    // focus wanders. Re-asking on the SAME monitor closes it; on another one it moves across.
+    function toggleWallpaperGallery(monName) {
+        if (ui.wallpaperGalleryOpen && ui.wallpaperGalleryMon === monName) {
+            ui.wallpaperGalleryOpen = false
+            return
+        }
+        ui.wallpaperGalleryMon  = monName
+        ui.wallpaperGalleryOpen = true
     }
 
     function wallpaperAnchor(mw, mh, pos) {
@@ -417,6 +496,7 @@ QtObject {
         if (keep !== "session"   && ui.sessionOpen)               ui.sessionOpen        = false
         if (keep !== "keybind"   && ui.keybindContext     !== "") ui.keybindContext     = ""
         if (keep !== "tray"      && ui.trayMenuOpen)              ui.trayMenuOpen       = false
+        if (keep !== "wallgal"   && ui.wallpaperGalleryOpen)      ui.wallpaperGalleryOpen = false
     }
     onOpenDropdownChanged:       if (ui.openDropdown   !== "") ui._closeMenusExcept("dropdown")
     onFlyoutChanged:             if (ui.flyout         !== "") ui._closeMenusExcept("flyout")
@@ -429,6 +509,7 @@ QtObject {
     onDashEditOpenChanged:       if (ui.dashEditOpen)          ui._closeMenusExcept("dashedit")
     onKeybindContextChanged:     if (ui.keybindContext !== "") ui._closeMenusExcept("keybind")
     onTrayMenuOpenChanged:       if (ui.trayMenuOpen)          ui._closeMenusExcept("tray")
+    onWallpaperGalleryOpenChanged: if (ui.wallpaperGalleryOpen) ui._closeMenusExcept("wallgal")
     // The editors take over the whole screen — clear the set, but stay out of it themselves.
     onPaletteEditorOpenChanged:  if (ui.paletteEditorOpen)     ui._closeMenusExcept("")
     onLockEditorOpenChanged:     if (ui.lockEditorOpen)        ui._closeMenusExcept("")

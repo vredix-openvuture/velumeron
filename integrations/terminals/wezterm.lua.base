@@ -1,0 +1,19 @@
+-- Velumeron — wezterm.
+--
+-- GENERATED. This head/tail is shipped with velumeron; the `config.colors` table in the middle is
+-- rendered from the live wallust palette on every theme change. Your own wezterm.lua was moved to
+-- wezterm.lua.velumeron-bak when you switched this on and comes back byte-for-byte when you switch
+-- it off (Settings → Integrations → Terminal).
+
+local wezterm = require 'wezterm'
+local config = wezterm.config_builder and wezterm.config_builder() or {}
+
+config.window_background_opacity = 0.86
+config.window_padding = { left = 8, right = 8, top = 8, bottom = 8 }
+config.hide_tab_bar_if_only_one_tab = true
+config.audible_bell = 'Disabled'
+config.default_cursor_style = 'BlinkingBlock'
+
+@VELUMERON_COLORS@
+
+return config
