@@ -6,6 +6,8 @@ import QtQuick
 Item {
     id: root
 
+    implicitHeight: col.implicitHeight
+
     Flickable {
         anchors.fill: parent
         contentHeight: col.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds

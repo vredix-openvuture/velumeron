@@ -6,6 +6,7 @@ import Quickshell.Io
 // whole shell — including this wizard — live), so there is nothing to commit.
 Item {
     id: root
+    implicitHeight: 9999   // the picker always takes the full card
 
     property var    items:   []   // [{path, name}]
     property string current: ""
@@ -36,7 +37,7 @@ Item {
         root.current = path
         // --no-showcase: the showcase switches workspaces — not while the wizard is up.
         applyProc.command = ["bash", "-c",
-            "setsid -f bash \"$VELUMERON_DIR/assets/scripts/wallpaper-set.sh\" --no-waybar --no-showcase "
+            "setsid -f bash \"$VELUMERON_DIR/assets/scripts/wallpaper-set.sh\" --no-showcase "
             + "--mon " + JSON.stringify(OnboardingState.mon) + " --file " + JSON.stringify(path)
             + " >/dev/null 2>&1"]
         applyProc.running = false; applyProc.running = true

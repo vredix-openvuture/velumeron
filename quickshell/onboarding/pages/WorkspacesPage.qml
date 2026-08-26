@@ -27,6 +27,8 @@ Item {
         if (root.dirty) UserSettings.set("workspaces", { rules: root.rules }, { noReload: true })
     }
 
+    implicitHeight: col.implicitHeight
+
     Flickable {
         anchors.fill: parent
         contentHeight: col.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds

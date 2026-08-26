@@ -29,7 +29,10 @@ Item {
         onExited: UiState.pickerOpen = false
     }
 
+    implicitHeight: col.implicitHeight
+
     Column {
+        id: col
         anchors.centerIn: parent
         width: parent.width * 0.8
         spacing: 16

@@ -253,6 +253,29 @@ _configure_one_monitor() {
 
 g_WS_NUM=(); g_WS_MON=(); g_WS_PERSIST=(); g_WS_DEFAULT=()
 
+# ── Blocks ──────────────────────────────────────────────────────────────────
+# Each monitor owns one hundred workspace ids: mon1 1-99, mon2 101-199, mon3
+# 201-299. What the user presses is the slot (SUPER+1…0 = slots 1-10 of the
+# monitor under the focus, see hypr.lua/modules/workspaces.lua); the id is
+# base + slot. See docs: compositor/workspaces.
+_ws_base() {
+    local n="${1#mon}"
+    [[ "$n" =~ ^[0-9]+$ ]] || n=1
+    echo $(( (n - 1) * 100 ))
+}
+
+_ws_next_free() {
+    local base="$1" slot=1 num
+    while (( slot < 100 )); do
+        num=$(( base + slot ))
+        local taken=false
+        for i in "${!g_WS_NUM[@]}"; do [[ "${g_WS_NUM[$i]}" == "$num" ]] && taken=true && break; done
+        $taken || { echo "$num"; return; }
+        (( slot++ ))
+    done
+    echo $(( base + 1 ))
+}
+
 _ws_load() {
     g_WS_NUM=(); g_WS_MON=(); g_WS_PERSIST=(); g_WS_DEFAULT=()
     while IFS= read -r line; do
@@ -263,6 +286,8 @@ _ws_load() {
         persist=$(echo "$line" | grep -oP 'persistent\s*=\s*\K(true|false)')
         echo "$line" | grep -q 'default\s*=\s*true' && def="true" || def="false"
         [[ -z "$num" || -z "$mon" ]] && continue
+        # Skip the generated block rules ("r[101-199]") — they are re-emitted on write.
+        [[ "$num" =~ ^[0-9]+$ ]] || continue
         g_WS_NUM+=("$num"); g_WS_MON+=("$mon")
         g_WS_PERSIST+=("${persist:-false}"); g_WS_DEFAULT+=("$def")
     done < <(read_section "WORKSPACES")
@@ -301,8 +326,18 @@ _ws_submenu() {
         read -rp "  Selection: " choice
         case "$choice" in
             a)
-                local new_num; new_num=$(ask "  Workspace number")
-                [[ -z "$new_num" || ! "$new_num" =~ ^[0-9]+$ ]] && warn "Invalid number." && continue
+                # Blocks: monitor n owns the ids (n-1)*100+1 … +99 (mon1 1-99, mon2 101-199).
+                # The number IS the monitor, so a workspace from another block would be
+                # unreachable from that monitor's keys — offer its next free slot instead.
+                local base; base=$(_ws_base "$mon_var")
+                local suggest; suggest=$(_ws_next_free "$base")
+                local new_num; new_num=$(ask "  Workspace number [$suggest]")
+                [[ -z "$new_num" ]] && new_num="$suggest"
+                [[ ! "$new_num" =~ ^[0-9]+$ ]] && warn "Invalid number." && continue
+                if (( new_num < base + 1 || new_num > base + 99 )); then
+                    warn "$mon_var owns $((base + 1))-$((base + 99)); $new_num belongs to another monitor."
+                    continue
+                fi
                 local already=false
                 for i in "${!g_WS_NUM[@]}"; do [[ "${g_WS_NUM[$i]}" == "$new_num" ]] && already=true && break; done
                 $already && warn "Workspace $new_num already assigned." && continue
@@ -350,6 +385,22 @@ _ws_write() {
         | sort -n | awk '{print $2}'
     )
     {
+        # One catch-all per monitor first, so anything created inside a block lands
+        # on that block's monitor; the specific rules below still win.
+        local -a seen_mons=()
+        for i in "${sorted[@]}"; do
+            local m="${g_WS_MON[$i]}" known=false
+            for sm in "${seen_mons[@]+"${seen_mons[@]}"}"; do [[ "$sm" == "$m" ]] && known=true && break; done
+            $known || seen_mons+=("$m")
+        done
+        if [[ ${#seen_mons[@]} -gt 0 ]]; then
+            echo "-- Blocks: each monitor owns one hundred ids (mon1 1-99, mon2 101-199, …)"
+            for m in "${seen_mons[@]}"; do
+                local b; b=$(_ws_base "$m")
+                echo "hl.workspace_rule({ workspace = \"r[$((b + 1))-$((b + 99))]\", monitor = $m })"
+            done
+            echo ""
+        fi
         local prev_mon=""
         for i in "${sorted[@]}"; do
             local mon="${g_WS_MON[$i]}"
@@ -715,55 +766,75 @@ autostart_config() {
     local monitors_json
     monitors_json=$(hyprctl monitors -j 2>/dev/null || echo "[]")
 
-    # Primary: focused monitor, else first detected
-    local mon1
-    mon1=$(echo "$monitors_json" | jq -r \
-        'first(.[] | select(.focused==true) | .name) // .[0].name' 2>/dev/null || true)
+    # Every connected monitor, focused one first: it becomes mon1 and owns the 1-99 block.
+    # Configuring only the focused screen left a second monitor with no rules at all, so
+    # SUPER+3 over there landed on an id nothing homed and the shell listed one screen.
+    local -a mon_names
+    mapfile -t mon_names < <(echo "$monitors_json" | jq -r \
+        'sort_by(.focused | not) | .[].name' 2>/dev/null || true)
 
-    if [[ -z "$mon1" ]]; then
+    if [[ ${#mon_names[@]} -eq 0 || -z "${mon_names[0]}" ]]; then
         warn "No monitors detected via hyprctl. Cannot continue."
         exit 1
     fi
 
-    # Best mode: sort by pixel count (w×h) desc, then by refresh rate desc
-    local best_mode
-    best_mode=$(echo "$monitors_json" | \
-        jq -r --arg n "$mon1" '.[] | select(.name==$n) | .availableModes[]' 2>/dev/null | \
-        sed 's/Hz$//' | \
-        awk -F'[@x]' '{ printf "%012.0f %010.3f %s\n", $1*$2, $3+0, $0 }' | \
-        sort -rn | head -1 | awk '{print $3}' || true)
+    # Best mode for one output: most pixels first, then the highest refresh rate that mode
+    # offers. Falls back to whatever it is running right now.
+    best_mode_for() {
+        local name="$1" mode
+        mode=$(echo "$monitors_json" | \
+            jq -r --arg n "$name" '.[] | select(.name==$n) | .availableModes[]' 2>/dev/null | \
+            sed 's/Hz$//' | \
+            awk -F'[@x]' '{ printf "%012.0f %010.3f %s\n", $1*$2, $3+0, $0 }' | \
+            sort -rn | head -1 | awk '{print $3}' || true)
+        if [[ -z "$mode" ]]; then
+            mode=$(echo "$monitors_json" | \
+                jq -r --arg n "$name" \
+                '.[] | select(.name==$n) | "\(.width)x\(.height)@\(.refreshRate | floor)"' \
+                2>/dev/null || true)
+        fi
+        echo "${mode:-2560x1440@60}"
+    }
 
-    # Fallback: use current active mode
-    if [[ -z "$best_mode" ]]; then
-        best_mode=$(echo "$monitors_json" | \
-            jq -r --arg n "$mon1" \
-            '.[] | select(.name==$n) | "\(.width)x\(.height)@\(.refreshRate | floor)"' \
-            2>/dev/null || true)
-        best_mode="${best_mode:-2560x1440@60}"
-    fi
-
-    ok "Monitor : $mon1"
-    ok "Mode    : $best_mode"
+    local mon1="${mon_names[0]}"
 
     {
-        printf 'mon1 = "%s"\n\n' "$mon1"
-        printf 'hl.monitor({\n'
-        printf '    output       = "%s",\n' "$mon1"
-        printf '    mode         = "%s",\n' "$best_mode"
-        printf '    transform    = 0,\n'
-        printf '    position     = "0x0",\n'
-        printf '    scale        = 1,\n'
-        printf '    bitdepth     = 10,\n'
-        printf '    supports_hdr = false,\n'
-        printf '    vrr          = 0,\n'
-        printf '    cm           = "auto",\n'
-        printf '})\n'
+        local i=1 name mode pos
+        for name in "${mon_names[@]}"; do
+            mode=$(best_mode_for "$name")
+            # The primary anchors at the origin; the rest let Hyprland place them beside it.
+            # The Monitors settings page is where an actual arrangement gets dragged out.
+            pos="auto"
+            [[ $i -eq 1 ]] && pos="0x0"
+            printf 'mon%d = "%s"\n\n' "$i" "$name"
+            printf 'hl.monitor({\n'
+            printf '    output       = "%s",\n' "$name"
+            printf '    mode         = "%s",\n' "$mode"
+            printf '    transform    = 0,\n'
+            printf '    position     = "%s",\n' "$pos"
+            printf '    scale        = 1,\n'
+            printf '    bitdepth     = 10,\n'
+            printf '    supports_hdr = false,\n'
+            printf '    vrr          = 0,\n'
+            printf '    cm           = "auto",\n'
+            printf '})\n\n'
+            ok "Monitor : mon$i = $name  ($mode)"
+            i=$((i + 1))
+        done
     } | write_section "MONITORS"
 
-    # ── 2) Workspaces: 1–5 on primary monitor, persistent ────────────────────
+    # ── 2) Workspaces: every monitor gets its block, 1–5 persistent on the primary ──
     say "── WORKSPACES ──"
 
     {
+        echo "-- Blocks: each monitor owns one hundred ids (mon1 1-99, mon2 101-199, …)"
+        local i=1 base
+        for _ in "${mon_names[@]}"; do
+            base=$(( (i - 1) * 100 ))
+            echo "hl.workspace_rule({ workspace = \"r[$((base + 1))-$((base + 99))]\", monitor = mon$i })"
+            i=$((i + 1))
+        done
+        echo ""
         echo "-- mon1"
         for ws in 1 2 3 4 5; do
             if [[ "$ws" == "1" ]]; then

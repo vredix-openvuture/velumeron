@@ -16,10 +16,25 @@ PanelWindow {
     readonly property bool active: OnboardingState.open && OnboardingState.mon === root.mon
     readonly property bool wizard: OnboardingState.mode === "first-run"
 
-    visible: active
+    // FREE motion (Style.qml): it belongs to the screen, not to the bar, so it fades up in
+    // place. Same spring as the session menu and the switchers, so the first surface a new
+    // user ever sees already moves like the rest of the shell.
+    property real reveal: 0
+    onActiveChanged: { reveal = active ? 1 : 0; if (active) keys.forceActiveFocus() }
+    Behavior on reveal {
+        id: revealB
+        SpringAnimation {
+            spring:  Style.springFor(revealB.targetValue > 0.5)
+            damping: Style.dampingFor(revealB.targetValue > 0.5)
+            epsilon: 0.003
+        }
+    }
+
+    visible: active || root.reveal > 0.01
     color:   "transparent"
     anchors { top: true; left: true; right: true; bottom: true }
     WlrLayershell.layer:         WlrLayer.Overlay
+    WlrLayershell.namespace:     "velumeron-onboarding"
     WlrLayershell.exclusiveZone: -1
     WlrLayershell.keyboardFocus: (active && !UiState.pickerOpen)
                                  ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
@@ -54,22 +69,52 @@ PanelWindow {
         OnboardingState.finish()
     }
 
-    // Scrim
+    // Veil. Derived from the palette's own ground, never pure black: the desktop under it is
+    // wallust-tinted and black punches a hole through that tint instead of dimming it.
     Rectangle {
         anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.55)
+        color: Style.popDimColor(root.reveal)
     }
 
-    // Card
+    // Enter advances, Escape leaves the update report. A text field on the apps page takes
+    // focus for itself, so typing there never jumps a page; every page change hands the key
+    // back, otherwise one click into a field would disable Enter for the rest of the wizard.
+    FocusScope {
+        id: keys
+        anchors.fill: parent
+        focus: root.active
+        Keys.onReturnPressed: root._advance()
+        Keys.onEnterPressed:  root._advance()
+    }
+    Connections {
+        target: OnboardingState
+        function onPageChanged() { if (root.active) keys.forceActiveFocus() }
+    }
+    function _advance() {
+        if (!root.wizard) { root._closeUpdate(); return }
+        if (OnboardingState.page === root.lastPage) root.finishWizard()
+        else root.next()
+    }
+
+    // Card. The height follows the page: the wallpaper picker and the workspace editor want
+    // every pixel, while "Avatar" and "All set" are six lines and used to sit in a card that
+    // was two thirds empty. Clamped so it never gets shorter than the footer needs.
+    readonly property int cardChrome: 58 + 58 + 36   // header + footer + page margins
     StyledRect {
         id: card
         anchors.centerIn: parent
         width:  Math.min(920, parent.width * 0.62)
-        height: Math.min(700, parent.height * 0.74)
+        height: Math.max(320, Math.min(700, parent.height * 0.74,
+                                       (pageLoader.item?.implicitHeight ?? 0) + root.cardChrome))
+        Behavior on height {
+            NumberAnimation { duration: Style.ctrlMs * 2; easing.type: Easing.OutCubic }
+        }
         radius: Style.rCard
         color:  Colors.bgPrimary
         borderWidth: 1
         borderColor: Style.chromeBorder
+        opacity: Style.popFade(root.reveal)
+        scale:   Style.popScale(root.reveal)
 
         // Header
         Item {
