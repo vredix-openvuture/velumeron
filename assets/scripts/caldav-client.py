@@ -15,8 +15,12 @@ Commands:
   toggle-todo <calId> <href> <0|1>
   add-event <calId> <summary> <YYYY-MM-DD> [HH:MM] [durationMin] [endYMD]
              (no HH:MM → all-day; endYMD makes it span start..end inclusive)
-  add-event-full <calId> <jsonEvent>        {summary,ymd,hm,durMin,location,notes,categories,attendees,icon}
+  add-event-full <calId> <jsonEvent>        {summary,ymd,hm,durMin,location,notes,categories,
+                                             attendees,icon,imageData,imageType}
   update-event <calId> <href> <jsonPatch>   any subset of the same fields
+      Either form takes "@<path>" instead of the JSON itself, which is required
+      once an event carries a picture: imageData is base64 and argv caps a
+      single entry at 128KB.
   delete-item <calId> <href>
 
 calId = "<account name>|<calendar href>". Accounts live in
@@ -25,6 +29,7 @@ the cache in ~/.cache/velumeron/caldav-cache.json.
 """
 
 import base64
+import hashlib
 import json
 import os
 import re
@@ -85,6 +90,12 @@ ACCOUNTS_PATH = os.path.join(user_dir(), "gui", "caldav-accounts.json")
 CACHE_PATH = os.path.join(
     os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"),
     "velumeron", "caldav-cache.json")
+# Event pictures arrive inside the event as an RFC 5545 ATTACH. They are written
+# out here and only the PATH goes into the JSON cache: 200 events with a picture
+# would otherwise add ~20MB of base64 that gets re-parsed on every start.
+IMAGE_CACHE = os.path.join(
+    os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"),
+    "velumeron", "event-images")
 
 
 # ── Small file helpers ────────────────────────────────────────────────────────
@@ -525,11 +536,55 @@ def _attendees(comp):
     return out
 
 
+_IMG_EXT = {"image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".png",
+            "image/gif": ".gif", "image/webp": ".webp"}
+# base64 payload → written path. A recurring event is shaped once per occurrence,
+# so without this the same picture would be decoded and hashed up to 400 times.
+_ATTACH_CACHE = {}
+
+
+def _attached_image(comp):
+    """First inline image ATTACH → its path in IMAGE_CACHE ("" if there is none).
+
+    Content-addressed, so the same picture on ten events is one file and the
+    path stays stable across syncs (an Image source that keeps changing
+    re-decodes and flickers)."""
+    for params, v in comp.get("ATTACH", []):
+        fmt = (params.get("FMTTYPE") or "").lower()
+        if params.get("ENCODING", "").upper() != "BASE64" or not fmt.startswith("image/"):
+            continue                            # a URI attachment or a non-image
+        b64 = (v or "").strip()
+        if not b64:
+            continue
+        if b64 in _ATTACH_CACHE:
+            return _ATTACH_CACHE[b64]
+        try:
+            data = base64.b64decode(b64)
+        except Exception:                                       # noqa: BLE001
+            continue
+        if not data:
+            continue
+        path = os.path.join(IMAGE_CACHE,
+                            hashlib.sha1(data).hexdigest()[:16] + _IMG_EXT.get(fmt, ".img"))
+        if not os.path.exists(path):
+            os.makedirs(IMAGE_CACHE, exist_ok=True)
+            tmp = path + ".tmp"
+            with open(tmp, "wb") as f:
+                f.write(data)
+            os.replace(tmp, path)
+        _ATTACH_CACHE[b64] = path
+        return path
+    return ""
+
+
 def _event_extra(src):
     """The rich fields shared by every shaped event."""
+    # X-VELORGANIZE-IMAGE is the old form: an absolute path, meaningless on any
+    # other machine. Still read as a fallback until every event is migrated.
     return {"notes": _text(src, "DESCRIPTION"), "location": _text(src, "LOCATION"),
             "categories": _categories(src), "attendees": _attendees(src),
-            "icon": _text(src, "X-VELORGANIZE-ICON"), "image": _text(src, "X-VELORGANIZE-IMAGE")}
+            "icon": _text(src, "X-VELORGANIZE-ICON"),
+            "image": _attached_image(src) or _text(src, "X-VELORGANIZE-IMAGE")}
 
 
 def shape_events(cal, items, win_start, win_end):
@@ -736,9 +791,30 @@ def _stamp():
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
+def _fold(line):
+    """Fold to 75 octets (RFC 5545 3.1). Nothing folded on write before, which
+    was survivable for a SUMMARY and is not for a base64 ATTACH — servers are
+    entitled to reject an over-long line. The limit counts OCTETS, so a
+    multi-byte character must never be split across the break."""
+    raw = line.encode()
+    if len(raw) <= 75:
+        return line
+    parts, first = [], True
+    while raw:
+        cut = 75 if first else 74               # a continuation costs one space
+        chunk = raw[:cut]
+        # Never cut mid-sequence: back off while the next byte is a UTF-8
+        # continuation byte (10xxxxxx).
+        while len(chunk) < len(raw) and (raw[len(chunk)] & 0xC0) == 0x80:
+            chunk = chunk[:-1]
+        parts.append(("" if first else " ") + chunk.decode())
+        raw, first = raw[len(chunk):], False
+    return "\r\n".join(parts)
+
+
 def put_new(cal, account, component_lines):
     uid = str(uuid.uuid4())
-    ics = "\r\n".join([
+    ics = "\r\n".join(_fold(l) for l in [
         "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//velumeron//caldav//EN",
         *component_lines(uid),
         "END:VCALENDAR", ""])
@@ -807,6 +883,14 @@ def _dt_lines(ymd, hm, dur_min):
             "DTEND;VALUE=DATE:" + (d + timedelta(days=1)).strftime("%Y%m%d")]
 
 
+def _attach_line(b64, mime):
+    """An inline binary attachment line. VALUE=BINARY + ENCODING=BASE64 is what
+    RFC 5545 3.8.1.1 asks for; FMTTYPE is what lets a reader tell a picture from
+    a PDF without sniffing the bytes."""
+    return (f"ATTACH;ENCODING=BASE64;VALUE=BINARY;FMTTYPE={mime or 'image/jpeg'}:"
+            + b64.strip())
+
+
 def _prop_lines(ev):
     """Settable VEVENT lines (summary/location/description/categories/attendees/
     icon) — no BEGIN/END/UID/DTSTAMP/DTSTART/DTEND/RRULE."""
@@ -829,7 +913,11 @@ def _prop_lines(ev):
         ls.append(f"ATTENDEE{params}:" + (f"mailto:{email}" if email else f"tel:{phone}"))
     if ev.get("icon"):
         ls.append("X-VELORGANIZE-ICON:" + _ics_escape(ev["icon"]))
-    if ev.get("image"):
+    # imageData (base64) travels with the event and works everywhere; `image`
+    # alone is the old local-path form, kept for callers that have no encoder.
+    if ev.get("imageData"):
+        ls.append(_attach_line(ev["imageData"], ev.get("imageType")))
+    elif ev.get("image"):
         ls.append("X-VELORGANIZE-IMAGE:" + _ics_escape(ev["image"]))
     return ls
 
@@ -895,6 +983,43 @@ def delete_item(cache, cal_id, href):
         raise RuntimeError(f"DELETE → HTTP {status}")
 
 
+def _prop_name(line):
+    return line.upper().split(":", 1)[0].split(";", 1)[0]
+
+
+def _patch_vevent(block, repl, dt_lines):
+    """One VEVENT's lines with the patched properties replaced: the old lines are
+    dropped and the new ones re-inserted before END:VEVENT, so RRULE / EXDATE /
+    VALARM and anything else another client wrote stays byte-intact.
+
+    Depth matters: a VALARM has its own DESCRIPTION and may have its own ATTACH
+    (an alarm sound), and neither may be touched."""
+    drop = set(repl) | {"LAST-MODIFIED"}
+    if dt_lines is not None:
+        drop |= {"DTSTART", "DTEND"}
+    out, depth = [], 0
+    for line in block:
+        u = line.upper()
+        if u.startswith("BEGIN:VEVENT"):
+            pass
+        elif u.startswith("BEGIN:"):
+            depth += 1
+        elif u.startswith("END:VEVENT") and depth == 0:
+            for lines_ in repl.values():
+                out += lines_
+            if dt_lines is not None:
+                out += dt_lines
+            out.append("LAST-MODIFIED:" + _stamp())
+            out.append(line)
+            continue
+        elif u.startswith("END:"):
+            depth -= 1
+        elif depth == 0 and _prop_name(line) in drop:
+            continue
+        out.append(line)
+    return out
+
+
 def update_event(cache, cal_id, href, patch):
     """GET-modify-PUT on a VEVENT. Any field present in `patch` (summary, location,
     notes, categories, attendees, icon, and ymd/hm/durMin for the time) is replaced
@@ -927,40 +1052,47 @@ def update_event(cache, cal_id, href, patch):
     if "icon" in patch:
         v = patch.get("icon") or ""
         repl["X-VELORGANIZE-ICON"] = ["X-VELORGANIZE-ICON:" + _ics_escape(v)] if v else []
-    if "image" in patch:
+    if "imageData" in patch and patch.get("imageData"):
+        repl["ATTACH"] = [_attach_line(patch["imageData"], patch.get("imageType"))]
+        repl["X-VELORGANIZE-IMAGE"] = []            # superseded by the attachment
+    elif "image" in patch:
         v = patch.get("image") or ""
-        repl["X-VELORGANIZE-IMAGE"] = ["X-VELORGANIZE-IMAGE:" + _ics_escape(v)] if v else []
+        if v.startswith(IMAGE_CACHE + os.sep):
+            # An extracted attachment handed straight back by a client that only
+            # knows paths. Leave the ATTACH alone instead of replacing it with a
+            # path that means nothing on any other machine.
+            repl["X-VELORGANIZE-IMAGE"] = []
+        else:
+            repl["ATTACH"] = []
+            repl["X-VELORGANIZE-IMAGE"] = ["X-VELORGANIZE-IMAGE:" + _ics_escape(v)] if v else []
     dt_lines = _dt_lines(patch["ymd"], patch.get("hm"), patch.get("durMin")) if patch.get("ymd") else None
 
-    drop = set(repl.keys()) | {"LAST-MODIFIED"}
-    if dt_lines is not None:
-        drop |= {"DTSTART", "DTEND"}
-
-    text = _unfold(body.decode())
-    out, in_ev, depth = [], False, 0
-    for line in text.split("\n"):
+    # One resource can hold several VEVENTs: the master plus one per modified
+    # occurrence. The patch belongs to the MASTER only — applying it at every
+    # END:VEVENT wrote the edited summary into each override as well.
+    out, block, in_ev, depth, done = [], None, False, 0, False
+    for line in _unfold(body.decode()).split("\n"):
         u = line.upper()
-        if u.startswith("BEGIN:VEVENT"):
-            in_ev = True
-        elif in_ev and u.startswith("BEGIN:"):
-            depth += 1
-        elif in_ev and depth > 0 and u.startswith("END:"):
-            depth -= 1
-        elif u.startswith("END:VEVENT"):
-            for lines_ in repl.values():
-                out += lines_
-            if dt_lines is not None:
-                out += dt_lines
-            out.append("LAST-MODIFIED:" + _stamp())
-            in_ev = False
-            out.append(line)
+        if not in_ev:
+            if u.startswith("BEGIN:VEVENT"):
+                in_ev, depth, block = True, 0, [line]
+            else:
+                out.append(line)
             continue
-        elif in_ev and depth == 0:
-            prop = u.split(":", 1)[0].split(";", 1)[0]
-            if prop in drop:
-                continue
-        out.append(line)
-    ics = "\r\n".join(l for l in out if l.strip() != "") + "\r\n"
+        block.append(line)
+        if u.startswith("BEGIN:"):
+            depth += 1
+        elif u.startswith("END:VEVENT") and depth == 0:
+            in_ev = False
+            master = not done and not any(_prop_name(l) == "RECURRENCE-ID" for l in block)
+            out += _patch_vevent(block, repl, dt_lines) if master else block
+            done = done or master
+            block = None
+        elif u.startswith("END:"):
+            depth -= 1
+    if block:                       # unterminated VEVENT: pass it through as-is
+        out += block
+    ics = "\r\n".join(_fold(l) for l in out if l.strip() != "") + "\r\n"
 
     hdrs = {"If-Match": etag} if etag else {}
     status, _, body = http("PUT", url, account, ics, headers=hdrs)
@@ -969,6 +1101,16 @@ def update_event(cache, cal_id, href, patch):
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
+
+def _json_arg(v):
+    """A JSON argument, or "@<path>" naming a file that holds it. An embedded
+    picture is ~160KB of base64 and Linux caps a SINGLE argv entry at 128KB, so
+    anything carrying an attachment has to arrive as a file."""
+    if v.startswith("@"):
+        with open(v[1:], encoding="utf-8") as f:
+            return json.load(f)
+    return json.loads(v)
+
 
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "load"
@@ -1025,11 +1167,11 @@ def main():
                       args[5] if len(args) > 5 and args[5] else None,
                       args[6] if len(args) > 6 and args[6] else None)
         elif cmd == "add-event-full":
-            add_event_full(cache, args[0], json.loads(args[1]))
+            add_event_full(cache, args[0], _json_arg(args[1]))
         elif cmd == "delete-item":
             delete_item(cache, args[0], args[1])
         elif cmd == "update-event":
-            update_event(cache, args[0], args[1], json.loads(args[2]))
+            update_event(cache, args[0], args[1], _json_arg(args[2]))
         else:
             raise RuntimeError("unknown command " + cmd)
         emit(sync())
