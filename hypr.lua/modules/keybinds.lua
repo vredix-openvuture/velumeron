@@ -52,15 +52,16 @@ hl.bind(MOD .. " + E",      hl.dsp.exec_cmd(filemanager))
 hl.bind(MOD .. " + C",      hl.dsp.window.close())
 hl.bind(MOD .. " + F",      hl.dsp.window.float({ action = "toggle" }))
 hl.bind(MOD .. " + N",      hl.dsp.exec_cmd(notifications))
--- MOD+B (Waybar toggle) retired with waybar; key is free for a future quickshell bar toggle.
 hl.bind(MOD .. " + X",      hl.dsp.exec_cmd(VTL_DIR .. "/bin/velumeron -t"))
 hl.bind(MOD .. " + V",      hl.dsp.exec_cmd(clipboard))
 hl.bind(MOD .. " + M",      hl.dsp.focus({ monitor = "+1" }))
--- Workspace next/prev, asymmetric on purpose: prev (`m-1`) wraps from the monitor's
--- first workspace around to its LAST existing one; next (`+1`) always goes ONE
--- further — past the last existing one it keeps creating fresh workspaces.
+-- Workspace next/prev, both MONITOR-relative (`m±1`): with one hundred-id block
+-- per monitor (modules/workspaces.lua) a global `+1` walks straight out of the
+-- block and onto the other screen's numbers, which is exactly what the blocks
+-- exist to prevent. `m-1` wraps from the monitor's first workspace around to
+-- its last existing one.
 hl.bind(MOD .. " + H",      hl.dsp.focus({ workspace = "m-1" }))
-hl.bind(MOD .. " + L",      hl.dsp.focus({ workspace = "+1" }))
+hl.bind(MOD .. " + L",      hl.dsp.focus({ workspace = "m+1" }))
 -- Cycle focus on the active workspace. NOT hl.dsp.window.cycle_next: that one does nothing at all
 -- under monocle and skips floating windows, so J/K were dead in exactly the layouts that need
 -- them most. VTL_ws_cycle (modules/layout_manager.lua) walks the workspace itself. Wrapped in a
@@ -84,11 +85,15 @@ for i = 1, 12 do
     end
 end
 
--- Workspace jumps: SUPER + 1–9
+-- Workspace jumps: SUPER + 1–9 (and 0 = slot 10)
+-- Monitor-RELATIVE: the number is a slot in the block of the monitor the focus
+-- is on (modules/workspaces.lua), so SUPER+3 is workspace 3 on the main screen
+-- and 103 on the second. Bound as closures because the monitor is only known
+-- when the key is actually pressed.
 for i = 1, 9 do
-    hl.bind(MOD .. " + " .. i, hl.dsp.focus({ workspace = i }))
+    hl.bind(MOD .. " + " .. i, function() VTL_ws_focus_slot(i) end)
 end
-hl.bind(MOD .. " + 0", hl.dsp.focus({ workspace = 10 }))
+hl.bind(MOD .. " + 0", function() VTL_ws_focus_slot(10) end)
 
 
 -- ══════════════════════════════════════════════════════
@@ -109,10 +114,13 @@ if screen_record ~= "" then
     hl.bind(MOD .. " + SHIFT + R", hl.dsp.exec_cmd(screen_record))
 end
 
--- Move window to workspace: SUPER+SHIFT + 1–9
+-- Move window to workspace: SUPER+SHIFT + 1–9 (and 0 = slot 10)
+-- Same slot arithmetic as the focus binds — the window lands on this monitor's
+-- workspace n, never on the other screen's.
 for i = 1, 9 do
-    hl.bind(MOD .. " + SHIFT + " .. i, hl.dsp.window.move({ workspace = i }))
+    hl.bind(MOD .. " + SHIFT + " .. i, function() VTL_ws_move_slot(i) end)
 end
+hl.bind(MOD .. " + SHIFT + 0", function() VTL_ws_move_slot(10) end)
 
 
 -- ══════════════════════════════════════════════════════
@@ -150,9 +158,14 @@ hl.bind(MOD .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })
 hl.bind(MOD .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
 hl.bind(MOD .. " + mouse:274", hl.dsp.window.float({ action = "toggle" }))
 
--- Same asymmetric next/prev as SUPER+H/L above.
-hl.bind(MOD .. " + CONTROL + mouse_up",   hl.dsp.focus({ workspace = "+1" }))
-hl.bind(MOD .. " + CONTROL + mouse_down", hl.dsp.focus({ workspace = "m-1" }))
+-- Wheel over the desktop cycles THIS monitor's workspaces (`m±1`, same as
+-- SUPER+H/L). Kept on SUPER+CONTROL as well, so the older habit still works.
+-- Wheel direction: scrolling DOWN goes to the next workspace, UP to the previous. Reads as
+-- pushing the strip of workspaces past you rather than moving a cursor through a list.
+hl.bind(MOD .. " + mouse_down",           hl.dsp.focus({ workspace = "m+1" }))
+hl.bind(MOD .. " + mouse_up",             hl.dsp.focus({ workspace = "m-1" }))
+hl.bind(MOD .. " + CONTROL + mouse_down", hl.dsp.focus({ workspace = "m+1" }))
+hl.bind(MOD .. " + CONTROL + mouse_up",   hl.dsp.focus({ workspace = "m-1" }))
 
 
 -- ══════════════════════════════════════════════════════
@@ -292,3 +305,26 @@ hl.define_submap("system", function()
     hl.bind("RETURN", exit_submap)
 end)
 
+
+
+-- ── Per-monitor workspace submaps ─────────────────────────────────────
+-- The plain SUPER+1…0 binds always mean "this monitor" (see the block scheme in
+-- modules/workspaces.lua), so this is how you reach the OTHER screen's numbers:
+-- SUPER+ALT+<n> aims the number row at monitor n's block, then SUPER+1…0 focuses
+-- one of its slots and SUPER+SHIFT+1…0 sends the focused window there. One key
+-- either way, then the submap exits itself — it is an aim, not a mode you sit in.
+for _mi = 1, #VTL_ws_monitors() do
+    local name = "monitor" .. _mi
+    local base = (_mi - 1) * VTL_WS_BLOCK
+    hl.bind(MOD .. " + ALT + " .. _mi, function() enter_submap(name) end)
+    hl.define_submap(name, function()
+        for i = 1, 9 do
+            hl.bind(MOD .. " + " .. i,           function() VTL_ws_focus_slot(i, base); exit_submap() end)
+            hl.bind(MOD .. " + SHIFT + " .. i,   function() VTL_ws_move_slot(i, base);  exit_submap() end)
+        end
+        hl.bind(MOD .. " + 0",         function() VTL_ws_focus_slot(10, base); exit_submap() end)
+        hl.bind(MOD .. " + SHIFT + 0", function() VTL_ws_move_slot(10, base);  exit_submap() end)
+        hl.bind("ESCAPE", exit_submap)
+        hl.bind("RETURN", exit_submap)
+    end)
+end

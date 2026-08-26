@@ -13,19 +13,6 @@ hl.layer_rule({
     xray         = true,
 })
 
-
--- Waybar
-hl.layer_rule({
-    name         = "waybar",
-    match        = { namespace = "(.*waybar.*)" },
-    blur         = true,
-    blur_popups  = true,
-    ignore_alpha = 0.1,
-    dim_around   = false,
-    no_anim      = true,
-    xray         = true,
-})
-
 -- Screenshot / color picker (no blur, no animation)
 hl.layer_rule({
     name         = "screenshot",

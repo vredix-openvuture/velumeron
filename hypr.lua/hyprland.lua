@@ -38,12 +38,12 @@ require("modules.environment")
 require("modules.devices")
 require("modules.look_and_feel")
 
--- Active app theme — the design chosen in the waybar GUI also themes hyprland.
--- The theme.lua overrides design-specific look on top of look_and_feel (it does
--- NOT touch rounding/border_size, which stay user-controlled). A missing file is
--- a no-op (the look_and_feel default stands). Defaults to "miboro".
+-- Active UI style — the design chosen in Settings also themes hyprland.
+-- themes/<style>.lua overrides design-specific look on top of look_and_feel (it
+-- does NOT touch rounding/border_size, which stay user-controlled). A missing
+-- file is a no-op, the look_and_feel default stands. Defaults to "flat".
 do
-    local theme = "miboro"
+    local theme = "flat"
     local tf = io.open(VTL_USER_DIR .. "/active-theme", "r")
     if tf then
         local line = tf:read("*l"); tf:close()

@@ -49,32 +49,39 @@ saturation = 20
 # ¡ If either one is a directory, then both SHOULD be one. !
 # zathura = { template = 'zathura', target = '~/.config/zathura/zathurarc' }
 
+# NOTE — what does NOT belong here: anything that writes into a config directory another program
+# owns. wallust templates are unconditional, so a template like the old `kitty_config` created and
+# overwrote ~/.config/kitty/colors.conf on a machine whose owner may never have asked velumeron to
+# touch their terminal. Those live in Settings → Integrations instead, which backs the original up
+# and can hand it back (assets/scripts/integrations.sh, rebuilt on theme change via the refresh
+# hook below). Kept here: our OWN files, and caches nobody else writes.
 vscode       = { src = "vscode.json",            dst = "~/.cache/wallust/colors.json" }
 vscode2      = { src = "vscode",                 dst = "~/.cache/wallust/colors" }
 hyprland_lua = { src = "colors.lua",             dst = "~/.config/velumeron/hypr.lua/colors.lua"}
-pywalfox     = { src = "pywal-colors",           dst = "~/.cache/wal/colors" }
-pywalfox2    = { src = "pywal-colors.json",      dst = "~/.cache/wal/colors.json" }
 fish         = { src = "colors.fish",            dst = "~/.cache/wallust/colors.fish"}
 starship     = { src = "starship-palette.toml",  dst = "~/.cache/wallust/starship-palette.toml"}
-   
 
-kitty_config     = { src = "colors-kitty.conf",    dst = "~/.config/kitty/colors.conf"}
 gtk3             = { src = "gtk3.css",             dst = "~/.config/gtk-3.0/wallust.css"}
 gtk4             = { src = "colors_gtk4.css",      dst = "~/.config/gtk-4.0/wallust.css"}
 qt5ct            = { src = "vutureland.conf",      dst = "~/.config/qt5ct/colors/vutureland.conf"}
 qt6ct            = { src = "vutureland.conf",      dst = "~/.config/qt6ct/colors/vutureland.conf"}
 
-kitty_vuture     = { src = "colors-kitty.conf",    dst = "~/.config/velumeron/kitty/colors.conf"}
 colors_vuture    = { src = "colors_gtk.css",       dst = "~/.config/velumeron/assets/colors_gtk.css" }
 qs_colors        = { src = "colors.json",          dst = "~/.config/velumeron/quickshell/colors.json" }
-obsidian_nexus   = { src = "obsidian-colors.css",  dst = "~/DEV/OBSIDIAN-nexus-DEV/.obsidian/snippets/wallust-colors.css" }
+# Obsidian USED to be a template here, writing into one specific vault path. It was exactly the
+# mistake the note above warns about: a wallust template writes its target unconditionally, so
+# every machine got a directory created for a vault only this one has. It is an ordinary opt-in
+# integration now (Settings → Integrations → Editor), which asks Obsidian where the vaults are,
+# backs up what it finds, and hands it back when you switch it off.
 
 [hooks]
 hyprland_lua_colors = "~/.config/velumeron/assets/scripts/wallust/hyprland_lua-colors.sh && hyprctl reload"
-pywalfox_update     = "pywalfox update"
-# Re-assemble the velumeron starship config with the fresh palette — but only
-# when that integration is enabled (Settings → Integrations); a no-op otherwise.
-starship_integration = "bash ~/.config/velumeron/assets/scripts/integrations.sh refresh 2>/dev/null || true"
+# Rebuild every ENABLED integration from the fresh palette — the themed terminal(s), starship,
+# cava, btop, spotify_player, VSCodium, and the pywal drop-in pywalfox reads. A no-op for anything
+# switched off, which is what makes this one hook safe to run unconditionally: nothing is written
+# into a directory the user did not opt into. (`pywalfox update` moved in there too, so a machine
+# without pywalfox no longer runs a command that isn't installed on every wallpaper change.)
+integrations_refresh = "bash ~/.config/velumeron/assets/scripts/integrations.sh refresh 2>/dev/null || true"
 # Recolour the velumeron-dynamic mouse cursor from the fresh accent — but only
 # when it is the active cursor theme (--if-selected is a fast no-op otherwise).
 # Detached: the ~1s rebuild must not stall the wallpaper transition; it re-applies

@@ -12,14 +12,7 @@ ipc() { qs -p "$QS_DIR" ipc call "$@" >/dev/null 2>&1 || true; }
 case "${1:-}" in
     # ── quickshell control ──────────────────────────────────────────────────
     quickshell)
-        shift
-        case "${1:-}" in
-            --gui-panel)
-                touch /tmp/velumeron-qs-gui-panel
-                pgrep -x quickshell >/dev/null 2>&1 || bash "$_DIR/../assets/scripts/launch-quickshell.sh"
-                ;;
-            *)  exec bash "$_DIR/../assets/scripts/launch-quickshell.sh" ;;
-        esac
+        exec bash "$_DIR/../assets/scripts/launch-quickshell.sh"
         ;;
 
     # ── keybind cheatsheet (quickshell overlay) ─────────────────────────────
@@ -40,7 +33,11 @@ case "${1:-}" in
         qs -p "$QS_DIR" ipc call screenshot open >/dev/null 2>&1 \
             || exec hyprshot -z --mode region --output-folder "$HOME/Bilder/Screenshots"
         ;;
-    -t|--toggle|--settings) ipc menu toggle ;;     # settings corner menu
+    # `--settings workspaces` opens straight on that page; bare, it toggles the menu.
+    -t|--toggle)            ipc menu toggle ;;     # settings corner menu
+    --settings)
+        if [[ -n "${2:-}" ]]; then ipc menu section "$2"; else ipc menu toggle; fi
+        ;;
     --panel-toggle)         ipc notify toggle ;;   # notification centre
     --dnd)                  ipc notify dnd ;;       # toggle do-not-disturb
 
@@ -57,7 +54,12 @@ case "${1:-}" in
         ;;
 
     # ── everyday actions (thin wrappers over the shipped scripts) ────────────
-    --lock)   exec bash "${VELUMERON_DIR:-$_DIR/..}/assets/scripts/launch-hyprlock.sh" ;;
+    # The native lock, engaged straight through its own IPC — the same path the SUPER+CTRL+L
+    # keybind takes (hypr.lua `on_lock`). Deliberately NOT `loginctl lock-session`: that route
+    # only arrives if hypridle is alive to run its lock_cmd, and a lock key that silently does
+    # nothing because a daemon died is the one failure this must not have. hypridle still owns
+    # the idle and before-sleep locking, so the sequencing it guards is untouched.
+    --lock)   exec qs -p "$QS_DIR" ipc call lock lock ;;
     --wallpaper)
         case "${2:-}" in
             random|"") exec bash "${VELUMERON_DIR:-$_DIR/..}/assets/scripts/wallpaper-random.sh" ;;
@@ -95,14 +97,14 @@ velumeron — Hyprland desktop shell launcher
   velumeron restart               Restart everything
   velumeron status                Show which services are up
   velumeron quickshell            Start / restart only the QuickShell shell
-  velumeron quickshell --gui-panel Toggle the GUI panel
   velumeron --keybind-help [ctx]  Keybind cheatsheet (ctx: window|apps|system)
   velumeron -t, --toggle          Toggle the settings menu
+  velumeron --settings [page]     Open settings, optionally on one page
   velumeron --panel-toggle        Toggle the notification centre
   velumeron --dnd                 Toggle do-not-disturb
   velumeron --onboarding [update] Open the setup wizard / update report
                                   (also: velumeron-welcome)
-  velumeron --lock                Lock the screen (hyprlock)
+  velumeron --lock                Lock the screen
   velumeron --wallpaper [FILE]    Set a wallpaper (no arg / 'random' → random)
   velumeron --mode dark|light     Desktop-wide dark/light appearance
   velumeron -e, --end             Stop ALL Velumeron services (alias of 'end')

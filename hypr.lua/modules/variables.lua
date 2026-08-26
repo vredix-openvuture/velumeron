@@ -3,18 +3,15 @@
 -- ═══════════════════════════════════════════════════════
 
 -- Scripts live in the read-only package dir (VTL_DIR).
--- Configs that have to be read alongside wallust-written colour files
--- (kitty.conf, rofi *.rasi) live in the user dir (VTL_USER_DIR), which
+-- Per-user generated state lives in the user dir (VTL_USER_DIR), which
 -- welcome_to_velumeron.sh seeds from the package on first run.
 
-desktop_shell  = VTL_DIR      .. "/assets/scripts/launch-shell.sh"
-notify_service = "velumeron-notify"
 clipboard      = "qs -p " .. VTL_DIR .. "/quickshell ipc call clipboard toggle"
 
 -- Launcher, wallpaper switcher, window switcher, clipboard and session menu are now native
 -- (quickshell) — the `qs ipc call <target>` overlays replace the old rofi/drun menus.
 window_switch  = "qs -p " .. VTL_DIR .. "/quickshell ipc call window open"
-terminal       = terminal      or ("kitty -c "   .. VTL_USER_DIR .. "/kitty/kitty.conf")
+-- terminal moved down to the role apps: it is one, and it needs _first_of (defined below).
 browser        = browser       or "librewolf"
 browser_float  = browser_float or (browser .. " --class=browser-float")
 filemanager    = filemanager   or "thunar"
@@ -30,7 +27,12 @@ bitwarden      = bitwarden     or "bitwarden"
 
 -- Locks and waits for the lockscreen to finish drawing, THEN suspends (see suspend.sh).
 on_sleep       = VTL_DIR .. "/assets/scripts/suspend.sh"
-on_lock        = "qs -p " .. VTL_DIR .. "/quickshell ipc call lock lock"   -- native quickshell lock (direct IPC, like session_menu)
+-- Native quickshell lock, engaged straight through its IPC. The session menu's Lock and
+-- `velumeron --lock` take the same path, so every MANUAL lock is one call. hypridle keeps the idle
+-- and before-sleep locking (loginctl → its lock_cmd → this same IPC), which is where the
+-- inhibit_sleep sequencing lives; going through logind for a keypress only adds two processes that
+-- have to be alive for the key to do anything.
+on_lock        = "qs -p " .. VTL_DIR .. "/quickshell ipc call lock lock"
 session_menu   = "qs -p " .. VTL_DIR .. "/quickshell ipc call session toggle"
 
 
@@ -48,6 +50,13 @@ local function _first_of(...)
     return ""
 end
 
+-- The terminal is a role app like every other line here, NOT a dependency. It used to be
+-- `kitty -c <user dir>/kitty/kitty.conf`, which made one emulator part of the desktop and shipped
+-- it a config it never asked for. Theming a terminal is now opt-in per emulator
+-- (Settings → Integrations → Terminal) and writes that emulator's OWN config; this only picks
+-- which one the keybinds open.
+terminal       = terminal      or _first_of("kitty", "foot", "alacritty", "wezterm", "ghostty",
+                                            "rio", "konsole", "gnome-terminal", "xterm")
 messenger      = messenger     or _first_of("telegram-desktop", "element-desktop", "cinny", "discord", "signal-desktop", "slack")
 player         = player        or _first_of("strawberry", "rhythmbox", "lollypop", "clementine", "elisa", "spotify", "audacious", "deadbeef", "musikcube", "vlc")
 notes_app      = notes_app     or _first_of("obsidian", "logseq", "joplin", "cherrytree", "zettlr", "rnote")

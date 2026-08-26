@@ -6,19 +6,9 @@
   "version": 2,
   "settings": {
     "opacity_enabled": true,
-    "panel_width_pct": 20,
-    "panel_height_pct": 80,
     "menu_theme": "follow",
     "opacity_value": 0.88,
-    "sidebar_labels": true,
-    "swaync_margin_top_pct": 20,
-    "swaync_width_pct": 20,
     "logo_variant": "full",
-    "rofi_source": "sets",
-    "panel_side": "left",
-    "panel_valign": "bottom",
-    "sidebar_autohide": true,
-    "shell_backend": "quickshell",
     "bar_modules_left": [],
     "bar_modules_center": [
       "clock"
@@ -70,7 +60,6 @@
     "bar_position": "top",
     "bar_module_margin": 4,
     "bar_module_spacing": 4,
-    "bar_colorful": true,
     "colorful_enabled": true,
     "colorful_menus": true,
     "colorful_osd": true,

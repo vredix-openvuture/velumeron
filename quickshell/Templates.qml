@@ -26,7 +26,6 @@ QtObject {
     function activate(source, id)        { _mut(["activate", source, id]) }
     function duplicate(source, id, name) { _mut((name && name.length) ? ["duplicate", source, id, name]
                                                                       : ["duplicate", source, id]) }
-    function create(name)                { _mut(["new", name || ""]) }
     // "Save as preset" flow: snapshot the current settings.json into a new named user template. It does
     // NOT become active — settings.json stays the live config; the preset is just there to apply later.
     function createAndBuild(name)        { _mut(["new", name || ""]) }
