@@ -283,7 +283,7 @@ def verb_sync():
     # they must never fork a builtin (a user template still persists them below, which is fine —
     # user templates are local to this device anyway).
     def _strip(s):
-        return {k: v for k, v in s.items() if k not in DEVICE_KEYS}
+        return {k: v for k, v in s.items() if not is_device_key(k)}
     if _strip(cur) == _strip(tmpl.get("settings", {})):
         print("sync:insync")
         return
@@ -311,7 +311,24 @@ def verb_sync():
 # and bluetooth aliases on every switch; wallpaper_sets and taskbar pins met the same fate
 # until 2026-07-11).
 DEVICE_KEYS = ("wallpaper_dirs", "bt_aliases", "bt_groups", "bar_per_monitor", "bar_monitors",
-               "wallpaper_sets", "taskbar_pinned")
+               "wallpaper_sets", "taskbar_pinned",
+               # The active THEME and the two lock settings that are about YOU rather than about a
+               # look. A template is a snapshot of the shell's arrangement; it has no business
+               # deciding which theme you run, and it never carried the weather city at all, so a
+               # full replace used to silently delete the place you live.
+               "theme", "lock_weather_city", "lock_weather_unit")
+# A theme's own knobs are namespaced (`theme_<id>_<key>`, see Theme.qml) and there is no list of
+# them to write down — the shell does not know what a theme will invent. They survive by prefix.
+DEVICE_PREFIXES = ("theme_",)
+
+
+def is_device_key(k):
+    if k in DEVICE_KEYS:
+        return True
+    for pre in DEVICE_PREFIXES:
+        if k.startswith(pre):
+            return True
+    return False
 
 
 def verb_activate(source, tid):
@@ -321,8 +338,8 @@ def verb_activate(source, tid):
         sys.exit(1)
     cur = read_json(settings_path(), {})
     new = dict(tmpl.get("settings", {}))          # full replace -> unset keys revert to defaults
-    for k in DEVICE_KEYS:                         # … except device-bound state: the CURRENT value
-        if k in cur:                              # always wins (templates snapshot these keys too,
+    for k in cur:                                 # … except device-bound state: the CURRENT value
+        if is_device_key(k):                      # always wins (templates snapshot these keys too,
             new[k] = cur[k]                       # so "only when absent" would never fire)
     set_active(tid, source)                       # point active at the template …
     write_settings(new)                           # … then full-replace settings.json from its snapshot
@@ -441,8 +458,8 @@ def verb_import(path):
     new_settings = data.get("settings")
     if isinstance(new_settings, dict):
         cur = read_json(settings_path(), {})
-        for k in DEVICE_KEYS:            # keep this device's hardware-bound keys
-            if k in cur:
+        for k in cur:                    # keep this device's hardware-bound keys
+            if is_device_key(k):
                 new_settings[k] = cur[k]
         write_settings(new_settings)
 

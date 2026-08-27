@@ -176,6 +176,109 @@ QtObject {
         }
     })
 
+    // ── Components ──────────────────────────────────────────────────────────────────────────────
+    // The second seam. A theme may bring its OWN QML for a surface instead of restyling the shipped
+    // one, because restyling was measured not to be enough: a Console built out of the existing
+    // components still read as mirobo with different corners.
+    //
+    // A theme DECLARES what it brings rather than the shell probing the disk for it:
+    //
+    //   "components": { "lock": "components/Lock.qml" }
+    //
+    // Declaring it is the contract. Guessing at file names would make every surface a stat() on
+    // every theme switch, and a typo would fail silently instead of failing where it is written.
+    // Anything a theme does not declare falls back to the shipped component.
+    //
+    // The path is relative to the theme's own directory, and it resolves against the directory the
+    // package was FOUND in — a user theme's component sits next to the user's theme.json, not next
+    // to the shipped one.
+    readonly property string dir: (root._user && root._user.id) ? (root._userDir + "/themes/" + root.themeId)
+                                : (root._ship && root._ship.id) ? (root._shipDir + "/" + root.themeId)
+                                : ""
+    function componentUrl(surface) {
+        var c = root.pkg.components
+        var rel = (c && typeof c[surface] === "string") ? c[surface] : ""
+        if (rel === "" || root.dir === "") return ""
+        return "file://" + root.dir + "/" + rel
+    }
+    function hasComponent(surface) { return root.componentUrl(surface) !== "" }
+
+    // ── Settings pages ──────────────────────────────────────────────────────────────────────────
+    // The third seam. A theme brings its OWN settings pages, so the range of adjustment is that
+    // theme's rather than a global one: Console offers a status line and a rail, mirobo offers
+    // pills and a bar. Declared the same way components are:
+    //
+    //   "settings": [ { "key": "console", "title": "Console", "icon": "\udb80\udcb0",
+    //                   "group": "Appearance", "page": "settings/ConsoleSection.qml" } ]
+    //
+    // `group` names one of the settings menu's nav groups; an unknown one lands in "More", which is
+    // where anything unplaced already goes.
+    readonly property var settingsPages: {
+        var out = []
+        var ps = root.pkg.settings
+        if (!ps || !ps.length) return out
+        for (var i = 0; i < ps.length; i++) {
+            var p = ps[i]
+            if (!p || !p.key || !p.page) continue
+            out.push({ "key": "" + p.key, "title": p.title || ("" + p.key),
+                       "icon": p.icon || "\u{F0765}", "group": p.group || "Appearance",
+                       "url": (root.dir === "") ? "" : ("file://" + root.dir + "/" + p.page) })
+        }
+        return out
+    }
+
+    // A theme's own settings are namespaced. A theme may invent any knob it likes and none of them
+    // can collide with a shell key or with another theme's — which is also what makes switching
+    // theme and switching back give you your knobs again rather than a reset.
+    function settingKey(key) { return "theme_" + root.themeId + "_" + key }
+    function setting(key, def) { return VtlConfig.rawSetting(root.settingKey(key), def) }
+    // The same values as an object, which is what a settings page and a component bind to. Reading
+    // through the function is fine for a one-shot; binding to it is not, because a function call is
+    // not a dependency and the control would freeze at whatever it was built with.
+    readonly property var settings: VtlConfig.rawPrefix("theme_" + root.themeId + "_")
+
+    // ── The lockscreen ──────────────────────────────────────────────────────────────────────────
+    // The lock is NOT personalised any more, and that is deliberate. It used to be a preset registry
+    // with an editor behind it, which meant every user built a different lockscreen out of the same
+    // parts and none of them was the product. A theme now brings ONE lock and owns how it looks;
+    // what stays a user setting is the part that is about you rather than about the look — the
+    // weather city, and when the screen locks at all.
+    //
+    // A theme overrides only what it changes. `layout` names an arrangement in lock/LockContent.qml.
+    readonly property var lockDefaults: ({
+        "layout":              "breath",
+        "reveal":              "bubble",           // bubble | fade | none
+        "blur":                0.0,                // 0..1 backdrop blur
+        "dim":                 0.0,                // 0..1 backdrop darken
+        "blurTarget":          "background",       // background | card
+        "cardWallpaper":       true,
+        "cardAvatar":          true,
+        "uniformWallpaper":    false,              // every screen shows the MAIN monitor's wallpaper
+        "cardPos":             "center",           // left | center | right
+        "cardWidthPct":        40,
+        "cardHeightPct":       40,
+        "clockFormat":         "hh:mm",
+        "dateFormat":          "dddd, dd MMMM",
+        "clockScale":          100,                // 50..200 %
+        "clockStyle":          "regular",          // light | regular | bold | spaced
+        "weatherForecast":     false,
+        "weatherForecastDays": 3,                  // clamped to 1..3 where it is used
+        // widget → zone, or "off". Zones: top|bottom × left|center|right. Only the `card` layout
+        // uses the zone itself; every other one reads the map as a plain on/off list.
+        "widgets": { "media": "bottom-left", "weather": "bottom-center", "battery": "bottom-right",
+                     "notifs": "off", "user": "off", "session": "off" }
+    })
+    readonly property var lock: {
+        var out = {}
+        var d = root.lockDefaults
+        for (var k in d) out[k] = d[k]
+        var l = root.pkg.lock
+        if (l) for (var k2 in l) out[k2] = l[k2]
+        return out
+    }
+    function lockWidgetZone(name)    { var w = root.lock.widgets; return (w && w[name]) ? w[name] : "off" }
+    function lockWidgetEnabled(name) { return root.lockWidgetZone(name) !== "off" }
+
     // ── The loaded package ──────────────────────────────────────────────────────────────────────
     property var _ship: ({})
     property var _user: ({})
@@ -201,6 +304,24 @@ QtObject {
         if (t) for (var k3 in t) out[k3] = t[k3]
         return out
     }
+
+    // ── What is installed ───────────────────────────────────────────────────────────────────────
+    // For the picker in Settings -> Style. Read through a tiny CLI because QML cannot list a
+    // directory, and a theme is a FOLDER you drop in — there is no registry file to read instead.
+    // Read-only on purpose: no save, no duplicate, no delete. A theme arrives and leaves as a
+    // folder, which is the whole difference from the preset registry this replaced.
+    property var available: []
+    property Process _listProc: Process {
+        command: ["python3", (Quickshell.env("VELUMERON_DIR") || "") + "/assets/scripts/theme-list.py"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try { root.available = JSON.parse(("" + this.text).trim()) }
+                catch (e) { /* keep the last good list; a broken scan must not empty the picker */ }
+            }
+        }
+    }
+    function refresh() { root._listProc.running = false; root._listProc.running = true }
+    Component.onCompleted: root.refresh()
 
     // Switching theme must not leave the previous package's data standing: the new theme may have
     // no user file at all, in which case its FileView never fires and the old table would keep

@@ -134,10 +134,11 @@ of them on the same desk.
 - **Taskbar**: a strip of open windows, with pinned apps that show whether they run or not. Nine
   placements, dock or float, always visible or on hover, scoped to the monitor, the workspace or
   everything, and it can reserve space like a bar.
-- **Lock screen**: native, authenticating through PAM directly. No hyprlock underneath.
-  Presets, a card you place and size in percent, wallpaper crop, avatar, blur on the background or
-  on the card, your clock format and weight, and widgets you drop into six zones (media, weather
-  with a forecast, battery, user, session). Build your own in a live editor.
+- **Lock screen**: native, authenticating through PAM directly. No hyprlock underneath. It belongs
+  to the theme rather than to a settings page, so it is one designed screen instead of a kit: Mirobo
+  brings *Breath*, a bloom of light behind the clock and no panel anywhere; Console brings the
+  machine talking, with a telemetry rail and a shell prompt. What stays yours is when the screen
+  locks and where the weather comes from.
 - **Screensaver**: your wallpapers, slowly, after a while away. It runs as a normal overlay while
   the session is unlocked and inside the lock screen once it is locked, so it looks the same either
   side of the password prompt.
@@ -317,7 +318,9 @@ of them on the same desk.
 - **The Desktop Dashboard.** Widgets above the wallpaper and below the windows, clock,
   disk, media and much more directly on the screen instead of only inside the settings menu.
 - **Clock and timer** next to the calendar, and a deeper DISPONERA (time, todo, calendar management application) integration.
-- **The lock screen.** Overall improvement of the lockscreen and its possiblities.
+- **More themes.** A theme brings its own tokens, its own components and its own settings pages, and
+  adding one is dropping a folder in. Two ship; the rest of the shell's surfaces move behind the
+  same seam.
 - **Accessibility.** A global scale, a reduced-motion switch, keyboard navigation through the
   menus and a high-contrast palette mode.
 - **A documentation website**, replacing the wiki in this repository.

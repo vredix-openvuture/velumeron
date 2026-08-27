@@ -5,5 +5,22 @@
   "version": 1,
   "contract": 1,
   "base": "flat",
-  "tokens": {}
+  "tokens": {},
+  "lock": {
+    "layout": "breath",
+    "reveal": "bubble",
+    "blur": 0.55,
+    "dim": 0.22,
+    "blurTarget": "background",
+    "clockStyle": "light",
+    "clockScale": 100,
+    "widgets": {
+      "media": "bottom-left",
+      "weather": "bottom-center",
+      "battery": "bottom-right",
+      "notifs": "off",
+      "user": "off",
+      "session": "off"
+    }
+  }
 }

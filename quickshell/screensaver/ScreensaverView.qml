@@ -187,7 +187,7 @@ Item {
         }
         Text {
             anchors.horizontalCenter: clockText.horizontalCenter
-            text: Qt.formatDate(root.now, VtlConfig.lockDateFormat)
+            text: Qt.formatDate(root.now, Theme.lock.dateFormat)
             color: Colors.fgMuted
             font.family: Style.font
             font.pixelSize: Math.round(clockText.font.pixelSize * 0.16)

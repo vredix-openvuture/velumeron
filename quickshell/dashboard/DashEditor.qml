@@ -5,7 +5,7 @@ import Quickshell
 import Quickshell.Wayland
 
 // Dashboard editor — a full-screen overlay, opened from the settings home page's pencil. Built in
-// the same shape as the lockscreen's build-your-own editor (LockEditor.qml): dim backdrop, the
+// the same shape the lockscreen editor had before the lock became the theme's: dim backdrop, the
 // live thing filling the left region, a 400 px card panel on the right. Arranging a ~420 px
 // settings panel from inside that same panel never had room for a module list, so the editor moved
 // out here and the settings menu hides while it's up (UiState.openDashEdit); Done brings it back.

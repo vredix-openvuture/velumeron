@@ -25,7 +25,7 @@ PanelWindow {
                                    + 0.7152 * Colors.bgPrimary.g
                                    + 0.0722 * Colors.bgPrimary.b) < 0.5
 
-    readonly property string _reveal: VtlConfig.lockReveal      // bubble | fade | none
+    readonly property string _reveal: Theme.lock.reveal          // bubble | fade | none
     readonly property bool   _bubble: root._reveal === "bubble"
 
     color: "transparent"

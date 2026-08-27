@@ -1,34 +1,30 @@
 import "../.."
 import QtQuick
 import Quickshell
-import Quickshell.Io
 
-// Lockscreen & suspend. The lockscreen is the native quickshell lock (lock/Lock.qml). Its look is a
-// PRESET — a named snapshot of the VtlConfig.lock* keys (LockPresets.qml / lockscreen-config.py),
-// ONE shipped builtin, Console (the six that came before it are parked in presets/_parked/ — their
-// arrangements still exist, they are just no longer offered), plus user presets built in the
-// LockEditor overlay ("Build your own"). A preset carries the LAYOUT too, so switching one
-// re-arranges the lock. Mirrors
-// Settings → Style (templates + your palettes). The two timings below are the LOCK's own: they are
-// written as plain settings.json keys and read by IdleService (ext-idle-notify-v1), so nothing here
-// rewrites hypr.lua/hypridle.conf any more. When the screensaver starts is on its own page — it
-// runs on a separate clock and shows over the lock as readily as over the desktop.
+// Lockscreen & suspend. The lockscreen is the native quickshell lock (lock/Lock.qml), and how it
+// LOOKS is not a setting: the active theme brings one lock and owns it (Theme.qml, `lock`). What
+// this page owns is the part that is about you rather than about the look — when the screen locks,
+// when the machine suspends, and where the weather comes from.
+//
+// The preview is the real thing, not a picture of it: LockContent rendered at monitor size and
+// scaled down, on this monitor's wallpaper. Every layout measure is a fraction of the screen, so
+// the miniature is accurate. It exists to answer "what will I see", not to be clicked.
+//
+// The two timings are written as plain settings.json keys and read by IdleService
+// (ext-idle-notify-v1), so nothing here rewrites hypr.lua/hypridle.conf. When the SCREENSAVER
+// starts is on its own page: it runs on a separate clock and shows over the lock as readily as
+// over the desktop.
 Item {
     id: root
-
-
-    Component.onCompleted: LockPresets.refresh()
-    onVisibleChanged: if (visible) LockPresets.refresh()
-
-    function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s }
 
     // Stored in seconds, edited in minutes.
     function _min(sec) { return Math.round(Math.max(0, sec) / 60) }
     readonly property int lockMin:    root._min(VtlConfig.idleLockSec)
     readonly property int suspendMin: root._min(VtlConfig.idleSuspendSec)
 
-    // Preview geometry — the monitor the settings menu is on, so a tile is a true miniature of the
-    // screen you will actually unlock instead of a 16:9 guess that lies on an ultrawide.
+    // The monitor the settings menu is on, so the preview is a true miniature of the screen you
+    // will actually unlock instead of a 16:9 guess that lies on an ultrawide.
     readonly property var _menuScreen: {
         var ss = Quickshell.screens
         for (var i = 0; i < ss.length; i++) if (ss[i].name === UiState.menuMon) return ss[i]
@@ -37,15 +33,7 @@ Item {
     readonly property int refW: root._menuScreen ? root._menuScreen.width  : 1920
     readonly property int refH: root._menuScreen ? root._menuScreen.height : 1080
 
-    // Open the build-your-own editor on the monitor the settings menu is on (mirrors StyleSection's
-    // "Build your own" → PaletteEditor). seed = a preset object to edit, or null = fresh from live.
-    function openEditor(seed) {
-        UiState.lockEditorSeed = seed || null
-        UiState.lockEditorMon  = UiState.menuMon
-        UiState.openDropdown   = ""
-        UiState.lockEditorOpen = true
-    }
-
+    readonly property bool wxShown: Theme.lockWidgetEnabled("weather")
 
     Flickable {
         anchors.fill: parent
@@ -56,24 +44,45 @@ Item {
             topPadding: 4
             spacing: Style.cardGap
 
-            // ── Presets (built-in) ────────────────────────────────────────────
+            // ── What you will see ─────────────────────────────────────────────
             Card {
-                CardLabel { text: "PRESETS" }
-                Flow {
-                    id: presetGrid
-                    width: parent.width; spacing: 8
-                    readonly property real cw: (width - spacing) / 2
-                    Repeater {
-                        model: LockPresets.presets.filter(function (p) { return p.source === "builtin" })
-                        delegate: LockPresetCard {
-                            required property var modelData
-                            preset: modelData
-                            width: presetGrid.cw
+                CardLabel { text: "YOUR LOCKSCREEN"
+                            hint: "The lockscreen belongs to the theme, so there is nothing to "
+                                  + "arrange here. Switching theme switches the lock with it." }
+                Rectangle {
+                    id: shot
+                    width: parent.width
+                    height: Math.round(width * root.refH / root.refW)
+                    radius: Style.rControl
+                    clip: true
+                    color: Colors.bgPrimary
+                    // Loader-gated: a full LockContent exists only while this page is on screen.
+                    Loader {
+                        active: root.visible
+                        width: root.refW; height: root.refH
+                        transformOrigin: Item.TopLeft
+                        scale: shot.width / root.refW
+                        sourceComponent: LockContent {
+                            preview:    true
+                            baseLayer:  false          // the stage covers it; skip a second decode
+                            screenName: UiState.menuMon
+                            cfgReveal:  "none"         // a thumbnail has no iris to play
                         }
                     }
                 }
-                TextButton { width: parent.width; label: "󰏘  Build your own"; primary: true
-                             onClicked: root.openEditor(null) }
+                Row {
+                    width: parent.width; spacing: 6
+                    Text {
+                        text: Theme.name
+                        color: Colors.fgPrimary
+                        font.family: Style.font; font.pixelSize: 13
+                    }
+                    Text {
+                        text: "·  " + Theme.lock.layout
+                        color: Colors.fgMuted
+                        font.family: Style.font; font.pixelSize: 13
+                    }
+                }
             }
 
             // ── Timers ────────────────────────────────────────────────────────
@@ -98,124 +107,32 @@ Item {
                 }
             }
 
-            // ── Your lockscreens (user presets) ───────────────────────────────
+            // ── Weather ───────────────────────────────────────────────────────
+            // Yours, not the theme's: nobody wants to retype where they live because they changed
+            // how the lock looks. With no city set, no request is made at all.
             Card {
-                visible: root._userPresets.length > 0
-                CardLabel { text: "YOUR LOCKSCREENS" }
-                Repeater {
-                    model: root._userPresets
-                    delegate: StyledRect {
-                        required property var modelData
-                        width: parent.width; height: 40; radius: Style.rControl
-                        readonly property bool active: modelData.active
-                        color: active ? Style.selFill : (rHov.containsMouse ? Style.controlHover : Style.controlFill)
-                        borderWidth: active ? Style.selBorderW : Style.controlBorderW
-                        borderColor: active ? Style.selBorderColor : Style.controlBorderColor
-                        Text {
-                            anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                            text: modelData.name; color: active ? Style.selText : Colors.fgPrimary
-                            font.family: Style.font; font.pixelSize: 13
-                        }
-                        MouseArea { id: rHov; anchors.fill: parent; hoverEnabled: true
-                                    onClicked: LockPresets.activate(modelData.source, modelData.id) }
-                        Row {
-                            anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
-                            spacing: 4
-                            Text { text: "󰏫"; color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 16
-                                   MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor
-                                               onClicked: root.openEditor(modelData) } }
-                            Text { text: "󰩹"; color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 16
-                                   MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor
-                                               onClicked: LockPresets.remove(modelData.id) } }
-                        }
-                    }
+                CardLabel { text: "WEATHER"
+                            hint: "Shown on the lockscreen and in the weather widget. Leave the "
+                                  + "city empty and nothing leaves the machine." }
+                FieldLabel { text: "CITY" }
+                InputField {
+                    text: VtlConfig.lockWeatherCity
+                    placeholder: "Berlin"
+                    onEdited: v => SettingsStore.set("lock_weather_city", ("" + v).trim())
                 }
-            }
-
-        }
-    }
-
-    readonly property var _userPresets: LockPresets.presets.filter(function (p) { return p.source === "user" })
-
-    // Mini lock-preview tile for a built-in preset (mirrors StyleSection's TemplateCard).
-    component LockPresetCard: Item {
-        id: lc
-        property var preset
-        readonly property bool active: preset.active
-        height: inner.implicitHeight + 20
-
-        // A preset may leave a key out — the builtins deliberately omit the weather city so
-        // switching a look cannot wipe it — so every lookup falls back to the live value.
-        function sv(key, live) {
-            var st = (lc.preset && lc.preset.settings) ? lc.preset.settings : null
-            return (st && st[key] !== undefined && st[key] !== null) ? st[key] : live
-        }
-
-        StyledRect {
-            anchors.fill: parent
-            radius: Style.rCard
-            color: lc.active ? Style.selFill : Style.controlFill
-            borderWidth: lc.active ? Style.selBorderW : Style.controlBorderW
-            borderColor: lc.active ? Style.selBorderColor : Style.controlBorderColor
-            Column {
-                id: inner
-                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
-                spacing: 8
-                // The real lock, rendered at monitor size and scaled down into the tile. Every
-                // layout measure is a fraction of the screen, so the miniature is the thing itself
-                // rather than a drawing of it — including this monitor's wallpaper. Loader-gated:
-                // six LockContents exist only while this page is actually on screen.
-                Rectangle {
-                    id: shot
+                FieldLabel { text: "UNIT" }
+                Segmented {
+                    equal: true
+                    current: VtlConfig.lockWeatherUnit
+                    segments: [{ label: "Celsius", key: "c" }, { label: "Fahrenheit", key: "f" }]
+                    onPicked: (k) => SettingsStore.set("lock_weather_unit", k)
+                }
+                SubLabel {
                     width: parent.width
-                    height: Math.round(width * root.refH / root.refW)
-                    radius: Style.rControl
-                    clip: true
-                    color: Colors.bgPrimary
-                    Loader {
-                        active: root.visible
-                        width: root.refW; height: root.refH
-                        transformOrigin: Item.TopLeft
-                        scale: shot.width / root.refW
-                        sourceComponent: LockContent {
-                            preview:    true
-                            baseLayer:  false          // the stage covers it; skip a second decode
-                            screenName: UiState.menuMon
-                            cfgReveal:  "none"         // a thumbnail has no iris to play
-                            cfgLayout:        lc.sv("lock_layout",              VtlConfig.lockLayout)
-                            cfgBlur:          lc.sv("lock_blur",                VtlConfig.lockBlur)
-                            cfgDim:           lc.sv("lock_dim",                 VtlConfig.lockDim)
-                            cfgCardWallpaper: lc.sv("lock_card_wallpaper",      VtlConfig.lockCardWallpaper)
-                            cfgCardAvatar:    lc.sv("lock_card_avatar",         VtlConfig.lockCardAvatar)
-                            cfgUniformWall:   lc.sv("lock_uniform_wallpaper",   VtlConfig.lockUniformWall)
-                            cfgCardPos:       lc.sv("lock_card_pos",            VtlConfig.lockCardPos)
-                            cfgCardWPct:      lc.sv("lock_card_width_pct",      VtlConfig.lockCardWidthPct)
-                            cfgCardHPct:      lc.sv("lock_card_height_pct",     VtlConfig.lockCardHeightPct)
-                            cfgWidgetZones:   lc.sv("lock_widget_zones",        VtlConfig.lockWidgetZones)
-                            cfgWxForecast:    lc.sv("lock_weather_forecast",    VtlConfig.lockWeatherForecast)
-                            cfgWxDays:        lc.sv("lock_weather_forecast_days", VtlConfig.lockWeatherForecastDays)
-                            cfgClockFormat:   lc.sv("lock_clock_format",        VtlConfig.lockClockFormat)
-                            cfgDateFormat:    lc.sv("lock_date_format",         VtlConfig.lockDateFormat)
-                            cfgClockScale:    lc.sv("lock_clock_scale",         VtlConfig.lockClockScale)
-                            cfgClockStyle:    lc.sv("lock_clock_style",         VtlConfig.lockClockStyle)
-                            cfgBlurTarget:    lc.sv("lock_blur_target",         VtlConfig.lockBlurTarget)
-                        }
-                    }
+                    visible: !root.wxShown
+                    text: "The current theme does not put weather on the lockscreen. The setting "
+                          + "still feeds the weather widget everywhere else."
                 }
-                Row {
-                    id: lblRow
-                    width: parent.width; spacing: 6
-                    Text { text: root.cap(lc.preset.name); color: lc.active ? Style.selText : Colors.fgPrimary
-                           font.family: Style.font; font.pixelSize: 13; elide: Text.ElideRight
-                           width: parent.width - (lc.active ? checkT.width + parent.spacing : 0) }
-                    Text { id: checkT; visible: lc.active; text: "\u2713"; color: Style.selText
-                           font.family: Style.font; font.pixelSize: 13 }
-                }
-            }
-            MouseArea {
-                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                onClicked: lc.active ? root.openEditor(lc.preset)
-                                     : LockPresets.activate(lc.preset.source, lc.preset.id)
             }
         }
     }

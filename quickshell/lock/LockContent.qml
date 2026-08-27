@@ -7,10 +7,10 @@ import Quickshell.Io
 import Quickshell.Services.Mpris
 import Quickshell.Services.UPower
 
-// Per-monitor lockscreen UI, filling one WlSessionLockSurface (and reused as the live preview inside
-// LockEditor). Driven entirely by the cfg* properties, which default to the live VtlConfig.lock*
-// keys — so the real lock follows settings.json live and the editor drives the SAME component with
-// unsaved draft values. `preview:true` disables password input.
+// Per-monitor lockscreen UI, filling one WlSessionLockSurface. Driven entirely by the cfg*
+// properties, which default to the ACTIVE THEME's lock block (Theme.lock) — the lock is not
+// personalised, so there is no editor and no preset registry behind it any more; a theme brings one
+// lock and owns how it looks. `preview:true` disables password input.
 FocusScope {
     id: root
 
@@ -33,28 +33,31 @@ FocusScope {
     }
     readonly property bool isMainMon: root.preview || root._mainMonName === "" || root.screenName === root._mainMonName
 
-    // ── Look config (real lock = live VtlConfig; editor overrides with draft values) ────────────
-    property string cfgReveal:        VtlConfig.lockReveal
-    property real   cfgBlur:          VtlConfig.lockBlur
-    property real   cfgDim:           VtlConfig.lockDim
-    property bool   cfgCardWallpaper: VtlConfig.lockCardWallpaper
-    property bool   cfgCardAvatar:    VtlConfig.lockCardAvatar
-    property bool   cfgUniformWall:   VtlConfig.lockUniformWall
-    property string cfgCardPos:       VtlConfig.lockCardPos
-    property int    cfgCardWPct:      VtlConfig.lockCardWidthPct
-    property int    cfgCardHPct:      VtlConfig.lockCardHeightPct
-    property var    cfgWidgetZones:   VtlConfig.lockWidgetZones
-    property bool   cfgWxForecast:    VtlConfig.lockWeatherForecast
-    property int    cfgWxDays:        VtlConfig.lockWeatherForecastDays
-    property string cfgClockFormat:   VtlConfig.lockClockFormat
-    property string cfgDateFormat:    VtlConfig.lockDateFormat
-    property int    cfgClockScale:    VtlConfig.lockClockScale
-    property string cfgClockStyle:    VtlConfig.lockClockStyle
-    property string cfgBlurTarget:    VtlConfig.lockBlurTarget
-    property string cfgLayout:        VtlConfig.lockLayout
+    // ── Look config — the THEME's, not the user's ───────────────────────────────────────────────
+    // These stay properties rather than direct Theme reads so one surface can still be driven with
+    // other values (the standalone lock, a capture rig). Nothing in the shell writes them: the lock
+    // is not personalised, the theme owns how it looks. See Theme.qml `lock`.
+    property string cfgReveal:        Theme.lock.reveal
+    property real   cfgBlur:          Theme.lock.blur
+    property real   cfgDim:           Theme.lock.dim
+    property bool   cfgCardWallpaper: Theme.lock.cardWallpaper
+    property bool   cfgCardAvatar:    Theme.lock.cardAvatar
+    property bool   cfgUniformWall:   Theme.lock.uniformWallpaper
+    property string cfgCardPos:       Theme.lock.cardPos
+    property int    cfgCardWPct:      Theme.lock.cardWidthPct
+    property int    cfgCardHPct:      Theme.lock.cardHeightPct
+    property var    cfgWidgetZones:   Theme.lock.widgets
+    property bool   cfgWxForecast:    Theme.lock.weatherForecast
+    property int    cfgWxDays:        Theme.lock.weatherForecastDays
+    property string cfgClockFormat:   Theme.lock.clockFormat
+    property string cfgDateFormat:    Theme.lock.dateFormat
+    property int    cfgClockScale:    Theme.lock.clockScale
+    property string cfgClockStyle:    Theme.lock.clockStyle
+    property string cfgBlurTarget:    Theme.lock.blurTarget
+    property string cfgLayout:        Theme.lock.layout
 
     // Which arrangement draws. Everything above is shared by all six; the layout only decides where
-    // the pieces sit — and therefore which of the card keys still mean anything (see VtlConfig).
+    // the pieces sit — and therefore which of the card keys still mean anything (see Theme.lock).
     readonly property bool isCard:  root.cfgLayout === "card"
     readonly property bool isSlab:  root.cfgLayout === "slab"
     readonly property bool isEdge:  root.cfgLayout === "edge"
@@ -62,8 +65,10 @@ FocusScope {
     readonly property bool isFocus: root.cfgLayout === "focus"
     readonly property bool isSplit: root.cfgLayout === "split"
     readonly property bool isInstrument: root.cfgLayout === "instrument"
+    readonly property bool isBreath: root.cfgLayout === "breath"
     readonly property bool isBand:  !root.isCard && !root.isSlab && !root.isEdge && !root.isHud
                                     && !root.isFocus && !root.isSplit && !root.isInstrument
+                                    && !root.isBreath
 
     // Blur + dim land on exactly one surface. "background" = the classic frosted wallpaper behind a
     // solid card; "card" turns it around — the desktop stays sharp and the CARD is the frosted pane.
@@ -802,6 +807,43 @@ FocusScope {
     }
     readonly property string hostName: root._hostName !== "" ? root._hostName : "velumeron"
 
+    // ── The theme lock contract, version 1 ──────────────────────────────────────────────────────
+    // Everything a theme-supplied lock component is given. Style.themeContext() carries the half
+    // every surface shares (palette, tokens, fonts); the rest is what a LOCK needs and nothing more.
+    // Deliberately thin: too thin and a theme can draw nothing, too fat and it is the shell's
+    // internals under a new name. It grows when a real component asks for something.
+    //
+    // THE TWO ANIMATION CLOCKS ARE NOT IN `ctx`, and that is the whole reason this is fast. `pulse`
+    // runs a 2.6 s sine for as long as the machine is locked and `entrance` runs at frame rate for
+    // the first 620 ms; folding either into the object would rebuild it sixty times a second, and
+    // rebuilding it means re-reading thirty-odd palette roles and walking the widget list every
+    // frame, for hours. They arrive as their own properties instead, so `ctx` changes about once a
+    // second — when the clock does.
+    //
+    // `entrance` is the raw 0..1 arrival clock. A component slices it the way the built-ins do:
+    //     stagger(i) = clamp((entrance - i * 0.13) / 0.6, 0, 1)
+    readonly property string themeLockUrl: Theme.componentUrl("lock")
+    readonly property var lockContext: {
+        var c = Style.themeContext()
+        c.w = root.width
+        c.h = root.height
+        c.lock = Theme.lock
+        c.clockText = root.clockText
+        c.dateText  = Qt.formatDate(root.now, root.cfgDateFormat)
+        c.dotCount       = root.dotCount
+        c.failMsg        = LockState.failMsg
+        c.authenticating = LockState.authenticating
+        c.typing         = root.typing
+        c.shakeX         = root.shakeX
+        c.user = { "name": root._userName, "avatar": "file://" + root._homeDir + "/.face" }
+        c.host = { "name": root.hostName, "kernel": root.kernelText, "uptime": root.uptimeText }
+        var ws = root._activeWidgets(), out = []
+        for (var i = 0; i < ws.length; i++)
+            out.push({ "name": ws[i], "glyph": root._widgetGlyph(ws[i]), "text": root._widgetText(ws[i]) })
+        c.widgets = out
+        return c
+    }
+
     // ── Shared pieces — every layout builds from these, so a change to the password field or the
     // avatar lands in all six at once. ──────────────────────────────────────────────────────────
     // The dots ARE the field: no box, no border, no placeholder. `size` scales them to whatever type
@@ -1097,10 +1139,53 @@ FocusScope {
             }
         }
 
-        // Exactly one arrangement exists at a time — the others cost nothing.
+        // ── The arrangement ──────────────────────────────────────────────────────────────────────
+        // Two ways in, and only one of them runs. A theme that ships its own lock component gets to
+        // draw the whole arrangement; a theme that only names a `layout` gets one of the built-ins.
+        //
+        // The split is deliberate: the theme owns the ARRANGEMENT, never the input. Keystrokes, the
+        // PAM call, the focus watchdog, the iris, the wallpaper and the widget data all stay in this
+        // file. A lockscreen that hands its key handling to a dropped-in folder is a lockscreen you
+        // cannot get out of, and this shell has already had one of those (a hung PAM try left the
+        // surface swallowing every key, and the only way out was the tty).
+        Loader {
+            id: themeArrangement
+            anchors.fill: parent
+            active: Theme.hasComponent("lock")
+            source: root.themeLockUrl
+            asynchronous: false
+            onStatusChanged: if (status === Loader.Error)
+                console.warn("theme:", Theme.themeId, "lock component failed to load:", root.themeLockUrl)
+        }
+        // Handed in rather than looked up: a component outside the shell tree cannot see Style,
+        // Colors or VtlConfig. Rebuilt on the clock tick, which is 1 Hz and the cheapest honest way
+        // to keep an external component live.
+        Binding {
+            target: themeArrangement.item
+            property: "ctx"
+            value: root.lockContext
+            when: themeArrangement.status === Loader.Ready
+        }
+        // The two frame-rate clocks, on their own so the context object above can stay still.
+        Binding {
+            target: themeArrangement.item
+            property: "entrance"
+            value: root.entrance
+            when: themeArrangement.status === Loader.Ready
+        }
+        Binding {
+            target: themeArrangement.item
+            property: "pulse"
+            value: root.accentPulse
+            when: themeArrangement.status === Loader.Ready
+        }
+
+        // Exactly one built-in arrangement exists at a time — the others cost nothing.
         Loader {
             anchors.fill: parent
-            sourceComponent: root.isInstrument ? instrumentLayout
+            active: !themeArrangement.active
+            sourceComponent: root.isBreath ? breathLayout
+                           : root.isInstrument ? instrumentLayout
                            : root.isCard  ? cardLayout
                            : root.isSlab  ? slabLayout
                            : root.isEdge  ? edgeLayout
@@ -1868,6 +1953,133 @@ FocusScope {
                 sourceSize.width: Math.round(root.height * 0.27)
                 opacity: 0.22 * root.stagger(3)
                 visible: status === Image.Ready
+            }
+        }
+    }
+
+    // ── Breath — no panel, no edge, nothing to draw a border around. A wide bloom of accent light
+    // sits behind the clock and slowly swells and settles, so a locked machine reads as asleep
+    // rather than as a photograph somebody left on the monitor. Everything else is type standing on
+    // the wallpaper: the time, the day, the dots, and one line of widgets along the bottom.
+    //
+    // The swell runs on its own clock, much slower than the accent pulse the other layouts use. The
+    // target is something you notice HAVING changed and never catch changing, so it is deliberately
+    // longer than a glance and shallower than a fade. ────────────────────────────────────────────
+    Component {
+        id: breathLayout
+        Item {
+            id: br
+            anchors.fill: parent
+            visible: root.isMainMon
+
+            readonly property real bloomR:  Math.max(root.width, root.height) * 0.44
+            readonly property real bloomY:  root.height * 0.52
+            readonly property int  clockPx: root._fitClock(root.height * 0.175, root.width * 0.74)
+            readonly property int  gap:     Math.round(Math.max(10, root.height * 0.015))
+            // Breath sets its own type scale rather than taking the shared clamps. Those exist for
+            // layouts that stand text next to a panel and must not shout; here there IS no panel,
+            // the clock is 250 px, and a 12 px date under it reads as a mistake. Still bounded, just
+            // bounded where this layout reads instead of where a widget card does.
+            readonly property int  datePx:  Math.round(Math.max(16, Math.min(30, root.height * 0.019)))
+            readonly property int  wgPx:    Math.round(Math.max(14, Math.min(20, root.height * 0.0125)))
+            readonly property real spacing: root.cfgClockStyle === "spaced" ? br.clockPx * 0.14 : 0
+
+            property real swell: 0
+            SequentialAnimation on swell {
+                running: root.baseLayer
+                loops: Animation.Infinite
+                NumberAnimation { to: 1; duration: 4600; easing.type: Easing.InOutSine }
+                NumberAnimation { to: 0; duration: 4600; easing.type: Easing.InOutSine }
+            }
+
+            // The bloom is a full-screen rectangle filled with a radial gradient rather than a big
+            // blurred circle: a gradient costs one pass, a 300 px blur costs a full-size texture and
+            // this thing is on screen the whole time the machine is locked.
+            Shape {
+                id: bloom
+                anchors.fill: parent
+                preferredRendererType: Shape.CurveRenderer
+                opacity: (0.72 + 0.28 * br.swell) * root.stagger(0)
+                // Wider than tall: a circular bloom on a 16:9 screen reads as a spotlight, and the
+                // thing it is meant to read as is light in a room.
+                transform: Scale {
+                    origin.x: root.width / 2; origin.y: br.bloomY
+                    xScale: 1.34 * (1 + 0.09 * br.swell); yScale: 1 + 0.09 * br.swell
+                }
+                ShapePath {
+                    strokeWidth: -1
+                    fillGradient: RadialGradient {
+                        centerX: root.width / 2; centerY: br.bloomY
+                        focalX:  root.width / 2; focalY:  br.bloomY
+                        centerRadius: br.bloomR
+                        GradientStop { position: 0.00; color: Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.46) }
+                        GradientStop { position: 0.36; color: Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.20) }
+                        GradientStop { position: 1.00; color: Qt.rgba(Style.accent.r, Style.accent.g, Style.accent.b, 0.00) }
+                    }
+                    PathMove { x: 0;          y: 0 }
+                    PathLine { x: root.width; y: 0 }
+                    PathLine { x: root.width; y: root.height }
+                    PathLine { x: 0;          y: root.height }
+                    PathLine { x: 0;          y: 0 }
+                }
+            }
+
+            Column {
+                id: brCol
+                anchors.centerIn: parent
+                anchors.verticalCenterOffset: -Math.round(root.height * 0.02)
+                spacing: Math.round(br.gap * 1.5)
+
+                Text {
+                    anchors.horizontalCenter: brCol.horizontalCenter
+                    text: root.clockText
+                    color: Colors.fgBright
+                    font.family: Style.font
+                    font.pixelSize: br.clockPx
+                    font.weight: root.clockWeight
+                    font.letterSpacing: br.spacing
+                    opacity: root.stagger(1)
+                    transform: Translate { y: root.rise(1) }
+                }
+                Text {
+                    anchors.horizontalCenter: brCol.horizontalCenter
+                    text: Qt.formatDate(root.now, root.cfgDateFormat)
+                    color: Colors.fgMuted
+                    font.family: Style.font
+                    font.pixelSize: br.datePx
+                    opacity: root.stagger(2)
+                    transform: Translate { y: root.rise(2) }
+                }
+                Item { width: 1; height: Math.round(br.gap * 1.4) }
+                Dots {
+                    anchors.horizontalCenter: brCol.horizontalCenter
+                    size: Math.round(Math.max(7, root.height * 0.0085))
+                    x: root.shakeX
+                    opacity: root.stagger(2)
+                }
+                FailText {
+                    anchors.horizontalCenter: brCol.horizontalCenter
+                    opacity: root.stagger(2)
+                }
+            }
+
+            // One line of widgets, no cards. They sit far enough below the bloom that the type never
+            // has to compete with the light behind it.
+            Row {
+                id: brWidgets
+                anchors { horizontalCenter: br.horizontalCenter; bottom: br.bottom
+                          bottomMargin: Math.round(root.height * 0.075) }
+                spacing: Math.round(root.width * 0.028)
+                opacity: root.stagger(3)
+                transform: Translate { y: root.rise(3) }
+                Repeater {
+                    model: root._activeWidgets()
+                    delegate: MiniWidget {
+                        required property var modelData
+                        name: modelData
+                        px: br.wgPx
+                    }
+                }
             }
         }
     }

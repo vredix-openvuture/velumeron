@@ -24,9 +24,6 @@ import Quickshell.Io
 // Keep the two `lock` handlers in sync.
 // ─────────────────────────────────────────────────────────────────────────────
 ShellRoot {
-    // LockPresets backs the "build your own" lock layout that the display reads via
-    // VtlConfig; boot it so a persisted custom layout renders even with no settings UI.
-    Component.onCompleted: LockPresets.boot()
 
     // Engage the lock. UNLOCK happens EXCLUSIVELY through PAM inside Lock.qml — never
     // via IPC, so the user-local IPC socket can't bypass the password.

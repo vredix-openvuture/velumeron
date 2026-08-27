@@ -76,7 +76,7 @@ ShellRoot {
     }
 
     Component.onCompleted: { root.rebuildIdle()
-                             Templates.boot(); LockPresets.boot(); void Hyprwindows.windows
+                             Templates.boot(); void Hyprwindows.windows
                              OnboardingState.boot(); SoundService.boot() }
 
     // Cold-start resync: Quickshell.Hyprland builds its workspace→monitor /
@@ -160,7 +160,7 @@ ShellRoot {
         function report(): string {
             return JSON.stringify({ id: Theme.themeId, name: Theme.name, base: Theme.base,
                                     loaded: Theme.loaded, contract: Theme.contract,
-                                    tokens: Theme.tokens }, null, 1)
+                                    tokens: Theme.tokens, lock: Theme.lock }, null, 1)
         }
     }
 
@@ -369,10 +369,10 @@ ShellRoot {
     // lock/LockContent.qml). No fetch happens with no city → nothing leaves the machine.
     Process { id: weatherProc }
     function _fetchWeather() {
-        if (!(VtlConfig.lockWidgetEnabled("weather") && VtlConfig.lockWeatherCity !== "")) return
+        if (!(Theme.lockWidgetEnabled("weather") && VtlConfig.lockWeatherCity !== "")) return
         // 3rd argument = how many forecast days to include (0 = current conditions only).
-        var days = VtlConfig.lockWeatherForecast
-                   ? Math.max(1, Math.min(3, VtlConfig.lockWeatherForecastDays)) : 0
+        var days = Theme.lock.weatherForecast
+                   ? Math.max(1, Math.min(3, Theme.lock.weatherForecastDays)) : 0
         weatherProc.command = ["bash",
             Quickshell.env("VELUMERON_DIR") + "/assets/scripts/weather-fetch.sh",
             VtlConfig.lockWeatherCity, VtlConfig.lockWeatherUnit, "" + days]
@@ -383,17 +383,20 @@ ShellRoot {
         interval: 30 * 60000
         repeat:   true
         triggeredOnStart: true
-        running:  VtlConfig.lockWidgetEnabled("weather") && VtlConfig.lockWeatherCity !== ""
+        running:  Theme.lockWidgetEnabled("weather") && VtlConfig.lockWeatherCity !== ""
         onTriggered: _fetchWeather()
     }
     Connections {
         target: VtlConfig
         function onLockWeatherCityChanged() { _fetchWeather() }
         function onLockWeatherUnitChanged() { _fetchWeather() }
-        // Turning the outlook on (or asking for more days) needs a refetch — weather.json only
-        // carries the days that were requested when it was written.
-        function onLockWeatherForecastChanged()     { _fetchWeather() }
-        function onLockWeatherForecastDaysChanged() { _fetchWeather() }
+    }
+    // Turning the outlook on (or asking for more days) needs a refetch — weather.json only carries
+    // the days that were requested when it was written. Those two are the THEME's now, so the
+    // trigger moved with them: one `lock` block changes, one refetch.
+    Connections {
+        target: Theme
+        function onLockChanged() { _fetchWeather() }
     }
 
     // Native wallpaper engine: one background-layer surface per monitor (static images + live video
@@ -450,13 +453,6 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         delegate: PaletteEditor { required property var modelData; screen: modelData }
-    }
-
-    // Build-your-own lockscreen editor: full-screen overlay with a live LockContent preview, one per
-    // screen (Settings → Lockscreen → Build your own).
-    Variants {
-        model: Quickshell.screens
-        delegate: LockEditor { required property var modelData; screen: modelData }
     }
 
     // Onboarding: first-run wizard / post-update changelog, one per screen (renders on the

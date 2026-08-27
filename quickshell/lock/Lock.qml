@@ -37,7 +37,7 @@ Item {
     // surfaces to have painted once.
     Timer {
         id: readyTimer
-        interval: VtlConfig.lockReveal === "none" ? 120 : 760
+        interval: Theme.lock.reveal === "none" ? 120 : 760
         onTriggered: root._setReady(true)
     }
     // A crash while locked would leave the flag behind and make the next suspend skip its wait.
@@ -112,7 +112,7 @@ Item {
         // At the START of the unlock, not after it: the reveal-out runs for 440 ms and the sound
         // belongs to the moment the password was accepted, not to the animation finishing.
         SoundService.play("unlock")
-        if (VtlConfig.lockReveal === "none") { root._finishUnlock(); return }
+        if (Theme.lock.reveal === "none") { root._finishUnlock(); return }
         LockState.unlocking = true
         unlockTimer.restart()
     }

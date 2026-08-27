@@ -82,9 +82,6 @@ QtObject {
     // Screensaver — one flag for every monitor: it is a whole-desk state, not a per-screen one.
     // Set by IdleService when the seat goes idle and cleared the moment anything happens.
     property bool   screensaverOn:  false
-    property bool   lockEditorOpen: false
-    property string lockEditorMon:  ""
-    property var    lockEditorSeed: null
 
     // Keybind cheatsheet overlay context: "" = closed, "all" = full reference,
     // "window" | "apps" | "system" = that submap's binds. Driven by the `keybind` IPC.
@@ -512,5 +509,4 @@ QtObject {
     onWallpaperGalleryOpenChanged: if (ui.wallpaperGalleryOpen) ui._closeMenusExcept("wallgal")
     // The editors take over the whole screen — clear the set, but stay out of it themselves.
     onPaletteEditorOpenChanged:  if (ui.paletteEditorOpen)     ui._closeMenusExcept("")
-    onLockEditorOpenChanged:     if (ui.lockEditorOpen)        ui._closeMenusExcept("")
 }

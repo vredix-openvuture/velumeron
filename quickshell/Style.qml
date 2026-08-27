@@ -440,6 +440,52 @@ QtObject {
     readonly property int   selBorderW:     root._tokNum("selBorderW", 0)
     readonly property color selBorderColor: root._tokColor("selBorderColor", Colors.boActive)
 
+    // ── The theme contract ────────────────────────────────────────────────────────
+    // What a THEME-SUPPLIED component gets handed. Measured fact behind this: a QML component from
+    // outside the shell tree loads and may use Quickshell's own types, but it cannot see the shell's
+    // singletons at all — `Style`, `Colors` and `VtlConfig` are simply not defined there. So this is
+    // not a convenience wrapper, it is the API boundary. A theme reads its surface's properties and
+    // nothing else, which is also what lets the contract be versioned: `contract` says which shape
+    // the object has, and a component can refuse a shape it does not know.
+    //
+    // Everything here is RESOLVED. The recipes a theme.json writes are already colours by the time
+    // they reach a component, because the component has no tint/lift to resolve them with.
+    //
+    // Each surface adds its own state on top; this is the part every surface shares.
+    function themeContext() {
+        return {
+            "contract": Theme.contract,
+            "theme":    Theme.themeId,
+            "font":     root.font,
+            "iconFont": root.iconFont,
+            // The theme's OWN namespaced settings, so a component and the settings page that
+            // writes them are looking at the same object.
+            "settings": Theme.settings,
+            "palette": {
+                "bgPrimary":   Colors.bgPrimary,   "bgSecondary": Colors.bgSecondary,
+                "bgElement":   Colors.bgElement,   "bgActive":    Colors.bgActive,
+                "bgHover":     Colors.bgHover,     "boNormal":    Colors.boNormal,
+                "boActive":    Colors.boActive,    "fgPrimary":   Colors.fgPrimary,
+                "fgMuted":     Colors.fgMuted,     "fgUrgent":    Colors.fgUrgent,
+                "fgBright":    Colors.fgBright,
+                "accent":      root.accent,        "onAccent":    root.onAccent,
+                "panel":       root.panelColor(VtlConfig.barColorful)
+            },
+            "tokens": {
+                "rCard": root.rCard, "rControl": root.rControl, "rTile": root.rTile,
+                "cardGap": root.cardGap, "cardPad": root.cardPad, "rowGap": root.rowGap,
+                "cardFill": root.cardFill,
+                "cardBorderW": root.cardBorderW, "cardBorderColor": root.cardBorderColor,
+                "controlFill": root.controlFill, "controlHover": root.controlHover,
+                "controlBorderW": root.controlBorderW, "controlBorderColor": root.controlBorderColor,
+                "selFill": root.selFill, "selText": root.selText,
+                "selBorderW": root.selBorderW, "selBorderColor": root.selBorderColor,
+                "fsSection": root.fsSection, "fsLabel": root.fsLabel,
+                "fsSub": root.fsSub, "fsValue": root.fsValue
+            }
+        }
+    }
+
     // ── Panel surface (menu / flyout / notification-center / dock fills) ──────────
     // All bar-grown panels share one fill. Cupertino goes frosted: desaturated toward neutral
     // grey and translucent, so the compositor blur (global quickshell layer rule, ignore_alpha

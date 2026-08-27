@@ -20,7 +20,6 @@ singleton CaffeineService 1.0 CaffeineService.qml
 singleton IdleService 1.0 IdleService.qml
 singleton SoundService 1.0 SoundService.qml
 singleton LockState 1.0 lock/LockState.qml
-singleton LockPresets 1.0 LockPresets.qml
 
 # Shared UI component library (token-driven; used by every settings page)
 StyledRect  1.0 common/StyledRect.qml
@@ -228,7 +227,6 @@ TaskbarSection       1.0 settings/taskbar/TaskbarSection.qml
 WindowTagsSection    1.0 settings/windowtags/WindowTagsSection.qml
 WallpaperSection     1.0 settings/theme/WallpaperSection.qml
 LockscreenSection    1.0 settings/lockscreen/LockscreenSection.qml
-LockEditor           1.0 settings/lockscreen/LockEditor.qml
 BootSection          1.0 settings/boot/BootSection.qml
 AutostartSection     1.0 settings/autostart/AutostartSection.qml
 IntegrationsSection  1.0 settings/integrations/IntegrationsSection.qml
