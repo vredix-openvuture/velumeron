@@ -718,9 +718,10 @@ fi  # AUTO_MODE
 # ─── 9) Default wallpaper ─────────────────────────────────────────────────────
 say "Setting default wallpaper"
 
-# Prefer the shipped branded wallpaper; fall back to whatever the horizontal
-# wallpaper dir holds so a renamed default can't silently skip this step again.
-DEFAULT_WP="$VELUMERON_DIR/assets/wallpaper/horizontal/velumeron_with_raven.png"
+# Three branded wallpapers ship; purple is the one a first run lands on. The
+# fallback picks whatever the horizontal dir holds, so a rename can't silently
+# skip this step again (it did once, when the default was renamed under it).
+DEFAULT_WP="$VELUMERON_DIR/assets/wallpaper/horizontal/velumeron-purple.jpg"
 [[ -f "$DEFAULT_WP" ]] || DEFAULT_WP=$(find "$VELUMERON_DIR/assets/wallpaper/horizontal" -maxdepth 1 \
     -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' \) 2>/dev/null | sort | head -1)
 if [[ "$AUTO_MODE" == true && -f "$VELUMERON_USER_DIR/quickshell/wallpapers.json" ]]; then

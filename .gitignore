@@ -16,15 +16,13 @@ claude-important.md
 # Image editor backups
 assets/icons/.*.png
 
-# Wallpapers stay local: large, and per-user content. The branded default ships
-# because welcome_to_velumeron.sh sets it on first run, and theme-names.txt is
-# read by the wallpaper scripts. `dir/*` instead of `dir/` because git cannot
-# re-include a file below an excluded directory.
+# Wallpapers stay local: large, and per-user content. The three branded ones ship,
+# and welcome_to_velumeron.sh sets one of them on a first run. `dir/*` instead of
+# `dir/` because git cannot re-include a file below an excluded directory.
 assets/wallpaper/*
-!assets/wallpaper/theme-names.txt
 !assets/wallpaper/horizontal/
 assets/wallpaper/horizontal/*
-!assets/wallpaper/horizontal/velumeron_with_raven.png
+!assets/wallpaper/horizontal/velumeron-*.jpg
 # Per-client now, stored in ~/.config/velumeron/assets/sets.json
 assets/wallpaper/sets.json
 
