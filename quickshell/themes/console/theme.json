@@ -43,7 +43,9 @@
     "selBorderColor": "accent"
   },
   "components": {
-    "lock": "components/Lock.qml"
+    "lock": "components/Lock.qml",
+    "material": "components/Material.qml",
+    "backdrop": "components/Backdrop.qml"
   },
   "lock": {
     "layout": "instrument",
@@ -69,5 +71,40 @@
       "group": "Appearance",
       "page": "settings/ConsoleSection.qml"
     }
-  ]
+  ],
+  "arrangement": {
+    "ui_style": "straight",
+    "ui_font": "",
+    "bar_mode": "dock",
+    "bar_position": "bottom",
+    "bar_edges": [
+      "bottom"
+    ],
+    "bar_thickness": 28,
+    "bar_inner_radius": 0,
+    "bar_module_bg": "none",
+    "bar_module_bg_radius": 0,
+    "bar_module_spacing": 20,
+    "bar_module_margin": 12,
+    "bar_font_size": 12,
+    "bar_icon_size": 14,
+    "bar_opacity_enabled": true,
+    "bar_opacity_value": 0.96,
+    "colorful_enabled": false,
+    "colorful_menus": false,
+    "colorful_osd": false,
+    "opacity_enabled": true,
+    "opacity_value": 0.97,
+    "settings_float": true,
+    "settings_nav_mode": "page",
+    "launcher_fullscreen": true,
+    "launcher_dock": false,
+    "notify_position": "bottom-left",
+    "notify_dock": true,
+    "osd_style": "dock",
+    "osd_position": "top-center",
+    "taskbar_enabled": false,
+    "transition_style_bar": "straight_origin",
+    "transition_style_edge": "straight_origin"
+  }
 }

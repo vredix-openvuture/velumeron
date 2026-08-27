@@ -698,4 +698,20 @@ ShellRoot {
         delegate: NotifCenter { required property var modelData; screen: modelData }
     }
 
+
+    // The theme's two material layers, per monitor. LAST in this file on purpose: within one
+    // layer-shell layer the stacking follows creation order, so a material declared earlier ends up
+    // under the launcher and the settings panel — which is exactly what it must not be.
+    //
+    // The model is EMPTY unless the theme actually declares one, because an invisible layer surface
+    // is not a free one; see the note above the settings backdrop for what a pair of always-present
+    // full-screen surfaces did to this session.
+    Variants {
+        model: Theme.hasComponent("backdrop") ? Quickshell.screens : []
+        delegate: ThemeMaterial { required property var modelData; screen: modelData; surface: "backdrop" }
+    }
+    Variants {
+        model: Theme.hasComponent("material") ? Quickshell.screens : []
+        delegate: ThemeMaterial { required property var modelData; screen: modelData; surface: "material" }
+    }
 }

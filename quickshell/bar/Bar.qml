@@ -640,6 +640,28 @@ PanelWindow {
     EdgeModules { edge: "left";   x: root.stripRect("left")[0];   y: root.stripRect("left")[1];   width: root.stripRect("left")[2];   height: root.stripRect("left")[3]   }
     EdgeModules { edge: "right";  x: root.stripRect("right")[0];  y: root.stripRect("right")[1];  width: root.stripRect("right")[2];  height: root.stripRect("right")[3]  }
 
+    // What a theme's bar is handed. Rebuilt on the clock tick, which is 1 Hz — nothing here changes
+    // faster, and a bar that rebuilt its context every frame would do it for the whole session.
+    function barContext(edge, w, h) {
+        var c = Style.themeContext()
+        c.w = w
+        c.h = h
+        c.edge = edge
+        c.horizontal = (edge === "top" || edge === "bottom")
+        c.monitor = root.mon
+        c.now = BarFacts.now
+        c.user = BarFacts.user
+        c.host = BarFacts.host
+        c.kernel = BarFacts.kernel
+        c.uptime = BarFacts.uptime
+        c.workspaces = BarFacts.workspacesFor(root.mon)
+        c.media = { "title": BarFacts.mediaTitle, "artist": BarFacts.mediaArtist,
+                    "playing": BarFacts.mediaPlaying }
+        c.battery = { "present": BarFacts.batPresent, "percent": BarFacts.batPercent,
+                      "charging": BarFacts.batCharging }
+        return c
+    }
+
     // A strip's modules: start/center/end groups along the edge. Horizontal edges flow
     // left→right; vertical edges flow top→bottom, rotated -90° (left) / +90° (right) so the
     // text stays readable. start/end keep VtlConfig.barModuleMargin from the edge.
@@ -670,8 +692,22 @@ PanelWindow {
         // The lane the three groups actually live in — the strip minus those two squares. Centre
         // stays centred IN THE LANE, so a corner on one side alone does not shove it off-centre by
         // half a strip.
+        // A theme that brings its own bar draws the whole lane. It gets the strip and the facts and
+        // decides what a bar even IS — Console's is one line of text, not a row of modules — so the
+        // three module groups below are simply not built for it.
+        ThemeSurface {
+            x:      em.horiz ? em.cornerLo : 0
+            y:      em.horiz ? 0 : em.cornerLo
+            width:  em.horiz ? Math.max(0, em.width - em.cornerLo - em.cornerHi) : em.width
+            height: em.horiz ? em.height : Math.max(0, em.height - em.cornerLo - em.cornerHi)
+            visible: Theme.hasComponent("bar")
+            surface: Theme.hasComponent("bar") ? "bar" : ""
+            ctx: root.barContext(em.edge, width, height)
+        }
+
         Item {
             id: lane
+            visible: !Theme.hasComponent("bar")
             x:      em.horiz ? em.cornerLo : 0
             y:      em.horiz ? 0 : em.cornerLo
             width:  em.horiz ? Math.max(0, em.width - em.cornerLo - em.cornerHi) : em.width

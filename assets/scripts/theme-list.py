@@ -56,7 +56,32 @@ def scan(base, source, out):
         }
 
 
+def load(tid):
+    """The full theme.json for one id, user first so a user theme shadows a shipped one."""
+    vtl = os.environ.get("VELUMERON_DIR", "")
+    for base in (os.path.join(user_dir(), "themes"),
+                 os.path.join(vtl, "quickshell", "themes") if vtl else None):
+        if not base:
+            continue
+        path = os.path.join(base, tid, "theme.json")
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return None
+    return None
+
+
 def main():
+    # `arrangement <id>` prints the settings keys that theme wants applied when it is picked.
+    # Everything else lists what is installed.
+    if len(sys.argv) > 2 and sys.argv[1] == "arrangement":
+        t = load(sys.argv[2]) or {}
+        json.dump(t.get("arrangement") or {}, sys.stdout)
+        sys.stdout.write("\n")
+        return
     vtl = os.environ.get("VELUMERON_DIR", "")
     out = {}
     if vtl:

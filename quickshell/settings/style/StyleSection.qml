@@ -763,6 +763,30 @@ Item {
                 }
             }
 
+    // Picking a theme applies its ARRANGEMENT as well as its id. Tokens restyle a surface; the
+    // arrangement decides where the surfaces are, and no token can say "the bar is a status line
+    // along the bottom". The keys are written through SettingsStore like any other setting, so they
+    // stay yours to change afterwards — picking the theme again puts them back.
+    function pickTheme(id) {
+        SettingsStore.set("theme", id)
+        arrangeProc.command = ["python3", (Quickshell.env("VELUMERON_DIR") || "")
+                               + "/assets/scripts/theme-list.py", "arrangement", id]
+        arrangeProc.running = false
+        arrangeProc.running = true
+    }
+    property Process arrangeProc: Process {
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var t = ("" + this.text).trim()
+                if (t === "" || t === "{}") return
+                try {
+                    var a = JSON.parse(t)
+                    for (var k in a) SettingsStore.set(k, a[k])
+                } catch (e) { console.warn("theme: arrangement is not valid JSON:", e.message) }
+            }
+        }
+    }
+
             // ── Theme ─────────────────────────────────────────────────────────
             // A theme is a whole desktop on top of Velumeron, not a colour scheme: its own tokens,
             // its own components for the surfaces it wants to own, and its own settings pages. See
@@ -826,7 +850,7 @@ Item {
                             id: thHov
                             anchors.fill: parent; hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: if (!thRow.on) SettingsStore.set("theme", thRow.modelData.id)
+                            onClicked: if (!thRow.on) root.pickTheme(thRow.modelData.id)
                         }
                     }
                 }

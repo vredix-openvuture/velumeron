@@ -22,5 +22,40 @@
       "user": "off",
       "session": "off"
     }
+  },
+  "arrangement": {
+    "ui_style": "flat",
+    "ui_font": "Fredoka",
+    "bar_mode": "frame",
+    "bar_position": "top",
+    "bar_edges": [
+      "top"
+    ],
+    "bar_thickness": 40,
+    "bar_inner_radius": 10,
+    "bar_module_bg": "module",
+    "bar_module_bg_radius": 8,
+    "bar_module_spacing": 4,
+    "bar_module_margin": 4,
+    "bar_font_size": 14,
+    "bar_icon_size": 14,
+    "bar_opacity_enabled": false,
+    "bar_opacity_value": 0.88,
+    "colorful_enabled": true,
+    "colorful_menus": true,
+    "colorful_osd": true,
+    "opacity_enabled": true,
+    "opacity_value": 0.88,
+    "launcher_fullscreen": false,
+    "launcher_dock": true,
+    "notify_position": "top-left",
+    "notify_dock": true,
+    "osd_style": "dock",
+    "osd_position": "bottom-right",
+    "taskbar_enabled": true,
+    "transition_style_bar": "fillet",
+    "transition_style_edge": "fillet",
+    "settings_float": false,
+    "settings_nav_mode": "sidebar"
   }
 }

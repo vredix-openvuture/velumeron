@@ -203,6 +203,18 @@ QtObject {
     }
     function hasComponent(surface) { return root.componentUrl(surface) !== "" }
 
+    // ── Arrangement ─────────────────────────────────────────────────────────────────────────────
+    // Tokens restyle a surface; ARRANGEMENT decides where the surfaces are. Console does not want
+    // mirobo's bar in a different colour, it wants a status line along the bottom — and no token
+    // can say that. So a theme carries plain settings.json keys and they are applied when you pick
+    // it, which is the honest reading of "a theme is a whole desktop".
+    //
+    //   "arrangement": { "bar_position": "bottom", "bar_thickness": 26, ... }
+    //
+    // Applied, not merged live: these are the user's own keys and stay editable afterwards. Picking
+    // the theme again puts them back.
+    readonly property var arrangement: root.pkg.arrangement || ({})
+
     // ── Settings pages ──────────────────────────────────────────────────────────────────────────
     // The third seam. A theme brings its OWN settings pages, so the range of adjustment is that
     // theme's rather than a global one: Console offers a status line and a rail, mirobo offers
