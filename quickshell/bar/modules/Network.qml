@@ -7,6 +7,7 @@ import Quickshell.Io
 Item {
     id: root
     property string barMon: ""   // monitor name, for per-monitor icon/font size
+    property bool vertical: false   // set by ModSlot: rotate to read along a vertical sidebar
     implicitWidth:  label.implicitWidth
     implicitHeight: label.implicitHeight
 

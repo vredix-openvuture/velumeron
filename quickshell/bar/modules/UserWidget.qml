@@ -12,6 +12,7 @@ Item {
     height: implicitHeight
 
     property string barMon:  ""     // monitor name, for per-monitor icon/font size
+    property bool vertical: false   // set by ModSlot: rotate to read along a vertical sidebar
     property string barEdge: "top"  // set by Bar; drives the click-glide direction
 
     readonly property string _homeDir: Quickshell.env("HOME") ?? ""

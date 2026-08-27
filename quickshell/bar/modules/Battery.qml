@@ -12,6 +12,7 @@ Row {
     id: root
     spacing: 8
     property string barMon: ""   // monitor name, for per-monitor icon/font size
+    property bool vertical: false   // set by ModSlot: rotate to read along a vertical sidebar
 
     // ── Internal battery (laptop) ────────────────────────────────────────────────
     readonly property UPowerDevice dev: UPower.displayDevice
