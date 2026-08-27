@@ -763,6 +763,75 @@ Item {
                 }
             }
 
+            // ── Theme ─────────────────────────────────────────────────────────
+            // A theme is a whole desktop on top of Velumeron, not a colour scheme: its own tokens,
+            // its own components for the surfaces it wants to own, and its own settings pages. See
+            // quickshell/Theme.qml. Colours stay wallust's under every one of them.
+            Card {
+                // Re-scan when the page comes up: a theme is a folder, so one can appear while the
+                // shell is running and the picker has no other way to notice.
+                Component.onCompleted: Theme.refresh()
+                CardLabel { text: "THEME"
+                            hint: "A theme decides the shape of the shell and brings its own "
+                                  + "lockscreen. Mirobo is the default. Colours always come from "
+                                  + "your wallpaper, whichever theme you run." }
+                Repeater {
+                    model: Theme.available
+                    delegate: StyledRect {
+                        id: thRow
+                        required property var modelData
+                        readonly property bool on: Theme.themeId === thRow.modelData.id
+                        width: parent.width
+                        height: 52
+                        radius: Style.rControl
+                        color: thRow.on ? Style.selFill
+                                        : (thHov.containsMouse ? Style.controlHover : Style.controlFill)
+                        borderWidth: thRow.on ? Style.selBorderW : Style.controlBorderW
+                        borderColor: thRow.on ? Style.selBorderColor : Style.controlBorderColor
+
+                        Column {
+                            anchors { left: parent.left; leftMargin: 12; right: chk.left; rightMargin: 8
+                                      verticalCenter: parent.verticalCenter }
+                            spacing: 2
+                            Text {
+                                text: thRow.modelData.name
+                                      + (thRow.modelData.source === "user" ? "  · yours" : "")
+                                color: thRow.on ? Style.selText : Colors.fgPrimary
+                                font.family: Style.font; font.pixelSize: 13; font.bold: thRow.on
+                            }
+                            Text {
+                                text: {
+                                    var bits = []
+                                    var c = thRow.modelData.components || []
+                                    if (c.length > 0) bits.push(c.length === 1 ? "own " + c[0]
+                                                                               : c.length + " own surfaces")
+                                    if (thRow.modelData.pages > 0)
+                                        bits.push(thRow.modelData.pages === 1 ? "a settings page"
+                                                                              : thRow.modelData.pages + " settings pages")
+                                    return bits.length ? bits.join(" · ") : "tokens only"
+                                }
+                                color: thRow.on ? Style.selText : Colors.fgMuted
+                                opacity: thRow.on ? 0.8 : 1
+                                font.family: Style.font; font.pixelSize: 11
+                            }
+                        }
+                        Text {
+                            id: chk
+                            anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                            visible: thRow.on
+                            text: "\u{F012C}"; color: Style.selText
+                            font.family: Style.font; font.pixelSize: 15
+                        }
+                        MouseArea {
+                            id: thHov
+                            anchors.fill: parent; hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: if (!thRow.on) SettingsStore.set("theme", thRow.modelData.id)
+                        }
+                    }
+                }
+            }
+
             // ── Template cards ────────────────────────────────────────────────
             Card {
                 CardLabel { text: "STYLE"

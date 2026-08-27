@@ -1,0 +1,73 @@
+{
+  "id": "console",
+  "name": "Console",
+  "author": "velumeron",
+  "version": 1,
+  "contract": 1,
+  "base": "straight",
+  "tokens": {
+    "rCard": 0,
+    "rControl": 0,
+    "rTile": 0,
+    "cardGap": 12,
+    "cardPad": 14,
+    "rowGap": 8,
+    "cardFill": {
+      "base": "bgPrimary",
+      "alpha": 0.72
+    },
+    "cardBorderW": 1,
+    "cardBorderColor": {
+      "base": "accent",
+      "alpha": 0.45
+    },
+    "controlFill": {
+      "base": "accent",
+      "lift": 0.06
+    },
+    "controlHover": {
+      "base": "accent",
+      "lift": 0.18
+    },
+    "controlBorderW": 1,
+    "controlBorderColor": {
+      "base": "accent",
+      "alpha": 0.3
+    },
+    "selFill": {
+      "base": "accent",
+      "alpha": 0.26
+    },
+    "selText": "accent",
+    "selBorderW": 1,
+    "selBorderColor": "accent"
+  },
+  "components": {
+    "lock": "components/Lock.qml"
+  },
+  "lock": {
+    "layout": "instrument",
+    "reveal": "bubble",
+    "blur": 0.0,
+    "dim": 0.0,
+    "clockFormat": "hh:mm",
+    "dateFormat": "dddd, dd MMMM",
+    "widgets": {
+      "media": "bottom-left",
+      "weather": "bottom-left",
+      "battery": "bottom-left",
+      "notifs": "bottom-left",
+      "user": "off",
+      "session": "off"
+    }
+  },
+  "settings": [
+    {
+      "key": "console",
+      "title": "Console",
+      "icon": "",
+      "group": "Appearance",
+      "page": "settings/ConsoleSection.qml"
+    }
+  ]
+}

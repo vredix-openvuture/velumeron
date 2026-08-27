@@ -364,7 +364,7 @@ PanelWindow {
     // the placeholder page with `hint`.) Component ids resolve file-wide, so forward refs are fine.
     // Order here is only the fallback: what the rail and the nav list actually show is grouped by
     // `navGroups` below. Info stays pinned at the rail bottom regardless of its position here.
-    readonly property var sections: [
+    readonly property var shellSections: [
         { key: "home",          icon: "󰋜", title: "Velumeron",     comp: homeComp },
         { key: "monitors",      icon: "󰍺", title: "Monitors",      comp: monitorsComp },
         { key: "workspaces",    icon: "󱂬", title: "Workspaces",    comp: workspacesComp },
@@ -399,11 +399,42 @@ PanelWindow {
         { key: "network",       rail: false, title: "Network",     comp: networkComp },
         { key: "bluetooth",     rail: false, title: "Bluetooth",   comp: bluetoothComp }
     ]
+    // The shipped pages plus whatever the ACTIVE THEME brings. Rebuilt rather than bound, because
+    // this array must stay non-reactive: a reactive entry reloads the page you are standing on
+    // every time something unrelated changes. A theme switch is the one change that SHOULD rebuild
+    // it — the old theme's pages stop existing at that moment.
+    property var sections: root.shellSections
+    function _rebuildSections() {
+        var out = []
+        for (var i = 0; i < root.shellSections.length; i++) out.push(root.shellSections[i])
+        var ps = Theme.settingsPages
+        for (var j = 0; j < ps.length; j++)
+            out.push({ key: "theme:" + ps[j].key, icon: ps[j].icon, title: ps[j].title,
+                       group: ps[j].group, url: ps[j].url, comp: themePageComp })
+        root.sections = out
+        // Never strand the user on a page that just stopped existing.
+        if (root.activeSection.indexOf("theme:") === 0 && !root.sectionMeta(root.activeSection))
+            root.activeSection = "style"
+    }
+    Component.onCompleted: root._rebuildSections()
+    Connections {
+        target: Theme
+        function onSettingsPagesChanged() { root._rebuildSections() }
+    }
     function sectionMeta(s) {
         for (var i = 0; i < sections.length; i++) if (sections[i].key === s) return sections[i]
         return null
     }
     function sectionTitle(s) { return root.sectionMeta(s)?.title ?? s }
+    // What a theme's settings page is handed. `settings` is the theme's own namespace as an object
+    // so controls bind to it and move when it moves; `set` writes back into that same namespace and
+    // nowhere else, so a theme can invent any knob it likes and can never reach the shell's keys.
+    readonly property var themePageContext: {
+        var c = Style.themeContext()
+        c.settings = Theme.settings
+        c.set = function (k, v) { SettingsStore.set(Theme.settingKey(k), v) }
+        return c
+    }
     // info's hint goes through Wording so the persona re-voices it; routing it here (not in the
     // sections array) keeps the array non-reactive — a style switch must not reload the open page.
     function sectionHint(s)  { return s === "info" ? Wording.s("hint.info") : (root.sectionMeta(s)?.hint ?? "") }
@@ -459,6 +490,14 @@ PanelWindow {
                 var m = root.sectionMeta(keys[i])
                 if (m && m.rail !== false && m.key !== "info" && root.sectionShown(keys[i]))
                     { metas.push(m); placed[keys[i]] = true }
+            }
+            // A theme's own pages sit in the group the theme named, next to the shipped pages that
+            // answer the same question. An unknown group name simply does not match here and the
+            // page falls through to "More", which is where anything unplaced already goes.
+            for (var t = 0; t < root.sections.length; t++) {
+                var tm = root.sections[t]
+                if (tm.key.indexOf("theme:") === 0 && tm.group === root.navGroups[s].name)
+                    { metas.push(tm); placed[tm.key] = true }
             }
             if (metas.length > 0) out.push({ name: root.navGroups[s].name, metas: metas })
         }
@@ -1140,6 +1179,29 @@ PanelWindow {
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            // A theme's settings page. Same boundary as a theme's components: it cannot see the
+            // shell's singletons, so the palette, the tokens and the two calls it needs to read and
+            // write its OWN namespaced settings are handed in.
+            Component {
+                id: themePageComp
+                Item {
+                    id: tpRoot
+                    readonly property var meta: content.activeMeta
+                    Loader {
+                        id: tpLdr
+                        anchors.fill: parent
+                        source: (tpRoot.meta && tpRoot.meta.url) ? tpRoot.meta.url : ""
+                        onStatusChanged: if (status === Loader.Error)
+                            console.warn("theme:", Theme.themeId, "settings page failed to load:",
+                                         tpRoot.meta ? tpRoot.meta.url : "")
+                    }
+                    Binding {
+                        target: tpLdr.item; property: "ctx"; value: root.themePageContext
+                        when: tpLdr.status === Loader.Ready
                     }
                 }
             }
