@@ -48,7 +48,7 @@ it on the next start.
 From a checkout instead: `sudo make install`, same behaviour.
 
 Requirements: an Arch based distribution and Hyprland. Everything else arrives as a package
-dependency. Uninstall with `velumeron-purge-goodby` (dry run by default).
+dependency. Uninstall with `velumeron-purge-goodbye` (dry run by default).
 
 <br>
 <br>

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# velumeron-purge-goodby — the counterpart to welcome_to_velumeron.sh.
+# velumeron-purge-goodbye — the counterpart to welcome_to_velumeron.sh.
 # Removes velumeron and everything it ever wrote to this machine.
 #
 # SAFE BY DEFAULT: with no flags this is a DRY-RUN that only prints what would
 # happen. Nothing is touched until you pass --execute and type the confirmation.
 #
-#   velumeron-purge-goodby                     dry-run (always safe)
-#   velumeron-purge-goodby --execute           actually remove (asks you to type "goodbye")
+#   velumeron-purge-goodbye                     dry-run (always safe)
+#   velumeron-purge-goodbye --execute           actually remove (asks you to type "goodbye")
 #     --system                also remove the system-level files (needs sudo)
 #     --keep-cache            leave ~/.cache/{velumeron,wallust,wal} alone
 #     --restore-hypr-backup   put the pre-velumeron Hyprland config back in place
@@ -34,7 +34,7 @@ for arg in "$@"; do
         --remove-source)       REMOVE_SOURCE=1 ;;
         --force)               FORCE=1 ;;
         -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
-        *) echo "velumeron-purge-goodby: unknown option '$arg' (try --help)" >&2; exit 1 ;;
+        *) echo "velumeron-purge-goodbye: unknown option '$arg' (try --help)" >&2; exit 1 ;;
     esac
 done
 
@@ -195,6 +195,8 @@ main() {
         /usr/share/wayland-sessions/velumeron.desktop
         /usr/bin/velumeron-setup
         /usr/bin/velumeron-session
+        /usr/bin/velumeron-purge-goodbye
+        /usr/bin/velumeron-purge-goodby        # spelling before 2026-08-27
         /usr/local/bin/velumeron
     )
     local owner

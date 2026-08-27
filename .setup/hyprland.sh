@@ -76,6 +76,27 @@ write_section() {
                 printf '%s\n' "$line"
             fi
         done < "$USER_SETTINGS" > "$tmp"
+        # A user_settings.lua that does not parse takes the whole session down: Hyprland
+        # aborts the config, registers no binds and drops into emergency mode — from
+        # which there is no way to fix it inside the desktop. So the result is checked
+        # BEFORE it replaces the real file, and a bad write is dropped instead.
+        #
+        # The escape-sequence check comes first and needs nothing installed: the way this
+        # breaks in practice is a status line leaking into the section, because a block
+        # piped into this function has stdout that IS the section. luac is a bonus when
+        # a lua package happens to be around (hyprland links its own).
+        if LC_ALL=C grep -q $'\033' "$tmp"; then
+            warn "refusing to write section $section — terminal escapes leaked into it"
+            warn "(a status message printed to stdout inside the block being piped here)"
+            rm -f "$tmp"
+            return 1
+        fi
+        if command -v luac >/dev/null 2>&1 && ! luac -p "$tmp" >/dev/null 2>&1; then
+            warn "refusing to write section $section — the result is not valid Lua:"
+            luac -p "$tmp" 2>&1 | sed 's/^/    /' >&2
+            rm -f "$tmp"
+            return 1
+        fi
         mv "$tmp" "$USER_SETTINGS"
     else
         warn "Section $section not found in user_settings.lua."
@@ -818,7 +839,8 @@ autostart_config() {
             printf '    vrr          = 0,\n'
             printf '    cm           = "auto",\n'
             printf '})\n\n'
-            ok "Monitor : mon$i = $name  ($mode)"
+            # >&2 is load-bearing: this block's stdout IS the section being written.
+            ok "Monitor : mon$i = $name  ($mode)" >&2
             i=$((i + 1))
         done
     } | write_section "MONITORS"

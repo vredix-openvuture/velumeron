@@ -9,8 +9,9 @@ VTL_DIR      = VTL_DIR      or os.getenv("VELUMERON_DIR")      or (os.getenv("HO
 VTL_USER_DIR = VTL_USER_DIR or os.getenv("VELUMERON_USER_DIR") or (os.getenv("HOME") .. "/.config/velumeron")
 
 -- Colors — wallust writes the live palette to ~/.config/velumeron/hypr.lua/colors.lua.
--- Fall back to the default palette shipped with the package if wallust hasn't
--- run yet (typical on first start, before the user picked a wallpaper).
+-- That file is per-machine and never shipped, so on a fresh install neither copy
+-- exists and every colour below would be nil. colors.default.lua is the shipped
+-- fallback for exactly that gap: first login until the first wallpaper.
 local function _try_dofile(path)
     local f = io.open(path, "r")
     if not f then return false end
@@ -19,7 +20,9 @@ local function _try_dofile(path)
     return true
 end
 if not _try_dofile(VTL_USER_DIR .. "/hypr.lua/colors.lua") then
-    _try_dofile(VTL_DIR .. "/hypr.lua/colors.lua")
+    if not _try_dofile(VTL_DIR .. "/hypr.lua/colors.lua") then
+        _try_dofile(VTL_DIR .. "/hypr.lua/colors.default.lua")
+    end
 end
 
 -- Device-specific settings (monitors, workspaces, peripherals)

@@ -22,7 +22,7 @@ install:
 	rm -rf $(SHARE)/quickshell/plugins/*/build $(SHARE)/quickshell/plugins/Velumeron
 	ln -sf $(PREFIX)/share/velumeron/bin/velumeron          $(BIN)/velumeron
 	ln -sf $(PREFIX)/share/velumeron/bin/velumeron-welcome  $(BIN)/velumeron-welcome
-	ln -sf $(PREFIX)/share/velumeron/bin/velumeron-purge-goodby $(BIN)/velumeron-purge-goodby
+	ln -sf $(PREFIX)/share/velumeron/bin/velumeron-purge-goodbye $(BIN)/velumeron-purge-goodbye
 	ln -sf $(PREFIX)/share/velumeron/welcome_to_velumeron.sh $(BIN)/velumeron-setup
 	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/velumeron/LICENSE
 	# Exec bits explicitly: a tree that arrived as a tarball (or through a copy that
