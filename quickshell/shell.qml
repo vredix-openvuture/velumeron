@@ -150,6 +150,20 @@ ShellRoot {
         function close():  void { OnboardingState.close() }
     }
 
+    // IPC: what the theme layer actually resolved to.
+    //   qs -p <this-dir> ipc call theme report
+    // This is not a convenience. qmllint cannot see a theme that is resolved at runtime, so asking
+    // the running shell is the only way to check that a theme package was found and which token
+    // table it ended up with — the cold load-check every new theme needs.
+    IpcHandler {
+        target: "theme"
+        function report(): string {
+            return JSON.stringify({ id: Theme.themeId, name: Theme.name, base: Theme.base,
+                                    loaded: Theme.loaded, contract: Theme.contract,
+                                    tokens: Theme.tokens }, null, 1)
+        }
+    }
+
     // IPC: toggle / open / close the corner menu from outside (e.g. a Hyprland keybind):
     //   qs -p <this-dir> ipc call menu toggle
     IpcHandler {

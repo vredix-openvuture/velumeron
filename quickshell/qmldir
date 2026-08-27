@@ -7,6 +7,7 @@ singleton UserSettings 1.0 UserSettings.qml
 singleton OnboardingState 1.0 onboarding/OnboardingState.qml
 singleton UiState   1.0 UiState.qml
 singleton Actions   1.0 Actions.qml
+singleton Theme     1.0 Theme.qml
 singleton Style     1.0 Style.qml
 singleton Fuzzy     1.0 Fuzzy.qml
 singleton Wording   1.0 Wording.qml

@@ -359,6 +359,11 @@ Item {
         var ms = _data.module_settings
         return (ms && ms[key] && ms[key][name] !== undefined && ms[key][name] !== "") ? ms[key][name] : def
     }
+    // The active THEME (quickshell/themes/<id>/ or $VELUMERON_USER_DIR/themes/<id>/). A theme is a
+    // whole desktop on top of Velumeron: its own token table today, its own components and settings
+    // pages as the framework grows. Mirobo is the default and stays it. See Theme.qml.
+    readonly property string theme:           _data.theme             ?? "mirobo"
+
     // Resolved main display font (blank ui_font → the default nerd face). Also the fallback for a
     // bar module's font, so the template/user font flows to the bar unless a module overrides it.
     readonly property string uiFontResolved: uiFont !== "" ? uiFont : "FantasqueSansM Nerd Font"

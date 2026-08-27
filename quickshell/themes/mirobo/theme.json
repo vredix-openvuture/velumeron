@@ -1,0 +1,9 @@
+{
+  "id": "mirobo",
+  "name": "Mirobo",
+  "author": "velumeron",
+  "version": 1,
+  "contract": 1,
+  "base": "flat",
+  "tokens": {}
+}

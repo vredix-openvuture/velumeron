@@ -359,85 +359,86 @@ QtObject {
         return ("" + s).slice(g.length).replace(/^\s+/, "")
     }
 
-    // ── Radii (chamfer cut sizes under futuristic, bite sizes under grimoire, bump radius under
-    //    wobbly). Straight/nostalgic are hard-cornered; sketch keeps a small radius. ───
-    readonly property int rCard:    isCards ? 16 : isOutlined ? 8 : isFuturistic ? 10 : isGrimoire ? 12
-                                  : isStraight ? 0 : isNostalgic ? 0 : isWobbly ? 9 : isSketch ? 7
-                                  : isCupertino ? 18 : 14
-    readonly property int rControl: isCards ? 12 : isOutlined ? 6 : isFuturistic ? 8  : isGrimoire ? 6
-                                  : isStraight ? 0 : isNostalgic ? 0 : isWobbly ? 7 : isSketch ? 6
-                                  : isCupertino ? 12 : 10
-    readonly property int rTile:    isCards ? 12 : isOutlined ? 6 : isFuturistic ? 6  : isGrimoire ? 5
-                                  : isStraight ? 0 : isNostalgic ? 0 : isWobbly ? 6 : isSketch ? 5
-                                  : isCupertino ? 10 : 8
+    // ── Tokens — supplied by the ACTIVE THEME, not decided here ───────────────────
+    // Radius, fill, border and spacing used to be one fourteen-deep ternary per token over ten
+    // hardcoded variant booleans, so an eleventh look could only exist by editing this file. The
+    // tables now live in Theme.variantTokens and a theme package overrides them (see Theme.qml), and
+    // this side is a lookup with the flat value as the fallback.
+    //
+    // Colours arrive as RECIPES rather than values. The palette is wallust's and moves with the
+    // wallpaper, so a token names a palette entry and what to do to it; resolving that lives here
+    // because tint / lift / liftSolid live here. The dependency runs one way: Style reads Theme,
+    // Theme never reads Style.
+    //
+    // Reactivity is unchanged. A binding that calls these captures every property they read —
+    // Theme.tokens, the Colors entry, root.accent, surfaceLift — so switching theme, wallpaper or
+    // the surface-contrast knob still re-binds every token in place, with no restart.
+    // A broken theme must never blank the shell, so every lookup falls back and keeps drawing — but
+    // it says so. The warning fires only when a key is PRESENT and wrong, which is a theme bug and
+    // exactly when the noise is wanted; a key a theme simply does not set is silent.
+    function _tokNum(key, fallback) {
+        var v = Theme.tokens[key]
+        if (typeof v === "number") return v
+        if (v !== undefined) console.warn("theme:", Theme.themeId, "token", key, "is not a number:", v)
+        return fallback
+    }
+    function _tokBase(name) {
+        if (name === "accent")   return root.accent
+        if (name === "onAccent") return root.onAccent
+        var c = Colors[name]
+        if (c !== undefined) return c
+        console.warn("theme:", Theme.themeId, "unknown palette entry:", name)
+        return root.accent
+    }
+    function _tokColor(key, fallback) {
+        var v = Theme.tokens[key]
+        if (v === undefined || v === null) return fallback
+        if (typeof v === "string") return (v === "transparent") ? "transparent" : root._tokBase(v)
+        var base = root._tokBase(v.base)
+        if (v.solid)               return root.liftSolid(base)
+        if (v.lift  !== undefined) return root.tint(base, root.lift(v.lift))
+        if (v.alpha !== undefined) return root.tint(base, v.alpha)
+        return base
+    }
+
+    // ── Radii. The theme picks the numbers; the SHAPE of a corner is still keyed off the variant
+    //    above (chamfer cuts at 45 degrees, scallop bites inward, wobbly bumps, sketch bows),
+    //    because that selects a renderer rather than a value. ───────────────────────
+    readonly property int rCard:    root._tokNum("rCard",    14)
+    readonly property int rControl: root._tokNum("rControl", 10)
+    readonly property int rTile:    root._tokNum("rTile",     8)
 
     // ── Spacing / density ─────────────────────────────────────────────────────────
-    readonly property int cardGap: isOutlined ? 12 : (isCards || isCupertino) ? 14 : (isGrimoire || isWobbly || isSketch) ? 18
-                                 : (isStraight || isNostalgic) ? 10 : 16                   // between groups
-    readonly property int cardPad: isOutlined ? 12 : (isGrimoire || isWobbly || isCupertino) ? 16
-                                 : isNostalgic ? 12 : 14                                   // inside a group
-    readonly property int rowGap:  (isFlat || isGrimoire || isWobbly || isSketch || isCupertino) ? 10 : 8 // between rows in a group
+    readonly property int cardGap: root._tokNum("cardGap", 16)   // between groups
+    readonly property int cardPad: root._tokNum("cardPad", 14)   // inside a group
+    readonly property int rowGap:  root._tokNum("rowGap",  10)   // between rows in a group
 
     // ── Card / group surface ──────────────────────────────────────────────────────
-    // The accent tints (and the two solid fills) run through the surface-contrast knob; the
-    // futuristic/cupertino alphas do NOT — there the value is translucency for the blur behind
-    // the surface, not a lift off the panel, so scaling it would just fog the material.
-    readonly property color cardFill: isCards      ? root.liftSolid(Colors.bgElement)
-                                     : isOutlined   ? "transparent"
-                                     : isFuturistic ? root.tint(Colors.bgPrimary, 0.45)
-                                     : isGrimoire   ? root.tint(root.accent, root.lift(0.07))
-                                     : isNostalgic  ? root.liftSolid(Colors.bgElement)
-                                     : isStraight   ? root.tint(root.accent, root.lift(0.04))
-                                     : isWobbly     ? root.tint(root.accent, root.lift(0.09))
-                                     : isSketch     ? root.tint(root.accent, root.lift(0.05))
-                                     : isCupertino  ? root.tint(Colors.bgElement, 0.55)
-                                                    : root.tint(root.accent, root.lift(0.06))
-    readonly property int   cardBorderW:     isNostalgic ? 2 : isFlat ? 0 : 1
-    readonly property color cardBorderColor: isOutlined   ? Colors.boNormal
-                                            : isFuturistic ? root.tint(root.accent, 0.50)
-                                            : isGrimoire   ? root.tint(root.accent, 0.55)
-                                            : isStraight   ? Colors.boNormal
-                                            : isNostalgic  ? Colors.boNormal
-                                            : isWobbly     ? root.tint(root.accent, 0.42)
-                                            : isSketch     ? root.tint(Colors.fgMuted, 0.85)
-                                            : isCupertino  ? root.tint(Colors.boNormal, 0.35)
-                                                           : root.tint(Colors.boNormal, 0.40)
+    // The accent tints (and the two solid fills) run through the surface-contrast knob: that is what
+    // a token's "lift" means. A token's "alpha" does NOT. On the futuristic and cupertino surfaces
+    // the value is translucency for the blur behind the surface, not a lift off the panel, and
+    // scaling it would only fog the material.
+    readonly property color cardFill:        root._tokColor("cardFill",
+                                                 root.tint(root.accent, root.lift(0.06)))
+    readonly property int   cardBorderW:     root._tokNum("cardBorderW", 0)
+    readonly property color cardBorderColor: root._tokColor("cardBorderColor",
+                                                 root.tint(Colors.boNormal, 0.40))
 
     // ── Control surface (toggle rows, dropdown header, plain rows, tiles) ──────────
-    readonly property color controlFill:  isCards      ? Colors.bgPrimary
-                                         : isOutlined   ? "transparent"
-                                         : isFuturistic ? root.tint(root.accent, root.lift(0.05))
-                                         : isGrimoire   ? root.tint(root.accent, root.lift(0.10))
-                                         : isNostalgic  ? Colors.bgElement
-                                         : isStraight   ? root.tint(root.accent, root.lift(0.07))
-                                         : isWobbly     ? root.tint(root.accent, root.lift(0.12))
-                                         : isSketch     ? root.tint(root.accent, root.lift(0.07))
-                                         : isCupertino  ? root.tint(Colors.bgPrimary, 0.55)
-                                                        : root.tint(root.accent, root.lift(0.12))
+    readonly property color controlFill:  root._tokColor("controlFill",
+                                              root.tint(root.accent, root.lift(0.12)))
     // Hover follows the same knob, or a raised control fill would swallow its own hover state.
-    readonly property color controlHover: isOutlined   ? root.tint(root.accent, root.lift(0.12))
-                                         : isCards      ? root.tint(root.accent, root.lift(0.18))
-                                         : isFuturistic ? root.tint(root.accent, root.lift(0.16))
-                                         : isCupertino  ? root.tint(root.accent, 0.16)
-                                                        : root.tint(root.accent, root.lift(0.22))
-    readonly property int   controlBorderW:     isNostalgic ? 2 : isFlat ? 0 : 1
-    readonly property color controlBorderColor: isOutlined   ? Colors.boNormal
-                                               : isFuturistic ? root.tint(root.accent, 0.45)
-                                               : isGrimoire   ? root.tint(root.accent, 0.35)
-                                               : isStraight   ? Colors.boNormal
-                                               : isNostalgic  ? Colors.boNormal
-                                               : isWobbly     ? root.tint(root.accent, 0.35)
-                                               : isSketch     ? root.tint(Colors.fgMuted, 0.70)
-                                               : isCupertino  ? root.tint(Colors.boNormal, 0.35)
-                                                              : root.tint(Colors.boNormal, 0.40)
+    readonly property color controlHover: root._tokColor("controlHover",
+                                              root.tint(root.accent, root.lift(0.22)))
+    readonly property int   controlBorderW:     root._tokNum("controlBorderW", 0)
+    readonly property color controlBorderColor: root._tokColor("controlBorderColor",
+                                                    root.tint(Colors.boNormal, 0.40))
 
     // ── Selected / active ─────────────────────────────────────────────────────────
-    readonly property color selFill:        isOutlined   ? "transparent"
-                                           : isFuturistic ? root.tint(root.accent, 0.28)
-                                                          : root.accent
-    readonly property color selText:        isOutlined ? root.accent    : root.onAccent
-    readonly property int   selBorderW:     isNostalgic ? 2 : isFlat ? 0 : 1
-    readonly property color selBorderColor: (isOutlined || isFuturistic) ? root.accent : Colors.boActive
+    readonly property color selFill:        root._tokColor("selFill", root.accent)
+    readonly property color selText:        root._tokColor("selText", root.onAccent)
+    readonly property int   selBorderW:     root._tokNum("selBorderW", 0)
+    readonly property color selBorderColor: root._tokColor("selBorderColor", Colors.boActive)
 
     // ── Panel surface (menu / flyout / notification-center / dock fills) ──────────
     // All bar-grown panels share one fill. Cupertino goes frosted: desaturated toward neutral
