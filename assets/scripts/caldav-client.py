@@ -10,6 +10,9 @@ Commands:
   load                                  print the cache without touching the network
   sync                                  refresh all accounts, write + print the cache
   add-account                           creds via env CD_NAME/CD_URL/CD_USER/CD_PASS
+  add-oauth-account                     a server with no password (Google): env
+                                        CD_NAME/CD_URL/CD_USER/CD_PROVIDER/CD_REFRESH/
+                                        CD_CLIENT_ID/CD_CLIENT_SECRET
   remove-account <name>
   add-todo <calId> <summary> [dueYMD]
   toggle-todo <calId> <href> <0|1>
@@ -96,6 +99,12 @@ CACHE_PATH = os.path.join(
 IMAGE_CACHE = os.path.join(
     os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"),
     "velumeron", "event-images")
+# Short-lived OAuth access tokens, cached so a sync of 30 calendars costs one
+# refresh instead of thirty. The refresh token itself lives with the account.
+OAUTH_TOKENS_PATH = os.path.join(
+    os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"),
+    "velumeron", "oauth-tokens.json")
+OAUTH_TOKEN_URLS = {"google": "https://oauth2.googleapis.com/token"}
 
 
 # ── Small file helpers ────────────────────────────────────────────────────────
@@ -109,10 +118,18 @@ def load_accounts():
 
 
 def save_accounts(accounts):
+    """Atomic, and 0600 before any content exists.
+
+    This file holds app passwords and now OAuth refresh tokens. Writing in place
+    left a truncated file behind if anything went wrong mid-write, and creating
+    it world-readable and chmod'ing afterwards left a window where it was not.
+    """
     os.makedirs(os.path.dirname(ACCOUNTS_PATH), exist_ok=True)
-    with open(ACCOUNTS_PATH, "w") as f:
+    tmp = ACCOUNTS_PATH + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
         json.dump({"accounts": accounts}, f, indent=2)
-    os.chmod(ACCOUNTS_PATH, 0o600)
+    os.replace(tmp, ACCOUNTS_PATH)
 
 
 def load_cache():
@@ -137,12 +154,83 @@ def emit(cache):
 
 # ── HTTP (urllib with manual redirects so PROPFIND/REPORT survive 301s) ──────
 
+def _is_oauth(account):
+    return (account.get("auth") or "basic") == "oauth"
+
+
+def _load_tokens():
+    try:
+        with open(OAUTH_TOKENS_PATH) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_tokens(tokens):
+    os.makedirs(os.path.dirname(OAUTH_TOKENS_PATH), exist_ok=True)
+    tmp = OAUTH_TOKENS_PATH + ".tmp"
+    # 0600 from the moment the file exists: an access token is a credential, and
+    # the window between a world-readable create and a chmod is long enough.
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump(tokens, f)
+    os.replace(tmp, OAUTH_TOKENS_PATH)
+
+
+def drop_access_token(account):
+    tokens = _load_tokens()
+    if tokens.pop(account["name"], None) is not None:
+        _save_tokens(tokens)
+
+
+def access_token(account):
+    """A usable bearer token for an OAuth account, refreshing when needed.
+
+    Renewed a minute early on purpose: a token that expires between the PROPFIND
+    and the REPORT turns one sync into a spray of 401s.
+    """
+    name = account["name"]
+    tokens = _load_tokens()
+    entry = tokens.get(name) or {}
+    now = datetime.now(timezone.utc).timestamp()
+    if entry.get("token") and entry.get("expiresAt", 0) > now + 60:
+        return entry["token"]
+
+    provider = account.get("provider") or "google"
+    token_url = OAUTH_TOKEN_URLS.get(provider)
+    if not token_url:
+        raise RuntimeError(f"no token endpoint known for provider {provider!r}")
+    if not account.get("refreshToken"):
+        raise RuntimeError(f"{name}: no refresh token — sign in again in Settings")
+
+    fields = {"client_id": account.get("clientId", ""),
+              "grant_type": "refresh_token",
+              "refresh_token": account["refreshToken"]}
+    if account.get("clientSecret"):
+        fields["client_secret"] = account["clientSecret"]
+    req = urllib.request.Request(
+        token_url, data=urllib.parse.urlencode(fields).encode(),
+        headers={"Content-Type": "application/x-www-form-urlencoded"})
+    try:
+        with urllib.request.urlopen(req, timeout=30, context=ssl.create_default_context()) as resp:
+            payload = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:200]
+        if "invalid_grant" in detail:
+            raise RuntimeError(f"{name}: sign-in expired — sign in again in Settings") from e
+        raise RuntimeError(f"{name}: token refresh → HTTP {e.code}: {detail}") from e
+
+    token = payload.get("access_token")
+    if not token:
+        raise RuntimeError(f"{name}: token endpoint returned no access token")
+    tokens[name] = {"token": token, "expiresAt": now + int(payload.get("expires_in") or 3600)}
+    _save_tokens(tokens)
+    return token
+
+
 def http(method, url, account, body=None, headers=None, depth=None):
-    hdrs = {
-        "User-Agent":    "velumeron-caldav/1.0",
-        "Authorization": "Basic " + base64.b64encode(
-            f"{account['username']}:{account['password']}".encode()).decode(),
-    }
+    hdrs = {"User-Agent": "velumeron-caldav/1.0"}
     if body is not None:
         hdrs["Content-Type"] = "application/xml; charset=utf-8" \
             if body.lstrip().startswith("<") else "text/calendar; charset=utf-8"
@@ -153,7 +241,15 @@ def http(method, url, account, body=None, headers=None, depth=None):
 
     data = body.encode() if isinstance(body, str) else body
     ctx = ssl.create_default_context()
+    refreshed = False
     for _ in range(5):
+        # Built per attempt: a refresh in the middle of the loop has to take
+        # effect on the retry.
+        if _is_oauth(account):
+            hdrs["Authorization"] = "Bearer " + access_token(account)
+        else:
+            hdrs["Authorization"] = "Basic " + base64.b64encode(
+                f"{account['username']}:{account['password']}".encode()).decode()
         req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
         try:
             resp = urllib.request.urlopen(req, timeout=20, context=ctx)
@@ -161,6 +257,12 @@ def http(method, url, account, body=None, headers=None, depth=None):
         except urllib.error.HTTPError as e:
             if e.code in (301, 302, 307, 308) and e.headers.get("Location"):
                 url = urllib.parse.urljoin(url, e.headers["Location"])
+                continue
+            if e.code == 401 and _is_oauth(account) and not refreshed:
+                # The cached token expired mid-sync. One refresh, one retry — any
+                # more and a genuinely revoked grant would loop.
+                refreshed = True
+                drop_access_token(account)
                 continue
             return e.code, dict(e.headers), e.read()
     raise RuntimeError("too many redirects")
@@ -560,7 +662,11 @@ def _attached_image(comp):
             return _ATTACH_CACHE[b64]
         try:
             data = base64.b64decode(b64)
-        except Exception:                                       # noqa: BLE001
+        except Exception as exc:                                # noqa: BLE001
+            # Silently falling back to "no picture" is how a corrupt attachment
+            # becomes a mystery. stdout is the JSON cache, so this goes to stderr.
+            print(f"caldav: bad ATTACH on {_text(comp, 'UID') or '(no UID)'}: {exc}",
+                  file=sys.stderr)
             continue
         if not data:
             continue
@@ -997,19 +1103,33 @@ def _patch_vevent(block, repl, dt_lines):
     drop = set(repl) | {"LAST-MODIFIED"}
     if dt_lines is not None:
         drop |= {"DTSTART", "DTEND"}
-    out, depth = [], 0
+    out, depth, written = [], 0, False
+
+    def emit_new():
+        """The replacements, once, before the first sub-component.
+
+        RFC 5545's eventc puts eventprop ahead of VALARM. Appending them after
+        END:VALARM parses fine in tolerant readers and is not something to bet a
+        270KB ATTACH on."""
+        nonlocal written
+        if written:
+            return
+        written = True
+        for lines_ in repl.values():
+            out.extend(lines_)
+        if dt_lines is not None:
+            out.extend(dt_lines)
+        out.append("LAST-MODIFIED:" + _stamp())
+
     for line in block:
         u = line.upper()
         if u.startswith("BEGIN:VEVENT"):
             pass
         elif u.startswith("BEGIN:"):
+            emit_new()
             depth += 1
         elif u.startswith("END:VEVENT") and depth == 0:
-            for lines_ in repl.values():
-                out += lines_
-            if dt_lines is not None:
-                out += dt_lines
-            out.append("LAST-MODIFIED:" + _stamp())
+            emit_new()
             out.append(line)
             continue
         elif u.startswith("END:"):
@@ -1138,7 +1258,27 @@ def main():
         emit(sync())
         return
 
+    if cmd == "add-oauth-account":
+        account = {"name": os.environ.get("CD_NAME", "").strip(),
+                   "url": os.environ.get("CD_URL", "").strip(),
+                   "username": os.environ.get("CD_USER", "").strip(),
+                   "auth": "oauth",
+                   "provider": os.environ.get("CD_PROVIDER", "google").strip(),
+                   "refreshToken": os.environ.get("CD_REFRESH", ""),
+                   "clientId": os.environ.get("CD_CLIENT_ID", ""),
+                   "clientSecret": os.environ.get("CD_CLIENT_SECRET", "")}
+        if not (account["name"] and account["url"] and account["refreshToken"]
+                and account["clientId"]):
+            raise RuntimeError("add-oauth-account needs CD_NAME, CD_URL, CD_REFRESH, CD_CLIENT_ID")
+        discover_calendars(account)          # validate the grant before saving
+        accounts = [a for a in load_accounts() if a["name"] != account["name"]]
+        accounts.append(account)
+        save_accounts(accounts)
+        emit(sync())
+        return
+
     if cmd == "remove-account":
+        drop_access_token({"name": args[0]})
         save_accounts([a for a in load_accounts() if a["name"] != args[0]])
         emit(sync())
         return
