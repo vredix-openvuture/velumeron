@@ -5,8 +5,10 @@ import Quickshell.Io
 
 // Lockscreen & suspend. The lockscreen is the native quickshell lock (lock/Lock.qml). Its look is a
 // PRESET — a named snapshot of the VtlConfig.lock* keys (LockPresets.qml / lockscreen-config.py),
-// six shipped builtins (Vitrine is the default) + user presets built in the LockEditor overlay
-// ("Build your own"). A preset carries the LAYOUT too, so switching one re-arranges the lock. Mirrors
+// ONE shipped builtin, Console (the six that came before it are parked in presets/_parked/ — their
+// arrangements still exist, they are just no longer offered), plus user presets built in the
+// LockEditor overlay ("Build your own"). A preset carries the LAYOUT too, so switching one
+// re-arranges the lock. Mirrors
 // Settings → Style (templates + your palettes). The two timings below are the LOCK's own: they are
 // written as plain settings.json keys and read by IdleService (ext-idle-notify-v1), so nothing here
 // rewrites hypr.lua/hypridle.conf any more. When the screensaver starts is on its own page — it

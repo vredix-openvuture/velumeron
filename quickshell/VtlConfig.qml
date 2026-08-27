@@ -649,23 +649,30 @@ Item {
     readonly property int    screensaverClockScale:   _data.screensaver_clock_scale  ?? 100  // 50..200 %
     readonly property real   screensaverDim:          _data.screensaver_dim          ?? 0.15
 
-    // The native quickshell lock (lock/Lock.qml) reads these live. Defaults = the shipped "vitrine"
+    // The native quickshell lock (lock/Lock.qml) reads these live. Defaults = the shipped "console"
     // preset; a preset is a named snapshot of exactly these keys (see LockPresets.qml), applied by
     // writing them back through SettingsStore, so switching a preset recolours the lock instantly.
-    readonly property string lockPreset:        _data.lock_preset         ?? "vitrine"
+    readonly property string lockPreset:        _data.lock_preset         ?? "console"
     // Which arrangement LockContent draws. Everything else (blur, clock, widgets) is shared; the
-    // layout decides WHERE those pieces sit, and which of the card keys below still mean anything:
-    //   band   Vitrine     — frosted band across the lower third, no card          (default)
+    // layout decides WHERE those pieces sit, and which of the card keys below still mean anything.
+    // Only `instrument` still ships as a preset — the rest are the arrangements the six parked
+    // presets used (assets/lockscreen/presets/_parked/) and stay so a lock already set to one keeps
+    // drawing:
+    //   instrument Console  — brackets, telemetry rail, instrument clock, prompt      (default)
+    //   band   Vitrine     — frosted band across the lower third, no card
     //   card   Mirobo      — the classic centred card                (card_* keys apply)
     //   edge   Randnotiz   — clock in the top corner, input appears on the first keystroke
     //   hud    Kommandozeile — chamfered frame, status lines, prompt with a block cursor
     //   focus  Fokus       — avatar in a ring, nothing else
     //   split  Diptychon   — solid panel down one side  (card_pos picks the side, card_width_pct
     //                        its share)
-    readonly property string lockLayout:        _data.lock_layout         ?? "band"
+    readonly property string lockLayout:        _data.lock_layout         ?? "instrument"
     readonly property string lockReveal:        _data.lock_reveal         ?? "bubble"   // bubble | fade | none
-    readonly property real   lockBlur:          _data.lock_blur           ?? 0.85       // 0..1 backdrop blur strength
-    readonly property real   lockDim:           _data.lock_dim            ?? 0.1        // 0..1 backdrop darken (kept light — the point is blur, not darkness)
+    // Console owns its own darkness (a terminal that followed a dim slider would stop reading as
+    // one), so the shipped default leaves the backdrop alone. The parked arrangements set their own
+    // through their preset.
+    readonly property real   lockBlur:          _data.lock_blur           ?? 0.0        // 0..1 backdrop blur strength
+    readonly property real   lockDim:           _data.lock_dim            ?? 0.0        // 0..1 backdrop darken
     readonly property bool   lockCardWallpaper: _data.lock_card_wallpaper ?? true       // sharp wallpaper crop inside the card
     readonly property bool   lockCardAvatar:    _data.lock_card_avatar    ?? true       // avatar embedded in the centre card (off = use the "user" widget instead)
     // Every monitor shows the MAIN monitor's wallpaper on the lock instead of its own — one image
@@ -696,7 +703,7 @@ Item {
     // with the card instead of freezing at a pixel value. Style = weight / letter-spacing of the
     // display font (no extra font families, so it holds on any machine).
     readonly property int    lockClockScale:    _data.lock_clock_scale    ?? 100        // 50..200 %
-    readonly property string lockClockStyle:    _data.lock_clock_style    ?? "light"    // light | regular | bold | spaced
+    readonly property string lockClockStyle:    _data.lock_clock_style    ?? "regular"  // light | regular | bold | spaced
     // Which surface the blur + dim apply to: the wallpaper behind everything, or the card itself
     // (frosted card over a sharp desktop).
     readonly property string lockBlurTarget:    _data.lock_blur_target    ?? "background"  // background | card

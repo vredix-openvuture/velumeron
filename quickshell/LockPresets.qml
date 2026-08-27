@@ -12,7 +12,7 @@ QtObject {
     readonly property string _cli: (Quickshell.env("VELUMERON_DIR") || "") + "/assets/scripts/lockscreen-config.py"
 
     property var    presets:      []          // [{ id, name, author, builtin, source, active, settings }]
-    property string activeId:     "mirobo"
+    property string activeId:     "console"
     property string activeSource: "builtin"
 
     function presetById(id, source) {
@@ -31,7 +31,7 @@ QtObject {
         try {
             var d = JSON.parse(("" + t).trim())
             root.presets      = d.presets || []
-            root.activeId     = d.activeId || "mirobo"
+            root.activeId     = d.activeId || "console"
             root.activeSource = d.activeSource || "builtin"
         } catch (e) { /* keep last good */ }
     }

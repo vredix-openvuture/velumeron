@@ -13,8 +13,9 @@ Verbs:
   save <name> <settings-json>   → write a user preset from the given lock settings, then activate it
   duplicate <source> <id> <name>→ copy a preset into a new user preset
   rename <id> <name>            → rename a user preset (id/file kept)
-  delete <id>                   → remove a user preset (falls back to vitrine if it was active)
-  init                          → ensure an active marker exists (default vitrine)
+  delete <id>                   → remove a user preset (falls back to console if it was active)
+  init                          → ensure an active marker exists, and move a session still pointing
+                                  at one of the parked builtins onto the shipped one
 """
 import glob
 import json
@@ -63,9 +64,29 @@ def atomic_write(path, obj):
     os.replace(tmp, path)
 
 
+# The six presets that shipped until 2026-08-27 and now sit in presets/_parked/. `init` moves a
+# marker still pointing at one of them onto DEFAULT_PRESET: the file it names is no longer scanned,
+# so leaving the pointer would show Settings an active preset that is not in its own list.
+PARKED_BUILTINS = {"vitrine", "mirobo", "console-hud", "diptych", "focus", "marginalia"}
+DEFAULT_PRESET = "console"
+
+
+def _on_old_console(aid):
+    """Was this session on the OLD Console — the hairline HUD that carried the same id?
+
+    The parked file was renamed to console-hud.json, but the marker a user already has on disk
+    says "console", which now resolves to the new preset. Without this the settings page would
+    report Console active over a lock still drawing the hairline frame. The layout is the tell:
+    nothing but the old preset puts `console` and `hud` together.
+    """
+    if aid != DEFAULT_PRESET:
+        return False
+    return (read_json(SETTINGS, {}) or {}).get("lock_layout") == "hud"
+
+
 def active():
     m = read_json(MARKER, {}) or {}
-    return m.get("id", "vitrine"), m.get("source", "builtin")
+    return m.get("id", DEFAULT_PRESET), m.get("source", "builtin")
 
 
 def set_active(pid, source):
@@ -167,14 +188,25 @@ def main():
             os.remove(f)
         aid, asrc = active()
         if aid == pid and asrc == "user":
-            _, mp = find("builtin", "vitrine")
+            _, mp = find("builtin", DEFAULT_PRESET)
             if mp:
-                apply_settings(mp.get("settings", {}), "vitrine")
-            set_active("vitrine", "builtin")
+                apply_settings(mp.get("settings", {}), DEFAULT_PRESET)
+            set_active(DEFAULT_PRESET, "builtin")
 
     elif verb == "init":
+        aid, asrc = active()
         if not os.path.exists(MARKER):
-            set_active("vitrine", "builtin")
+            set_active(DEFAULT_PRESET, "builtin")
+        elif asrc == "builtin" and (aid in PARKED_BUILTINS or _on_old_console(aid)):
+            # A session still on one of the parked builtins gets the shipped one applied, not just
+            # pointed at: leaving the keys alone would show Settings "Console, active" over a lock
+            # that still draws Vitrine. The preset carries no weather city, so the one setting
+            # nobody wants re-typed survives. A preset the user SAVED (source "user") is never
+            # touched by this.
+            _, np = find("builtin", DEFAULT_PRESET)
+            if np:
+                apply_settings(np.get("settings", {}), DEFAULT_PRESET)
+            set_active(DEFAULT_PRESET, "builtin")
 
 
 if __name__ == "__main__":

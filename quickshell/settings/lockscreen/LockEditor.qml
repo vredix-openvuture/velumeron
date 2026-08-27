@@ -106,14 +106,18 @@ PanelWindow {
         var d = root._draftSettings()
         for (var k in d) SettingsStore.set(k, d[k])
     }
-    // The six arrangements, in the order the picker shows them. Keys match VtlConfig.lockLayout;
-    // the names are the presets that ship with each, so the grid and the preset list agree.
+    // The arrangements, in the order the picker shows them. Keys match VtlConfig.lockLayout.
+    // "Console" is the one Velumeron ships; the rest are the arrangements the six parked presets
+    // used (assets/lockscreen/presets/_parked/) and stay here so a lock already set to one keeps
+    // working and can still be built on. "Hairline HUD" is the OLD Console, renamed so the picker
+    // never offers the same name twice.
     readonly property var layoutOptions: [
+        { key: "instrument", label: "Console" },
         { key: "band",  label: "Vitrine" },
         { key: "slab",  label: "Mirobo" },
         { key: "card",  label: "Classic" },
         { key: "edge",  label: "Marginalia" },
-        { key: "hud",   label: "Console" },
+        { key: "hud",   label: "Hairline HUD" },
         { key: "focus", label: "Focus" },
         { key: "split", label: "Diptych" }
     ]

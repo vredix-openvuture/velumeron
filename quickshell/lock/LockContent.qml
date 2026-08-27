@@ -61,8 +61,9 @@ FocusScope {
     readonly property bool isHud:   root.cfgLayout === "hud"
     readonly property bool isFocus: root.cfgLayout === "focus"
     readonly property bool isSplit: root.cfgLayout === "split"
+    readonly property bool isInstrument: root.cfgLayout === "instrument"
     readonly property bool isBand:  !root.isCard && !root.isSlab && !root.isEdge && !root.isHud
-                                    && !root.isFocus && !root.isSplit
+                                    && !root.isFocus && !root.isSplit && !root.isInstrument
 
     // Blur + dim land on exactly one surface. "background" = the classic frosted wallpaper behind a
     // solid card; "card" turns it around — the desktop stays sharp and the CARD is the frosted pane.
@@ -335,6 +336,31 @@ FocusScope {
     property var now: new Date()
     Timer { interval: 1000; running: true; repeat: true; onTriggered: root.now = new Date() }
     readonly property string _homeDir: Quickshell.env("HOME") ?? ""
+    readonly property string _vtlDir:  Quickshell.env("VELUMERON_DIR") ?? ""
+
+    // ── Telemetry — what a locked machine can honestly say about itself ──────────────────────────
+    // Two files, no processes: the Console layout prints these, and a lock screen that invented its
+    // own uptime would be worse than one that showed nothing. Re-read once a minute, which is as
+    // often as a "4d 06:11" can change its mind.
+    property real _uptimeSec: 0
+    FileView {
+        id: uptimeFile
+        path: "/proc/uptime"
+        onLoaded: root._uptimeSec = parseFloat(("" + text()).split(" ")[0]) || 0
+    }
+    Timer { interval: 60000; running: true; repeat: true; onTriggered: uptimeFile.reload() }
+    readonly property string uptimeText: {
+        var s = Math.max(0, Math.floor(root._uptimeSec))
+        var d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60)
+        function pad(n) { return (n < 10 ? "0" : "") + n }
+        return (d > 0 ? d + "d " : "") + pad(h) + ":" + pad(m)
+    }
+    property string _kernel: ""
+    FileView {
+        path: "/proc/sys/kernel/osrelease"
+        onLoaded: root._kernel = ("" + text()).trim()
+    }
+    readonly property string kernelText: root._kernel !== "" ? root._kernel : "linux"
 
     // Base — the frozen desktop screenshot captured by Lock.qml just before locking, so the iris
     // grows out of your ACTUAL screen instead of over black. In the editor preview (no real lock),
@@ -1074,7 +1100,8 @@ FocusScope {
         // Exactly one arrangement exists at a time — the others cost nothing.
         Loader {
             anchors.fill: parent
-            sourceComponent: root.isCard  ? cardLayout
+            sourceComponent: root.isInstrument ? instrumentLayout
+                           : root.isCard  ? cardLayout
                            : root.isSlab  ? slabLayout
                            : root.isEdge  ? edgeLayout
                            : root.isHud   ? hudLayout
@@ -1614,6 +1641,233 @@ FocusScope {
                 text: LockState.failMsg !== "" ? "→ " + LockState.failMsg : root._statusLine()
                 color: LockState.failMsg !== "" ? Colors.fgUrgent : Colors.fgMuted
                 font.family: Style.iconFont; font.pixelSize: hud.px; font.letterSpacing: hud.px * 0.16
+            }
+        }
+    }
+
+    // ── Console — the machine talking. Heavy brackets instead of a hairline frame, a telemetry rail
+    // that prints what a locked session can honestly say about itself, a clock read as an instrument
+    // (hours and minutes big, the seconds as their own accent block), and a prompt you type into.
+    // The wallpaper is a ghost behind a scan grid: this look is about the system, not the picture.
+    //
+    // It owns its darkness, the way the hairline HUD does — a terminal that depended on lock_dim
+    // would stop reading as one the moment somebody moved the slider. Every line in the rail comes
+    // from a file or a service that is already running; nothing here is decoration pretending to be
+    // data.
+    Component {
+        id: instrumentLayout
+        Item {
+            id: inst
+            anchors.fill: parent
+            visible: root.isMainMon
+            property bool blinkOn: true
+
+            readonly property int   m:         Math.round(Math.max(40, Math.min(root.width, root.height) * 0.055))
+            readonly property int   px:        root._bodyPx(root.height * 0.0155)
+            readonly property int   arm:       Math.round(Math.max(90, Math.min(root.width, root.height) * 0.17))
+            readonly property int   thick:     Math.round(Math.max(3, Math.min(root.width, root.height) * 0.0042))
+            readonly property int   clockSize: root._fitClock(root.height * 0.21, root.width * 0.52)
+            readonly property int   railX:     inst.m + Math.round(inst.arm * 0.55)
+            readonly property int   labelW:    Math.round(inst.px * 7.2)   // mono: 9 chars of gutter
+            readonly property color tone:      Colors.boActive
+
+            // The seconds get their own block only when the clock format does not already carry
+            // them — otherwise the lock prints them twice.
+            readonly property bool ownSeconds: ("" + root.cfgClockFormat).indexOf("s") < 0
+
+            // The rail. The first four lines are the machine; the rest are the same widgets every
+            // other layout shows, so the zone switches still turn things on and off here — they
+            // just arrive as printed lines instead of as cards.
+            readonly property var rail: {
+                var out = [["HOST",    root.hostName],
+                           ["KERNEL",  root.kernelText],
+                           ["UPTIME",  root.uptimeText],
+                           ["SESSION", "locked \u00B7 pam_unix"]]
+                var ws = root._activeWidgets()
+                for (var i = 0; i < ws.length; i++) {
+                    if (ws[i] === "session" || ws[i] === "user") continue
+                    var v = root._widgetText(ws[i])
+                    if (v !== "") out.push([ws[i].toUpperCase(), v])
+                }
+                return out
+            }
+
+            Timer { interval: 550; repeat: true; running: true; onTriggered: inst.blinkOn = !inst.blinkOn }
+
+            Rectangle { anchors.fill: parent; color: Qt.rgba(0, 0, 0, 0.66) }
+
+            // Scan grid — one Canvas, painted once. A Repeater of two hundred rectangles would be
+            // the same picture and two hundred items.
+            Canvas {
+                id: scan
+                anchors.fill: parent
+                opacity: 0.13
+                // A Canvas paints once and keeps the texture, so every input it draws with needs its
+                // own repaint — including the palette, which changes under a lock that is still up
+                // when the wallpaper is swapped from another monitor.
+                property color line: inst.tone
+                onLineChanged:   requestPaint()
+                onWidthChanged:  requestPaint()
+                onHeightChanged: requestPaint()
+                onPaint: {
+                    var c = getContext("2d")
+                    c.clearRect(0, 0, width, height)
+                    c.strokeStyle = "" + scan.line
+                    c.lineWidth = 1
+                    for (var y = 0; y < height; y += 6) {
+                        c.beginPath(); c.moveTo(0, y + 0.5); c.lineTo(width, y + 0.5); c.stroke()
+                    }
+                }
+            }
+
+            // Brackets, not a frame: they mark the corners and leave the edges open, which is what
+            // separates this from the hairline HUD. Plain rectangles, so the axis-aligned runs are
+            // pixel exact and none of the CurveRenderer trouble in CLAUDE.md applies.
+            Item {
+                anchors.fill: parent
+                anchors.margins: inst.m
+                opacity: root.stagger(0)
+                readonly property int shortArm: Math.round(inst.arm * 0.55)
+                Rectangle { anchors { left: parent.left; top: parent.top }
+                            width: inst.arm; height: inst.thick; color: inst.tone }
+                Rectangle { anchors { left: parent.left; top: parent.top }
+                            width: inst.thick; height: parent.shortArm; color: inst.tone }
+                Rectangle { anchors { right: parent.right; top: parent.top }
+                            width: inst.arm; height: inst.thick; color: inst.tone }
+                Rectangle { anchors { right: parent.right; top: parent.top }
+                            width: inst.thick; height: parent.shortArm; color: inst.tone }
+                Rectangle { anchors { left: parent.left; bottom: parent.bottom }
+                            width: inst.arm; height: inst.thick; color: inst.tone }
+                Rectangle { anchors { left: parent.left; bottom: parent.bottom }
+                            width: inst.thick; height: parent.shortArm; color: inst.tone }
+                Rectangle { anchors { right: parent.right; bottom: parent.bottom }
+                            width: inst.arm; height: inst.thick; color: inst.tone }
+                Rectangle { anchors { right: parent.right; bottom: parent.bottom }
+                            width: inst.thick; height: parent.shortArm; color: inst.tone }
+            }
+
+            Text {
+                anchors { right: parent.right; top: parent.top
+                          rightMargin: inst.railX; topMargin: inst.m + Math.round(inst.arm * 0.30) }
+                text: "SESSION LOCKED"
+                color: inst.tone; opacity: 0.85
+                font.family: Style.iconFont; font.pixelSize: inst.px; font.letterSpacing: inst.px * 0.22
+            }
+
+            // The rail.
+            Column {
+                anchors { left: parent.left; leftMargin: inst.railX
+                          top: parent.top; topMargin: inst.m + Math.round(inst.arm * 0.62) }
+                spacing: Math.round(inst.px * 0.55)
+                opacity: root.stagger(1)
+                Repeater {
+                    model: inst.rail
+                    Row {
+                        required property var modelData
+                        spacing: 0
+                        Text {
+                            width: inst.labelW
+                            text: modelData[0]; color: Colors.fgMuted; opacity: 0.75
+                            font.family: Style.iconFont; font.pixelSize: inst.px; font.letterSpacing: inst.px * 0.10
+                        }
+                        Text {
+                            text: modelData[1]; color: Colors.fgPrimary
+                            font.family: Style.iconFont; font.pixelSize: inst.px; font.letterSpacing: inst.px * 0.10
+                        }
+                    }
+                }
+            }
+
+            // The instrument.
+            Row {
+                id: instClock
+                anchors { left: parent.left; leftMargin: inst.railX
+                          verticalCenter: parent.verticalCenter
+                          verticalCenterOffset: Math.round(root.height * 0.04) }
+                spacing: Math.round(inst.clockSize * 0.10)
+                opacity: root.stagger(2)
+                Text {
+                    text: root.clockText; color: Colors.fgBright
+                    font.family: Style.iconFont; font.pixelSize: inst.clockSize
+                    font.weight: root.clockWeight; font.letterSpacing: inst.clockSize * 0.04
+                }
+                Column {
+                    visible: inst.ownSeconds
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.verticalCenterOffset: Math.round(inst.clockSize * 0.20)
+                    spacing: Math.round(inst.clockSize * 0.05)
+                    Text {
+                        text: Qt.formatTime(root.now, "ss"); color: inst.tone
+                        font.family: Style.iconFont; font.pixelSize: Math.round(inst.clockSize * 0.36)
+                    }
+                    Rectangle {
+                        width: Math.round(inst.clockSize * 0.44)
+                        height: Math.max(2, Math.round(inst.thick * 0.8))
+                        color: inst.tone
+                    }
+                }
+            }
+            Text {
+                anchors { left: parent.left; leftMargin: inst.railX
+                          top: instClock.bottom; topMargin: Math.round(inst.px * 0.4) }
+                opacity: root.stagger(2)
+                text: Qt.formatDate(root.now, root.cfgDateFormat).toUpperCase()
+                color: Colors.fgMuted
+                font.family: Style.iconFont; font.pixelSize: inst.px; font.letterSpacing: inst.px * 0.40
+            }
+
+            // The prompt: the machine's own line, and the dots are what you typed into it.
+            Row {
+                id: instPrompt
+                anchors { left: parent.left; leftMargin: inst.railX
+                          bottom: parent.bottom; bottomMargin: inst.m + Math.round(inst.arm * 0.62) }
+                spacing: Math.round(inst.px * 0.7)
+                opacity: root.stagger(3)
+                transform: Translate { x: root.shakeX }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root._userName + "@" + root.hostName
+                    color: inst.tone
+                    font.family: Style.iconFont; font.pixelSize: Math.round(inst.px * 1.35)
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "$"; color: Colors.fgMuted
+                    font.family: Style.iconFont; font.pixelSize: Math.round(inst.px * 1.35)
+                }
+                Dots {
+                    anchors.verticalCenter: parent.verticalCenter
+                    size: Math.round(Math.max(7, inst.px * 0.8))
+                    tint: Colors.fgBright
+                }
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.round(inst.px * 0.7); height: Math.round(inst.px * 1.5)
+                    color: Colors.fgBright
+                    opacity: inst.blinkOn && !LockState.authenticating ? 1 : 0
+                }
+            }
+            Text {
+                anchors { left: parent.left; leftMargin: inst.railX
+                          right: parent.right; rightMargin: inst.railX
+                          top: instPrompt.bottom; topMargin: Math.round(inst.px * 0.9) }
+                elide: Text.ElideRight
+                visible: LockState.failMsg !== "" || LockState.authenticating
+                text: LockState.failMsg !== "" ? "\u2192 " + LockState.failMsg : "\u2192 checking \u2026"
+                color: LockState.failMsg !== "" ? Colors.fgUrgent : Colors.fgMuted
+                font.family: Style.iconFont; font.pixelSize: inst.px; font.letterSpacing: inst.px * 0.16
+            }
+
+            // The mark, quiet, in the corner the brackets leave empty.
+            Image {
+                anchors { right: parent.right; bottom: parent.bottom
+                          rightMargin: inst.railX; bottomMargin: inst.m + Math.round(inst.arm * 0.55) }
+                source: root._vtlDir !== "" ? "file://" + root._vtlDir + "/assets/icons/vuture.png" : ""
+                width: Math.round(root.height * 0.12); height: Math.round(root.height * 0.135)
+                fillMode: Image.PreserveAspectFit
+                sourceSize.width: Math.round(root.height * 0.27)
+                opacity: 0.22 * root.stagger(3)
+                visible: status === Image.Ready
             }
         }
     }
