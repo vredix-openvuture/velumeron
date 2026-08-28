@@ -649,16 +649,16 @@ PanelWindow {
         c.edge = edge
         c.horizontal = (edge === "top" || edge === "bottom")
         c.monitor = root.mon
-        c.now = BarFacts.now
-        c.user = BarFacts.user
-        c.host = BarFacts.host
-        c.kernel = BarFacts.kernel
-        c.uptime = BarFacts.uptime
-        c.workspaces = BarFacts.workspacesFor(root.mon)
-        c.media = { "title": BarFacts.mediaTitle, "artist": BarFacts.mediaArtist,
-                    "playing": BarFacts.mediaPlaying }
-        c.battery = { "present": BarFacts.batPresent, "percent": BarFacts.batPercent,
-                      "charging": BarFacts.batCharging }
+        c.now = ShellFacts.now
+        c.user = ShellFacts.user
+        c.host = ShellFacts.host
+        c.kernel = ShellFacts.kernel
+        c.uptime = ShellFacts.uptime
+        c.workspaces = ShellFacts.workspacesFor(root.mon)
+        c.media = { "title": ShellFacts.mediaTitle, "artist": ShellFacts.mediaArtist,
+                    "playing": ShellFacts.mediaPlaying }
+        c.battery = { "present": ShellFacts.batPresent, "percent": ShellFacts.batPercent,
+                      "charging": ShellFacts.batCharging }
         return c
     }
 

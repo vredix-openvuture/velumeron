@@ -48,7 +48,8 @@
     "bar": "components/Bar.qml",
     "material": "components/Material.qml",
     "launcher": "components/Launcher.qml",
-    "notifications": "components/Notifications.qml"
+    "notifications": "components/Notifications.qml",
+    "dashboard": "components/Dashboard.qml"
   },
   "lock": {
     "layout": "instrument",

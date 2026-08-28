@@ -30,6 +30,29 @@ Item {
     onVisibleChanged: DashState.active = root.visible
     Component.onCompleted: DashState.active = root.visible
 
+    // What a theme's dashboard is handed. Rebuilt on the clock tick; the load figures move on their
+    // own five-second sampler in ShellFacts, so nothing here polls.
+    readonly property var dashContext: {
+        var c = Style.themeContext()
+        c.w = root.width
+        c.h = root.height
+        c.now = ShellFacts.now
+        c.user = ShellFacts.user
+        c.host = ShellFacts.host
+        c.kernel = ShellFacts.kernel
+        c.uptime = ShellFacts.uptime
+        c.load = { "cpu": ShellFacts.cpuPercent, "mem": ShellFacts.memPercent,
+                   "disk": ShellFacts.diskPercent }
+        c.battery = { "present": ShellFacts.batPresent, "percent": ShellFacts.batPercent,
+                      "charging": ShellFacts.batCharging }
+        c.media = { "title": ShellFacts.mediaTitle, "artist": ShellFacts.mediaArtist,
+                    "playing": ShellFacts.mediaPlaying }
+        c.workspaces = ShellFacts.workspacesFor(UiState.menuMon)
+        c.notifications = { "count": NotifService.model ? NotifService.model.values.length : 0,
+                            "dnd": NotifService.dnd }
+        return c
+    }
+
     readonly property var modules: DashModules.resolve(VtlConfig.dashboardModules,
                                                        VtlConfig.dashboardCols, viewport.rowsPerPage)
 
@@ -93,8 +116,19 @@ Item {
         // the dashboard shaking its way onto the screen. Tried twice (once with the page
         // Behavior animating each intermediate value, once without); both juddered. The
         // remainder is the cheaper price.
+        // A theme that brings its own dashboard draws the whole thing. Console's is a status report
+        // you read rather than a raster of tiles, so there is no grid to restyle — see Theme.qml.
+        ThemeSurface {
+            anchors.fill: parent
+            visible: Theme.hasComponent("dashboard")
+            surface: Theme.hasComponent("dashboard") ? "dashboard" : ""
+            ctx: root.dashContext
+            z: 3
+        }
+
         DashGrid {
             id: grid
+            visible: !Theme.hasComponent("dashboard")
             // ITS OWN width (cols x cell width + gaps), NOT the viewport's. Filling the viewport
             // meant the menu size decided how wide a dashboard cell is, so making the menu bigger
             // under Style → Menu grew the dashboard with it. The two carry their own size settings

@@ -1,19 +1,21 @@
 pragma Singleton
-import ".."
+import "."
 import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Mpris
 import Quickshell.Services.UPower
 
-// What a theme's own bar is given. The shipped bar is a set of modules, each owning its own source;
-// a theme that draws one line of text instead needs those values as VALUES, not as widgets.
+// What the machine can say about itself, as VALUES rather than as widgets.
 //
-// This is deliberately not everything the modules can show. It is the set a status line reads out —
-// who the machine is, how long it has been up, what is playing, what the battery says, which
-// workspace you are on — and it grows when a theme's bar actually asks for more. Anything a module
-// computes in a way that is genuinely its own (network state machines, the update checker's cache)
-// stays in the module rather than being copied here.
+// The shipped surfaces are built from components that each own their source: the bar's clock module
+// owns a clock, the performance module owns its own /proc reader. A theme that draws one line of
+// text, or a status report instead of a tile grid, needs the numbers themselves — so they live here
+// once, for every surface that asks.
+//
+// It grows when a surface actually needs something, not in advance. Anything a module computes in a
+// way that is genuinely its own (the network state machine, the update checker's cache) stays in
+// that module rather than being copied here.
 QtObject {
     id: root
 
@@ -75,6 +77,50 @@ QtObject {
                                                   || root._bat.state === UPowerDeviceState.FullyCharged
                                                   || root._bat.state === UPowerDeviceState.PendingCharge)
                                                   : false
+
+    // ── Load ────────────────────────────────────────────────────────────────────────────────────
+    // CPU, memory and root-filesystem use, sampled every five seconds. The same awk one-liners the
+    // Performance bar module runs, deliberately: two readers of /proc that disagree about what
+    // "busy" means would be worse than one duplicated line. If a third surface ever wants these,
+    // the module should read them from here instead.
+    property int cpuPercent: 0
+    property int memPercent: 0
+    property int diskPercent: 0
+
+    property var _cpuPrev: null
+    property Process _cpuProc: Process {
+        command: ["awk", "NR==1{idle=$5+$6; total=0; for(i=2;i<=NF;i++) total+=$i; print total, idle; exit}",
+                  "/proc/stat"]
+        stdout: SplitParser {
+            onRead: line => {
+                var p = ("" + line).trim().split(" ")
+                var total = parseFloat(p[0]), idle = parseFloat(p[1])
+                if (root._cpuPrev) {
+                    var dt = total - root._cpuPrev.total
+                    var di = idle - root._cpuPrev.idle
+                    if (dt > 0) root.cpuPercent = Math.max(0, Math.min(100, Math.round(100 * (1 - di / dt))))
+                }
+                root._cpuPrev = { "total": total, "idle": idle }
+            }
+        }
+    }
+    property Process _memProc: Process {
+        command: ["awk", "/^MemTotal:/{t=$2} /^MemAvailable:/{a=$2} END{printf \"%.0f\", 100*(t-a)/t}",
+                  "/proc/meminfo"]
+        stdout: SplitParser { onRead: line => { root.memPercent = parseInt(("" + line).trim()) || 0 } }
+    }
+    property Process _diskProc: Process {
+        command: ["bash", "-c", "df -P / | awk 'NR==2{gsub(/%/,\"\",$5); print $5}'"]
+        stdout: SplitParser { onRead: line => { root.diskPercent = parseInt(("" + line).trim()) || 0 } }
+    }
+    property Timer _loadTick: Timer {
+        interval: 5000; running: true; repeat: true; triggeredOnStart: true
+        onTriggered: {
+            root._cpuProc.running = false;  root._cpuProc.running = true
+            root._memProc.running = false;  root._memProc.running = true
+            root._diskProc.running = false; root._diskProc.running = true
+        }
+    }
 
     // Workspaces for one monitor, as plain data.
     //

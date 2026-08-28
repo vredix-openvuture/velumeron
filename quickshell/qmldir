@@ -20,7 +20,7 @@ singleton CaffeineService 1.0 CaffeineService.qml
 singleton IdleService 1.0 IdleService.qml
 singleton SoundService 1.0 SoundService.qml
 singleton LockState 1.0 lock/LockState.qml
-singleton BarFacts 1.0 bar/BarFacts.qml
+singleton ShellFacts 1.0 ShellFacts.qml
 
 # Shared UI component library (token-driven; used by every settings page)
 ThemeSurface 1.0 common/ThemeSurface.qml
