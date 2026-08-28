@@ -49,7 +49,10 @@
     "material": "components/Material.qml",
     "launcher": "components/Launcher.qml",
     "notifications": "components/Notifications.qml",
-    "dashboard": "components/Dashboard.qml"
+    "dashboard": "components/Dashboard.qml",
+    "osd": "components/Osd.qml",
+    "screensaver": "components/Screensaver.qml",
+    "splash": "components/Splash.qml"
   },
   "lock": {
     "layout": "instrument",

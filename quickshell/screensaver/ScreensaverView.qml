@@ -168,12 +168,39 @@ Item {
         }
     }
 
+    // What a theme's screensaver face is given. `fade` is the shell's own crossfade and is applied
+    // to the surface rather than handed in, so a theme cannot forget to honour it.
+    readonly property var saverContext: {
+        var c = Style.themeContext()
+        c.w = root.width
+        c.h = root.height
+        c.now = root.now
+        c.host = ShellFacts.host
+        c.kernel = ShellFacts.kernel
+        c.uptime = ShellFacts.uptime
+        c.user = ShellFacts.user
+        c.load = { "cpu": ShellFacts.cpuPercent, "mem": ShellFacts.memPercent,
+                   "disk": ShellFacts.diskPercent }
+        c.media = { "title": ShellFacts.mediaTitle, "playing": ShellFacts.mediaPlaying }
+        return c
+    }
+
     property var now: new Date()
     Timer { interval: 1000; repeat: true; running: root.active; onTriggered: root.now = new Date() }
 
+    // A theme that brings its own screensaver face draws over the slideshow. The shell keeps the
+    // wallpaper cycle, the crossfade, the wake and the pointer trap.
+    ThemeSurface {
+        anchors.fill: parent
+        visible: Theme.hasComponent("screensaver")
+        surface: Theme.hasComponent("screensaver") ? "screensaver" : ""
+        opacity: root.fade
+        ctx: root.saverContext
+    }
+
     Column {
         id: clockBox
-        visible: VtlConfig.screensaverClock
+        visible: VtlConfig.screensaverClock && !Theme.hasComponent("screensaver")
         opacity: root.fade
         spacing: Math.round(clockText.font.pixelSize * 0.08)
         Text {

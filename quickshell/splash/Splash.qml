@@ -86,6 +86,22 @@ PanelWindow {
         }
     }
 
+    // What a theme's splash is given. `tear` is the curtain's own 0..1 progress, so a theme can
+    // stage what it prints against how far the door has opened instead of guessing at a duration.
+    readonly property var splashContext: {
+        var c = Style.themeContext()
+        c.w = root.width
+        c.h = root.height
+        c.tear = root.tear
+        // The wordmark's fill, which is what actually times the splash: it tears open the moment
+        // this reaches 1. A theme stages against this, not against a duration it guessed.
+        c.progress = mark.charge
+        c.host = ShellFacts.host
+        c.kernel = ShellFacts.kernel
+        c.user = ShellFacts.user
+        return c
+    }
+
     // The growing circle: diameter = screen diagonal × tear, so at 1 it has swallowed every corner.
     // It is the mask for the curtain — INVERTED, so the circle is the hole and everything outside
     // it is what's left of the curtain.
@@ -125,8 +141,19 @@ PanelWindow {
             onClicked: SplashState.finish()
         }
 
+        // A theme that brings its own splash draws the face of the curtain. The shell keeps the
+        // curtain itself, the tear animation, the cursor trap and when it goes away.
+        ThemeSurface {
+            anchors.fill: parent
+            visible: Theme.hasComponent("splash")
+            surface: Theme.hasComponent("splash") ? "splash" : ""
+            ctx: root.splashContext
+            z: 5
+        }
+
         // ── Centre: the OpenVuture mascot, static ────────────────────────────────────────────────
         Image {
+            visible: !Theme.hasComponent("splash")
             anchors.centerIn: parent
             source: "file://" + root._vtlDir + "/assets/splash_openvuture.png"
             width:  Math.round(Math.min(root.width * 0.30, root.height * 0.44, 520))
@@ -135,7 +162,10 @@ PanelWindow {
             fillMode: Image.PreserveAspectFit
             smooth: true; mipmap: true; antialiasing: true
             // Breathe in with the curtain instead of landing hard on the first frame.
-            opacity: root.appeared ? 1 : 0
+            // Hidden, never disabled, when a theme draws the splash: this wordmark's fill IS the
+            // splash's clock — the curtain tears the moment it is full — so stopping it would stop
+            // the splash from ending.
+            opacity: (root.appeared && !Theme.hasComponent("splash")) ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
         }
 

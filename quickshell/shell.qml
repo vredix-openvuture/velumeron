@@ -155,6 +155,20 @@ ShellRoot {
     // This is not a convenience. qmllint cannot see a theme that is resolved at runtime, so asking
     // the running shell is the only way to check that a theme package was found and which token
     // table it ended up with — the cold load-check every new theme needs.
+    // IPC: the screensaver and the splash, so both can be looked at without waiting out an idle
+    // timer or a login. A theme that draws either of them has no other way to be checked.
+    //   qs -p <this-dir> ipc call saver show|hide
+    //   qs -p <this-dir> ipc call splash show
+    IpcHandler {
+        target: "saver"
+        function show(): void { UiState.screensaverOn = true }
+        function hide(): void { UiState.screensaverOn = false }
+    }
+    IpcHandler {
+        target: "splash"
+        function show(): void { SplashState.replay() }
+    }
+
     IpcHandler {
         target: "theme"
         function report(): string {

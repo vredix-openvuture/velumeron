@@ -224,6 +224,19 @@ PanelWindow {
     readonly property int    scrW:      root.screen ? root.screen.width  : root.width
     readonly property int    scrH:      root.screen ? root.screen.height : root.height
 
+    // What a theme's OSD is handed. Small on purpose: an OSD shows one number for a second.
+    readonly property var osdContext: {
+        var c = Style.themeContext()
+        c.w = card.width
+        c.h = card.height
+        c.kind = root.kind
+        c.level = root.level
+        c.percent = Math.round(root.level * 100)
+        c.muted = root.muted
+        c.glyph = root.icon
+        c.device = root.deviceLine ? root.deviceName : ""
+        return c
+    }
     readonly property string deviceName:  Pipewire.defaultAudioSink?.description ?? Pipewire.defaultAudioSink?.name ?? ""
     readonly property bool   deviceLine:  root.kind === "volume" && VtlConfig.osdShowDevice && root.deviceName !== ""
     readonly property string displayMode: root.kind === "brightness" ? VtlConfig.osdBrightnessDisplay : VtlConfig.osdVolumeDisplay
@@ -420,9 +433,19 @@ PanelWindow {
                 }
             }
 
+            // A theme that brings its own OSD draws the whole card face. The shell keeps the card,
+            // its placement, its reveal and the sources behind the numbers.
+            ThemeSurface {
+                anchors.fill: parent
+                visible: Theme.hasComponent("osd")
+                surface: Theme.hasComponent("osd") ? "osd" : ""
+                ctx: root.osdContext
+                z: 2
+            }
+
             // ── Volume / brightness content ───────────────────────────────────────
             Item {
-                visible: root.kind !== "workspace"
+                visible: root.kind !== "workspace" && !Theme.hasComponent("osd")
                 anchors.fill: parent
                 anchors.margins: 16
                 anchors.bottomMargin: root.deviceLine ? 22 : 16
@@ -474,7 +497,7 @@ PanelWindow {
             // ── Workspace content (dots + name/id, card shrinks to fit) ─────────────
             Row {
                 id: wsRow
-                visible: root.kind === "workspace"
+                visible: root.kind === "workspace" && !Theme.hasComponent("osd")
                 anchors.centerIn: parent
                 spacing: 16
 
