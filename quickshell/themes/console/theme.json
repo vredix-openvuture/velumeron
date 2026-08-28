@@ -44,8 +44,9 @@
   },
   "components": {
     "lock": "components/Lock.qml",
-    "material": "components/Material.qml",
-    "backdrop": "components/Backdrop.qml"
+    "backdrop": "components/Backdrop.qml",
+    "bar": "components/Bar.qml",
+    "material": "components/Material.qml"
   },
   "lock": {
     "layout": "instrument",

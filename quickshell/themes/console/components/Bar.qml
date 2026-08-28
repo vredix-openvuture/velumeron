@@ -11,17 +11,7 @@ import QtQuick
 //
 // Everything comes from `ctx`; this file cannot see the shell's singletons. See Style.themeContext()
 // for the shared half and Bar.qml's barContext() for the rest.
-//
-// NOT DECLARED IN theme.json YET, and this is why: measured in the capture rig, this component
-// loads, is handed a complete context (`user vredix`, a live clock, real workspaces) and paints its
-// own background across the strip — a probe fill showed up at x 429..2130, y 1412..1439 — but none
-// of its TEXT reaches the screen. The Row reports a width of 327 px and the label a width of 45 px,
-// so the items exist and are laid out; they simply do not draw, and a plain Text with a fixed size
-// and colour and no binding at all behaves the same. Ruled out so far: the context not arriving,
-// zero geometry, the font, and the material layer covering it.
-//
-// Until that is understood, Console's bar is the shipped bar under Console's arrangement and tokens,
-// which works. Declaring a component that renders an empty strip would be worse than not having one.
+
 Item {
     id: root
     anchors.fill: parent
