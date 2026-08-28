@@ -46,7 +46,9 @@
     "lock": "components/Lock.qml",
     "backdrop": "components/Backdrop.qml",
     "bar": "components/Bar.qml",
-    "material": "components/Material.qml"
+    "material": "components/Material.qml",
+    "launcher": "components/Launcher.qml",
+    "notifications": "components/Notifications.qml"
   },
   "lock": {
     "layout": "instrument",

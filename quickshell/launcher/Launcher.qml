@@ -444,6 +444,30 @@ PanelWindow {
 
     Process { id: termProc }    // Terminal=true entries — see launch()
 
+    // What a theme's launcher is handed. Rebuilt when the query or the selection changes, which is
+    // per keystroke — the list is capped because a theme draws what fits on a screen, not 900 rows,
+    // and building 900 objects on every keystroke would be felt.
+    readonly property int themeResultCap: 60
+    readonly property var launcherContext: {
+        var c = Style.themeContext()
+        c.w = root.width
+        c.h = root.height
+        c.query = search.text
+        c.index = list.currentIndex
+        c.count = root.filtered.length
+        c.capped = root.filtered.length > root.themeResultCap
+        var out = []
+        for (var i = 0; i < root.filtered.length && i < root.themeResultCap; i++) {
+            var a = root.filtered[i]
+            if (!a) continue
+            out.push({ "name": a.name || "", "comment": a.comment || "",
+                       "icon": a.icon || "", "terminal": a.runInTerminal === true,
+                       "command": (a.command || []).join(" ") })
+        }
+        c.results = out
+        return c
+    }
+
     function launch(i) {
         var a = root.apps[i]
         if (!a) return
@@ -711,8 +735,25 @@ PanelWindow {
                 onPicked: key => root.pickMode(key)
             }
 
+            // A theme that brings its own launcher draws the results and the prompt. The shell keeps
+            // the parts that must not move: the TextInput below still holds focus and still owns
+            // every key, the filter and the launch path are unchanged. A launcher whose key
+            // handling lived in a dropped-in folder could not be trusted to close.
+            //
+            // `content` is faded rather than hidden, because `visible: false` takes its TextInput
+            // out of the focus chain and the launcher would stop accepting keys entirely. It costs
+            // a hidden GridView for as long as the launcher is open, which is the cheaper mistake.
+            ThemeSurface {
+                anchors.fill: content
+                visible: Theme.hasComponent("launcher")
+                surface: Theme.hasComponent("launcher") ? "launcher" : ""
+                ctx: root.launcherContext
+                z: 2
+            }
+
             Column {
                 id: content
+                opacity: Theme.hasComponent("launcher") ? 0 : 1
                 x: (root.railSide && !root.railRight) ? root.railW + root.railGap : 0
                 y: root.railTop ? root.railH + root.railGap : 0
                 width:  parent.width  - (root.railSide ? root.railW + root.railGap : 0)
@@ -1180,7 +1221,10 @@ PanelWindow {
             // costs is reserved in content.viewH, which is why it never overlaps the icons.)
             Row {
                 id: pageDots
-                visible: root.fs && root.mode === "apps"
+                // A theme drawing its own launcher is not paging a grid, so the grid's indicator
+                // has no meaning there. It sits outside `content`, which is why fading that alone
+                // left the dots floating over the theme's list.
+                visible: root.fs && root.mode === "apps" && !Theme.hasComponent("launcher")
                 anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
                 height: 16
                 spacing: 9

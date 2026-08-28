@@ -41,6 +41,30 @@ PanelWindow {
         for (var i = 0; i < root._all.length; i++) if (NotifService.isPinned(root._all[i])) c++
         return c
     }
+    // What a theme's notification list is handed. The entries are already flattened: a theme should
+    // not have to know how this shell groups by application or which one it treats as the
+    // representative of a stack.
+    readonly property var notifContext: {
+        var c = Style.themeContext()
+        var out = []
+        for (var i = 0; i < root._all.length; i++) {
+            var n = root._all[i]
+            out.push({ "app": n.appName || "",
+                       "summary": n.summary || "",
+                       "body": n.body || "",
+                       // Two levels, not five: a status line has room for "this one is different"
+                       // and nothing finer.
+                       "critical": ("" + n.urgency).toLowerCase().indexOf("critical") >= 0,
+                       "pinned": NotifService.isPinned(n) })
+        }
+        c.entries = out
+        c.count = root._count
+        c.apps = root._apps
+        c.pinned = root._pins
+        c.dnd = NotifService.dnd
+        return c
+    }
+
     // Morph progress on this screen (other screens stay collapsed so the close morph still plays).
     readonly property real reveal: root.onActiveMonitor ? UiState.notifReveal : 0
 
@@ -476,7 +500,18 @@ PanelWindow {
                     font.family: Style.font; font.pixelSize: 10
                 }
 
+                // A theme that brings its own notification list draws the entries; the shell keeps
+                // the service, the pinning, the do-not-disturb switch and the panel itself.
+                ThemeSurface {
+                    anchors { top: listCap.bottom; topMargin: 9
+                              left: parent.left; right: parent.right; bottom: parent.bottom
+                              leftMargin: 10; rightMargin: 10; bottomMargin: 12 }
+                    visible: Theme.hasComponent("notifications")
+                    surface: Theme.hasComponent("notifications") ? "notifications" : ""
+                    ctx: root.notifContext
+                }
                 NotifList {
+                    visible: !Theme.hasComponent("notifications")
                     anchors { top: listCap.bottom; topMargin: 9
                               left: parent.left; right: parent.right; bottom: parent.bottom
                               leftMargin: 10; rightMargin: 10; bottomMargin: 12 }
