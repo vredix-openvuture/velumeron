@@ -73,10 +73,52 @@ Item {
         }
     }
 
+    // ── The spaces ──────────────────────────────────────────────────────────────────────────────
+    // The workspace overview sits in this area in the shipped launcher, so it is drawn here rather
+    // than left as a hole. One line per workspace: the slot, and what is on it.
+    Column {
+        id: spaces
+        visible: (root.ctx.spaces || []).length > 0
+        anchors { left: parent.left; right: parent.right; top: prompt.bottom
+                  leftMargin: root.pad; rightMargin: root.pad
+                  topMargin: Math.round(root.pad * 0.7) }
+        spacing: Math.round(root.px * 0.2)
+
+        Repeater {
+            model: root.ctx.spaces || []
+            delegate: Row {
+                id: space
+                required property var modelData
+                spacing: Math.round(root.px * 0.7)
+                readonly property var wins: space.modelData.windows || []
+
+                Text {
+                    text: (space.modelData.active ? "▸ " : "  ") + space.modelData.slot
+                    color: space.modelData.active ? root.accent : root.dim
+                    font.family: root.font; font.pixelSize: root.px
+                }
+                Text {
+                    width: Math.round(root.px * 34)
+                    text: {
+                        if (space.wins.length === 0) return "empty"
+                        var names = []
+                        for (var i = 0; i < space.wins.length; i++) names.push(space.wins[i]["class"])
+                        return names.join("  ")
+                    }
+                    color: space.wins.length === 0 ? root.faint : root.ink
+                    elide: Text.ElideRight
+                    font.family: root.font; font.pixelSize: root.px
+                }
+            }
+        }
+        Item { width: 1; height: Math.round(root.px * 0.8) }
+    }
+
     // ── The hits ────────────────────────────────────────────────────────────────────────────────
     ListView {
         id: hits
-        anchors { left: parent.left; right: parent.right; top: prompt.bottom; bottom: footer.top
+        anchors { left: parent.left; right: parent.right; top: spaces.visible ? spaces.bottom : prompt.bottom
+                  bottom: footer.top
                   leftMargin: root.pad; rightMargin: root.pad
                   topMargin: Math.round(root.pad * 0.9); bottomMargin: Math.round(root.pad * 0.4) }
         clip: true

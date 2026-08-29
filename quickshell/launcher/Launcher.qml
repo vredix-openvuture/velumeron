@@ -465,6 +465,11 @@ PanelWindow {
                        "command": (a.command || []).join(" ") })
         }
         c.results = out
+        // The workspace overview lives INSIDE this area, so a theme drawing the launcher covers it.
+        // Rather than leave a hole, the spaces come along in the same context and the theme decides
+        // whether to show them. `spaces` as a resolution point of its own stays for a theme that
+        // restyles the launcher but keeps the shipped one.
+        c.spaces = (root.fs && root.fsOverview && overview) ? overview.spacesContext.spaces : []
         return c
     }
 

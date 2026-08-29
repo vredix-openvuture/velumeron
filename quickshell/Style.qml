@@ -29,15 +29,26 @@ QtObject {
                                           && !isStraight && !isWobbly && !isNostalgic && !isSketch
                                           && !isCupertino                                           // unknown → flat
 
-    // Corner/edge shape switches keyed off the variant. StyledRect and every chrome path builder read
-    // these: chamfer cuts corners at 45° (futuristic); scallop bites them inward (grimoire); wobbly
-    // draws a cloud of outward bumps; sketch bows the outline like a hand-drawn line; nostalgic drops
-    // the outline for a two-tone raised bevel. Straight/flat/cards/outlined stay plain rectangles.
-    readonly property bool chamfer:   isFuturistic
-    readonly property bool scallop:   isGrimoire
-    readonly property bool wobbly:    isWobbly
-    readonly property bool sketch:    isSketch
-    readonly property bool nostalgic: isNostalgic
+    // Corner/edge SHAPE. StyledRect and every chrome path builder read these: chamfer cuts corners
+    // at 45°; scallop bites them inward; wobble draws a cloud of outward bumps; sketch bows the
+    // outline like a hand-drawn line; bevel drops the outline for a two-tone raised edge. Anything
+    // else is a plain rectangle.
+    //
+    // This is a token like any other now — `"corner": "chamfer"` in a theme.json — but it is the one
+    // token that selects a RENDERER rather than a value, which is why it is a name and not a number.
+    // The per-variant defaults below are what the ten shipped looks always did.
+    readonly property string cornerDefault: isFuturistic ? "chamfer" : isGrimoire ? "scallop"
+                                          : isWobbly     ? "wobble"  : isSketch   ? "sketch"
+                                          : isNostalgic  ? "bevel"   : "round"
+    readonly property string corner: {
+        var v = Theme.tokens.corner
+        return (typeof v === "string" && v !== "") ? v : root.cornerDefault
+    }
+    readonly property bool chamfer:   root.corner === "chamfer"
+    readonly property bool scallop:   root.corner === "scallop"
+    readonly property bool wobbly:    root.corner === "wobble"
+    readonly property bool sketch:    root.corner === "sketch"
+    readonly property bool nostalgic: root.corner === "bevel"
 
     // Convex-corner SVG segment for hand-rolled path builders (Bar.qml, StyledRect): a clockwise
     // arc normally, the straight 45° cut when chamfered, the inward bite when scalloped.

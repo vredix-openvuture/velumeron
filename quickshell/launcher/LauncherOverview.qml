@@ -84,6 +84,30 @@ Item {
     // both models would otherwise rebuild in the middle of the hold: cards shifting along, every
     // miniature destroyed and re-created, previews blanking and reloading. That rebuild is what
     // read as a glitch — the switch itself was never the visible part.
+    // What a theme's overview is handed: the workspaces of THIS monitor, each with its window list
+    // flattened to class and title. No captures — a theme that wanted live thumbnails would need
+    // the shell's screencopy plumbing, and Console draws the tiling tree instead.
+    readonly property var spacesContext: {
+        var c = Style.themeContext()
+        c.w = ov.width
+        c.h = ov.height
+        c.monitor = ov.mon
+        c.activeId = ov.activeWsShown
+        var out = []
+        for (var i = 0; i < ov.wsList.length; i++) {
+            var w = ov.wsList[i]
+            var wins = w.fresh ? [] : ov.winsOn(w.id)
+            var ws = []
+            for (var j = 0; j < wins.length; j++)
+                ws.push({ "class": wins[j].cls || "", "title": wins[j].title || "",
+                          "floating": wins[j].floating === true })
+            out.push({ "id": w.id, "slot": Compositor.wsSlot(w.id), "fresh": w.fresh === true,
+                       "active": !w.fresh && w.id === ov.activeWsShown, "windows": ws })
+        }
+        c.spaces = out
+        return c
+    }
+
     property var wsList:  []
     property var winSrc:  []
     onWsListLiveChanged: if (!ov.picking) ov.wsList = ov.wsListLive
@@ -264,8 +288,19 @@ Item {
     }
     Component.onCompleted: { ov.thaw(); ov.centerActive(true) }
 
+    // A theme that brings its own workspace overview draws the whole strip. The shell keeps the
+    // workspace list, the live captures and the pick that switches to one.
+    ThemeSurface {
+        anchors.fill: parent
+        visible: Theme.hasComponent("spaces")
+        surface: Theme.hasComponent("spaces") ? "spaces" : ""
+        ctx: ov.spacesContext
+        z: 2
+    }
+
     ListView {
         id: strip
+        visible: !Theme.hasComponent("spaces")
         anchors.fill: parent
         // The viewport is the WHOLE strip while a card is only `share` of it: what is left over is
         // the peek at the workspace before and after, which is how you know they are there.
