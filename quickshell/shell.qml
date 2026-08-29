@@ -157,16 +157,20 @@ ShellRoot {
     // table it ended up with — the cold load-check every new theme needs.
     // IPC: the screensaver and the splash, so both can be looked at without waiting out an idle
     // timer or a login. A theme that draws either of them has no other way to be checked.
-    //   qs -p <this-dir> ipc call saver show|hide
-    //   qs -p <this-dir> ipc call splash show
+    //   qs -p <this-dir> ipc call saver on|off
+    //   qs -p <this-dir> ipc call splash play
+    //
+    // NOT `show`. That is a subcommand of quickshell's own ipc CLI, so `ipc call saver show` is
+    // parsed as "describe the target" and prints the function list instead of calling anything —
+    // silently, which is exactly how it wasted a debugging pass.
     IpcHandler {
         target: "saver"
-        function show(): void { UiState.screensaverOn = true }
-        function hide(): void { UiState.screensaverOn = false }
+        function on():  void { UiState.screensaverOn = true }
+        function off(): void { UiState.screensaverOn = false }
     }
     IpcHandler {
         target: "splash"
-        function show(): void { SplashState.replay() }
+        function play(): void { SplashState.replay() }
     }
 
     IpcHandler {

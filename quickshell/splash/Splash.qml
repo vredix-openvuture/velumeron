@@ -162,10 +162,7 @@ PanelWindow {
             fillMode: Image.PreserveAspectFit
             smooth: true; mipmap: true; antialiasing: true
             // Breathe in with the curtain instead of landing hard on the first frame.
-            // Hidden, never disabled, when a theme draws the splash: this wordmark's fill IS the
-            // splash's clock — the curtain tears the moment it is full — so stopping it would stop
-            // the splash from ending.
-            opacity: (root.appeared && !Theme.hasComponent("splash")) ? 1 : 0
+            opacity: root.appeared ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
         }
 
@@ -187,7 +184,10 @@ PanelWindow {
             height: Math.round(width * 1000 / 1900)          // the banner's own aspect
             x: mark._pad
             y: root.height - height - mark._pad
-            opacity: root.appeared ? 1 : 0
+            // Hidden, never stopped, when a theme draws the splash: this wordmark's fill IS the
+            // splash's clock — the curtain tears the moment it is full — so halting it would stop
+            // the splash from ever ending.
+            opacity: (root.appeared && !Theme.hasComponent("splash")) ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
 
             Image {
