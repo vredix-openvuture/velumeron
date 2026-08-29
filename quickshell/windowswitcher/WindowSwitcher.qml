@@ -17,6 +17,22 @@ PanelWindow {
     readonly property bool isOpen: UiState.windowSwitcherOpen
     readonly property bool active: isOpen && root.mon !== "" && root.mon === UiState.windowSwitcherMon
 
+    // What a theme's switcher is handed. Already ordered most-recently-used, so a theme never has
+    // to know how this shell tracks focus history.
+    readonly property var switcherContext: {
+        var c = Style.themeContext()
+        c.w = root.width
+        c.h = root.height
+        c.index = root.sel
+        var out = []
+        for (var i = 0; i < root.wins.length; i++) {
+            var wi = root.wins[i]
+            out.push({ "class": wi.cls || "", "title": wi.title || "", "address": wi.address || "" })
+        }
+        c.windows = out
+        return c
+    }
+
     property var wins: []     // [{ address, cls, title }], most-recently-used first
     property int sel: 0
 
@@ -138,15 +154,34 @@ PanelWindow {
         StyledRect {
             id: card
             anchors.centerIn: parent
-            width:  Math.min(root.width - 80, strip.contentWidth + 28)
-            height: 150
+            // The shipped strip sizes the card to its own content. A themed switcher draws a list
+            // instead, and `strip` is not built then — so its contentWidth is 0 and the card
+            // collapsed to a sliver. Give the theme a share of the screen to work in.
+            width:  Theme.hasComponent("switcher") ? Math.round(Math.min(root.width - 120, 820))
+                                                   : Math.min(root.width - 80, strip.contentWidth + 28)
+            height: Theme.hasComponent("switcher")
+                    ? Math.round(Math.min(root.height * 0.5,
+                                          Math.max(120, ((root.wins.length || 1) * 30) + 40)))
+                    : 150
             radius: Style.rCard; color: Colors.bgPrimary
             borderWidth: 1; borderColor: Style.chromeBorder
             opacity: Style.popFade(root.reveal)
             scale:   Style.popScale(root.reveal)
 
+            // A theme that brings its own switcher draws the list. The shell keeps the keyboard, the
+            // most-recently-used order and the raise on release.
+            ThemeSurface {
+                anchors.fill: parent
+                anchors.margins: 14
+                visible: Theme.hasComponent("switcher")
+                surface: Theme.hasComponent("switcher") ? "switcher" : ""
+                ctx: root.switcherContext
+                z: 2
+            }
+
             ListView {
                 id: strip
+                visible: !Theme.hasComponent("switcher")
                 anchors.fill: parent; anchors.margins: 14
                 orientation: ListView.Horizontal
                 spacing: 10; clip: true

@@ -1,0 +1,8 @@
+-- Hyprland look for the Mirobo THEME.
+--
+-- Deliberately empty, exactly like flat.lua was: mirobo IS the base look (modules/look_and_feel.lua),
+-- and everything a window frame does under it — gaps, rounding, border size, blur — is the user's
+-- own setting from the Look and Feel page. Naming values here would quietly overwrite them.
+--
+-- It exists as a file because the window decoration follows the THEME now rather than the ui_style,
+-- and the loader in hyprland.lua needs something to find for the default.

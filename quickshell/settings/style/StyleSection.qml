@@ -773,7 +773,15 @@ Item {
                                + "/assets/scripts/theme-list.py", "arrangement", id]
         arrangeProc.running = false
         arrangeProc.running = true
+        // The WINDOW frames follow the theme too. hyprland.lua reads <USER_DIR>/active-theme and
+        // dofiles hypr.lua/themes/<name>.lua, so handing it the theme id is what makes a switch
+        // reach the compositor instead of stopping at the shell's own surfaces.
+        frameProc.command = ["bash", (Quickshell.env("VELUMERON_DIR") || "")
+                             + "/assets/scripts/apply-ui-style.sh", id]
+        frameProc.running = false
+        frameProc.running = true
     }
+    property Process frameProc: Process {}
     property Process arrangeProc: Process {
         stdout: StdioCollector {
             onStreamFinished: {

@@ -52,7 +52,9 @@
     "dashboard": "components/Dashboard.qml",
     "osd": "components/Osd.qml",
     "screensaver": "components/Screensaver.qml",
-    "splash": "components/Splash.qml"
+    "splash": "components/Splash.qml",
+    "switcher": "components/Switcher.qml",
+    "zones": "components/Zones.qml"
   },
   "lock": {
     "layout": "instrument",

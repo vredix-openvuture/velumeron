@@ -160,9 +160,9 @@ ShellRoot {
     //   qs -p <this-dir> ipc call saver on|off
     //   qs -p <this-dir> ipc call splash play
     //
-    // NOT `show`. That is a subcommand of quickshell's own ipc CLI, so `ipc call saver show` is
-    // parsed as "describe the target" and prints the function list instead of calling anything —
-    // silently, which is exactly how it wasted a debugging pass.
+    // NOT `show` — see the note on the `zones` handler below, which already records why. It cost a
+    // debugging pass to rediscover, because `ipc call <t> show` exits 0 and prints the function
+    // list instead of failing.
     IpcHandler {
         target: "saver"
         function on():  void { UiState.screensaverOn = true }

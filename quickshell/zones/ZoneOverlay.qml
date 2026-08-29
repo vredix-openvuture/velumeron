@@ -50,14 +50,40 @@ PanelWindow {
         return out
     }
 
+    // What a theme's zone overlay is handed: the rects in this monitor's own coordinates, each
+    // already marked with whether the cursor is inside it, so a theme never repeats the hit test.
+    readonly property var zoneContext: {
+        var c = Style.themeContext()
+        c.w = root.width
+        c.h = root.height
+        var out = []
+        for (var i = 0; i < root.zoneRects.length; i++) {
+            var z = root.zoneRects[i]
+            var hot = ZonesState.cx - root.sx >= z.x && ZonesState.cx - root.sx <= z.x + z.w
+                   && ZonesState.cy - root.sy >= z.y && ZonesState.cy - root.sy <= z.y + z.h
+            out.push({ "x": z.x, "y": z.y, "w": z.w, "h": z.h, "hot": hot, "index": i })
+        }
+        c.zones = out
+        return c
+    }
+
     Item {
         id: fields
         anchors.fill: parent
         opacity: ZonesState.active ? 1.0 : 0.0
         Behavior on opacity { NumberAnimation { id: fadeOut; duration: 160; easing.type: Easing.OutCubic } }
 
+        // A theme that brings its own drop zones draws the rack. The shell keeps the geometry, the
+        // hit test and the snap — this is only what you see while dragging.
+        ThemeSurface {
+            anchors.fill: parent
+            visible: Theme.hasComponent("zones")
+            surface: Theme.hasComponent("zones") ? "zones" : ""
+            ctx: root.zoneContext
+        }
+
         Repeater {
-            model: root.zoneRects
+            model: Theme.hasComponent("zones") ? [] : root.zoneRects
             delegate: Rectangle {
                 id: zone
                 required property var modelData
