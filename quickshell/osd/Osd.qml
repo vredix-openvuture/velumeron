@@ -103,7 +103,7 @@ PanelWindow {
         // A free card is rounded on all four corners (the float background's radius), so the frost
         // has to be too. The docked shape merges into the bar and keeps the plain rect, as the
         // glides and flyouts do.
-        radius: root.dock ? 0 : 16
+        radius: root.dock ? 0 : root.cardR
     }
 
     PwObjectTracker { objects: [Pipewire.defaultAudioSink] }
@@ -290,13 +290,21 @@ PanelWindow {
     readonly property color cardColor: Style.barPanelColor(Style.panelColor(VtlConfig.osdColorful), root.mon)
 
     // ── Dock outline (concave fillets where the card meets its edge / the bar) ──────
+    // TWO radii, and they answer different questions. The corners out in the open are the THEME's
+    // card corner, like every other surface's; the fillets where the card merges into the bar have
+    // to continue the BAR's corner, so they take that monitor's bar radius.
+    //
+    // One number did both, and on a screen whose bar is set square that squared off the whole OSD
+    // while the rest of the desktop stayed round — a per-monitor bar setting quietly redesigning a
+    // surface that has nothing to do with that monitor's bar.
+    readonly property int cardR:  Style.chromeR(Style.rCard)
     readonly property int flareR: VtlConfig.barInnerRadiusFor(root.mon)
     // Seam overshoot past each docked edge — through the bar to the screen edge (+24 spare) so the
     // fill covers the bar's inner border. `seam` is the anchored edge, `perpSeam` the perpendicular
     // one at a corner. The clip drawer trims each back to a 2px overlap when a bar is actually there.
     readonly property int seam:     root.barThk  + 24
     readonly property int perpSeam: root.perpThk + 24
-    readonly property int pad:      root.flareR + Math.max(root.seam, root.perpSeam)
+    readonly property int pad:      Math.max(root.cardR, root.flareR) + Math.max(root.seam, root.perpSeam)
                                     + Math.ceil(Math.max(Style.elTopBulge, Style.elSideBulge))
     // Build the outline in (a, d) space — a runs along the anchored edge, d is the depth away from
     // it (edge at d = 0) — then map onto the actual edge. Returns [borderOpen, fillClosed]. A centre
@@ -310,9 +318,10 @@ PanelWindow {
         var horiz = (root.dockEdge === "top" || root.dockEdge === "bottom")
         var A = horiz ? W : H
         var D = horiz ? H : W
-        var e = Math.max(0, Math.min(root.flareR, A / 3, D / 3))   // convex far corners
+        var e = Math.max(0, Math.min(root.cardR, A / 3, D / 3))    // convex far corners: the theme's
+        var fr = Math.max(0, Math.min(root.flareR, A / 3, D / 3))  // merge fillets: the bar's
         // Concave merge fillets collapse to 0 (straight corners) for the non-fillet styles.
-        var f = VtlConfig.transitionFilletFor("osd", root._tctx) ? e : 0
+        var f = VtlConfig.transitionFilletFor("osd", root._tctx) ? fr : 0
         var sA = root.seam                                         // anchored-edge overshoot
         var sP = root.perpSeam                                     // perpendicular-edge overshoot
         var P  = root.pad
@@ -446,7 +455,7 @@ PanelWindow {
             StyledRect {
                 visible: !root.dock
                 anchors.fill: parent
-                radius: 16
+                radius: root.cardR
                 color:  root.cardColor
                 borderWidth: 1; borderColor: Style.chromeBorder
             }

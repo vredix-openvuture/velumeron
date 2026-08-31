@@ -948,23 +948,27 @@ PanelWindow {
         // small icon centre on one line — and a dot in THAT corner floats half a bar above the
         // glyph it belongs to, reading as a mark on the bar rather than on the module. So the box
         // is the module's own drawing whenever there is no pill to sit on.
-        // …with a hair of air around the module's own drawing. Hung exactly on the glyph's corner
-        // the dot touches the last letter of a text module — it belongs TO the module, but it is
-        // not part of the word. The pill case needs none: the pill is already the padding.
-        readonly property int dotAir: ms.moduleBg ? 0 : Math.max(3, Math.round(ms.dotOver * 1.5))
-        readonly property real dotBoxW: ms.moduleBg ? ms.width
-                       : Math.min(ms.width,  (ms.rotated ? ms.ih : ms.iw) + 2 * ms.dotAir)
-        readonly property real dotBoxH: ms.moduleBg ? ms.height
-                       : Math.min(ms.height, (ms.rotated ? ms.iw : ms.ih) + 2 * ms.dotAir)
+        // With a pill the dot sits ON its corner, overhanging by `dotOver` — the pill is a box and a
+        // badge that breaks its outline reads as belonging to it.
+        //
+        // WITHOUT a pill there is no outline to break; the module is a word or a glyph, and a badge
+        // overlapping THAT is a badge sitting in the text. So the dot clears the drawing instead:
+        // beside its top-right corner with a hair of air, never on top of the last letter.
+        readonly property real contentW: ms.rotated ? ms.ih : ms.iw
+        readonly property real contentH: ms.rotated ? ms.iw : ms.ih
+        readonly property int  dotAir:   Math.max(2, Math.round(Style.dotSize(root.mon) * 0.35))
         StatusDot {
             id: msDot
             barMon: root.mon
             on:     ms.dotOn
             tone:   ms.dotTone
             z:      11
-            // Placed rather than anchored: the box it hangs off is not the slot's rect.
-            x: (ms.width  + ms.dotBoxW) / 2 - msDot.width + ms.dotOver
-            y: (ms.height - ms.dotBoxH) / 2 - ms.dotOver
+            // Placed rather than anchored: the box it hangs off is not the slot's rect. Clamped to
+            // the slot's top so a thin bar cannot push it out through the strip's own edge.
+            x: ms.moduleBg ? ms.width - msDot.width + ms.dotOver
+                           : (ms.width + ms.contentW) / 2 + ms.dotAir
+            y: ms.moduleBg ? -ms.dotOver
+                           : Math.max(0, (ms.height - ms.contentH) / 2 - ms.dotAir - msDot.height)
         }
 
         Loader {
