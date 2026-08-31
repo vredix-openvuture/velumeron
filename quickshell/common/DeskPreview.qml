@@ -58,7 +58,9 @@ Item {
     Rectangle {
         id: desk
         anchors.fill: parent
-        radius: Math.max(2, Math.round(Style.rCard * 0.6))
+        // The same corner every other surface INSIDE a card uses. It had a rounding of its own
+        // (0.6 of the card's), which put a third radius on a page that is trying to have one.
+        radius: Style.rControl
         color: Colors.bgPrimary
         clip: true
 
