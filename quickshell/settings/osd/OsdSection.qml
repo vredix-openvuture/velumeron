@@ -12,6 +12,10 @@ Item {
     // How many columns the menu has given this page. It lays one grid across the whole
     // content area — switch, cards, preview — and every page sits on it.
     readonly property int pageCols: (parent && parent.pageCols !== undefined) ? parent.pageCols : 0
+    // How tall this page's content is, so the menu can be the size of its page rather than
+    // a fixed box with half of it empty.
+    readonly property real pageContentH: col.visible ? col.implicitHeight : 0
+    readonly property real pageFillH: (parent && parent.pageFillH !== undefined) ? parent.pageFillH : 0
     readonly property real pageRowMin: (parent && parent.pageRowMin !== undefined) ? parent.pageRowMin : 0
 
     function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s }
@@ -59,6 +63,7 @@ Item {
             id: col
             forced: root.pageCols
             firstRowMin: root.pageRowMin
+            fillHeight: root.pageFillH
             width: parent.width
             y: 4
 

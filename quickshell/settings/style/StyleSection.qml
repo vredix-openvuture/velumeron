@@ -21,6 +21,9 @@ Item {
     // How many columns the menu has given this page. It lays one grid across the whole
     // content area — switch, cards, preview — and every page sits on it.
     readonly property int pageCols: (parent && parent.pageCols !== undefined) ? parent.pageCols : 0
+    // Its rooms have no ids: the visible one is whatever the column is currently as tall as.
+    readonly property real pageContentH: col.implicitHeight + pinnedPreview.height + Style.cardGap + tabStrip.height + 18
+    readonly property real pageFillH: (parent && parent.pageFillH !== undefined) ? parent.pageFillH : 0
     readonly property real pageRowMin: (parent && parent.pageRowMin !== undefined) ? parent.pageRowMin : 0
 
     // "" = main page, "build" = the theme-builder sub-page.
@@ -700,6 +703,7 @@ Item {
             CardColumns {
                 forced:  root.pageCols
                 firstRowMin: root.pageRowMin
+                fillHeight: root.pageFillH
                 height:  implicitHeight
                 visible: root.tab === "look"
                 width:   col.width
@@ -1091,6 +1095,7 @@ Item {
             CardColumns {
                 forced:  root.pageCols
                 firstRowMin: root.pageRowMin
+                fillHeight: root.pageFillH
                 height:  implicitHeight
                 visible: root.tab === "menu"
                 width:   col.width
@@ -1248,6 +1253,7 @@ Item {
             CardColumns {
                 forced:  root.pageCols
                 firstRowMin: root.pageRowMin
+                fillHeight: root.pageFillH
                 height:  implicitHeight
                 visible: root.tab === "theme"
                 width:   col.width
@@ -1386,6 +1392,7 @@ Item {
             CardColumns {
                 forced:  root.pageCols
                 firstRowMin: root.pageRowMin
+                fillHeight: root.pageFillH
                 height:  implicitHeight
                 visible: root.tab === "motion"
                 width:   col.width

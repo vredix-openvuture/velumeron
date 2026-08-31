@@ -19,7 +19,7 @@ StyledRect {
     // it is in. Cards of three different heights side by side is what makes a page look assembled
     // rather than laid out, and no amount of matching WIDTHS fixes that.
     property real rowHeight: 0
-    readonly property real contentHeight: inner.implicitHeight + Style.cardPad * 2
+    readonly property real contentHeight: card._naturalH + Style.cardPad * 2
     height:       Math.max(card.contentHeight, card.rowHeight)
 
     // Grimoire flourish: an inner hairline frame echoing the scalloped outline, plus corner
@@ -49,10 +49,35 @@ StyledRect {
         }
     }
 
+    // When the grid gives a card more height than its contents need, the rows SPREAD into it
+    // rather than sitting at the top of an empty box — up to a point. Past twice the normal gap
+    // the page starts reading as a list of unrelated lines, so the rest of the slack stays at the
+    // bottom and the card is simply taller.
+    //
+    // The spread is computed from the natural height (`_naturalH`, measured at the base gap), never
+    // from `inner.implicitHeight` — spacing feeding back into the height it is derived from is a
+    // binding loop.
+    readonly property real _naturalH: {
+        var n = 0, h = 0
+        for (var i = 0; i < inner.children.length; i++) {
+            var c = inner.children[i]
+            if (c && c.visible) { h += c.height; n++ }
+        }
+        return h + Math.max(0, n - 1) * Style.rowGap
+    }
+    readonly property int _rows: {
+        var n = 0
+        for (var i = 0; i < inner.children.length; i++)
+            if (inner.children[i] && inner.children[i].visible) n++
+        return n
+    }
+    readonly property real _slack: Math.max(0, card.height - 2 * Style.cardPad - card._naturalH)
+
     Column {
         id: inner
         anchors { top: parent.top; left: parent.left; right: parent.right
                   topMargin: Style.cardPad; leftMargin: Style.cardPad; rightMargin: Style.cardPad }
-        spacing: Style.rowGap
+        spacing: Style.rowGap + (card._rows > 1
+                 ? Math.min(card._slack / (card._rows - 1), Style.rowGap * 2) : 0)
     }
 }

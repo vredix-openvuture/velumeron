@@ -1156,6 +1156,12 @@ PanelWindow {
                 // The preview stands beside the page, so the page's first row matches its height
                 // and the row reads as one row rather than as two cards and a taller neighbour.
                 property real pageRowMin: (content.previewOn && deskSide.visible) ? deskSide.height : 0
+                // …and reports back how tall its page turned out, so the menu can be the size of
+                // what is in it.
+                // The height the page has to work with, so its rows can grow into it instead of
+                // leaving the bottom half of the panel empty. The scroll still takes over when the
+                // content is genuinely taller than this.
+                property real pageFillH: pageLdr.height - 8
                 anchors.left:   parent.left
                 anchors.right:  content.previewOn ? deskSide.left : parent.right
                 anchors.bottom: parent.bottom
@@ -1177,6 +1183,7 @@ PanelWindow {
                 id: deskSide
                 visible: content.previewOn && pageLdr.visible
                 width: content.previewW
+                rowHeight: pageLdr.height - 8      // fills its column, like the rows beside it
                 anchors { right: parent.right; rightMargin: 18; top: pageLdr.top }
 
                 CardLabel {

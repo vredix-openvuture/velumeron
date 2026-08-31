@@ -42,6 +42,10 @@ Item {
     // below the others — which is the thing this grid exists to stop. The menu passes the preview's
     // height down and the first row matches it.
     property real firstRowMin: 0
+    // The height the page has to fill. Rows grow into it proportionally when there is more room
+    // than content — a page of two cards in a panel twice their height leaves half the screen
+    // empty otherwise, which is the complaint this grid keeps coming back to.
+    property real fillHeight: 0
     readonly property int  count: cols.forced > 0
                                   ? cols.forced
                                   : Math.max(1, Math.min(cols.maxCols,
@@ -74,6 +78,9 @@ Item {
         var n = cols.count
         var row = []          // the cards on the row being filled
         var y = 0
+        // Two passes: measure the rows, then place them. The stretch cannot be worked out until
+        // every row's natural height is known.
+        var rows = []
         var firstRow = true
         function flush() {
             if (!row.length) return
@@ -81,13 +88,7 @@ Item {
             firstRow = false
             for (var a = 0; a < row.length; a++) h = Math.max(h, row[a].contentHeight !== undefined
                                                                  ? row[a].contentHeight : row[a].height)
-            for (var b = 0; b < row.length; b++) {
-                var it = row[b]
-                if (it.rowHeight !== undefined) it.rowHeight = h        // a Card stretches to match
-                it.x = b * (cols.cardWidth + cols.gap)
-                it.y = y
-            }
-            y += h + cols.gap
+            rows.push({ "items": row, "h": h, "span": false })
             row = []
         }
         for (var j = 0; j < cols.children.length; j++) {
@@ -99,15 +100,37 @@ Item {
             if (c.spans === true) {
                 flush()
                 if (c.rowHeight !== undefined) c.rowHeight = 0
-                c.x = 0
-                c.y = y
-                y += c.height + cols.gap
+                rows.push({ "items": [c], "h": c.height, "span": true })
                 continue
             }
             row.push(c)
             if (row.length === n) flush()
         }
         flush()
+
+        // How much room is left over, and who may take it. A full-width band (a lead-in line, a
+        // nested layout) keeps its own height; the card rows share the surplus in proportion to
+        // what they already are, so a tall row stays taller than a short one.
+        var natural = 0, stretchable = 0
+        for (var r = 0; r < rows.length; r++) {
+            natural += rows[r].h
+            if (!rows[r].span) stretchable += rows[r].h
+        }
+        natural += Math.max(0, rows.length - 1) * cols.gap
+        var surplus = (cols.fillHeight > 0 && stretchable > 0)
+                      ? Math.max(0, cols.fillHeight - natural) : 0
+
+        for (var q = 0; q < rows.length; q++) {
+            var rw = rows[q]
+            var h2 = rw.span ? rw.h : rw.h + surplus * (rw.h / stretchable)
+            for (var b = 0; b < rw.items.length; b++) {
+                var it = rw.items[b]
+                if (it.rowHeight !== undefined) it.rowHeight = h2
+                it.x = rw.span ? 0 : b * (cols.cardWidth + cols.gap)
+                it.y = y
+            }
+            y += h2 + cols.gap
+        }
         cols._tallest = Math.max(0, y - cols.gap)
     }
 
@@ -118,6 +141,7 @@ Item {
 
     onWidthChanged:       cols._schedule()
     onFirstRowMinChanged: cols._schedule()
+    onFillHeightChanged:  cols._schedule()
     onCountChanged:     cols._schedule()
     on_HeightsChanged:  cols._schedule()
     onChildrenChanged:  cols._schedule()

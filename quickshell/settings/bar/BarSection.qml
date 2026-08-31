@@ -13,6 +13,10 @@ Item {
     // How many columns the menu has given this page. It lays one grid across the whole
     // content area — switch, cards, preview — and every page sits on it.
     readonly property int pageCols: (parent && parent.pageCols !== undefined) ? parent.pageCols : 0
+    // How tall this page's content is, so the menu can be the size of its page rather than
+    // a fixed box with half of it empty.
+    readonly property real pageContentH: Math.max(formPage.visible ? formPage.implicitHeight : 0, stylePage.visible ? stylePage.implicitHeight : 0, modPage.visible ? modPage.implicitHeight : 0, 0)
+    readonly property real pageFillH: (parent && parent.pageFillH !== undefined) ? parent.pageFillH : 0
     readonly property real pageRowMin: (parent && parent.pageRowMin !== undefined) ? parent.pageRowMin : 0
 
     // Per-monitor editing: when on, settings are written under bar_monitors.<name>.
@@ -597,6 +601,7 @@ Item {
                 id: formPage
                 forced: root.pageCols
                 firstRowMin: root.pageRowMin
+                fillHeight: root.pageFillH
                 visible: root.tab === "form"
                 width: parent.width
 
@@ -772,6 +777,7 @@ Item {
                 id: stylePage
                 forced: root.pageCols
                 firstRowMin: root.pageRowMin
+                fillHeight: root.pageFillH
                 visible: root.tab === "style"
                 width: parent.width
 
@@ -886,6 +892,7 @@ Item {
                 id: modPage
                 forced: root.pageCols
                 firstRowMin: root.pageRowMin
+                fillHeight: root.pageFillH
                 visible: root.tab === "modules"
                 width: parent.width
 
