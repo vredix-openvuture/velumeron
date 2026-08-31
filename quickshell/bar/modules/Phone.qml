@@ -30,6 +30,11 @@ Item {
     readonly property bool   open:  UiState.flyout === "phone" && UiState.flyoutMon === root.barMon
 
     readonly property int _sz: VtlConfig.moduleIconSizeFor("phone", root.barMon)
+    // The battery figure is TEXT, so it takes the bar's text size like every other module's does.
+    // It used to be the icon size minus four, which is a different number entirely: with an icon
+    // size of 16 that is a 12 px figure next to a 14 px clock, and the phone module read as if it
+    // were half broken.
+    readonly property int _fs: VtlConfig.moduleFontSizeFor("phone", root.barMon)
 
     // Link state → the bar's status dot, drawn by the slot (Bar.qml's ModSlot). Always shown, and
     // only its colour carries the meaning: reachable in the shared tone, nothing paired in red.
@@ -68,7 +73,7 @@ Item {
             text:  (root.bat.charging ? "󰂄" : "") + root.bat.charge + "%"
             color: root.bat.charging ? Style.accent : root.low ? Colors.fgUrgent : root._col
             font.family:    root._font
-            font.pixelSize: Math.max(9, root._sz - 4)
+            font.pixelSize: root._fs
         }
     }
 

@@ -948,10 +948,14 @@ PanelWindow {
         // small icon centre on one line — and a dot in THAT corner floats half a bar above the
         // glyph it belongs to, reading as a mark on the bar rather than on the module. So the box
         // is the module's own drawing whenever there is no pill to sit on.
+        // …with a hair of air around the module's own drawing. Hung exactly on the glyph's corner
+        // the dot touches the last letter of a text module — it belongs TO the module, but it is
+        // not part of the word. The pill case needs none: the pill is already the padding.
+        readonly property int dotAir: ms.moduleBg ? 0 : Math.max(3, Math.round(ms.dotOver * 1.5))
         readonly property real dotBoxW: ms.moduleBg ? ms.width
-                                                    : Math.min(ms.width,  ms.rotated ? ms.ih : ms.iw)
+                       : Math.min(ms.width,  (ms.rotated ? ms.ih : ms.iw) + 2 * ms.dotAir)
         readonly property real dotBoxH: ms.moduleBg ? ms.height
-                                                    : Math.min(ms.height, ms.rotated ? ms.iw : ms.ih)
+                       : Math.min(ms.height, (ms.rotated ? ms.iw : ms.ih) + 2 * ms.dotAir)
         StatusDot {
             id: msDot
             barMon: root.mon
