@@ -10,7 +10,7 @@ import Quickshell.Hyprland
 Item {
     id: root
 
-    readonly property var    monitors: Quickshell.screens
+    readonly property var    monitors: Compositor.screensOrdered
     function monName(s) { return (s && s.name) ? s.name : "" }
     property string targetMon: ""
     readonly property bool vertMon: {

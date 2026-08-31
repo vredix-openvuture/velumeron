@@ -9,7 +9,7 @@ import Quickshell.Io
 Item {
     id: root
 
-    readonly property var monitors: Quickshell.screens
+    readonly property var monitors: Compositor.screensOrdered
     function monName(s) { return (s && s.name) ? s.name : "" }
     function base(p)    { return ("" + p).split("/").pop() }
     function isVideo(n) { return /\.(mp4|webm|mkv|avi|mov)$/i.test(n) }

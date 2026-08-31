@@ -67,31 +67,45 @@ PanelWindow {
     // the wallpaper stuck on the old one forever. Go anyway; a botched transition beats a dead one.
     Timer { id: preloadGuard; interval: 3000; onTriggered: root._flip() }
     property string _lastPath: ""
-    function _apply() {
-        var e = root.all[root.mon]
+    function _use(e) {
         if (!e || !e.path || e.path === root._lastPath) return
         root._lastPath = e.path
         root._swap(e.path, e.type || "image")
     }
+    // The file is the source of truth; the pending entry is only a head start. Whichever names a
+    // path we are not already showing wins, and the second one to arrive is a no-op because
+    // `_lastPath` already matches.
+    function _apply() { root._use(root.all[root.mon]) }
     onAllChanged:  _apply()
     onMonChanged:  _apply()
     Component.onCompleted: _apply()
+
+    readonly property var _pendingHere: UiState.wallpaperPending[root.mon]
+    on_PendingHereChanged: root._use(root._pendingHere)
 
     // ── Transition plan (Settings → Wallpaper → gear). `random` rolls type + params per change. ─────
     readonly property string transition:   VtlConfig.wallpaperTransition
     readonly property int    transitionMs: Math.max(150, VtlConfig.wallpaperTransitionMs)
     property var effPlan: ({ type: "fade", slideDir: "left" })
     function _rand(a) { return a[Math.floor(Math.random() * a.length)] }
+    // "theme" rolls one of the FOUR the active theme brings — that is what makes a wallpaper change
+    // feel like it belongs to the desktop it happens on: mirobo dissolves and drifts, Console cuts
+    // and wipes like a channel change. A theme that declares none falls back to the shipped four.
+    readonly property var themeTransitions: (Theme.transitions && Theme.transitions.length)
+                                            ? Theme.transitions : ["fade", "slide", "push", "zoom"]
     function _planTransition() {
         var t = root.transition
         var rnd = (t === "random")
+        var thm = (t === "theme")
         if (rnd) t = root._rand(["fade", "slide", "push", "zoom"])
+        if (thm) t = root._rand(root.themeTransitions)
         root.effPlan = {
             type:     t,
-            slideDir: rnd ? root._rand(["left", "right", "up", "down"]) : VtlConfig.wallpaperSlideDir
+            slideDir: (rnd || thm) ? root._rand(["left", "right", "up", "down"])
+                                   : VtlConfig.wallpaperSlideDir
         }
     }
-    onTransitionChanged: if (root.transition !== "random") root._planTransition()
+    onTransitionChanged: if (root.transition !== "random" && root.transition !== "theme") root._planTransition()
 
     // ── Live-wallpaper plugin failed to load ───────────────────────────────────────────────────
     // Velumeron.Mpv is a COMPILED QML module and is not in git — launch-quickshell.sh builds it on
@@ -165,9 +179,18 @@ PanelWindow {
         readonly property var    plan: root.effPlan
         readonly property string tt:   plan.type
 
-        // reveal 0 (hidden) → 1 (shown); drives every transition.
+        // reveal 0 (hidden) → 1 (shown); drives every transition. A `cut` is the same animation with
+        // one frame in it — the swap still goes through the same preload and the same z-order, it
+        // just has no travel.
         property real reveal: active ? 1 : 0
-        Behavior on reveal { NumberAnimation { id: revAnim; duration: root.transitionMs; easing.type: Easing.InOutQuad } }
+        Behavior on reveal {
+            NumberAnimation {
+                id: revAnim
+                duration: slot.tt === "cut" ? 16 : root.transitionMs
+                easing.type: slot.tt === "wipe" || slot.tt === "flicker" ? Easing.Linear
+                                                                        : Easing.InOutQuad
+            }
+        }
         readonly property bool animating: revAnim.running
 
         z: active ? 1 : 0   // incoming on top of the outgoing
@@ -181,19 +204,41 @@ PanelWindow {
                                   : tt === "push"  ? (active ? (1 - reveal) * _dy : -reveal * _dy) : 0
         readonly property real _sc: (tt === "zoom" && active) ? (0.72 + 0.28 * reveal) : 1.0
 
-        opacity: tt === "fade" ? reveal
-               : tt === "zoom" ? (active ? reveal : (animating ? 1.0 : 0.0))
-               : (active ? 1.0 : (animating ? 1.0 : 0.0))   // slide / push
+        // A tube changing channel: three hard on/off beats over the first half, then it stays. Steps
+        // rather than a ramp, because a fade is exactly what this is not.
+        readonly property real _flick: reveal >= 0.55 ? 1.0
+                                     : (Math.floor(reveal * 8) % 2 === 0 ? 1.0 : 0.0)
+
+        opacity: tt === "fade"    ? reveal
+               : tt === "zoom"    ? (active ? reveal : (animating ? 1.0 : 0.0))
+               : tt === "flicker" ? (active ? _flick : (animating ? 1.0 : 0.0))
+               : (active ? 1.0 : (animating ? 1.0 : 0.0))   // slide / push / wipe / cut
 
         transform: [
             Translate { x: slot._tx; y: slot._ty },
             Scale { origin.x: slot.width / 2; origin.y: slot.height / 2; xScale: slot._sc; yScale: slot._sc }
         ]
 
+        // A wipe is a hard EDGE travelling across the screen: the incoming picture stands still and
+        // is uncovered, which is why it lives in a clip window rather than in the transform above.
+        // The window runs along the same axis the slide direction names, so "wipe" and "slide"
+        // answer to one setting.
+        Item {
+            id: window
+            readonly property bool wiping: slot.tt === "wipe" && slot.active && slot.animating
+            readonly property bool horiz:  slot.plan.slideDir === "left" || slot.plan.slideDir === "right"
+            readonly property bool fromEnd: slot.plan.slideDir === "right" || slot.plan.slideDir === "down"
+            clip:   window.wiping
+            width:  (window.wiping && window.horiz) ? Math.round(slot.width * slot.reveal) : slot.width
+            height: (window.wiping && !window.horiz) ? Math.round(slot.height * slot.reveal) : slot.height
+            x: (window.wiping && window.horiz  && window.fromEnd) ? slot.width  - width  : 0
+            y: (window.wiping && !window.horiz && window.fromEnd) ? slot.height - height : 0
+
         // Static image — source gated on type so it never tries to decode a video file.
         Image {
             id: img
-            anchors.fill: parent
+            width: slot.width; height: slot.height
+            x: -window.x; y: -window.y
             visible:  slot.item.type === "image"
             source:   (slot.item.type === "image" && slot.item.path !== "") ? "file://" + slot.item.path : ""
             fillMode: Image.PreserveAspectCrop
@@ -209,7 +254,8 @@ PanelWindow {
         // Live video — isolated MpvVideo, kept alive once created; shown only for video entries.
         Loader {
             id: vid
-            anchors.fill: parent
+            width: slot.width; height: slot.height
+            x: -window.x; y: -window.y
             active:  slot.everVideo
             visible: slot.item.type === "video"
             source:  Qt.resolvedUrl("wallpaper/VideoSurface.qml")
@@ -223,5 +269,6 @@ PanelWindow {
         // waiting for one on a paused surface would wait forever.
         Binding { target: vid.item; property: "paused"; when: vid.status === Loader.Ready
                   value: !(slot.item.type === "video" && (slot.active || slot.preloading)) }
+        }
     }
 }

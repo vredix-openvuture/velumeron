@@ -1,6 +1,7 @@
 import ".."
 import QtQuick
 import Quickshell
+import Quickshell.Widgets
 
 // One wallpaper thumbnail cell — shared by the settings browser (WallpaperSection) and the quick
 // picker (WallpaperQuick). The caller sets the cell size; `active` draws the applying highlight.
@@ -20,7 +21,12 @@ Item {
     id: cell
     property string path:   ""
     property string name:   ""
-    property bool   active: false
+    // `active` is the SELECTION — the cell the cursor is on. In a grid there is no cursor and the
+    // selection is simply the wallpaper you are wearing, so the two coincide; in the coverflow they
+    // do not, and marking the worn one with the selection frame put the frame on a card the user
+    // had not chosen. That is what `current` is for: same fact, quieter mark.
+    property bool   active:  false
+    property bool   current: false
     signal picked()
 
     // Which cache tier this cell wants. 480 is the grid's — a 130 px cell needs nothing more — but
@@ -70,9 +76,24 @@ Item {
         }
     }
 
-    Rectangle {
+    // The corner radius is the TILE radius by default, which is right for a 130 px grid cell and
+    // far too tight on a picker card the size of a monitor miniature. A caller that draws big
+    // passes its own; a square theme keeps 0 either way, because every one of these is a multiple
+    // of a token the theme already set.
+    property real radius: Style.rTile
+
+    // ClippingRectangle, not a Rectangle with `clip: true`: Qt's clip is RECTANGULAR, so a rounded
+    // frame around a picture leaves the picture's own corners square. At grid size (radius 8) that
+    // is a pixel nobody sees; on a picker card the size of a monitor it is the whole corner, and
+    // the rounding looked like it had not been applied at all.
+    //
+    // The picture FILLS this rectangle — no inset. An inset one is still clipped by the outer
+    // radius, so it kept a gap along the straight edges and none at all in the corners: the corner
+    // showed two curves a couple of pixels apart, which reads as a rendering fault rather than as a
+    // frame. The border draws over the picture's own edge, which is what a frame is.
+    ClippingRectangle {
         anchors.fill: parent; anchors.margins: 4
-        radius: Style.rTile; clip: true
+        radius: cell.radius
         color:  Style.controlFill
         border.color: Style.accent
         border.width: cell.active ? 2 : (cHov.containsMouse ? 1 : 0)
@@ -80,7 +101,7 @@ Item {
 
         Image {
             id: img
-            anchors.fill: parent; anchors.margins: 2
+            anchors.fill: parent
             visible: status === Image.Ready
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
@@ -111,6 +132,15 @@ Item {
             anchors { right: parent.right; bottom: parent.bottom; rightMargin: 6; bottomMargin: 6 }
             width: 16; height: 16; radius: 8; color: Qt.rgba(0, 0, 0, 0.5)
             Text { anchors.centerIn: parent; text: "▶"; color: Colors.fgBright; font.pixelSize: 8 }
+        }
+        // "This is the one you are wearing." A badge rather than a frame: the frame belongs to
+        // whatever you are pointing at, and two frames of the same weight say nothing.
+        Rectangle {
+            visible: cell.current && !cell.active
+            anchors { right: parent.right; top: parent.top; rightMargin: 6; topMargin: 6 }
+            width: 14; height: 14; radius: Style.rTile === 0 ? 0 : 7
+            color: Style.accent
+            border.width: 1; border.color: Qt.rgba(0, 0, 0, 0.35)
         }
         MouseArea { id: cHov; anchors.fill: parent; hoverEnabled: true; onClicked: cell.picked() }
     }

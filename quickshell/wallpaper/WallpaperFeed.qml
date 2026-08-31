@@ -114,6 +114,9 @@ Item {
     function apply(path) {
         feed.applying = path
         feed.status   = "Applying " + feed.stem(("" + path).split("/").pop()) + " → " + feed.mon + "…"
+        // Tell the surface first, then start the script. The transition then begins on the frame you
+        // clicked instead of when wallust and the thumbnailer are done with it.
+        UiState.wallpaperApplied(feed.mon, path, feed.isVideo(path) ? "video" : "image")
         applyProc.command = ["bash", "-c",
             "setsid bash \"$VELUMERON_DIR/assets/scripts/wallpaper-set.sh\" "
             + "--mon " + JSON.stringify(feed.mon) + " --file " + JSON.stringify(path)

@@ -161,6 +161,19 @@ PanelWindow {
     property bool everLive: false
     onLiveWarmChanged: if (root.liveWarm) root.everLive = true
 
+    // The box a theme's picker offers for the live player, with the TARGET MONITOR's aspect fitted
+    // inside it. The theme hands over the pane it has free (`liveRect`, in its own coordinates,
+    // which are the window's); how a wallpaper has to be shaped is the shell's business, and a
+    // picker should not have to do that arithmetic to get a video in the right shape.
+    readonly property rect themeLive: {
+        var r = (root.themed && themedPicker.item && themedPicker.item.liveRect)
+                ? themedPicker.item.liveRect : Qt.rect(0, 0, 0, 0)
+        if (!r || r.width <= 0 || r.height <= 0) return Qt.rect(0, 0, 0, 0)
+        var w = r.width, h = Math.round(r.width / root.cardAspect)
+        if (h > r.height) { h = r.height; w = Math.round(r.height * root.cardAspect) }
+        return Qt.rect(Math.round(r.x + (r.width - w) / 2), Math.round(r.y + (r.height - h) / 2), w, h)
+    }
+
     // One shape for both catalogues, so the carousel below never has to know which it is showing.
     // { path, name, label, kind } — a set's "path" is its preview image.
     readonly property var entries: {
@@ -179,6 +192,9 @@ PanelWindow {
         return 0
     }
     readonly property var selEntry: root.entries[flow.currentIndex]
+    // THE cursor. The coverflow's current index is it, whether the coverflow is on screen or a
+    // theme's picker is drawing instead — one place for the keyboard and the pointer to agree on.
+    property alias cursor: flow.currentIndex
 
     function activate(i) {
         // Coverflow rule: a card that is not centred gets centred, the centred one gets applied.
@@ -236,12 +252,86 @@ PanelWindow {
         }
     }
 
+    // Is a theme drawing the picker instead of the coverflow? Asked once; every surface in
+    // here that has to step aside reads this one property.
+    readonly property bool themed: Theme.hasComponent("wallpaper")
+
+    // A theme that brings its own picker draws the whole screen. The shell keeps the window, the
+    // backdrop, the catalogue, the keyboard and what applying a wallpaper actually does — the last
+    // surface to get a resolution point, and the one where the two answers are furthest apart: a
+    // coverflow of tilted miniatures is a very Mirobo idea, and Console wants a directory listing
+    // with one big preview.
+    ThemeSurface {
+        id: themedPicker
+        anchors.fill: parent
+        visible: root.themed
+        surface: root.themed ? "wallpaper" : ""
+        ctx: root.pickerContext
+        opacity: Style.popFade(root.reveal)
+        z: 4
+    }
+
+    // Where the cursor is, handed over SEPARATELY from `ctx`. It moves on every key press, and a
+    // context object rebuilt on every key press hands the picker a new `entries` array each time —
+    // which resets the view drawing it and scrolls the listing back to the top. That is exactly
+    // what the ThemeSurface contract warns about ("anything that changes at frame rate"), and it
+    // is why walking the list with the keyboard kept jumping back to the first row.
+    Binding {
+        target:   themedPicker.item
+        property: "cursor"
+        value:    root.cursor
+        when:     themedPicker.item !== null
+    }
+
+    // What a theme's picker is handed: the catalogue as plain rows, where you are, and the four
+    // things it can do. `entries` already carries the current view (this monitor's folder or the
+    // defined sets), so a theme never has to know how a set is applied differently from a file.
+    readonly property var pickerContext: {
+        var c = Style.themeContext()
+        c.w = root.width
+        c.h = root.height
+        c.monitor = root.selMon
+        c.monitors = root._mons
+        c.view = root.view
+        c.filter = feed.typeFilter
+        c.counts = { "static": feed.nStatic, "live": feed.nLive }
+        c.current = root.curPath
+        c.applying = feed.applying
+        c.entries = root.entries
+        // The cursor is NOT in here — it is bound to the picker's `cursor` property above, because
+        // it changes on every key press and this object is rebuilt whole whenever anything in it
+        // does. A theme's picker highlights `cursor` and calls `select` when the pointer moves,
+        // instead of keeping a second cursor of its own that the keyboard would not know about.
+        c.actions = {
+            "apply":   function (path) {
+                var e = null
+                for (var i = 0; i < root.entries.length; i++)
+                    if (root.entries[i].path === path) { e = root.entries[i]; break }
+                if (e && e.kind === "set") feed.applySet(e.name)
+                else                       feed.apply("" + path)
+                root.close()
+            },
+            "close":   function ()  { root.close() },
+            "filter":  function (k) { root.setKind("" + k) },
+            "view":    function (v) { root.view = "" + v },
+            "monitor": function (m) { root.selMon = "" + m },
+            "select":  function (i) { root.cursor = Math.max(0, Math.min(root.entries.length - 1, i)) }
+        }
+        return c
+    }
+
+    // The keyboard is the SHELL's, always — a theme never owns input, so this scope stays alive
+    // even when a theme draws the picker and only its own visuals step aside (`chrome`).
     FocusScope {
         id: kbd
         anchors.fill: parent
         focus: true
-        opacity: Style.popFade(root.reveal)
-        scale:   Style.popScale(root.reveal)
+        // Above the theme's picker (z 4) when there is one, because the only thing left visible in
+        // here then is the live player, and it has to sit ON the preview pane rather than behind a
+        // panel that is 86% opaque. Everything else in this scope hides itself when a theme draws.
+        z: root.themed ? 5 : 0
+        opacity: root.themed ? 1 : Style.popFade(root.reveal)
+        scale:   root.themed ? 1 : Style.popScale(root.reveal)
 
         Keys.onEscapePressed:  { if (root.menuOpen) root.menuOpen = false; else root.close() }
         Keys.onLeftPressed:    root.move(-1)
@@ -253,6 +343,10 @@ PanelWindow {
         // Tab is the pile switch — the same two things the control on the left edge picks between.
         Keys.onShortcutOverride: e => { if (e.key === Qt.Key_Tab || e.key === Qt.Key_Backtab) e.accepted = true }
         Keys.onPressed: e => {
+            // hjkl beside the arrows: the picker is a list you walk, and half the people who will
+            // ever open it never take their hands off the home row.
+            if      (e.key === Qt.Key_H || e.key === Qt.Key_K) { root.move(-1); e.accepted = true; return }
+            else if (e.key === Qt.Key_L || e.key === Qt.Key_J) { root.move(1);  e.accepted = true; return }
             if      (e.key === Qt.Key_Home) { flow.currentIndex = 0; e.accepted = true }
             else if (e.key === Qt.Key_End)  { flow.currentIndex = Math.max(0, root.entries.length - 1); e.accepted = true }
             else if (e.key === Qt.Key_Tab || e.key === Qt.Key_Backtab) {
@@ -273,6 +367,7 @@ PanelWindow {
         //   column  → button top-left   · piles left-centre · caption right-centre
         Column {
             id: head
+            visible: !root.themed
             anchors { top: parent.top; topMargin: Math.round(root.height * 0.045)
                       horizontalCenter: root.vert ? undefined : parent.horizontalCenter
                       left: root.vert ? parent.left : undefined
@@ -379,7 +474,7 @@ PanelWindow {
         // empty screen and no clue why.
         StyledRect {
             id: kindSwitch
-            visible: root.view === "grid"
+            visible: root.view === "grid" && !root.themed
             // Bottom-left in BOTH modes, and the two tiles side by side in both. It used to stand on
             // its end at the left edge of a column layout — two tiles stacked in a rail that ran the
             // height of the screen, which read as a scrollbar someone had put buttons on. A column of
@@ -458,6 +553,9 @@ PanelWindow {
         PathView {
             id: flow
             anchors.fill: parent
+            // Invisible under a theme's picker, never destroyed: `currentIndex` IS the cursor the
+            // keyboard moves, and the theme reads it back off its own `cursor` property.
+            visible: !root.themed
             model: root.entries
             pathItemCount: 11
             cacheItemCount: 4
@@ -565,13 +663,20 @@ PanelWindow {
                 // among them, and WallThumb is the one place that knows how to keep that cheap.
                 WallThumb {
                     anchors.fill: parent
+                    // A card here is a miniature of a whole monitor, not a grid cell: the tile
+                    // radius reads as a hard corner at this size. Derived from the theme's own card
+                    // token, so a square theme stays square.
+                    radius: Math.round(Style.rCard * 1.7)
                     thumbW: root.thumbBucket
                     path:   card.modelData.path
                     name:   card.modelData.name
-                    // The accent frame means "this is the one you are on": the wallpaper currently
-                    // set on the target monitor, or the one being applied right now.
-                    active: card.modelData.kind === "wall"
-                            && (card.modelData.path === root.curPath || card.modelData.path === feed.applying)
+                    // The frame follows the CURSOR — the centred card is what a click or Return
+                    // will apply, and a frame anywhere else reads as "you picked that one". The
+                    // wallpaper actually in use gets a badge instead (`current`), which is a
+                    // different question and deserves a different mark.
+                    active:  card.PathView.isCurrentItem
+                    current: card.modelData.kind === "wall"
+                             && (card.modelData.path === root.curPath || card.modelData.path === feed.applying)
                     onPicked: root.activate(card.index)
                 }
             }
@@ -598,13 +703,21 @@ PanelWindow {
             // Parked (2 px, behind the cards) whenever there is nothing to show, but NEVER hidden:
             // a QQuickFramebufferObject that is not rendered has no GL context, and without the
             // context mpv has no video output to load into.
+            //
+            // Where it goes depends on WHO is drawing the picker. Over the centred card in the
+            // coverflow; inside the preview pane a theme's picker asks for (`liveRect`) when a
+            // theme draws instead. It used to stay on the card either way, which put a playing
+            // video in card size in the middle of a screen that had no cards on it — the picker
+            // underneath showed it through its own translucent panel, which is what "live
+            // wallpapers are drawn wrong" was.
             readonly property bool showing: root.livePath !== "" && livePane.ready
+                                            && (!root.themed || root.themeLive.width > 0)
             visible: livePlayer.active
             z: livePane.showing ? 4 : -1             // over the stack, under the chrome (z 5)
-            width:  livePane.showing ? Math.max(0, root.cardW - 12) : 2   // the picture inside the
-            height: livePane.showing ? Math.max(0, root.cardH - 12) : 2   // card (WallThumb insets 6)
-            x: flow.cx - width / 2
-            y: flow.cy - height / 2
+            width:  livePane.showing ? (root.themed ? root.themeLive.width : Math.max(0, root.cardW - 12)) : 2
+            height: livePane.showing ? (root.themed ? root.themeLive.height : Math.max(0, root.cardH - 12)) : 2
+            x: (livePane.showing && root.themed) ? root.themeLive.x : flow.cx - width / 2
+            y: (livePane.showing && root.themed) ? root.themeLive.y : flow.cy - height / 2
             clip: true
             // Not 0 while parked: Qt culls a fully transparent item, and a culled item never renders.
             opacity: livePane.showing ? 1 : 0.01
@@ -650,6 +763,10 @@ PanelWindow {
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.NoButton
+            // Off while a theme draws the picker: this scope is lifted over it so the player can
+            // reach the preview pane, and a full-screen wheel handler up there would take every
+            // notch meant for the theme's own listing.
+            enabled: !root.themed
             onWheel: wheel => {
                 root.move(wheel.angleDelta.y > 0 ? -1 : 1)
                 wheel.accepted = true
@@ -660,6 +777,7 @@ PanelWindow {
         // Same rule as the switch: under the row, beside the column. In a column the free strip is
         // whatever is left of the screen next to the widest card, minus the margins.
         Column {
+            visible: !root.themed
             anchors { bottom: root.vert ? undefined : parent.bottom
                       bottomMargin: Math.round(root.height * 0.055)
                       horizontalCenter: root.vert ? undefined : parent.horizontalCenter
@@ -704,6 +822,7 @@ PanelWindow {
         // Close. The picker takes the whole screen, so it needs a visible way out that is not
         // "know that Escape works" — the same reason the wallpaper card itself is not a button.
         StyledRect {
+            visible: !root.themed
             anchors { right: parent.right; bottom: parent.bottom
                       rightMargin: Math.round(root.width * 0.025); bottomMargin: Math.round(root.height * 0.045) }
             width: 48; height: 48; radius: Style.rControl === 0 ? 0 : 24

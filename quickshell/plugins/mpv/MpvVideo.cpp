@@ -92,7 +92,17 @@ MpvVideo::MpvVideo(QQuickItem *parent) : QQuickFramebufferObject(parent)
     mpv_set_option_string(m_mpv, "msg-level", dbg ? "all=v" : "all=no");
     mpv_set_option_string(m_mpv, "config", "no");
     mpv_set_option_string(m_mpv, "vo", "libmpv");
-    mpv_set_option_string(m_mpv, "hwdec", "auto");
+    // hwdec is an EXPLICIT list, never "auto" (and never "auto-safe" — measured: mpv 0.41 probes
+    // the Vulkan hwdevice under both). That probe calls av_hwdevice_ctx_create → vkCreateDevice on
+    // mpv's own core thread, and any misbehaving implicit Vulkan layer then takes the whole shell
+    // down with it: MangoHud is enabled system-wide here (MANGOHUD=1 in /etc/environment) and
+    // segfaults inside device creation, so switching to a live wallpaper killed quickshell.
+    // Reproduces without the shell: `MANGOHUD=1 ffmpeg -init_hw_device vulkan=v -f lavfi -i nullsrc
+    // -frames:v 1 -f null -` → SIGSEGV; DISABLE_MANGOHUD=1 → clean.
+    // Restricting the list costs nothing: we render through an OpenGL context, so only the decoders
+    // that can interop with GL are useful anyway (vaapi on Intel/AMD, nvdec on NVIDIA). Everything
+    // else falls back to software decoding, which is what a looping wallpaper can afford.
+    mpv_set_option_string(m_mpv, "hwdec", "vaapi,nvdec");
     mpv_set_option_string(m_mpv, "loop-file", "inf");   // live wallpaper loops forever
     mpv_set_option_string(m_mpv, "audio", "no");
     mpv_set_option_string(m_mpv, "mute", "yes");

@@ -11,7 +11,7 @@ import Quickshell.Hyprland
 Item {
     id: root
 
-    readonly property var    monitors: Quickshell.screens
+    readonly property var    monitors: Compositor.screensOrdered
     function monName(s) { return (s && s.name) ? s.name : "" }
     property string targetMon:  ""
     property string folder:     ""     // selected monitor's folder
@@ -140,12 +140,17 @@ Item {
 
             // ── Change transition ─────────────────────────────────────────────
             Card {
-                CardLabel { text: "CHANGE TRANSITION" }
+                CardLabel { text: "CHANGE TRANSITION"
+                            hint: "Theme rolls one of the four the worn theme brings — Mirobo "
+                                  + "dissolves and drifts, Console cuts and wipes. The rest are the "
+                                  + "shipped ones, the same under every look." }
                 Flow {
                     width: parent.width; spacing: 6
                     Repeater {
-                        model: [{ k: "fade", l: "Fade" }, { k: "slide", l: "Slide" }, { k: "push", l: "Push" },
-                                { k: "zoom", l: "Zoom" }, { k: "random", l: "Random" }]
+                        model: [{ k: "theme", l: "Theme" },
+                                { k: "fade", l: "Fade" }, { k: "slide", l: "Slide" }, { k: "push", l: "Push" },
+                                { k: "zoom", l: "Zoom" }, { k: "cut", l: "Cut" }, { k: "wipe", l: "Wipe" },
+                                { k: "flicker", l: "Flicker" }, { k: "random", l: "Random" }]
                         delegate: Chip {
                             required property var modelData
                             label:    modelData.l
@@ -157,7 +162,9 @@ Item {
 
                 // Slide / push: which side the new wallpaper enters from.
                 FieldLabel { text: "From"
-                             visible: VtlConfig.wallpaperTransition === "slide" || VtlConfig.wallpaperTransition === "push"
+                             visible: VtlConfig.wallpaperTransition === "slide"
+                                      || VtlConfig.wallpaperTransition === "push"
+                                      || VtlConfig.wallpaperTransition === "wipe"
                              hint: "Random rolls the transition (and direction) fresh on every change." }
                 Flow {
                     width: parent.width; spacing: 6
