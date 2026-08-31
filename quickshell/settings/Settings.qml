@@ -1095,19 +1095,25 @@ PanelWindow {
 
             // À-la-carte on/off for the active feature — off removes its surfaces entirely
             // (component register); the settings below still configure how it looks when on.
-            Card {
+            // One column wide, not the whole panel: it is a single switch, and a switch whose label
+            // sits at one end of 1870 px and whose knob sits at the other is exactly the stretch
+            // this page was full of. CardColumns hands it the width the cards below it get.
+            CardColumns {
                 id: featureHeader
                 visible: content.featureKey !== "" && !root.shownNavPage
+                height: implicitHeight
                 anchors { top: backBar.visible ? backBar.bottom : parent.top; left: parent.left; right: parent.right
                           topMargin: backBar.visible ? 8 : 18; leftMargin: 18; rightMargin: 18 }
-                Toggle {
-                    label: root.sectionTitle(root.shownSection)
-                    sub:   VtlConfig.componentEnabled(content.featureKey)
-                           ? "On — showing on your desktop"
-                           : "Off — its surfaces aren't loaded (turn on to use it)"
-                    on:    VtlConfig.componentEnabled(content.featureKey)
-                    onToggled: SettingsStore.setComponentEnabled(content.featureKey,
-                                                                 !VtlConfig.componentEnabled(content.featureKey))
+                Card {
+                    Toggle {
+                        label: root.sectionTitle(root.shownSection)
+                        sub:   VtlConfig.componentEnabled(content.featureKey)
+                               ? "On — showing on your desktop"
+                               : "Off — its surfaces aren't loaded (turn on to use it)"
+                        on:    VtlConfig.componentEnabled(content.featureKey)
+                        onToggled: SettingsStore.setComponentEnabled(content.featureKey,
+                                                                     !VtlConfig.componentEnabled(content.featureKey))
+                    }
                 }
             }
             Loader {

@@ -216,11 +216,10 @@ Item {
         clip: true
         boundsBehavior: Flickable.StopAtBounds
 
-        Column {
+        CardColumns {
             id: col
             width: parent.width
-            topPadding: 4
-            spacing: Style.cardGap
+            y: 4
 
             Card {
                 CardLabel { text: "INTEGRATIONS"

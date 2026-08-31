@@ -27,6 +27,7 @@ ThemeSkin   1.0 common/ThemeSkin.qml
 ThemeMaterial 1.0 ThemeMaterial.qml
 StyledRect  1.0 common/StyledRect.qml
 Card        1.0 common/Card.qml
+CardColumns 1.0 common/CardColumns.qml
 CardLabel   1.0 common/CardLabel.qml
 SubGroup    1.0 common/SubGroup.qml
 FieldLabel  1.0 common/FieldLabel.qml

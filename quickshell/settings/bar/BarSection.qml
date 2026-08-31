@@ -566,6 +566,7 @@ Item {
         visible: root.customizeKey === "" && root.addTarget === ""
         anchors { top: parent.top; left: parent.left; right: parent.right
                   topMargin: header.visible ? header.height + 14 : 2 }
+        equal:   false
         current: root.tab
         tabs: [{ icon: "󰠱", label: "Form", key: "form" },
                { icon: "󰏘", label: "Style", key: "style" },
@@ -587,11 +588,10 @@ Item {
             implicitHeight: Math.max(formPage.implicitHeight, stylePage.implicitHeight, modPage.implicitHeight)
 
             // ─── FORM: where the bar sits and what shape it takes ─────────────
-            Column {
+            CardColumns {
                 id: formPage
                 visible: root.tab === "form"
                 width: parent.width
-                spacing: Style.cardGap
 
                 // The mode and everything the mode decides live on ONE card: a floating bar has a
                 // gap, a frame has edges and a shared corner, and neither means anything for the
@@ -761,11 +761,10 @@ Item {
             // is tuned by eye against the wallpaper and the windows around it, and at that scale
             // five is not a nudge — it is a redesign: a 14 px icon lands on 15 or 20 with nothing
             // in between, and a radius you are matching to a window corner can simply not be hit.
-            Column {
+            CardColumns {
                 id: stylePage
                 visible: root.tab === "style"
                 width: parent.width
-                spacing: Style.cardGap
 
                 // An empty state is one of the few things that still belongs on the page itself
                 // rather than in a hover hint — the user has to see WHY the page is bare.
@@ -874,11 +873,10 @@ Item {
             }
 
             // ─── MODULES: which module sits where ─────────────────────────────
-            Column {
+            CardColumns {
                 id: modPage
                 visible: root.tab === "modules"
                 width: parent.width
-                spacing: Style.cardGap
 
                 SubLabel {
                     visible: root.mode === "none"

@@ -6,7 +6,11 @@ import QtQuick
 StyledRect {
     id: card
     default property alias content: inner.data
-    width:        parent ? parent.width : 0
+    // A card fills its parent, unless the parent is laying cards into COLUMNS — then it takes the
+    // column width it is told. Asked for as a property rather than assigned by the container, so
+    // the width stays a binding and a page that overrides it still wins.
+    width:        (parent && parent.cardWidth !== undefined) ? parent.cardWidth
+                                                             : (parent ? parent.width : 0)
     radius:       Style.rCard
     color:        Style.cardFill
     borderWidth:  Style.cardBorderW

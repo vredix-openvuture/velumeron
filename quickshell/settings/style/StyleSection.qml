@@ -692,10 +692,10 @@ Item {
             topPadding: 4
             spacing: Style.cardGap
 
-            Column {
+            CardColumns {
+                height:  implicitHeight
                 visible: root.tab === "look"
                 width:   col.width
-                spacing: Style.cardGap
 
                 // ── Colours: wallust auto / fixed palette — always here, independent of any theme ──
                 Card {
@@ -1081,10 +1081,10 @@ Item {
                 }
             }
 
-            Column {
+            CardColumns {
+                height:  implicitHeight
                 visible: root.tab === "menu"
                 width:   col.width
-                spacing: Style.cardGap
 
                 // ── Settings-menu navigation mode (experimental) ──────────────────
                 Card {
@@ -1236,10 +1236,10 @@ Item {
                 }
             }
 
-            Column {
+            CardColumns {
+                height:  implicitHeight
                 visible: root.tab === "theme"
                 width:   col.width
-                spacing: Style.cardGap
 
                 // ── Theme ─────────────────────────────────────────────────────────
                 // A theme is a whole desktop on top of Velumeron, not a colour scheme: its own tokens,
@@ -1372,10 +1372,10 @@ Item {
                 }
             }
 
-            Column {
+            CardColumns {
+                height:  implicitHeight
                 visible: root.tab === "motion"
                 width:   col.width
-                spacing: Style.cardGap
 
                 // ── Motion (elastic "soft-mass" emergence) ────────────────────────
                 Card {

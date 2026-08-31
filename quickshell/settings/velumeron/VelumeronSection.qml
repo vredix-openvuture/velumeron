@@ -141,11 +141,10 @@ Item {
         clip: true
         boundsBehavior: Flickable.StopAtBounds
 
-        Column {
+        CardColumns {
             id: col
             width: parent.width
-            topPadding: 4
-            spacing: Style.cardGap
+            y: 4
 
             // ── Shell ─────────────────────────────────────────────────────────
             Card {
@@ -231,6 +230,7 @@ Item {
 
             // ── Result ────────────────────────────────────────────────────────
             Text {
+                property bool spans: true    // a lead-in line, not a card
                 width: parent.width
                 visible: root.status !== ""
                 text: root.status

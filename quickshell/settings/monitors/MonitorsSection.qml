@@ -249,11 +249,10 @@ Item {
         anchors.fill: parent
         anchors.topMargin: revertBanner.visible ? revertBanner.height + 8 : 0
         contentHeight: col.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
-        Column {
+        CardColumns {
             id: col
             width: parent.width
-            topPadding: 4
-            spacing: Style.cardGap
+            y: 4
 
             // ── Arrangement (preview — arranging happens in the takeover) ──────
             Card {
