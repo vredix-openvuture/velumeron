@@ -56,6 +56,17 @@ Item {
     // belongs to. Ids below the block size have slot == id, so a single-monitor setup is
     // unchanged and a config from before the scheme still reads correctly.
     readonly property int wsBlock: 100
+    // Screens left to right, then top to bottom — the order you would point at them across the desk.
+    // Every settings page that lists monitors uses this instead of `Quickshell.screens`, whose order
+    // is whatever the compositor enumerated: on a three-screen desk that put DP-3 before DP-2 and
+    // read as a bug in the page rather than as an accident of hotplug order.
+    readonly property var screensOrdered: {
+        var out = []
+        for (var i = 0; i < Quickshell.screens.length; i++) out.push(Quickshell.screens[i])
+        out.sort(function (a, b) { return (a.x - b.x) || (a.y - b.y) })
+        return out
+    }
+
     function wsSlot(id) { return id > 0 ? (id % comp.wsBlock === 0 ? comp.wsBlock : id % comp.wsBlock) : id }
     function wsBaseOf(id) { return id > 0 ? id - comp.wsSlot(id) : 0 }
 

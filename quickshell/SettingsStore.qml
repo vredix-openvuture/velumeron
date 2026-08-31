@@ -50,6 +50,16 @@ Singleton {
         flushTimer.restart()
     }
 
+    // A whole batch in one go — for callers that hold a finished set of values rather than a user
+    // turning one knob (a theme's arrangement is ~80 keys). Going through set() per key is what
+    // froze the shell for 16 s on a theme switch; see VtlConfig.applyLocalMany.
+    function setAll(values) {
+        VtlConfig.applyLocalMany(values)
+        for (var k in values) root._pending[k] = values[k]
+        root._hasPending = true
+        flushTimer.restart()
+    }
+
     // Flip one entry of the component_enabled map (the à-la-carte on/off shown atop each
     // feature's settings page). Clones the map so every other feature's explicit state survives.
     function setComponentEnabled(key, on) {

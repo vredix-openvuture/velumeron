@@ -9,16 +9,54 @@ import Quickshell.Hyprland
 ShellRoot {
     id: root
 
-    // Touch the Templates singleton on startup so its copy-on-write watcher + one-time migration run
-    // even before any settings UI is opened (a singleton only instantiates once referenced).
-    // OnboardingState decides whether to open the first-run wizard / post-update changelog.
-    // SoundService.boot() builds the sound cache and — once per session, never per shell restart —
-    // fires the login sound. Like the others it has to be TOUCHED, or the singleton is never created.
+    // ── Boot gate: nothing maps before the splash curtain has painted ───────────────────────────
+    // Every window below is modelled on THIS instead of on Quickshell.screens, so the shell waits
+    // for the curtain to be on screen before it builds anything else.
+    //
+    // Measured on 2026-08-29, three monitors, warm cache. The splash reports its first frame 0.7 s
+    // after launch when it is the only surface and 5.6 s when the rest of the shell comes up
+    // alongside it — and 5.6 s was longer than the whole splash, so the curtain was torn down
+    // before it had ever been seen. What the user got was five seconds of black followed by a
+    // desktop popping into place. The cost is not QML construction (the object tree is complete
+    // 0.9 s in) and not the wallpaper (5.9 s without it): it is ~130 layer-shell surfaces, three
+    // screens × 43 of these blocks, each wanting its own configure/ack and first buffer, with the
+    // splash's own frame queued behind all of them.
+    //
+    // SplashState.curtainUp is true on the first evaluation when the splash is switched off, so an
+    // unsplashed start maps everything as immediately as it did before.
+    //
+    // Only the surfaces you actually SEE when the curtain tears ride this one: wallpaper, bar,
+    // taskbar, tags, corners, the theme's layers. Together they cost 0.23 s. Everything else is
+    // invisible until you ask for it, and goes in WAVES — see late().
+    readonly property var bootScreens: SplashState.curtainUp ? Quickshell.screens : []
+
+    // The ~36 surfaces nobody has asked for yet: every menu, glide, picker and overlay. Building
+    // them all in one go costs 6.8 s of blocked GUI thread (0.23 s for the visible ones, 7 s for
+    // the lot), and wherever that block sits it is a hole: under the curtain it is a splash that
+    // stands still, after it a desktop that does. So they come up a wave at a time — the timer can
+    // only fire once the event loop is free, which makes each tick "one more group, then breathe".
+    //
+    // Wave order is what you are likely to reach for first: OSD and notification popups, then the
+    // launcher, then the settings menu, then the glides, the menus, and the rarities last. The
+    // splash does NOT wait for any of this; it plays its own length and tears open on time, and the
+    // rest arrives underneath a desktop that is already yours.
+    //
+    // `late()` is a function on purpose: a binding tracks every property it reads while it
+    // evaluates, `lateWave` included, so each model re-evaluates on the wave that carries it.
+    property int lateWave: 0
+    readonly property int lastWave: 18
+    function late(wave) { return root.lateWave >= wave ? Quickshell.screens : [] }
+    // NOT while the splash is playing. Each wave blocks the GUI thread for a moment, and the
+    // curtain's own animation runs on that same thread — the wordmark charged in visible steps and
+    // the whole start read as a stutter. The waves wait for the curtain to be gone and then build
+    // under a desktop that is already up and already yours; the surfaces they carry are invisible
+    // until you ask for one anyway.
     Timer {
-        interval: 2500; repeat: true; running: true
-        onTriggered: console.warn("[saverdbg] poll enabled", saverMon.enabled, "timeout", saverMon.timeout,
-                                  "svc.saverSec", IdleService.saverSec, "isIdle", saverMon.isIdle)
+        interval: 1; repeat: true
+        running: SplashState.curtainUp && !SplashState.active && root.lateWave < root.lastWave
+        onTriggered: root.lateWave++
     }
+
     // ── Idle chain: screensaver → lock → suspend (ext-idle-notify-v1) ────────────────────────
     // Every stage is BUILT, not bound. Measured, three times, in one process against a reference
     // monitor on the same seat: an IdleMonitor whose `enabled` or `timeout` is a binding ends up
@@ -27,11 +65,6 @@ ShellRoot {
     // stage is instantiated with its timeout as an INITIAL property, parented to this root (the
     // only place they arm at all — inside a singleton or an Item they stay silent), and a settings
     // change destroys the old object and builds a new one instead of touching it.
-    // [saverdbg] reference monitor, literal values
-    IdleMonitor {
-        enabled: true; timeout: 10; respectInhibitors: true
-        onIsIdleChanged: console.warn("[saverdbg] REF", new Date().toLocaleTimeString(), "isIdle", this.isIdle)
-    }
     Component {
         id: idleStage
         IdleMonitor { enabled: true }
@@ -52,7 +85,6 @@ ShellRoot {
         root.saverMon = root._stage(root.saverMon, IdleService.saverSec, r, function (idle) {
             // The screensaver is the one stage that also has to come DOWN by itself: `isIdle` going
             // false is the resume signal, which is why neither surface has to grab the keyboard.
-            console.warn("[saverdbg] SAVER", new Date().toLocaleTimeString(), "idle", idle)
             UiState.screensaverOn = idle && !IdleService.awake
         })
         root.lockMon = root._stage(root.lockMon, IdleService.lockSec, r, function (idle) {
@@ -75,8 +107,11 @@ ShellRoot {
         function onRespectChanged()    { root.rebuildIdle() }
     }
 
+    // OnboardingState decides whether to open the first-run wizard / post-update changelog.
+    // SoundService.boot() builds the sound cache and — once per session, never per shell restart —
+    // fires the login sound. Each has to be TOUCHED, or the singleton is never created.
     Component.onCompleted: { root.rebuildIdle()
-                             Templates.boot(); void Hyprwindows.windows
+                             void Hyprwindows.windows
                              OnboardingState.boot(); SoundService.boot() }
 
     // Cold-start resync: Quickshell.Hyprland builds its workspace→monitor /
@@ -110,7 +145,7 @@ ShellRoot {
         }
     }
 
-    // Hand the active ui_style to Hyprland whenever it changes — from the Style picker, a template
+    // Hand the active ui_style to Hyprland whenever it changes — from the Style picker, a theme
     // activation, or any settings edit — so window decoration (border / glow / shadow / rounding)
     // follows the shell look. hyprland.lua reads <USER_DIR>/active-theme and loads themes/<style>.lua.
     // `cur` is a live binding on VtlConfig.uiStyle; `_last` snapshots the value at startup so a
@@ -175,6 +210,10 @@ ShellRoot {
 
     IpcHandler {
         target: "theme"
+        // `wear` is the whole switch: id, arrangement and window frames. Same path the picker takes.
+        function wear(id: string): void { Theme.wear(id) }
+        // Forget what you made of a theme and put its shipped arrangement back.
+        function reset(id: string): void { Theme.resetArrangement(id === "" ? Theme.themeId : id) }
         function report(): string {
             return JSON.stringify({ id: Theme.themeId, name: Theme.name, base: Theme.base,
                                     loaded: Theme.loaded, contract: Theme.contract,
@@ -420,19 +459,25 @@ ShellRoot {
     // Native wallpaper engine: one background-layer surface per monitor (static images + live video
     // with GPU crossfades), driven by the watched wallpapers.json. Sits below everything.
     Variants {
-        model: VtlConfig.componentEnabled("wallpaper") ? Quickshell.screens : []
+        model: VtlConfig.componentEnabled("wallpaper") ? root.bootScreens : []
         delegate: WallpaperWindow { required property var modelData; screen: modelData }
     }
 
-    // Bar visual: full-screen transparent surface, no exclusive zone (dynamic, multi-edge).
-    // Held back until the splash curtain is actually on screen — SplashState.curtainUp is already
-    // true on the first evaluation when the splash is switched off, so an unsplashed start puts the
-    // bar up as immediately as before. With the splash on, the bar builds itself UNDER the curtain
-    // (strips, tray icons, workspace pills) and is simply there when the curtain tears open,
-    // instead of assembling in the frames before the curtain lands. The reserving surfaces below
-    // are invisible, so they stay ungated and the window layout settles during the splash too.
+    // The theme's window veil, if it brings one: over your windows, UNDER everything the shell
+    // draws. Declared HERE, before the bar, on purpose — both sit on the Top layer and the one
+    // mapped first ends up underneath, which is the whole point of it.
     Variants {
-        model: (VtlConfig.componentEnabled("bar") && SplashState.curtainUp) ? Quickshell.screens : []
+        model: root.bootScreens
+        delegate: ThemeMaterial { required property var modelData; screen: modelData; surface: "dim" }
+    }
+
+    // Bar visual: full-screen transparent surface, no exclusive zone (dynamic, multi-edge).
+    // On the boot gate with everything else: the bar builds itself UNDER the curtain (strips, tray
+    // icons, workspace pills) and is simply there when the curtain tears open, instead of
+    // assembling in the frames before the curtain lands. The reserving surfaces below wait with it,
+    // so the window layout settles while nobody can see it either.
+    Variants {
+        model: VtlConfig.componentEnabled("bar") ? root.bootScreens : []
         delegate: Bar {
             required property var modelData
             screen: modelData
@@ -442,25 +487,25 @@ ShellRoot {
     // Exclusive zones: one invisible reserving surface per screen × edge. Each only
     // reserves space when the bar actually occupies that edge (driven by VtlConfig).
     Variants {
-        model: VtlConfig.componentEnabled("bar") ? Quickshell.screens : []
+        model: VtlConfig.componentEnabled("bar") ? root.bootScreens : []
         delegate: EdgeExclusiveZone { required property var modelData; screen: modelData; edge: "top" }
     }
     Variants {
-        model: VtlConfig.componentEnabled("bar") ? Quickshell.screens : []
+        model: VtlConfig.componentEnabled("bar") ? root.bootScreens : []
         delegate: EdgeExclusiveZone { required property var modelData; screen: modelData; edge: "bottom" }
     }
     Variants {
-        model: VtlConfig.componentEnabled("bar") ? Quickshell.screens : []
+        model: VtlConfig.componentEnabled("bar") ? root.bootScreens : []
         delegate: EdgeExclusiveZone { required property var modelData; screen: modelData; edge: "left" }
     }
     Variants {
-        model: VtlConfig.componentEnabled("bar") ? Quickshell.screens : []
+        model: VtlConfig.componentEnabled("bar") ? root.bootScreens : []
         delegate: EdgeExclusiveZone { required property var modelData; screen: modelData; edge: "right" }
     }
 
     // Settings menu: one per screen, shown via UiState.openDropdown === "vuture-icon"
     Variants {
-        model: Quickshell.screens
+        model: root.late(3)
         delegate: Settings {
             required property var modelData
             screen: modelData
@@ -469,36 +514,36 @@ ShellRoot {
 
     // Build-your-own palette editor: centred overlay, one per screen (Settings → Style → Colours).
     Variants {
-        model: Quickshell.screens
+        model: root.late(18)
         delegate: PaletteEditor { required property var modelData; screen: modelData }
     }
 
     // Onboarding: first-run wizard / post-update changelog, one per screen (renders on the
     // monitor focused when it opened).
     Variants {
-        model: VtlConfig.componentEnabled("onboarding") ? Quickshell.screens : []
+        model: VtlConfig.componentEnabled("onboarding") ? root.late(3) : []
         delegate: OnboardingWindow { required property var modelData; screen: modelData }
     }
 
     // Application launcher: one per screen, shows on the focused monitor (Super+Space).
     Variants {
-        model: VtlConfig.componentEnabled("launcher") ? Quickshell.screens : []
+        model: VtlConfig.componentEnabled("launcher") ? root.late(2) : []
         delegate: Launcher { required property var modelData; screen: modelData }
     }
 
     // Hot corners / screen edges: one transparent trigger overlay per screen (Settings → Corners).
     Variants {
-        model: VtlConfig.componentEnabled("hotcorners") ? Quickshell.screens : []
+        model: VtlConfig.componentEnabled("hotcorners") ? root.bootScreens : []
         delegate: HotCorners { required property var modelData; screen: modelData }
     }
 
     // rofi successors: window switcher, clipboard history, session menu — one per screen.
-    Variants { model: VtlConfig.componentEnabled("windowswitcher") ? Quickshell.screens : []; delegate: WindowSwitcher { required property var modelData; screen: modelData } }
-    Variants { model: VtlConfig.componentEnabled("windowswitcher") ? Quickshell.screens : []; delegate: LayoutQuickSwitcher { required property var modelData; screen: modelData } }
-    Variants { model: VtlConfig.componentEnabled("clipboard") ? Quickshell.screens : []; delegate: ClipboardMenu  { required property var modelData; screen: modelData } }
-    Variants { model: VtlConfig.componentEnabled("session") ? Quickshell.screens : []; delegate: SessionOverlay { required property var modelData; screen: modelData } }
+    Variants { model: VtlConfig.componentEnabled("windowswitcher") ? root.late(14) : []; delegate: WindowSwitcher { required property var modelData; screen: modelData } }
+    Variants { model: VtlConfig.componentEnabled("windowswitcher") ? root.late(14) : []; delegate: LayoutQuickSwitcher { required property var modelData; screen: modelData } }
+    Variants { model: VtlConfig.componentEnabled("clipboard") ? root.late(15) : []; delegate: ClipboardMenu  { required property var modelData; screen: modelData } }
+    Variants { model: VtlConfig.componentEnabled("session") ? root.late(15) : []; delegate: SessionOverlay { required property var modelData; screen: modelData } }
     // Screensaver — one surface per output; each shows ITS OWN monitor's wallpaper folder.
-    Variants { model: Quickshell.screens; delegate: Screensaver { required property var modelData; screen: modelData } }
+    Variants { model: root.bootScreens; delegate: Screensaver { required property var modelData; screen: modelData } }
     // The idle chain has no visual of its own, so nothing else would ever instantiate the
     // singleton. A binding that reads it is what brings the three IdleMonitors up — and it has to
     // be a property, not a second Component.onCompleted: this root already has one, and QML rejects
@@ -520,15 +565,15 @@ ShellRoot {
 
     // Taskbar OSD: a strip of open windows (Settings → Taskbar), one per screen. TaskbarReserve is the
     // invisible space-reserving surface for the "like bar" layer.
-    Variants { model: VtlConfig.componentEnabled("taskbar") ? Quickshell.screens : []; delegate: Taskbar        { required property var modelData; screen: modelData } }
-    Variants { model: VtlConfig.componentEnabled("taskbar") ? Quickshell.screens : []; delegate: TaskbarReserve { required property var modelData; screen: modelData } }
+    Variants { model: VtlConfig.componentEnabled("taskbar") ? root.bootScreens : []; delegate: Taskbar        { required property var modelData; screen: modelData } }
+    Variants { model: VtlConfig.componentEnabled("taskbar") ? root.bootScreens : []; delegate: TaskbarReserve { required property var modelData; screen: modelData } }
 
     // Window tags: a name chip on the edge of every window, fading out on cursor approach.
-    Variants { model: VtlConfig.componentEnabled("windowtags") ? Quickshell.screens : []; delegate: WindowTags     { required property var modelData; screen: modelData } }
+    Variants { model: VtlConfig.componentEnabled("windowtags") ? root.bootScreens : []; delegate: WindowTags     { required property var modelData; screen: modelData } }
 
     // OSD: one per screen, shows on the focused monitor (volume / brightness)
     Variants {
-        model: VtlConfig.componentEnabled("osd") ? Quickshell.screens : []
+        model: VtlConfig.componentEnabled("osd") ? root.late(1) : []
         delegate: Osd {
             required property var modelData
             screen: modelData
@@ -538,33 +583,33 @@ ShellRoot {
     // Module glides: a pill that slides out of the bar from a module. Volume % (hover), performance
     // stats (hover), system-tray icons (hover), user session actions (click). One of each per screen.
     Variants {
-        model: Quickshell.screens
+        model: root.late(4)
         delegate: VolumeGlide { required property var modelData; screen: modelData }
     }
     Variants {
-        model: Quickshell.screens
+        model: root.late(6)
         delegate: PerformanceGlide { required property var modelData; screen: modelData }
     }
     Variants {
-        model: Quickshell.screens
+        model: root.late(6)
         delegate: UserGlide { required property var modelData; screen: modelData }
     }
     Variants {
-        model: Quickshell.screens
+        model: root.late(7)
         delegate: NetworkGlide { required property var modelData; screen: modelData }
     }
     Variants {
-        model: Quickshell.screens
+        model: root.late(7)
         delegate: BtGlide { required property var modelData; screen: modelData }
     }
     Variants {
-        model: Quickshell.screens
+        model: root.late(8)
         delegate: TrayGlide { required property var modelData; screen: modelData }
     }
     // The file-transfer card. Not gated on the phone module being placed in the bar: a transfer can
     // only start from the popout, and if you got that far you want to see where the file went.
     Variants {
-        model: Quickshell.screens
+        model: root.late(8)
         delegate: ShareGlide { required property var modelData; screen: modelData }
     }
     // ── Two surfaces that must NOT exist until they are wanted ───────────────────
@@ -619,100 +664,100 @@ ShellRoot {
     // moment it closes, which is what lets it stay out of the login path entirely.
     ShotRunner { }
     Variants {
-        model: Quickshell.screens
+        model: root.late(4)
         delegate: WorkspaceGlide { required property var modelData; screen: modelData }
     }
     Variants {
-        model: Quickshell.screens
+        model: root.late(5)
         delegate: NotifPeekGlide { required property var modelData; screen: modelData }
     }
     Variants {
-        model: Quickshell.screens
+        model: root.late(5)
         delegate: UpdatesGlide { required property var modelData; screen: modelData }
     }
 
     // Module flyouts (hover/IPC-grown panels): one of each per screen.
     Variants {
-        model: Quickshell.screens
+        model: root.late(9)
         delegate: PerformanceMenu { required property var modelData; screen: modelData }
     }
     Variants {
-        model: Quickshell.screens
+        model: root.late(9)
         delegate: VolumeMenu { required property var modelData; screen: modelData }
     }
     Variants {
-        model: Quickshell.screens
+        model: root.late(11)
         delegate: PhoneMenu { required property var modelData; screen: modelData }
     }
     Variants {
-        model: Quickshell.screens
+        model: root.late(11)
         delegate: MprisMenu { required property var modelData; screen: modelData }
     }
     Variants {
-        model: Quickshell.screens
+        model: root.late(10)
         delegate: BluetoothMenu { required property var modelData; screen: modelData }
     }
     Variants {
-        model: Quickshell.screens
+        model: root.late(10)
         delegate: NetworkMenu { required property var modelData; screen: modelData }
     }
     // One generic GroupMenu per screen serves every dynamic "group:<n>" module (only one flyout
     // is ever open, so it re-binds to whichever group opened — no per-instance windows needed).
     Variants {
-        model: Quickshell.screens
+        model: root.late(12)
         delegate: GroupMenu { required property var modelData; screen: modelData }
     }
     // Shell-styled tray context menu (one overlay per screen; renders whichever item's menu opened).
     Variants {
-        model: Quickshell.screens
+        model: root.late(12)
         delegate: TrayMenu { required property var modelData; screen: modelData }
     }
     Variants {
-        model: Quickshell.screens
+        model: root.late(16)
         delegate: WallpaperQuick { required property var modelData; screen: modelData }
     }
     // The same picker's full-screen shape (Settings → Wallpaper → Quickselect → Style = Gallery).
     // Both surfaces exist on every screen; UiState.openWallpaperQuick() opens exactly one of them.
     Variants {
-        model: Quickshell.screens
+        model: root.late(16)
         delegate: WallpaperGallery { required property var modelData; screen: modelData }
     }
     Variants {
-        model: VtlConfig.componentEnabled("calendar") ? Quickshell.screens : []
+        model: VtlConfig.componentEnabled("calendar") ? root.late(13) : []
         delegate: CalendarMenu { required property var modelData; screen: modelData }
     }
 
     Variants {
-        model: Quickshell.screens
+        model: root.late(13)
         delegate: LayoutMenu { required property var modelData; screen: modelData }
     }
 
     // FancyZones: input-transparent zone fields per screen, shown while a float is dragged.
     Variants {
-        model: VtlConfig.componentEnabled("zones") ? Quickshell.screens : []
+        model: VtlConfig.componentEnabled("zones") ? root.late(17) : []
         delegate: ZoneOverlay { required property var modelData; screen: modelData }
     }
 
     // Dashboard editor: a standalone window over everything, opened from the settings home page's
     // pencil (UiState.dashEditOpen). Shows on the monitor the menu was on; the menu hides meanwhile.
     Variants {
-        model: Quickshell.screens
+        model: root.late(17)
         delegate: DashEditor { required property var modelData; screen: modelData }
     }
 
     // Keybind cheatsheet: one per screen, shown via UiState.keybindContext
     Variants {
-        model: VtlConfig.componentEnabled("keybind") ? Quickshell.screens : []
+        model: VtlConfig.componentEnabled("keybind") ? root.late(18) : []
         delegate: KeybindHelp { required property var modelData; screen: modelData }
     }
 
     // Notifications: toast popups + the history centre, one per screen (focused monitor shows them)
     Variants {
-        model: VtlConfig.componentEnabled("notifications") ? Quickshell.screens : []
+        model: VtlConfig.componentEnabled("notifications") ? root.late(1) : []
         delegate: NotifPopups { required property var modelData; screen: modelData }
     }
     Variants {
-        model: VtlConfig.componentEnabled("notifications") ? Quickshell.screens : []
+        model: VtlConfig.componentEnabled("notifications") ? root.late(4) : []
         delegate: NotifCenter { required property var modelData; screen: modelData }
     }
 
@@ -725,11 +770,11 @@ ShellRoot {
     // is not a free one; see the note above the settings backdrop for what a pair of always-present
     // full-screen surfaces did to this session.
     Variants {
-        model: Theme.hasComponent("backdrop") ? Quickshell.screens : []
+        model: Theme.hasComponent("backdrop") ? root.bootScreens : []
         delegate: ThemeMaterial { required property var modelData; screen: modelData; surface: "backdrop" }
     }
     Variants {
-        model: Theme.hasComponent("material") ? Quickshell.screens : []
+        model: Theme.hasComponent("material") ? root.bootScreens : []
         delegate: ThemeMaterial { required property var modelData; screen: modelData; surface: "material" }
     }
 }

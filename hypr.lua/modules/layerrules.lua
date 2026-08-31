@@ -103,6 +103,23 @@ hl.layer_rule({ name = "velumeron-session", match = { namespace = "velumeron-ses
 -- the panel itself keeps its frost on its own surface (SettingsDim.qml relies on this).
 hl.layer_rule({ name = "velumeron-settings-dim", match = { namespace = "velumeron-settings-dim" }, blur = false, dim_around = false, no_anim = true, xray = true })
 
+-- Velumeron THEME layers — the veils a theme lays over the desktop (ThemeMaterial.qml):
+--   velumeron-dim       over your windows, under the shell, while a menu is open
+--   velumeron-material  over everything (Console's scanlines)
+--   velumeron-backdrop  over the wallpaper, under the windows
+--
+-- All three must be exempt from the blanket blur above, and the dim is the one that proves why:
+-- the catch-all blurs any layer whose alpha clears ignore_alpha 0.1, so an 18 % black veil turned
+-- into a full-screen frost and the desktop got BRIGHTER when a menu opened instead of quieter.
+hl.layer_rule({
+    name        = "velumeron-theme-layers",
+    match       = { namespace = "(.*velumeron-dim.*|.*velumeron-material.*|.*velumeron-backdrop.*)" },
+    blur        = false,
+    blur_popups = false,
+    no_anim     = true,
+    xray        = true,
+})
+
 -- Velumeron OSD — one rule per slide direction.
 -- The daemon sets the namespace to velumeron-osd-{bottom|top|left|right}
 -- based on the position chosen in the OSD settings page.

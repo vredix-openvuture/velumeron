@@ -79,6 +79,20 @@ QtObject {
     // Full-screen overlay that renders a live LockContent preview (no WlSessionLock/PAM) beside the
     // controls. seed = { id, source, name, settings } to edit an existing preset; null = fresh from
     // the live VtlConfig.lock* values. Cleared by the editor once read.
+    // ── The wallpaper you just picked, before the disk knows about it ───────────────────────────
+    // Applying runs a shell script (wallust, thumbnails, the JSON the surfaces watch), and the
+    // transition used to start when that script finally wrote the file — a few hundred milliseconds
+    // after the click, which is exactly long enough to read as "the picker closed, and THEN
+    // something happened". The picker publishes its choice here instead and the wallpaper surface
+    // starts on the same frame; the file landing afterwards is a confirmation, not a trigger.
+    property var wallpaperPending: ({})
+    function wallpaperApplied(mon, path, type) {
+        var m = {}
+        for (var k in ui.wallpaperPending) m[k] = ui.wallpaperPending[k]
+        m["" + mon] = { "path": "" + path, "type": "" + (type || "image") }
+        ui.wallpaperPending = m
+    }
+
     // Screensaver — one flag for every monitor: it is a whole-desk state, not a per-screen one.
     // Set by IdleService when the seat goes idle and cleared the moment anything happens.
     property bool   screensaverOn:  false
@@ -482,6 +496,16 @@ QtObject {
     // whatever is underneath), and the palette / lockscreen editors — those hold unsaved drafts, so
     // they close everything else when they open but are never auto-closed themselves.
     // `keep` is the key of the surface that just opened; "" closes the whole set.
+    // Is anything of the shell's own open right now — a menu, a flyout, a switcher, the launcher?
+    // Only one of them ever is (see _closeMenusExcept below), so this is "the shell has the screen".
+    // A theme's material reads it: Console turns the phosphor up while you are in a menu, which is
+    // the moment the desktop is supposed to feel like a machine you are operating.
+    readonly property bool shellBusy: ui.openDropdown !== "" || ui.flyout !== ""
+                                      || ui.notifCenterOpen || ui.launcherOpen || ui.clipboardOpen
+                                      || ui.windowSwitcherOpen || ui.layoutSwitcherOpen
+                                      || ui.sessionOpen || ui.keybindContext !== ""
+                                      || ui.trayMenuOpen || ui.wallpaperGalleryOpen
+
     function _closeMenusExcept(keep) {
         if (keep !== "dropdown"  && ui.openDropdown       !== "") ui.openDropdown       = ""
         if (keep !== "flyout"    && ui.flyout             !== "") ui.flyout             = ""

@@ -53,6 +53,19 @@ Item {
         root._data = d
         root._pendingLocal[key] = value
     }
+    // The same thing for a whole batch, and it is not a convenience: reassigning `_data` re-evaluates
+    // every binding in the shell that reads any setting. Wearing a theme writes its ~80-key
+    // arrangement, and one applyLocal per key meant eighty of those storms back to back — measured
+    // at 16 s of frozen shell between the switch and the file actually being written. One clone,
+    // one reassign, one storm.
+    function applyLocalMany(values) {
+        var d = Object.assign({}, root._data)
+        for (var k in values) {
+            d[k] = values[k]
+            root._pendingLocal[k] = values[k]
+        }
+        root._data = d
+    }
     // Called by SettingsStore once a batch has actually been written. Only drops keys whose pending
     // value is still the one that was written — a key changed AGAIN while the write was in flight
     // must stay pending, or the next read would undo the newer value.
@@ -103,8 +116,8 @@ Item {
     //
     // This is the ONE switch per feature: Settings pins it atop the feature's page and
     // every other "enable X" in the UI is gone. Four features predate the register and
-    // shipped their own key; those keys survive ONLY as the fallback below, so a style
-    // template (or a settings.json written before the merge) still decides until the
+    // shipped their own key; those keys survive ONLY as the fallback below, so a theme's
+    // arrangement (or a settings.json written before the merge) still decides until the
     // user flips the switch — which writes component_enabled and takes over for good.
     readonly property var _legacyFeatureKeys: ({
         "taskbar":    "taskbar_enabled",
@@ -240,9 +253,22 @@ Item {
         for (var i = 1; i < vs.length; i++) if (vs[i].id < m.id) m = vs[i]
         return m.name
     }
+    // Has this monitor an arrangement of its OWN? Anything the bar page filed under bar_monitors
+    // counts — that is the user having said what belongs on this screen.
+    function hasOwnBarModules(mon) {
+        var o = _monObj(mon)
+        if (!o || !o.bar_modules_m) return false
+        for (var k in o.bar_modules_m) return true
+        return false
+    }
     function isSecondaryMinimal(mon) {
         if (!secondaryBarsMinimal || !mon) return false
         if (Hyprland.monitors.values.length < 2) return false   // single monitor → full bar
+        // An explicit arrangement outranks the convenience. "Minimal secondary bars" is a default
+        // for screens nobody has configured; once you HAVE configured one, having the shell quietly
+        // ignore the layout you just built is the worst of both — and there was no sign anywhere
+        // that it was doing so.
+        if (hasOwnBarModules(mon)) return false
         return mon !== _mainMonName()
     }
 
@@ -382,7 +408,7 @@ Item {
     readonly property string theme:           _data.theme             ?? "mirobo"
 
     // Resolved main display font (blank ui_font → the default nerd face). Also the fallback for a
-    // bar module's font, so the template/user font flows to the bar unless a module overrides it.
+    // bar module's font, so the theme/user font flows to the bar unless a module overrides it.
     readonly property string uiFontResolved: uiFont !== "" ? uiFont : "FantasqueSansM Nerd Font"
     function moduleFontFor(key, def)     { return moduleSetting(key, "font", def ?? uiFontResolved) }
     function moduleFontSizeFor(key, mon) { return moduleSetting(key, "font_size", barFontSizeFor(mon)) }
