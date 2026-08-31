@@ -19,7 +19,7 @@ Item {
     // Where this page's card grid starts inside it. Zero for a page that is nothing but
     // its grid; the ones with a header of their own say so, and the menu lines its
     // preview card up with the grid rather than with the top of the page.
-    readonly property real pageGridY: 0
+    readonly property real pageGridY: headCard.visible ? headCard.height + Style.cardGap : 0
     readonly property real pageFillH: (parent && parent.pageFillH !== undefined) ? parent.pageFillH : 0
     readonly property real pageRowMin: (parent && parent.pageRowMin !== undefined) ? parent.pageRowMin : 0
 
@@ -549,11 +549,19 @@ Item {
     // behaviour switches that shared this header moved into the Form tab, where they belong — this
     // strip has one job, and it stays visible across the tabs because it scopes every one of them.
     // Hidden on a single-screen machine (nothing to scope) unless an override is still on.
+    // ── The page's own head ─────────────────────────────────────────────────────────
+    // Scope chips and tabs in ONE card. They used to float above the page as two loose rows of
+    // buttons with nothing behind them — on a page made entirely of cards that reads as controls
+    // that fell out of one.
+    Card {
+        id: headCard
+        visible: root.customizeKey === "" && root.addTarget === ""
+        anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 2 }
+
     Column {
         id: header
-        visible: root.customizeKey === "" && root.addTarget === ""
-                 && (root.monitors.length > 1 || root.perMonitor)
-        anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 2 }
+        width: parent.width
+        visible: root.monitors.length > 1 || root.perMonitor
         spacing: 6
 
         FieldLabel {
@@ -581,14 +589,9 @@ Item {
     }
 
     // ── Tab bar (fixed) ───────────────────────────────────────────────────────────
-    // Anchored to the top with the header's height folded into the margin, not to header.bottom:
-    // a hidden Column still occupies its content height, so a single-monitor machine would get a
-    // block of empty space where the scope strip is not.
     PageTabs {
         id: tabBar
-        visible: root.customizeKey === "" && root.addTarget === ""
-        anchors { top: parent.top; left: parent.left; right: parent.right
-                  topMargin: header.visible ? header.height + 14 : 2 }
+        width: parent.width
         equal:   false
         current: root.tab
         tabs: [{ icon: "󰠱", label: "Form", key: "form" },
@@ -597,10 +600,13 @@ Item {
         onPicked: key => root.tab = key
     }
 
+    }
+
     // ── Page content (one tab visible at a time) ────────────────────────────────────
     Flickable {
         visible: root.customizeKey === "" && root.addTarget === ""
-        anchors { top: tabBar.bottom; topMargin: 22; left: parent.left; right: parent.right; bottom: parent.bottom }
+        anchors { top: headCard.bottom; topMargin: Style.cardGap; left: parent.left; right: parent.right
+                  bottom: parent.bottom }
         contentHeight: pages.implicitHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds

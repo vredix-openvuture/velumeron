@@ -78,12 +78,19 @@ StyledRect {
         return n
     }
     readonly property real _slack: Math.max(0, card.height - 2 * Style.cardPad - card._naturalH)
+    // …but a heading belongs at the top of its card. Past this much slack the card stops centring
+    // and simply has room under its contents, because a title floating in the middle of a tall card
+    // reads as a mistake.
+    readonly property real _centreCap: 160
 
+    // A card given more height than its contents need keeps its rows TOGETHER and sits them in the
+    // middle of the space. Spreading the gaps was the other way to fill it and it reads worse: four
+    // rows a finger apart stop looking like one group and start looking like four unrelated lines.
     Column {
         id: inner
-        anchors { top: parent.top; left: parent.left; right: parent.right
-                  topMargin: Style.cardPad; leftMargin: Style.cardPad; rightMargin: Style.cardPad }
-        spacing: Style.rowGap + (card._rows > 1
-                 ? Math.min(card._slack / (card._rows - 1), Style.rowGap * 2) : 0)
+        anchors { left: parent.left; right: parent.right
+                  leftMargin: Style.cardPad; rightMargin: Style.cardPad }
+        y: Style.cardPad + Math.min(card._slack, card._centreCap) / 2
+        spacing: Style.rowGap
     }
 }
