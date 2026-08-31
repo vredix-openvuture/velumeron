@@ -5,6 +5,12 @@
   "version": 1,
   "contract": 1,
   "base": "flat",
+  "transitions": [
+    "fade",
+    "zoom",
+    "slide",
+    "push"
+  ],
   "tokens": {},
   "lock": {
     "layout": "breath",
@@ -24,37 +30,93 @@
     }
   },
   "arrangement": {
-    "ui_style": "flat",
-    "ui_font": "Fredoka",
-    "bar_mode": "frame",
-    "bar_position": "top",
-    "bar_edges": [
-      "top"
-    ],
-    "bar_thickness": 40,
-    "bar_inner_radius": 10,
-    "bar_module_bg": "module",
-    "bar_module_bg_radius": 8,
-    "bar_module_spacing": 4,
-    "bar_module_margin": 4,
-    "bar_font_size": 14,
-    "bar_icon_size": 14,
+    "opacity_enabled": true,
+    "menu_theme": "follow",
+    "opacity_value": 0.88,
+    "logo_variant": "full",
     "bar_opacity_enabled": false,
     "bar_opacity_value": 0.88,
+    "bar_inner_radius": 10,
     "colorful_enabled": true,
     "colorful_menus": true,
     "colorful_osd": true,
-    "opacity_enabled": true,
-    "opacity_value": 0.88,
-    "launcher_fullscreen": false,
-    "launcher_dock": true,
-    "notify_position": "top-left",
     "notify_dock": true,
+    "notify_position": "top-left",
     "osd_style": "dock",
     "osd_position": "bottom-right",
-    "taskbar_enabled": true,
+    "notify_main_monitor_only": true,
+    "wallpaper_search_subfolders": true,
+    "wallpaper_subfolder_sorting": true,
+    "osd_width_px": 300,
+    "osd_height_px": 52,
+    "notify_center_height": 0,
+    "notify_center_width": 0,
+    "wallpaper_quick_position": "bottom-center",
+    "wallpaper_quick_rows": 4,
+    "wallpaper_quick_preview": 260,
+    "wallpaper_quick_cols": 2,
+    "wallpaper_auto_minutes": 14,
+    "wallpaper_transition": "theme",
+    "wallpaper_transition_ms": 1400,
+    "wallpaper_slide_dir": "left",
     "transition_style_bar": "fillet",
     "transition_style_edge": "fillet",
+    "wallpaper_auto_mode": "silent",
+    "wallpaper_auto_order": "random_all",
+    "ui_style": "flat",
+    "launcher_cols": 6,
+    "launcher_position": "bottom-center",
+    "launcher_blur": false,
+    "launcher_dock": true,
+    "launcher_fullscreen": false,
+    "launcher_width": 800,
+    "launcher_rows": 4,
+    "corner_actions_enabled": true,
+    "corner_default_dwell": 300,
+    "corner_zones": {
+      "top-left": {
+        "action": {
+          "type": "none",
+          "value": ""
+        },
+        "dwell": null
+      },
+      "bottom-left": {
+        "action": {
+          "type": "launcher",
+          "value": ""
+        },
+        "dwell": null
+      }
+    },
+    "taskbar_enabled": true,
+    "taskbar_position": "bottom-center",
+    "taskbar_style": "dock",
+    "taskbar_visibility": "hover",
+    "taskbar_scope": "monitor",
+    "taskbar_labels": false,
+    "taskbar_icon_size": 34,
+    "taskbar_layer": "over",
+    "taskbar_margin": 12,
+    "window_tags_enabled": true,
+    "window_tags_position": "top-left",
+    "fancy_zones_enabled": true,
+    "calendar_menu_width": 480,
+    "calendar_menu_max_height": 800,
+    "module_settings": {
+      "updates": {
+        "check_minutes": 10,
+        "show_zero": true,
+        "include_flatpak": true,
+        "update_command": "yay -Syu"
+      },
+      "clock": {
+        "font": "Audiowide"
+      }
+    },
+    "ui_font": "Fredoka",
+    "elastic_spring": 10.4,
+    "elastic_damping": 0.68,
     "settings_float": false,
     "settings_nav_mode": "sidebar"
   }

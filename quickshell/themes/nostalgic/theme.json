@@ -2,71 +2,26 @@
   "id": "nostalgic",
   "name": "Nostalgic",
   "author": "velumeron",
-  "builtin": true,
   "version": 3,
-  "wallpaper": "assets/templates/nostalgic/wallpaper.jpg",
-  "settings": {
+  "contract": 1,
+  "base": "nostalgic",
+  "wip": true,
+  "wallpaper": "wallpaper.jpg",
+  "arrangement": {
     "opacity_enabled": true,
     "menu_theme": "follow",
     "opacity_value": 0.88,
     "logo_variant": "full",
-    "bar_modules_left": [],
-    "bar_modules_center": [
-      "clock"
-    ],
-    "bar_modules_right": [],
     "bar_opacity_enabled": false,
     "bar_opacity_value": 0.88,
-    "bar_mode": "dock",
-    "bar_edges": [
-      "bottom"
-    ],
-    "bar_thickness": 38,
     "bar_inner_radius": 0,
-    "bar_modules": {
-      "top": {
-        "start": [],
-        "center": [],
-        "end": []
-      },
-      "left": {
-        "start": [],
-        "center": [],
-        "end": []
-      },
-      "bottom": {
-        "start": [
-          "vuture-icon",
-          "tasks"
-        ],
-        "center": [],
-        "end": [
-          "tray",
-          "network",
-          "volume",
-          "clock"
-        ]
-      },
-      "right": {
-        "start": [],
-        "center": [],
-        "end": []
-      }
-    },
-    "bar_module_bg": "module",
-    "bar_module_bg_radius": 0,
-    "bar_position": "bottom",
-    "bar_module_margin": 4,
-    "bar_module_spacing": 6,
     "colorful_enabled": false,
     "colorful_menus": true,
     "colorful_osd": true,
-    "bar_module_bg_opacity": 0.5,
     "notify_dock": true,
     "notify_position": "bottom-right",
     "osd_style": "dock",
     "osd_position": "bottom-center",
-    "bar_per_monitor": false,
     "notify_main_monitor_only": true,
     "wallpaper_search_subfolders": true,
     "wallpaper_subfolder_sorting": true,
@@ -134,40 +89,6 @@
         "update_command": "yay -Syu"
       }
     },
-    "bar_modules_m": {
-      "dock": {
-        "top": {
-          "start": [],
-          "center": [],
-          "end": []
-        },
-        "left": {
-          "start": [],
-          "center": [],
-          "end": []
-        },
-        "bottom": {
-          "start": [
-            "vuture-icon",
-            "tasks"
-          ],
-          "center": [],
-          "end": [
-            "tray",
-            "network",
-            "volume",
-            "clock"
-          ]
-        },
-        "right": {
-          "start": [],
-          "center": [],
-          "end": []
-        }
-      }
-    },
-    "bar_icon_size": 14,
-    "bar_font_size": 14,
     "ui_font": "VT323"
   }
 }

@@ -342,7 +342,7 @@ QtObject {
     readonly property color onAccent: root.onColor(root.accent)
 
     // ── Typography ──────────────────────────────────────────────────────────────
-    // The main display font — per-template (ui_font) with a manual override, blank = the default.
+    // The main display font — the theme's (ui_font) with a manual override, blank = the default.
     // Nerd-font icons keep rendering under any display font: a shipped fontconfig rule pins
     // `iconFont` as the glyph fallback for the bundled UI fonts, so icons never depend on the
     // chosen face. iconFont is also exposed for anywhere that wants the glyph font explicitly.
@@ -387,8 +387,9 @@ QtObject {
     // A broken theme must never blank the shell, so every lookup falls back and keeps drawing — but
     // it says so. The warning fires only when a key is PRESENT and wrong, which is a theme bug and
     // exactly when the noise is wanted; a key a theme simply does not set is silent.
-    function _tokNum(key, fallback) {
-        var v = Theme.tokens[key]
+    function _tokNum(key, fallback) { return root._tokNumIn(Theme.tokens, key, fallback) }
+    function _tokNumIn(table, key, fallback) {
+        var v = table ? table[key] : undefined
         if (typeof v === "number") return v
         if (v !== undefined) console.warn("theme:", Theme.themeId, "token", key, "is not a number:", v)
         return fallback
@@ -401,8 +402,13 @@ QtObject {
         console.warn("theme:", Theme.themeId, "unknown palette entry:", name)
         return root.accent
     }
-    function _tokColor(key, fallback) {
-        var v = Theme.tokens[key]
+    function _tokColor(key, fallback) { return root._tokColorIn(Theme.tokens, key, fallback) }
+    // The same lookup against ANY table, not just the active theme's. The theme picker draws one
+    // card per installed theme and each card has to look like the theme it is offering — which
+    // means resolving a table the shell is not currently wearing. The recipes are the theme's, the
+    // palette is always the live one: a card previews the shape, never a foreign colour scheme.
+    function _tokColorIn(table, key, fallback) {
+        var v = table ? table[key] : undefined
         if (v === undefined || v === null) return fallback
         if (typeof v === "string") return (v === "transparent") ? "transparent" : root._tokBase(v)
         var base = root._tokBase(v.base)
@@ -410,6 +416,24 @@ QtObject {
         if (v.lift  !== undefined) return root.tint(base, root.lift(v.lift))
         if (v.alpha !== undefined) return root.tint(base, v.alpha)
         return base
+    }
+
+    // What a preview card needs to draw a theme it is not wearing: the same tokens the shell binds
+    // above, resolved out of a table handed in. Deliberately the few that shape a surface — a card
+    // is a thumbnail, not a second renderer.
+    function resolveTable(table) {
+        return {
+            "rCard":           root._tokNumIn(table, "rCard", 14),
+            "rControl":        root._tokNumIn(table, "rControl", 10),
+            "rTile":           root._tokNumIn(table, "rTile", 8),
+            "cardFill":        root._tokColorIn(table, "cardFill", root.tint(root.accent, root.lift(0.06))),
+            "cardBorderW":     root._tokNumIn(table, "cardBorderW", 0),
+            "cardBorderColor": root._tokColorIn(table, "cardBorderColor", root.tint(Colors.boNormal, 0.40)),
+            "controlFill":     root._tokColorIn(table, "controlFill", root.tint(root.accent, root.lift(0.12))),
+            "selFill":         root._tokColorIn(table, "selFill", root.accent),
+            "selBorderW":      root._tokNumIn(table, "selBorderW", 0),
+            "selBorderColor":  root._tokColorIn(table, "selBorderColor", Colors.boActive)
+        }
     }
 
     // ── Radii. The theme picks the numbers; the SHAPE of a corner is still keyed off the variant

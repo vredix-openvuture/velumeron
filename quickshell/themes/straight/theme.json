@@ -1,70 +1,26 @@
 {
-  "id": "sketch",
-  "name": "Sketch",
+  "id": "straight",
+  "name": "Straight",
   "author": "velumeron",
-  "builtin": true,
   "version": 3,
-  "settings": {
+  "contract": 1,
+  "base": "straight",
+  "wip": true,
+  "arrangement": {
     "opacity_enabled": true,
     "menu_theme": "follow",
     "opacity_value": 0.88,
     "logo_variant": "full",
-    "bar_modules_left": [],
-    "bar_modules_center": [
-      "clock"
-    ],
-    "bar_modules_right": [],
     "bar_opacity_enabled": false,
     "bar_opacity_value": 0.88,
-    "bar_mode": "float",
-    "bar_edges": [
-      "top"
-    ],
-    "bar_thickness": 38,
-    "bar_inner_radius": 8,
-    "bar_modules": {
-      "top": {
-        "start": [
-          "clock"
-        ],
-        "center": [
-          "workspaces"
-        ],
-        "end": [
-          "group:doodles",
-          "notiftray"
-        ]
-      },
-      "left": {
-        "start": [],
-        "center": [],
-        "end": []
-      },
-      "bottom": {
-        "start": [],
-        "center": [],
-        "end": []
-      },
-      "right": {
-        "start": [],
-        "center": [],
-        "end": []
-      }
-    },
-    "bar_module_bg": "module",
-    "bar_module_bg_radius": 6,
-    "bar_position": "top",
-    "bar_module_margin": 6,
-    "bar_module_spacing": 8,
+    "bar_inner_radius": 0,
     "colorful_enabled": false,
     "colorful_menus": true,
     "colorful_osd": true,
-    "bar_module_bg_opacity": 0.25,
     "notify_dock": true,
     "notify_position": "bottom-center",
     "osd_style": "dock",
     "osd_position": "bottom-center",
-    "bar_per_monitor": false,
     "notify_main_monitor_only": true,
     "wallpaper_search_subfolders": true,
     "wallpaper_subfolder_sorting": true,
@@ -84,7 +40,7 @@
     "transition_style_edge": "auto",
     "wallpaper_auto_mode": "silent",
     "wallpaper_auto_order": "random_all",
-    "ui_style": "sketch",
+    "ui_style": "straight",
     "launcher_cols": 6,
     "launcher_position": "bottom-center",
     "launcher_blur": false,
@@ -130,50 +86,8 @@
         "show_zero": true,
         "include_flatpak": true,
         "update_command": "yay -Syu"
-      },
-      "group:doodles": {
-        "label": "Doodles",
-        "icon": "󰋋",
-        "members": [
-          "mpris",
-          "volume"
-        ]
       }
     },
-    "bar_modules_m": {
-      "float": {
-        "top": {
-          "start": [
-            "clock"
-          ],
-          "center": [
-            "workspaces"
-          ],
-          "end": [
-            "group:doodles",
-            "notiftray"
-          ]
-        },
-        "left": {
-          "start": [],
-          "center": [],
-          "end": []
-        },
-        "bottom": {
-          "start": [],
-          "center": [],
-          "end": []
-        },
-        "right": {
-          "start": [],
-          "center": [],
-          "end": []
-        }
-      }
-    },
-    "bar_icon_size": 14,
-    "bar_font_size": 14,
-    "ui_font": "Shantell Sans",
-    "bar_float_gap": 10
+    "ui_font": "Chivo Mono"
   }
 }

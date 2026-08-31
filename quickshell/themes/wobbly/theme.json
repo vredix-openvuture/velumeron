@@ -2,68 +2,25 @@
   "id": "wobbly",
   "name": "Wobbly",
   "author": "velumeron",
-  "builtin": true,
   "version": 3,
-  "settings": {
+  "contract": 1,
+  "base": "wobbly",
+  "wip": true,
+  "arrangement": {
     "opacity_enabled": true,
     "menu_theme": "follow",
     "opacity_value": 0.88,
     "logo_variant": "full",
-    "bar_modules_left": [],
-    "bar_modules_center": [
-      "clock"
-    ],
-    "bar_modules_right": [],
     "bar_opacity_enabled": false,
     "bar_opacity_value": 0.88,
-    "bar_mode": "float",
-    "bar_edges": [
-      "bottom"
-    ],
-    "bar_thickness": 42,
     "bar_inner_radius": 18,
-    "bar_modules": {
-      "top": {
-        "start": [],
-        "center": [],
-        "end": []
-      },
-      "left": {
-        "start": [],
-        "center": [],
-        "end": []
-      },
-      "bottom": {
-        "start": [],
-        "center": [
-          "vuture-icon",
-          "workspaces",
-          "clock",
-          "group:bubbles",
-          "notiftray"
-        ],
-        "end": []
-      },
-      "right": {
-        "start": [],
-        "center": [],
-        "end": []
-      }
-    },
-    "bar_module_bg": "module",
-    "bar_module_bg_radius": 12,
-    "bar_position": "bottom",
-    "bar_module_margin": 8,
-    "bar_module_spacing": 10,
     "colorful_enabled": true,
     "colorful_menus": true,
     "colorful_osd": true,
-    "bar_module_bg_opacity": 0.3,
     "notify_dock": true,
     "notify_position": "bottom-center",
     "osd_style": "dock",
     "osd_position": "bottom-center",
-    "bar_per_monitor": false,
     "notify_main_monitor_only": true,
     "wallpaper_search_subfolders": true,
     "wallpaper_subfolder_sorting": true,
@@ -140,38 +97,6 @@
         ]
       }
     },
-    "bar_modules_m": {
-      "float": {
-        "top": {
-          "start": [],
-          "center": [],
-          "end": []
-        },
-        "left": {
-          "start": [],
-          "center": [],
-          "end": []
-        },
-        "bottom": {
-          "start": [],
-          "center": [
-            "vuture-icon",
-            "workspaces",
-            "clock",
-            "group:bubbles",
-            "notiftray"
-          ],
-          "end": []
-        },
-        "right": {
-          "start": [],
-          "center": [],
-          "end": []
-        }
-      }
-    },
-    "bar_icon_size": 14,
-    "bar_font_size": 14,
     "ui_font": "Fredoka",
     "bar_float_gap": 14
   }

@@ -2,70 +2,26 @@
   "id": "gnomish",
   "name": "Gnomish",
   "author": "velumeron",
-  "builtin": true,
   "version": 3,
-  "wallpaper": "assets/templates/gnomish/wallpaper.png",
-  "settings": {
+  "contract": 1,
+  "base": "cupertino",
+  "wip": true,
+  "wallpaper": "wallpaper.png",
+  "arrangement": {
     "opacity_enabled": true,
     "menu_theme": "follow",
     "opacity_value": 0.88,
     "logo_variant": "full",
-    "bar_modules_left": [],
-    "bar_modules_center": [
-      "clock"
-    ],
-    "bar_modules_right": [],
     "bar_opacity_enabled": true,
     "bar_opacity_value": 0.55,
-    "bar_mode": "dock",
-    "bar_edges": [
-      "top"
-    ],
-    "bar_thickness": 26,
     "bar_inner_radius": 0,
-    "bar_modules": {
-      "top": {
-        "start": [
-          "vuture-icon"
-        ],
-        "center": [
-          "clock"
-        ],
-        "end": [
-          "group:control",
-          "notiftray"
-        ]
-      },
-      "left": {
-        "start": [],
-        "center": [],
-        "end": []
-      },
-      "bottom": {
-        "start": [],
-        "center": [],
-        "end": []
-      },
-      "right": {
-        "start": [],
-        "center": [],
-        "end": []
-      }
-    },
-    "bar_module_bg": "none",
-    "bar_module_bg_radius": 0,
-    "bar_position": "top",
-    "bar_module_margin": 6,
-    "bar_module_spacing": 12,
     "colorful_enabled": true,
     "colorful_menus": true,
     "colorful_osd": true,
-    "bar_module_bg_opacity": 0.2,
     "notify_dock": true,
     "notify_position": "top-right",
     "osd_style": "dock",
     "osd_position": "bottom-center",
-    "bar_per_monitor": false,
     "notify_main_monitor_only": true,
     "wallpaper_search_subfolders": true,
     "wallpaper_subfolder_sorting": true,
@@ -143,39 +99,6 @@
         ]
       }
     },
-    "bar_modules_m": {
-      "dock": {
-        "top": {
-          "start": [
-            "vuture-icon"
-          ],
-          "center": [
-            "clock"
-          ],
-          "end": [
-            "group:control",
-            "notiftray"
-          ]
-        },
-        "left": {
-          "start": [],
-          "center": [],
-          "end": []
-        },
-        "bottom": {
-          "start": [],
-          "center": [],
-          "end": []
-        },
-        "right": {
-          "start": [],
-          "center": [],
-          "end": []
-        }
-      }
-    },
-    "bar_icon_size": 14,
-    "bar_font_size": 12,
     "ui_font": "",
     "bar_float_gap": 0
   }

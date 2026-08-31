@@ -215,16 +215,23 @@ QtObject {
     // the theme again puts them back.
     readonly property var arrangement: root.pkg.arrangement || ({})
 
-    // ── Settings pages ──────────────────────────────────────────────────────────────────────────
-    // The third seam. A theme brings its OWN settings pages, so the range of adjustment is that
-    // theme's rather than a global one: Console offers a status line and a rail, mirobo offers
-    // pills and a bar. Declared the same way components are:
+    // ── Wallpaper transitions ───────────────────────────────────────────────────────────────────
+    // Four per theme, rolled per change when `wallpaper_transition` is "theme". A wallpaper swap is
+    // the biggest thing that ever happens on the screen, and having it dissolve the same way under
+    // every look made the theme stop at the panels. Names come from the shipped set in
+    // WallpaperWindow: fade · slide · push · zoom · cut · wipe · flicker.
+    readonly property var transitions: Array.isArray(root.pkg.transitions) ? root.pkg.transitions : []
+
+    // ── The theme's own settings ────────────────────────────────────────────────────────────────
+    // The third seam. A theme brings its OWN controls, so the range of adjustment is that theme's
+    // rather than a global one: Console offers a scanline grid and a lockscreen rail, mirobo offers
+    // nothing of the sort. Declared the same way components are:
     //
-    //   "settings": [ { "key": "console", "title": "Console", "icon": "\udb80\udcb0",
-    //                   "group": "Appearance", "page": "settings/ConsoleSection.qml" } ]
+    //   "settings": [ { "key": "console", "title": "Console",
+    //                   "page": "settings/ConsoleSection.qml" } ]
     //
-    // `group` names one of the settings menu's nav groups; an unknown one lands in "More", which is
-    // where anything unplaced already goes.
+    // `title` names the card the shell builds for it on Settings -> Style; `key` only has to be
+    // unique within the theme.
     readonly property var settingsPages: {
         var out = []
         var ps = root.pkg.settings
@@ -233,7 +240,6 @@ QtObject {
             var p = ps[i]
             if (!p || !p.key || !p.page) continue
             out.push({ "key": "" + p.key, "title": p.title || ("" + p.key),
-                       "icon": p.icon || "\u{F0765}", "group": p.group || "Appearance",
                        "url": (root.dir === "") ? "" : ("file://" + root.dir + "/" + p.page) })
         }
         return out
@@ -305,23 +311,36 @@ QtObject {
     // working for a session that has no theme package at all.
     readonly property string base:   root.pkg.base || VtlConfig.uiStyle
 
-    // The effective table: flat, then the named variant, then whatever the theme overrides.
-    readonly property var tokens: {
+    // Did the active theme have an OPINION about this token, or is the value only the shipped
+    // table's? Some surfaces are drawn to match something else by default — a notification toast
+    // reads as a bar module rather than as a card, on purpose — and should follow the theme instead
+    // only where the theme actually said something. Asking `tokens` cannot answer that: it always
+    // has a value.
+    function declares(token) {
+        var t = root.pkg.tokens
+        return !!t && t[token] !== undefined
+    }
+
+    // The effective table for ANY theme: flat, then the named variant, then that theme's overrides.
+    // The picker resolves one of these per installed theme so a card can look like what it offers.
+    function tableFor(base, overrides) {
         var out = {}
         var f = root.variantTokens["flat"]
         for (var k in f) out[k] = f[k]
-        var v = root.variantTokens[root.base]
+        var v = root.variantTokens[base]
         if (v) for (var k2 in v) out[k2] = v[k2]
-        var t = root.pkg.tokens
-        if (t) for (var k3 in t) out[k3] = t[k3]
+        if (overrides) for (var k3 in overrides) out[k3] = overrides[k3]
         return out
     }
+
+    // The effective table: flat, then the named variant, then whatever the theme overrides.
+    readonly property var tokens: root.tableFor(root.base, root.pkg.tokens)
 
     // ── What is installed ───────────────────────────────────────────────────────────────────────
     // For the picker in Settings -> Style. Read through a tiny CLI because QML cannot list a
     // directory, and a theme is a FOLDER you drop in — there is no registry file to read instead.
-    // Read-only on purpose: no save, no duplicate, no delete. A theme arrives and leaves as a
-    // folder, which is the whole difference from the preset registry this replaced.
+    // The list carries what the picker's preview card draws (bar_mode / bar_position / ui_font /
+    // wallpaper), so a card is the theme's own arrangement rather than a guess.
     property var available: []
     property Process _listProc: Process {
         command: ["python3", (Quickshell.env("VELUMERON_DIR") || "") + "/assets/scripts/theme-list.py"]
@@ -334,6 +353,141 @@ QtObject {
     }
     function refresh() { root._listProc.running = false; root._listProc.running = true }
     Component.onCompleted: root.refresh()
+
+    // ── Wearing one ─────────────────────────────────────────────────────────────────────────────
+    // A theme is more than its id: the ARRANGEMENT in its package says where the surfaces go, and
+    // no token can say "the bar is a status line along the bottom". Applying it lives here rather
+    // than in the settings page, so a keybind, the CLI (`ipc call theme wear <id>`) and the picker
+    // all switch the same way.
+    //
+    // The keys go through SettingsStore like any other setting, so they stay yours to change
+    // afterwards — wearing the theme again puts them back. The arrangement is read from the package
+    // this singleton has already loaded, which is why wear() waits for the new theme.json to arrive
+    // instead of shelling out to read a file the shell is holding open anyway.
+    property string _wanted: ""
+    function wear(id) {
+        if (!id || id === "") return
+        // Curtain first, but only for a real switch: the shell is about to rewrite ~80 settings and
+        // swap every component the new theme brings, and the reassembly is not a thing to watch.
+        // Re-picking the theme you already wear only puts its arrangement back, which is instant.
+        if (id !== root.themeId) {
+            SplashState.cover()
+            root._snapshotCurrent()      // keep what you made of the theme you are leaving
+        }
+        root._wanted = id
+        SettingsStore.set("theme", id)
+        if (root.pkg.id === id) root._applyArrangement()     // already loaded (re-picking it)
+        // The WINDOW frames follow the theme too: hyprland.lua reads <USER_DIR>/active-theme and
+        // dofiles hypr.lua/themes/<name>.lua, so handing it the id is what makes a switch reach the
+        // compositor instead of stopping at the shell's own surfaces.
+        root._frameProc.command = ["bash", (Quickshell.env("VELUMERON_DIR") || "")
+                                   + "/assets/scripts/apply-ui-style.sh", id]
+        root._frameProc.running = false
+        root._frameProc.running = true
+    }
+    // Settings that describe THIS MACHINE rather than a look. A theme has no business naming them,
+    // and the shipped packages do not — but a theme is a folder anyone can drop in, and one that
+    // rewrote your wallpaper folders or your bluetooth aliases on a switch would be a nasty
+    // surprise. Same list as the one a restore preserves (assets/scripts/settings-backup.py).
+    // Per-monitor bars count as this desk: `bar_monitors` holds one block per monitor NAME, and
+    // `bar_per_monitor` is the switch that turns those blocks on. A theme that flipped it off would
+    // silently flatten a bar the user arranged screen by screen — so on a machine with per-monitor
+    // bars, a theme's bar_position lands in the global keys and the blocks keep winning. That is
+    // the trade: the setup you built by hand outranks the one a theme suggests.
+    readonly property var deviceKeys: ["theme", "wallpaper_dirs", "wallpaper_sets", "bt_aliases",
+                                       "bt_groups", "bar_per_monitor", "bar_monitors",
+                                       "taskbar_pinned", "lock_weather_city", "lock_weather_unit"]
+    // And the ones that are simply YOURS, whatever theme is on: which modules sit where, how big
+    // the bar is, how big its type is. A theme decides the shape of the desktop; it does not get to
+    // rearrange the bar you built or resize it under you. This is a rule, not a default — there is
+    // no theme that may write these.
+    // `bar_mode`, `bar_edges` and `bar_position` are in here too, and that is the whole point rather
+    // than an oversight: a module arrangement is filed per edge COMBINATION, so a theme that moves
+    // the bar re-keys the layout and the modules you placed are simply not what the bar reads any
+    // more. The bar is yours — where it sits, how big it is, what is on it.
+    readonly property var userKeys: ["bar_thickness", "bar_font_size", "bar_icon_size",
+                                     "bar_mode", "bar_edges", "bar_position",
+                                     "bar_module_bg", "bar_module_bg_radius", "bar_module_bg_opacity",
+                                     "bar_module_spacing", "bar_module_margin",
+                                     "bar_modules", "bar_modules_m", "bar_modules_left",
+                                     "bar_modules_center", "bar_modules_right"]
+    function themeMayWrite(key) {
+        return root.deviceKeys.indexOf(key) < 0 && root.userKeys.indexOf(key) < 0
+               && key.indexOf("theme_") !== 0
+    }
+    // ── Your version of a theme ─────────────────────────────────────────────────────────────────
+    // A theme ships an arrangement; what you do with it afterwards is yours. Wearing a theme you
+    // have worn before therefore restores YOUR version of it, not the shipped one — leaving a theme
+    // snapshots the keys it owns, and coming back plays that snapshot instead of the package.
+    // Without this, moving the bar and then trying another look threw the move away, which made the
+    // picker feel like a trap rather than like a wardrobe.
+    //
+    // `resetArrangement` is the way back to the shipped state, and it is the only thing that
+    // forgets a snapshot.
+    readonly property var savedArrangements: VtlConfig.rawSetting("theme_arrangements", ({})) || ({})
+    function arrangementFor(id) {
+        var s = root.savedArrangements[id]
+        return (s && typeof s === "object") ? s : null
+    }
+    function _snapshotCurrent() {
+        var a = root.pkg.arrangement
+        var id = root.pkg.id
+        if (!a || !id) return
+        var snap = {}
+        for (var k in a)
+            if (root.themeMayWrite(k)) snap[k] = VtlConfig.rawSetting(k, a[k])
+        var all = {}
+        for (var t in root.savedArrangements) all[t] = root.savedArrangements[t]
+        all[id] = snap
+        SettingsStore.set("theme_arrangements", all)
+    }
+    function resetArrangement(id) {
+        var all = {}
+        for (var t in root.savedArrangements) if (t !== id) all[t] = root.savedArrangements[t]
+        SettingsStore.set("theme_arrangements", all)
+        if (id === root.pkg.id) root._applyPackageArrangement()
+    }
+    function _applyPackageArrangement() {
+        var a = root.pkg.arrangement
+        if (!a) return
+        var out = {}
+        for (var k in a) if (root.themeMayWrite(k)) out[k] = a[k]
+        SettingsStore.setAll(out)
+    }
+    function _applyArrangement() {
+        root._wanted = ""
+        var mine = root.arrangementFor(root.pkg.id)
+        if (mine) SettingsStore.setAll(mine)
+        else      root._applyPackageArrangement()
+    }
+    // The package arrives asynchronously (FileView), so the arrangement is applied when it lands.
+    onPkgChanged: if (root._wanted !== "" && root.pkg.id === root._wanted) root._applyArrangement()
+    readonly property Process _frameProc: Process {}
+
+    // ── Themes of your own ──────────────────────────────────────────────────────────────────────
+    // A shipped theme stays a folder that only ever arrives and leaves. What a picker does need is
+    // the fork: take the theme you are running plus the settings you have actually made, and keep
+    // them as yours. theme-fork.py writes under the user directory and nowhere else.
+    signal forked(string id)
+    function fork(id, name)   { root._write(["fork", id, name || ""]) }
+    function rename(id, name) { root._write(["rename", id, name]) }
+    function remove(id)       { root._write(["delete", id]) }
+    function _write(args) {
+        root._forkProc.command = ["python3", (Quickshell.env("VELUMERON_DIR") || "")
+                                  + "/assets/scripts/theme-fork.py"].concat(args)
+        root._forkProc.running = false
+        root._forkProc.running = true
+    }
+    readonly property Process _forkProc: Process {
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var line = ("" + this.text).trim()
+                if (line.indexOf("fork:") === 0) root.forked(line.slice(5))
+                else if (line.indexOf(":ok") < 0) console.warn("theme:", line)
+            }
+        }
+        onRunningChanged: if (!running) root.refresh()
+    }
 
     // Switching theme must not leave the previous package's data standing: the new theme may have
     // no user file at all, in which case its FileView never fires and the old table would keep

@@ -1,73 +1,27 @@
 {
-  "id": "straight",
-  "name": "Straight",
+  "id": "futuristic",
+  "name": "Futuristic",
   "author": "velumeron",
-  "builtin": true,
   "version": 3,
-  "settings": {
+  "contract": 1,
+  "base": "futuristic",
+  "wip": true,
+  "wallpaper": "wallpaper.png",
+  "arrangement": {
     "opacity_enabled": true,
     "menu_theme": "follow",
-    "opacity_value": 0.88,
+    "opacity_value": 0.8,
     "logo_variant": "full",
-    "bar_modules_left": [],
-    "bar_modules_center": [
-      "clock"
-    ],
-    "bar_modules_right": [],
     "bar_opacity_enabled": false,
     "bar_opacity_value": 0.88,
-    "bar_mode": "dock",
-    "bar_edges": [
-      "top"
-    ],
-    "bar_thickness": 28,
-    "bar_inner_radius": 0,
-    "bar_modules": {
-      "top": {
-        "start": [
-          "workspaces",
-          "submap"
-        ],
-        "center": [
-          "clock"
-        ],
-        "end": [
-          "performance",
-          "network",
-          "volume",
-          "notiftray"
-        ]
-      },
-      "left": {
-        "start": [],
-        "center": [],
-        "end": []
-      },
-      "bottom": {
-        "start": [],
-        "center": [],
-        "end": []
-      },
-      "right": {
-        "start": [],
-        "center": [],
-        "end": []
-      }
-    },
-    "bar_module_bg": "none",
-    "bar_module_bg_radius": 0,
-    "bar_position": "top",
-    "bar_module_margin": 2,
-    "bar_module_spacing": 10,
-    "colorful_enabled": false,
+    "bar_inner_radius": 8,
+    "colorful_enabled": true,
     "colorful_menus": true,
     "colorful_osd": true,
-    "bar_module_bg_opacity": 0.2,
     "notify_dock": true,
     "notify_position": "bottom-center",
     "osd_style": "dock",
     "osd_position": "bottom-center",
-    "bar_per_monitor": false,
     "notify_main_monitor_only": true,
     "wallpaper_search_subfolders": true,
     "wallpaper_subfolder_sorting": true,
@@ -87,7 +41,7 @@
     "transition_style_edge": "auto",
     "wallpaper_auto_mode": "silent",
     "wallpaper_auto_order": "random_all",
-    "ui_style": "straight",
+    "ui_style": "futuristic",
     "launcher_cols": 6,
     "launcher_position": "bottom-center",
     "launcher_blur": false,
@@ -133,44 +87,16 @@
         "show_zero": true,
         "include_flatpak": true,
         "update_command": "yay -Syu"
+      },
+      "group:comms": {
+        "label": "Comms",
+        "icon": "󰤨",
+        "members": [
+          "network",
+          "bluetooth"
+        ]
       }
     },
-    "bar_modules_m": {
-      "dock": {
-        "top": {
-          "start": [
-            "workspaces",
-            "submap"
-          ],
-          "center": [
-            "clock"
-          ],
-          "end": [
-            "performance",
-            "network",
-            "volume",
-            "notiftray"
-          ]
-        },
-        "left": {
-          "start": [],
-          "center": [],
-          "end": []
-        },
-        "bottom": {
-          "start": [],
-          "center": [],
-          "end": []
-        },
-        "right": {
-          "start": [],
-          "center": [],
-          "end": []
-        }
-      }
-    },
-    "bar_icon_size": 14,
-    "bar_font_size": 14,
-    "ui_font": "Chivo Mono"
+    "ui_font": "Orbitron"
   }
 }
