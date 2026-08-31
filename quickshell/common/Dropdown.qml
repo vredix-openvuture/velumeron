@@ -17,7 +17,7 @@ Column {
     spacing: 4
 
     StyledRect {
-        width: parent.width; height: 34; radius: Style.rControl
+        width: parent.width; height: Style.ctrlH; radius: Style.rControl
         color: ddHov.containsMouse ? Style.controlHover : Style.controlFill
         borderWidth: dd.open ? Math.max(1, Style.controlBorderW) : Style.controlBorderW
         borderColor: dd.open ? Style.accent : Style.controlBorderColor

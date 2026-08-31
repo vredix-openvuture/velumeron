@@ -16,7 +16,7 @@ StyledRect {
 
     width:        parent ? parent.width - (indent ? 12 : 0) : 0
     x:            indent ? 12 : 0
-    height:       38
+    height:       Style.ctrlH
     radius:       Style.rControl
     color:        Style.controlFill
     borderWidth:  Style.controlBorderW

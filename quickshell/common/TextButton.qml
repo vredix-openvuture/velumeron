@@ -12,7 +12,7 @@ StyledRect {
     readonly property string _text: b._icon !== "" ? Style.stripIcon(b.label) : b.label
     readonly property color  _fg:   b.primary ? Colors.fgBright : Colors.fgPrimary
     implicitWidth:  Math.max(64, content.implicitWidth + 20)
-    implicitHeight: 28
+    implicitHeight: Style.ctrlH
     radius:         Style.rTile
     color:          b.primary ? (h.containsMouse ? Colors.boActive : Style.accent)
                               : (h.containsMouse ? Style.controlHover : Style.controlFill)

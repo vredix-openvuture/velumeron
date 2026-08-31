@@ -8,7 +8,7 @@ StyledRect {
     property bool   selected: false
     signal clicked()
     width:        parent ? parent.width : 0
-    height:       34
+    height:       Style.ctrlH
     radius:       Style.rControl
     color:        selected ? Style.selFill : (h.containsMouse ? Style.controlHover : Style.controlFill)
     borderWidth:  selected ? Style.selBorderW : Style.controlBorderW

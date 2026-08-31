@@ -30,7 +30,7 @@ Row {
             readonly property color  segFg:   on ? Style.selText : Colors.fgPrimary
             width: sg.equal ? (sg.width - sg.gap * (sg.segments.length - 1)) / sg.segments.length
                             : (lbl.implicitWidth + 18)
-            height: 26; radius: Style.rControl
+            height: Style.ctrlH; radius: Style.rControl
             color: on ? Style.selFill : (h.containsMouse ? Style.controlHover : Style.controlFill)
             borderWidth: on ? Style.selBorderW : Style.controlBorderW
             borderColor: on ? Style.selBorderColor : Style.controlBorderColor

@@ -447,6 +447,11 @@ QtObject {
     readonly property int cardGap: root._tokNum("cardGap", 16)   // between groups
     readonly property int cardPad: root._tokNum("cardPad", 14)   // inside a group
     readonly property int rowGap:  root._tokNum("rowGap",  10)   // between rows in a group
+    // ONE height for a control row. Every control used to pick its own — 38 for a toggle, 34 for a
+    // dropdown, 30 for a slider, 26 for a segmented — so a card was a stack of rows at four
+    // different heights and the page read as ragged however well the cards themselves lined up.
+    // A theme may set it; what it must not do is let each control decide separately.
+    readonly property int ctrlH:   root._tokNum("ctrlH",   36)
 
     // ── Card / group surface ──────────────────────────────────────────────────────
     // The accent tints (and the two solid fills) run through the surface-contrast knob: that is what

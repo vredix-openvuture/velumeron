@@ -25,7 +25,7 @@ Item {
     signal moved(real v)
 
     width:   parent ? parent.width : 0
-    height:  30
+    height:  Style.ctrlH
     activeFocusOnTab: true
 
     // While the user drags, render from this local value so the knob is buttery regardless of how

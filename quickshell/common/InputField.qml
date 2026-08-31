@@ -11,7 +11,7 @@ StyledRect {
     signal edited(string v)
 
     width:        parent ? parent.width : 200
-    height:       34
+    height:       Style.ctrlH
     radius:       Style.rControl
     color:        Style.controlFill
     borderWidth:  input.activeFocus ? Math.max(1, Style.controlBorderW) : Style.controlBorderW

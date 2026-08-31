@@ -28,6 +28,7 @@ Row {
     signal changed(int v)
     signal reset()
     width:   parent ? parent.width : 0
+    height:  Style.ctrlH        // the shared control-row height; the buttons inside stay smaller
     spacing: 8
 
     readonly property bool _canReset: st.inheritable && !st.inherited
