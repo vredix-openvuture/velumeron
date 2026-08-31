@@ -32,8 +32,20 @@ Item {
     property int maxCols: 3
     property int gap:     Style.cardGap
 
-    readonly property int  count: Math.max(1, Math.min(cols.maxCols,
-                                  Math.floor((cols.width + cols.gap) / (cols.minColW + cols.gap))))
+    // A page inside the settings menu does not get to pick its own column count: the menu lays ONE
+    // grid across the whole content area — the feature switch, the page's cards and the preview all
+    // sit on it — and hands each part the number of columns it owns. Left at 0 this works it out
+    // from its own width, which is what a CardColumns outside that grid does.
+    property int forced: 0
+    // A floor for the FIRST row. The menu puts its preview card beside the page rather than inside
+    // it, and a preview that is taller than the row it stands next to leaves one card sticking out
+    // below the others — which is the thing this grid exists to stop. The menu passes the preview's
+    // height down and the first row matches it.
+    property real firstRowMin: 0
+    readonly property int  count: cols.forced > 0
+                                  ? cols.forced
+                                  : Math.max(1, Math.min(cols.maxCols,
+                                    Math.floor((cols.width + cols.gap) / (cols.minColW + cols.gap))))
     readonly property real cardWidth: Math.floor((cols.width - cols.gap * (cols.count - 1)) / cols.count)
 
     // Every visible child's height, summed — a dependency the layout can watch. Card heights change
@@ -43,7 +55,7 @@ Item {
         var s = 0
         for (var i = 0; i < cols.children.length; i++) {
             var c = cols.children[i]
-            if (c && c.visible) s += c.height + c.y * 0    // read height only; y is ours to set
+            if (c && c.visible) s += (c.contentHeight !== undefined ? c.contentHeight : c.height)
         }
         return s
     }
@@ -51,35 +63,52 @@ Item {
     implicitHeight: cols._tallest
     property real _tallest: 0
 
+    // ROWS of equal height, in the order the page declared them.
+    //
+    // The first version filled the shortest column, which packs tighter — and looked assembled
+    // rather than laid out: three cards of three different heights beside each other, their bottom
+    // edges landing wherever the contents happened to end. A settings page is read across as much
+    // as down, so the grid is rows: every card in a row is as tall as the tallest one in it, every
+    // row starts on one line, and the reading order is the one the page wrote.
     function relayout() {
         var n = cols.count
-        var y = []
-        for (var i = 0; i < n; i++) y.push(0)
+        var row = []          // the cards on the row being filled
+        var y = 0
+        var firstRow = true
+        function flush() {
+            if (!row.length) return
+            var h = firstRow ? cols.firstRowMin : 0
+            firstRow = false
+            for (var a = 0; a < row.length; a++) h = Math.max(h, row[a].contentHeight !== undefined
+                                                                 ? row[a].contentHeight : row[a].height)
+            for (var b = 0; b < row.length; b++) {
+                var it = row[b]
+                if (it.rowHeight !== undefined) it.rowHeight = h        // a Card stretches to match
+                it.x = b * (cols.cardWidth + cols.gap)
+                it.y = y
+            }
+            y += h + cols.gap
+            row = []
+        }
         for (var j = 0; j < cols.children.length; j++) {
             var c = cols.children[j]
             // A Repeater is a child with no height; so is a card whose contents all hid themselves.
-            // Placing those would open a column gap the size of the spacing for nothing.
-            if (!c || !c.visible || c.height <= 0) continue
+            if (!c || !c.visible || (c.height <= 0 && c.contentHeight === undefined)) continue
             // Something that has to have the whole width (a lead-in paragraph, a nested layout of
-            // its own) takes a band across every column and the columns resume under it.
+            // its own) closes the row it is in and takes a band of its own.
             if (c.spans === true) {
-                var floor = 0
-                for (var f = 0; f < n; f++) floor = Math.max(floor, y[f])
+                flush()
+                if (c.rowHeight !== undefined) c.rowHeight = 0
                 c.x = 0
-                c.y = floor
-                for (var g = 0; g < n; g++) y[g] = floor + c.height + cols.gap
+                c.y = y
+                y += c.height + cols.gap
                 continue
             }
-            // shortest column wins; ties go left, so a single column stays in declared order
-            var pick = 0
-            for (var k = 1; k < n; k++) if (y[k] < y[pick] - 0.5) pick = k
-            c.x = pick * (cols.cardWidth + cols.gap)
-            c.y = y[pick]
-            y[pick] += c.height + cols.gap
+            row.push(c)
+            if (row.length === n) flush()
         }
-        var tall = 0
-        for (var m = 0; m < n; m++) tall = Math.max(tall, y[m])
-        cols._tallest = Math.max(0, tall - cols.gap)
+        flush()
+        cols._tallest = Math.max(0, y - cols.gap)
     }
 
     // Deferred, always: a relayout reads heights that the same frame is still settling, and running
@@ -87,7 +116,8 @@ Item {
     function _schedule() { relayoutTimer.restart() }
     Timer { id: relayoutTimer; interval: 0; onTriggered: cols.relayout() }
 
-    onWidthChanged:     cols._schedule()
+    onWidthChanged:       cols._schedule()
+    onFirstRowMinChanged: cols._schedule()
     onCountChanged:     cols._schedule()
     on_HeightsChanged:  cols._schedule()
     onChildrenChanged:  cols._schedule()

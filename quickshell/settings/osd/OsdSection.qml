@@ -9,6 +9,11 @@ import Quickshell.Io
 Item {
     id: root
 
+    // How many columns the menu has given this page. It lays one grid across the whole
+    // content area — switch, cards, preview — and every page sits on it.
+    readonly property int pageCols: (parent && parent.pageCols !== undefined) ? parent.pageCols : 0
+    readonly property real pageRowMin: (parent && parent.pageRowMin !== undefined) ? parent.pageRowMin : 0
+
     function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s }
     function posLabel(p) { return p.split("-").map(root.cap).join(" ") }
     function dispLabel(k) {
@@ -52,6 +57,8 @@ Item {
 
         CardColumns {
             id: col
+            forced: root.pageCols
+            firstRowMin: root.pageRowMin
             width: parent.width
             y: 4
 

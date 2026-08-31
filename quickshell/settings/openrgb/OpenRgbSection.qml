@@ -16,6 +16,11 @@ import Quickshell.Io
 Item {
     id: root
 
+    // How many columns the menu has given this page. It lays one grid across the whole
+    // content area — switch, cards, preview — and every page sits on it.
+    readonly property int pageCols: (parent && parent.pageCols !== undefined) ? parent.pageCols : 0
+    readonly property real pageRowMin: (parent && parent.pageRowMin !== undefined) ? parent.pageRowMin : 0
+
     readonly property string _sh: "\"$VELUMERON_DIR/assets/scripts/openrgb.sh\""
 
     property bool   installed: false
@@ -88,6 +93,8 @@ Item {
 
         CardColumns {
             id: col
+            forced: root.pageCols
+            firstRowMin: root.pageRowMin
             width: parent.width
             y: 4
 

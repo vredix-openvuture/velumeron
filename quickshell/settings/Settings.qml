@@ -1102,8 +1102,10 @@ PanelWindow {
                 id: featureHeader
                 visible: content.featureKey !== "" && !root.shownNavPage
                 height: implicitHeight
-                anchors { top: backBar.visible ? backBar.bottom : parent.top; left: parent.left; right: parent.right
-                          topMargin: backBar.visible ? 8 : 18; leftMargin: 18; rightMargin: 18 }
+                forced: 1
+                width:  content.gridColW
+                anchors { top: backBar.visible ? backBar.bottom : parent.top; left: parent.left
+                          topMargin: backBar.visible ? 8 : 18; leftMargin: 18 }
                 Card {
                     Toggle {
                         label: root.sectionTitle(root.shownSection)
@@ -1129,13 +1131,31 @@ PanelWindow {
                           "wallpaper": "wallpaper", "style": "style" }[root.shownSection]
                 return k || ""
             }
-            readonly property int previewW: Math.round(Math.max(340, Math.min(760, content.width * 0.36)))
+            // ── ONE grid for the whole page ─────────────────────────────────────────────
+            // The switch at the top, the page's cards and the preview beside them are all laid on
+            // the same columns, so every edge in the menu lines up with every other. Before this
+            // they each worked their width out for themselves and the page came out as three
+            // different measures stacked on one screen.
+            readonly property int  gridGap:  Style.cardGap
+            readonly property int  gridMin:  360                        // the narrowest usable card
+            readonly property int  gridCols: Math.max(1, Math.min(3,
+                Math.floor((content.width - 36 + content.gridGap) / (content.gridMin + content.gridGap))))
+            readonly property int  gridColW: Math.floor((content.width - 36
+                                             - content.gridGap * (content.gridCols - 1)) / content.gridCols)
+
+            readonly property int previewW: content.gridColW
             readonly property bool previewOn: content.previewKind !== ""
                                               && !(content.pageMode && root.shownNavPage)
-                                              && content.width > 980
+                                              && content.gridCols >= 2
 
             Loader {
                 id: pageLdr
+                // The columns this page owns: all of them, less the one the preview sits in.
+                property int pageCols: content.previewOn ? Math.max(1, content.gridCols - 1)
+                                                         : content.gridCols
+                // The preview stands beside the page, so the page's first row matches its height
+                // and the row reads as one row rather than as two cards and a taller neighbour.
+                property real pageRowMin: (content.previewOn && deskSide.visible) ? deskSide.height : 0
                 anchors.left:   parent.left
                 anchors.right:  content.previewOn ? deskSide.left : parent.right
                 anchors.bottom: parent.bottom
@@ -1150,11 +1170,13 @@ PanelWindow {
                 sourceComponent: content.activeMeta?.comp ?? null
             }
 
-            Column {
+            // The preview is a CARD, on the same grid as the page's own: one column wide, the same
+            // frame, the same heading. Beside a page of cards, a bare picture with a label over it
+            // reads as a different piece of software.
+            Card {
                 id: deskSide
                 visible: content.previewOn && pageLdr.visible
                 width: content.previewW
-                spacing: 8
                 anchors { right: parent.right; rightMargin: 18; top: pageLdr.top }
 
                 CardLabel {
@@ -1170,11 +1192,9 @@ PanelWindow {
                 }
                 // The numbers the miniature cannot show at this size, read back where you are
                 // looking rather than hunted for among the controls that hold them.
-                Card {
-                    width: parent.width
-                    Repeater {
-                        model: deskMini.facts
-                        delegate: Item {
+                Repeater {
+                    model: deskMini.facts
+                    delegate: Item {
                             required property var modelData
                             width: parent.width
                             height: 22
@@ -1193,7 +1213,6 @@ PanelWindow {
                                 elide: Text.ElideRight
                                 font.pixelSize: Style.fsLabel; font.family: Style.font
                             }
-                        }
                     }
                 }
             }

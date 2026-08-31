@@ -18,6 +18,11 @@ import Quickshell
 Item {
     id: root
 
+    // How many columns the menu has given this page. It lays one grid across the whole
+    // content area — switch, cards, preview — and every page sits on it.
+    readonly property int pageCols: (parent && parent.pageCols !== undefined) ? parent.pageCols : 0
+    readonly property real pageRowMin: (parent && parent.pageRowMin !== undefined) ? parent.pageRowMin : 0
+
     // Stored in seconds, edited in minutes.
     function _min(sec) { return Math.round(Math.max(0, sec) / 60) }
     readonly property int lockMin:    root._min(VtlConfig.idleLockSec)
@@ -40,6 +45,8 @@ Item {
         contentHeight: col.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
         CardColumns {
             id: col
+            forced: root.pageCols
+            firstRowMin: root.pageRowMin
             width: parent.width
             y: 4
 

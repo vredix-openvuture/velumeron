@@ -15,7 +15,12 @@ StyledRect {
     color:        Style.cardFill
     borderWidth:  Style.cardBorderW
     borderColor:  Style.cardBorderColor
-    height:       inner.implicitHeight + Style.cardPad * 2
+    // A card is as tall as its contents — unless the grid it sits in has told it to match the row
+    // it is in. Cards of three different heights side by side is what makes a page look assembled
+    // rather than laid out, and no amount of matching WIDTHS fixes that.
+    property real rowHeight: 0
+    readonly property real contentHeight: inner.implicitHeight + Style.cardPad * 2
+    height:       Math.max(card.contentHeight, card.rowHeight)
 
     // Grimoire flourish: an inner hairline frame echoing the scalloped outline, plus corner
     // bosses — the diamond fittings on medieval book covers. Pure decoration under the content

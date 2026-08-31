@@ -10,6 +10,11 @@ import Quickshell.Hyprland
 Item {
     id: root
 
+    // How many columns the menu has given this page. It lays one grid across the whole
+    // content area — switch, cards, preview — and every page sits on it.
+    readonly property int pageCols: (parent && parent.pageCols !== undefined) ? parent.pageCols : 0
+    readonly property real pageRowMin: (parent && parent.pageRowMin !== undefined) ? parent.pageRowMin : 0
+
     // Per-monitor editing: when on, settings are written under bar_monitors.<name>.
     // targetMon is the monitor currently being edited; editMon ("" = global) drives every
     // read (VtlConfig.*For) and write (save). Monitor list comes from the live screens, so it
@@ -590,6 +595,8 @@ Item {
             // ─── FORM: where the bar sits and what shape it takes ─────────────
             CardColumns {
                 id: formPage
+                forced: root.pageCols
+                firstRowMin: root.pageRowMin
                 visible: root.tab === "form"
                 width: parent.width
 
@@ -763,6 +770,8 @@ Item {
             // in between, and a radius you are matching to a window corner can simply not be hit.
             CardColumns {
                 id: stylePage
+                forced: root.pageCols
+                firstRowMin: root.pageRowMin
                 visible: root.tab === "style"
                 width: parent.width
 
@@ -875,6 +884,8 @@ Item {
             // ─── MODULES: which module sits where ─────────────────────────────
             CardColumns {
                 id: modPage
+                forced: root.pageCols
+                firstRowMin: root.pageRowMin
                 visible: root.tab === "modules"
                 width: parent.width
 

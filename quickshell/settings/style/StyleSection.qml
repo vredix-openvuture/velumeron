@@ -18,6 +18,11 @@ import Quickshell.Io
 Item {
     id: root
 
+    // How many columns the menu has given this page. It lays one grid across the whole
+    // content area — switch, cards, preview — and every page sits on it.
+    readonly property int pageCols: (parent && parent.pageCols !== undefined) ? parent.pageCols : 0
+    readonly property real pageRowMin: (parent && parent.pageRowMin !== undefined) ? parent.pageRowMin : 0
+
     // "" = main page, "build" = the theme-builder sub-page.
     property string page: ""
 
@@ -693,6 +698,8 @@ Item {
             spacing: Style.cardGap
 
             CardColumns {
+                forced:  root.pageCols
+                firstRowMin: root.pageRowMin
                 height:  implicitHeight
                 visible: root.tab === "look"
                 width:   col.width
@@ -1082,6 +1089,8 @@ Item {
             }
 
             CardColumns {
+                forced:  root.pageCols
+                firstRowMin: root.pageRowMin
                 height:  implicitHeight
                 visible: root.tab === "menu"
                 width:   col.width
@@ -1237,6 +1246,8 @@ Item {
             }
 
             CardColumns {
+                forced:  root.pageCols
+                firstRowMin: root.pageRowMin
                 height:  implicitHeight
                 visible: root.tab === "theme"
                 width:   col.width
@@ -1373,6 +1384,8 @@ Item {
             }
 
             CardColumns {
+                forced:  root.pageCols
+                firstRowMin: root.pageRowMin
                 height:  implicitHeight
                 visible: root.tab === "motion"
                 width:   col.width

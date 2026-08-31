@@ -9,6 +9,11 @@ import Quickshell.Io
 Item {
     id: root
 
+    // How many columns the menu has given this page. It lays one grid across the whole
+    // content area — switch, cards, preview — and every page sits on it.
+    readonly property int pageCols: (parent && parent.pageCols !== undefined) ? parent.pageCols : 0
+    readonly property real pageRowMin: (parent && parent.pageRowMin !== undefined) ? parent.pageRowMin : 0
+
     property var    mons:     []    // working copy, helper JSON shape (+ _live per output)
     property var    live:     ({})  // output → { x, y, modes: [], description }
     property string selected: ""
@@ -251,6 +256,8 @@ Item {
         contentHeight: col.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
         CardColumns {
             id: col
+            forced: root.pageCols
+            firstRowMin: root.pageRowMin
             width: parent.width
             y: 4
 
