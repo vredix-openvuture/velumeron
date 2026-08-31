@@ -627,6 +627,23 @@ def fix_workspaces(data, monitor_vars):
                 r["workspace"] = cand
                 taken.add(cand)
                 break
+    # A monitor with no persistent workspace of its own owns a block but has
+    # nothing standing in it, so the compositor shows it the first workspace it
+    # can find anywhere — another monitor's. That is how a hotplugged third
+    # screen took over mon1's workspace 10. Seed every known monitor with the
+    # first slot of its own block; the default pass below then adopts it.
+    for mv in monitor_vars:
+        if any(r["monitor"] == mv and r.get("persistent") for r in rules):
+            continue
+        base = ws_base(mv)
+        for slot in range(1, WS_BLOCK):
+            first = str(base + slot)
+            if first in taken:
+                continue
+            taken.add(first)
+            rules.append({"workspace": first, "monitor": mv, "persistent": True,
+                          "default": True, "default_name": "", "layout": ""})
+            break
     per_mon = {}
     for r in rules:
         per_mon.setdefault(r["monitor"], []).append(r)

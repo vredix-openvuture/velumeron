@@ -224,6 +224,10 @@ of them on the same desk.
   Notifications, Calendar, Hot corners; Layouts, Zones, Window rules, Window tags, Keybindings;
   Default apps, Autostart, Quick access, Integrations; Shell and Info, plus Network and Bluetooth
   managers.
+- **Themes are one picker**, a grid of cards where each card is a shrunken desktop drawn from that
+  theme's own arrangement. Wearing one moves the whole shell — its shape, its font, where the bar
+  goes, its lockscreen — and every key it writes stays yours to change afterwards. *Make mine* forks
+  the theme you are wearing, with the settings you have actually made, into one of your own.
 - **Default apps** are the system's, not ours: which app opens a link, a folder, a picture or a
   song is written through `xdg-mime`, so every `xdg-open` on the machine follows it — the same
   choice a GNOME or KDE panel would make.
@@ -295,6 +299,8 @@ of them on the same desk.
 - **Plymouth, GRUB and SDDM** are managed from the same menu: every theme installed on the machine
   is listed with a preview, and applying one runs in a visible terminal that tells you what it is
   about to write. Velumeron's own theme is one entry in those lists, offered, never forced.
+  Picking an SDDM theme also clears a conflicting `Current=` from `/etc/sddm.conf`, which outranks
+  everything in `/etc/sddm.conf.d`; the original is kept as `/etc/sddm.conf.velumeron-bak`.
 - Switch off the parts your machine does not have. A systemd-boot user never sees a GRUB card.
 - A **Velumeron session** entry for your display manager, so a fresh install is one pick at the
   login screen.

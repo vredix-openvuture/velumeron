@@ -512,13 +512,17 @@ def sddm_status():
 
 
 def _sddm_conf_chain():
-    """Every config source, in the order sddm applies them (later wins)."""
+    """Every config source, in the order sddm applies them (later wins).
+
+    The order is the one man 5 sddm.conf states: both directories first, then
+    /etc/sddm.conf, "the latter having highest precedence". Getting this wrong
+    made status() report our drop-in as the active theme while a Current= in
+    /etc/sddm.conf was in fact the one sddm loaded."""
     out = []
-    for d in (Path("/usr/lib/sddm/sddm.conf.d"),):
+    for d in (Path("/usr/lib/sddm/sddm.conf.d"), SDDM_CONF_D):
         out += sorted(d.glob("*.conf")) if d.is_dir() else []
     if SDDM_CONF.is_file():
         out.append(SDDM_CONF)
-    out += sorted(SDDM_CONF_D.glob("*.conf")) if SDDM_CONF_D.is_dir() else []
     return out
 
 
@@ -549,16 +553,55 @@ def _sddm_publish_face():
     print("published avatar %s → %s" % (src, dst))
 
 
+def _sddm_clear_conflicting_theme(theme):
+    """Drop a [Theme] Current= from /etc/sddm.conf when it would override us.
+
+    The `zz-` prefix on our drop-in only wins inside /etc/sddm.conf.d. The file
+    /etc/sddm.conf is read after that whole directory (man 5 sddm.conf), so a
+    Current= parked there by a distro installer or by another theme's setup
+    script silently beats the drop-in whatever it is named. Only that one key
+    goes; everything else in the file is left alone, and the original is kept
+    next to it."""
+    if not SDDM_CONF.is_file():
+        return
+    cp = configparser.ConfigParser(strict=False, interpolation=None)
+    cp.optionxform = str
+    try:
+        cp.read_string(_read(SDDM_CONF))
+    except configparser.Error:
+        return
+    if not cp.has_section("Theme") or not cp.has_option("Theme", "Current"):
+        return
+    current = cp.get("Theme", "Current").strip()
+    if current == theme:
+        return
+    backup = Path(str(SDDM_CONF) + ".velumeron-bak")
+    if not backup.exists():
+        shutil.copyfile(SDDM_CONF, backup)
+    cp.remove_option("Theme", "Current")
+    if not cp.options("Theme"):
+        cp.remove_section("Theme")
+    buf = io.StringIO()
+    # sddm's own files are written key=value; keep that rather than let
+    # configparser pad the delimiter with spaces.
+    cp.write(buf, space_around_delimiters=False)
+    SDDM_CONF.write_text(buf.getvalue(), encoding="utf-8")
+    print("cleared overriding [Theme] Current=%s from %s (backup: %s)"
+          % (current, SDDM_CONF, backup))
+
+
 def sddm_apply(theme):
     _install_generated("sddm", theme)
     _sddm_publish_face()
     SDDM_CONF_D.mkdir(parents=True, exist_ok=True)
     SDDM_DROPIN.write_text(
-        "# Written by Velumeron (boot-theme.py). The `zz-` prefix is deliberate:\n"
-        "# sddm applies /etc/sddm.conf.d/*.conf alphabetically and the last one wins,\n"
-        "# so this has to sort after any distro drop-in (e.g. kde_settings.conf).\n"
+        "# Written by Velumeron (boot-theme.py). The `zz-` prefix makes this sort\n"
+        "# after any distro drop-in (e.g. kde_settings.conf) inside this directory.\n"
+        "# That alone is not enough: /etc/sddm.conf outranks the whole directory,\n"
+        "# so sddm_apply also clears a conflicting Current= over there.\n"
         "[Theme]\nCurrent=%s\n" % theme, encoding="utf-8")
     print("wrote %s → [Theme] Current=%s" % (SDDM_DROPIN, theme))
+    _sddm_clear_conflicting_theme(theme)
     return 0
 
 
