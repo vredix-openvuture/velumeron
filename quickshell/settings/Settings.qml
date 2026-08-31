@@ -365,76 +365,79 @@ PanelWindow {
     // Order here is only the fallback: what the rail and the nav list actually show is grouped by
     // `navGroups` below. Info stays pinned at the rail bottom regardless of its position here.
     readonly property var shellSections: [
-        { key: "home",          icon: "󰋜", title: "Velumeron",     comp: homeComp },
-        { key: "monitors",      icon: "󰍺", title: "Monitors",      comp: monitorsComp },
-        { key: "workspaces",    icon: "󱂬", title: "Workspaces",    comp: workspacesComp },
-        { key: "peripherals",   icon: "󰍽", title: "Peripherals",   comp: peripheralsComp },
-        { key: "defaults",      icon: "󰙵", title: "Default apps",  comp: defaultAppsComp },
-        { key: "boot",          icon: "󰘚", title: "Boot & Login",  comp: bootComp },
-        { key: "autostart",     icon: "󱓞", title: "Autostart",     comp: autostartComp },
-        { key: "quickaccess",   icon: "󱊫", title: "Quick access",  comp: quickAccessComp },
-        { key: "integrations",  icon: "󰐱", title: "Integrations",  comp: integrationsComp },
+        { key: "home",          icon: "󰋜", title: "Velumeron",     comp: homeComp,
+          hint: "Status at a glance, and the way into every other page." },
+        { key: "monitors",      icon: "󰍺", title: "Monitors",      comp: monitorsComp,
+          hint: "Resolution, refresh rate, scale, and how the screens sit next to each other." },
+        { key: "workspaces",    icon: "󱂬", title: "Workspaces",    comp: workspacesComp,
+          hint: "How many workspaces there are and which apps open on them." },
+        { key: "peripherals",   icon: "󰍽", title: "Peripherals",   comp: peripheralsComp,
+          hint: "Cursor theme and size, and what the function keys do." },
+        { key: "defaults",      icon: "󰙵", title: "Default apps",  comp: defaultAppsComp,
+          hint: "Which program opens a link, a folder, a terminal." },
+        { key: "boot",          icon: "󰘚", title: "Boot & Login",  comp: bootComp,
+          hint: "Plymouth, GRUB and the login screen: the part of the session that runs before the shell." },
+        { key: "autostart",     icon: "󱓞", title: "Autostart",     comp: autostartComp,
+          hint: "Programs the session starts for you." },
+        { key: "quickaccess",   icon: "󱊫", title: "Quick access",  comp: quickAccessComp,
+          hint: "The apps on Super+F1 to F12." },
+        { key: "integrations",  icon: "󰐱", title: "Integrations",  comp: integrationsComp,
+          hint: "Velumeron-styled configs for external tools. Every one of them is reversible." },
         // Appears only once the OpenRGB integration is switched on — see sectionShown().
-        { key: "openrgb",       icon: "󰌵", title: "OpenRGB",       comp: openrgbComp },
-        { key: "bar",           icon: "󰕮", title: "Bar",           comp: barComp },
-        { key: "taskbar",       icon: "󱂩", title: "Taskbar",       comp: taskbarComp },
-        { key: "style",         icon: "󰏘", title: "Style",         comp: styleComp },
-        { key: "wallpaper",     icon: "󰸉", title: "Wallpaper",     comp: wallpaperComp },
-        { key: "lockscreen",    icon: "󰌾", title: "Lockscreen",    comp: lockComp },
-        { key: "screensaver",   icon: "󰤄", title: "Screensaver",   comp: screensaverComp },
-        { key: "launcher",      icon: "󰀻", title: "Launcher",      comp: launcherComp },
-        { key: "osd",           icon: "󰍹", title: "OSD",           comp: osdComp },
-        { key: "notifications", icon: "󰂚", title: "Notifications", comp: notifyComp },
-        { key: "sounds",        icon: "󰕾", title: "Sounds",        comp: soundsComp },
-        { key: "calendar",      icon: "󰃭", title: "Calendar",      comp: calendarComp },
-        { key: "keybinds",      icon: "󰌌", title: "Keybindings",   comp: keybindsComp },
-        { key: "corners",       icon: "󰊓", title: "Hot corners",   comp: cornersComp },
-        { key: "zones",         icon: "󰝘", title: "Zones",         comp: zonesComp },
-        { key: "layouts",       icon: "󰕴", title: "Layouts",       comp: layoutsComp },
-        { key: "windowtags",    icon: "󰓹", title: "Window tags",   comp: windowTagsComp },
-        { key: "windowrules",   icon: "󱪯", title: "Window rules",  comp: windowRulesComp },
-        { key: "velumeron",     icon: "󰒓", title: "Shell",         comp: velumeronComp },
+        { key: "openrgb",       icon: "󰌵", title: "OpenRGB",       comp: openrgbComp,
+          hint: "Lighting for RGB hardware, driven through OpenRGB." },
+        { key: "bar",           icon: "󰕮", title: "Bar",           comp: barComp,
+          hint: "Where the bar sits, what it carries, and how it looks." },
+        { key: "taskbar",       icon: "󱂩", title: "Taskbar",       comp: taskbarComp,
+          hint: "The window list: its place, its size, and what it shows." },
+        { key: "style",         icon: "󰏘", title: "Style",         comp: styleComp,
+          hint: "Theme, accent, corners, fonts, and how things move." },
+        { key: "wallpaper",     icon: "󰸉", title: "Wallpaper",     comp: wallpaperComp,
+          hint: "Folders, sets, and the picker that swaps them." },
+        { key: "lockscreen",    icon: "󰌾", title: "Lockscreen",    comp: lockComp,
+          hint: "What the lock screen looks like, and when it locks." },
+        { key: "screensaver",   icon: "󰤄", title: "Screensaver",   comp: screensaverComp,
+          hint: "What the screen does once nothing has happened for a while." },
+        { key: "launcher",      icon: "󰀻", title: "Launcher",      comp: launcherComp,
+          hint: "The app launcher, and everything it is allowed to search." },
+        { key: "osd",           icon: "󰍹", title: "OSD",           comp: osdComp,
+          hint: "The overlay that reports volume, brightness and the like." },
+        { key: "notifications", icon: "󰂚", title: "Notifications", comp: notifyComp,
+          hint: "Popups, the log, and what is allowed to interrupt you." },
+        { key: "sounds",        icon: "󰕾", title: "Sounds",        comp: soundsComp,
+          hint: "The sounds the shell plays, and how loud." },
+        { key: "calendar",      icon: "󰃭", title: "Calendar",      comp: calendarComp,
+          hint: "Accounts, local lists, and which calendars show up." },
+        { key: "keybinds",      icon: "󰌌", title: "Keybindings",   comp: keybindsComp,
+          hint: "Every shortcut the shell binds." },
+        { key: "corners",       icon: "󰊓", title: "Hot corners",   comp: cornersComp,
+          hint: "What pushing the pointer into a screen corner does." },
+        { key: "zones",         icon: "󰝘", title: "Zones",         comp: zonesComp,
+          hint: "Drop zones a dragged window snaps into." },
+        { key: "layouts",       icon: "󰕴", title: "Layouts",       comp: layoutsComp,
+          hint: "How tiled windows divide the screen." },
+        { key: "windowtags",    icon: "󰓹", title: "Window tags",   comp: windowTagsComp,
+          hint: "Tags you pin to windows, and what a tag then does." },
+        { key: "windowrules",   icon: "󱪯", title: "Window rules",  comp: windowRulesComp,
+          hint: "Rules that decide how a window opens: size, workspace, floating." },
+        { key: "velumeron",     icon: "󰒓", title: "Shell",         comp: velumeronComp,
+          hint: "The shell as a running program: restart, diagnostics, and a backup of your settings." },
         { key: "info",          icon: "󰋽", title: "Info",          comp: null,
           hint: "System information." },
-        { key: "network",       rail: false, title: "Network",     comp: networkComp },
-        { key: "bluetooth",     rail: false, title: "Bluetooth",   comp: bluetoothComp }
+        { key: "network",       rail: false, title: "Network",     comp: networkComp,
+          hint: "Wi-Fi and wired connections." },
+        { key: "bluetooth",     rail: false, title: "Bluetooth",   comp: bluetoothComp,
+          hint: "Paired devices, and what is connected right now." }
     ]
-    // The shipped pages plus whatever the ACTIVE THEME brings. Rebuilt rather than bound, because
-    // this array must stay non-reactive: a reactive entry reloads the page you are standing on
-    // every time something unrelated changes. A theme switch is the one change that SHOULD rebuild
-    // it — the old theme's pages stop existing at that moment.
+    // A theme's own controls are NOT a page of their own. They live on the Style page, under the
+    // card that picks the theme, because that is where you are when you care about them — and a nav
+    // entry that appears and disappears with the theme is a menu that will not hold still.
     property var sections: root.shellSections
-    function _rebuildSections() {
-        var out = []
-        for (var i = 0; i < root.shellSections.length; i++) out.push(root.shellSections[i])
-        var ps = Theme.settingsPages
-        for (var j = 0; j < ps.length; j++)
-            out.push({ key: "theme:" + ps[j].key, icon: ps[j].icon, title: ps[j].title,
-                       group: ps[j].group, url: ps[j].url, comp: themePageComp })
-        root.sections = out
-        // Never strand the user on a page that just stopped existing.
-        if (root.activeSection.indexOf("theme:") === 0 && !root.sectionMeta(root.activeSection))
-            root.activeSection = "style"
-    }
-    Component.onCompleted: root._rebuildSections()
-    Connections {
-        target: Theme
-        function onSettingsPagesChanged() { root._rebuildSections() }
-    }
     function sectionMeta(s) {
         for (var i = 0; i < sections.length; i++) if (sections[i].key === s) return sections[i]
         return null
     }
     function sectionTitle(s) { return root.sectionMeta(s)?.title ?? s }
-    // What a theme's settings page is handed. `settings` is the theme's own namespace as an object
-    // so controls bind to it and move when it moves; `set` writes back into that same namespace and
-    // nowhere else, so a theme can invent any knob it likes and can never reach the shell's keys.
-    readonly property var themePageContext: {
-        var c = Style.themeContext()
-        c.settings = Theme.settings
-        c.set = function (k, v) { SettingsStore.set(Theme.settingKey(k), v) }
-        return c
-    }
     // info's hint goes through Wording so the persona re-voices it; routing it here (not in the
     // sections array) keeps the array non-reactive — a style switch must not reload the open page.
     function sectionHint(s)  { return s === "info" ? Wording.s("hint.info") : (root.sectionMeta(s)?.hint ?? "") }
@@ -490,14 +493,6 @@ PanelWindow {
                 var m = root.sectionMeta(keys[i])
                 if (m && m.rail !== false && m.key !== "info" && root.sectionShown(keys[i]))
                     { metas.push(m); placed[keys[i]] = true }
-            }
-            // A theme's own pages sit in the group the theme named, next to the shipped pages that
-            // answer the same question. An unknown group name simply does not match here and the
-            // page falls through to "More", which is where anything unplaced already goes.
-            for (var t = 0; t < root.sections.length; t++) {
-                var tm = root.sections[t]
-                if (tm.key.indexOf("theme:") === 0 && tm.group === root.navGroups[s].name)
-                    { metas.push(tm); placed[tm.key] = true }
             }
             if (metas.length > 0) out.push({ name: root.navGroups[s].name, metas: metas })
         }
@@ -1037,6 +1032,10 @@ PanelWindow {
             color:  Style.tint(Colors.boNormal, 0.25)
         }
 
+        // The theme's own veil over the panel (Console's scanlines). Nothing when the theme brings
+        // no skin; never takes input, and it sits under the rail and the page.
+        ThemeSkin { anchors.fill: parent; kind: "menu"; radius: Style.rCard }
+
         // ── Content area (right) ─────────────────────────────────────────────
         Item {
             id: content
@@ -1176,6 +1175,9 @@ PanelWindow {
                                         anchors.fill: parent; hoverEnabled: true
                                         onClicked: { root.activeSection = modelData.key; root.navPage = false }
                                     }
+                                    // Same explanation the rail hands over on hover — the two ways
+                                    // into a page say the same thing about it.
+                                    HintTip { text: modelData.hint ?? ""; hovered: entryHov.containsMouse }
                                 }
                             }
                         }
@@ -1186,26 +1188,6 @@ PanelWindow {
             // A theme's settings page. Same boundary as a theme's components: it cannot see the
             // shell's singletons, so the palette, the tokens and the two calls it needs to read and
             // write its OWN namespaced settings are handed in.
-            Component {
-                id: themePageComp
-                Item {
-                    id: tpRoot
-                    readonly property var meta: content.activeMeta
-                    Loader {
-                        id: tpLdr
-                        anchors.fill: parent
-                        source: (tpRoot.meta && tpRoot.meta.url) ? tpRoot.meta.url : ""
-                        onStatusChanged: if (status === Loader.Error)
-                            console.warn("theme:", Theme.themeId, "settings page failed to load:",
-                                         tpRoot.meta ? tpRoot.meta.url : "")
-                    }
-                    Binding {
-                        target: tpLdr.item; property: "ctx"; value: root.themePageContext
-                        when: tpLdr.status === Loader.Ready
-                    }
-                }
-            }
-
             Component { id: homeComp;      HomeHub          { pageMode: content.pageMode; onNavigate: s => root.activeSection = s; onOpenNav: root.navPage = true } }
             Component { id: networkComp;   NetworkManager   { onBack: root.activeSection = "home" } }
             Component { id: bluetoothComp; BluetoothManager { onBack: root.activeSection = "home" } }
@@ -1326,26 +1308,22 @@ PanelWindow {
             }
         }
 
-        // Hover tooltip: the section name, floating right of the rail (the rail is raised above the
-        // content pane so the label isn't painted under it).
+        // Hover tooltip: what this entry is, and what its page is for.
+        //
+        // Through HintTip rather than a Rectangle anchored right of the icon, which is what this
+        // was: the endless rail scrolls inside a CLIPPING Flickable, so a bubble hung beside the
+        // icon was cut off at the rail's own edge and most of the rail never showed one at all.
+        // HintTip hangs itself on the window instead and clamps to it.
+        //
+        // With names on, the title is already on the row — the bubble then carries the explanation
+        // alone rather than repeating what the eye is reading.
         readonly property string tipText: root.sectionTitle(ri.section)
-        Rectangle {
-            visible: !ri.labelled && opacity > 0.01 && ri.tipText !== ""
-            opacity: (riHov.containsMouse && !ri.labelled) ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 120 } }
-            anchors { left: parent.right; leftMargin: 10; verticalCenter: parent.verticalCenter }
-            width:  tipTxt.implicitWidth + 16
-            height: tipTxt.implicitHeight + 10
-            radius: Style.rControl
-            color:  Colors.bgPrimary
-            border.width: 1; border.color: Colors.boNormal
-            Text {
-                id: tipTxt
-                anchors.centerIn: parent
-                text: ri.tipText
-                color: Colors.fgPrimary
-                font.pixelSize: 12; font.family: Style.font
-            }
+        readonly property string tipHint: root.sectionHint(ri.section)
+        HintTip {
+            target:  ri
+            hovered: riHov.containsMouse
+            text:    ri.labelled ? ri.tipHint
+                     : (ri.tipHint !== "" ? ri.tipText + "\n" + ri.tipHint : ri.tipText)
         }
     }
 

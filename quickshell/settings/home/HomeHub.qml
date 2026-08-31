@@ -50,6 +50,35 @@ Item {
         c.workspaces = ShellFacts.workspacesFor(UiState.menuMon)
         c.notifications = { "count": NotifService.model ? NotifService.model.values.length : 0,
                             "dnd": NotifService.dnd }
+        // A dashboard you can only read is a poster. The shell's own is a grid of controls, so a
+        // theme's gets the same two halves: what the machine is doing, and the handles to change
+        // it. Everything here is already what the shipped tiles drive (DashState), so a theme and
+        // a tile can never disagree about the volume.
+        c.state = { "volume":     DashState.volume,
+                    "muted":      DashState.muted,
+                    "brightness": DashState.brightness / 100,
+                    "profile":    DashState.profile,
+                    "night":      DashState.night,
+                    "caffeine":   DashState.caffeine,
+                    "dnd":        NotifService.dnd }
+        c.actions = {
+            "volume":     function (v) { DashState.setVolume(v) },
+            "mute":       function ()  { DashState.toggleMute() },
+            "brightness": function (v) { DashState.setBrightness(v) },
+            "profile":    function (p) { DashState.setProfile("" + p) },
+            "night":      function ()  { DashState.toggleNight() },
+            "caffeine":   function ()  { DashState.toggleCaffeine() },
+            "dnd":        function ()  { NotifService.dnd = !NotifService.dnd },
+            "workspace":  function (slot) { Actions.fire({ "type": "dispatch",
+                                                           "value": "hl.dsp.focus({ workspace = "
+                                                                    + slot + " })" }, UiState.menuMon) },
+            // launcher | wallpaper | notifications | cheatsheet | lock | command | app …
+            "fire":       function (type, value) {
+                Actions.fire({ "type": "" + type, "value": value === undefined ? "" : "" + value },
+                             UiState.menuMon)
+            },
+            "section":    function (name) { root.navigate("" + name) }
+        }
         return c
     }
 
@@ -173,6 +202,11 @@ Item {
     // Deliberately quiet: barely there until the pointer comes near. All it does is open the editor.
     StyledRect {
         id: editBtn
+        // Only over the shipped raster. The editor arranges `dashboard_modules`, and a theme that
+        // brings its own dashboard does not draw those — Console's is a status report with no grid
+        // to arrange — so the pencil would open a page of tiles that appear nowhere. What such a
+        // theme offers instead lives on its own settings card (Settings -> Style).
+        visible: !Theme.hasComponent("dashboard")
         width: 24; height: 24; radius: Style.rTile
         anchors { top: parent.top; right: parent.right; topMargin: 2 }
         z: 5

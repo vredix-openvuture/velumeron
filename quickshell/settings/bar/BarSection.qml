@@ -17,7 +17,7 @@ Item {
     property bool   perMonitor: false
     property string targetMon:  ""
     readonly property string editMon: perMonitor ? targetMon : ""
-    readonly property var    monitors: Quickshell.screens
+    readonly property var    monitors: Compositor.screensOrdered
     function monName(s) { return (s && s.name) ? s.name : "" }
 
     property string mode:       "frame"
@@ -404,6 +404,18 @@ Item {
         if (mode === "frame") saveModules(modules, "", VtlConfig.barLayoutKeyOf("frame", edges))
         edges = next
         save("bar_edges", edges)
+        // Carry the arrangement over the FIRST time a combination is used. Adding an edge should
+        // hand you a new lane to fill, not an empty bar — and an empty bar is what you got: the new
+        // key had no entry, the picker read blanks, and the next save wrote those blanks down. A
+        // combination you have arranged before is untouched and comes back as you left it.
+        if (mode === "frame") {
+            var nk = VtlConfig.barLayoutKeyOf("frame", next)
+            var store = root.editMon
+                        ? ((VtlConfig.barMonitors[root.editMon] || ({})).bar_modules_m
+                           || VtlConfig.barModulesMap)
+                        : VtlConfig.barModulesMap
+            if (!store || !store[nk]) saveModules(root.modules, "", nk)
+        }
         reloadModules()
         reloadActiveEdge()
     }
@@ -549,16 +561,16 @@ Item {
     // Anchored to the top with the header's height folded into the margin, not to header.bottom:
     // a hidden Column still occupies its content height, so a single-monitor machine would get a
     // block of empty space where the scope strip is not.
-    Row {
+    PageTabs {
         id: tabBar
         visible: root.customizeKey === "" && root.addTarget === ""
         anchors { top: parent.top; left: parent.left; right: parent.right
                   topMargin: header.visible ? header.height + 14 : 2 }
-        height:  34
-        spacing: 6
-        TabBtn { icon: "󰠱"; label: "Form";    key: "form"    }
-        TabBtn { icon: "󰏘"; label: "Style";   key: "style"   }
-        TabBtn { icon: "󰕰"; label: "Modules"; key: "modules" }
+        current: root.tab
+        tabs: [{ icon: "󰠱", label: "Form", key: "form" },
+               { icon: "󰏘", label: "Style", key: "style" },
+               { icon: "󰕰", label: "Modules", key: "modules" }]
+        onPicked: key => root.tab = key
     }
 
     // ── Page content (one tab visible at a time) ────────────────────────────────────
@@ -857,6 +869,19 @@ Item {
                     text: "No bar in this mode — your module layout is kept and comes back with it."
                 }
 
+                // A secondary screen normally shows the stripped-down bar (Settings → Bar → Form →
+                // Visibility → "Minimal secondary bars"), and until now it did so no matter what
+                // you built here — the layout saved, the bar ignored it, and nothing said why.
+                // Placing anything now takes the screen off that default; this says so beforehand.
+                SubLabel {
+                    visible: root.mode !== "none"
+                             && root.editMon !== "" && VtlConfig.isSecondaryMinimal(root.editMon)
+                    width: parent.width
+                    text: root.editMon + " currently shows the minimal secondary bar — clock at the "
+                          + "start, submap and workspaces at the end. The moment you place a module "
+                          + "here, this screen follows what you built instead."
+                }
+
                 Card {
                     visible: root.mode !== "none"
                     CardLabel {
@@ -1002,41 +1027,6 @@ Item {
 
     // ── Reusable bits ────────────────────────────────────────────────────────────
 
-    // Top-level tab button (Form / Stil / Module).
-    component TabBtn: StyledRect {
-        id: tb
-        property string icon:  ""
-        property string label: ""
-        property string key:   ""
-        readonly property bool on: root.tab === tb.key
-        width:  (tabBar.width - 2 * tabBar.spacing) / 3
-        height: tabBar.height
-        radius: Style.rControl
-        color:  tb.on ? Style.selFill : (tbHov.containsMouse ? Style.controlHover : Style.controlFill)
-        borderWidth: tb.on ? Style.selBorderW : Style.controlBorderW
-        borderColor: tb.on ? Style.selBorderColor : Style.controlBorderColor
-        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
-        Row {
-            anchors.centerIn: parent
-            spacing: 7
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                visible:        tb.icon !== ""
-                text:           tb.icon
-                color:          tb.on ? Style.selText : Colors.fgPrimary
-                font.pixelSize: 15
-                font.family:    Style.iconFont
-            }
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                text:           tb.label
-                color:          tb.on ? Style.selText : Colors.fgPrimary
-                font.pixelSize: Style.fsLabel
-                font.family:    Style.font
-            }
-        }
-        MouseArea { id: tbHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.tab = tb.key }
-    }
 
 
 

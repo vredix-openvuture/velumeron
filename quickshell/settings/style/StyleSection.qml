@@ -4,24 +4,46 @@ import Quickshell
 import Quickshell.Io
 
 // Style settings — the main page holds:
-//   1. STYLE      — preview cards for each shipped style. Only Mirobo is built out and selectable
-//      right now; every other style is parked as a dimmed "SOON" card and returns once finished.
-//      Clicking a card APPLIES it (full-replace of settings.json, device keys + colours untouched);
-//      clicking the active card opens the builder.
+//   1. THEME      — one preview card per installed theme. Clicking a card wears it: the theme id
+//      plus its whole arrangement, written key by key so everything stays yours to change
+//      afterwards. Clicking the card you already wear opens the builder.
 //   2. COLOURS    — palette source (wallust auto / fixed scheme). Always here, independent of the
-//      style/template — persisted in wallust/color-mode + options.json, never inside a template.
+//      theme — persisted in wallust/color-mode + options.json, never inside a theme package.
 //   3. APPEARANCE — the desktop-wide dark/light preference + GTK/Qt app theming.
 //   4. BUILD A THEME — the builder sub-page: adjust bar, menus, launcher, font on the LIVE config,
-//      then optionally snapshot the result as a named preset. No auto-forking — changing a setting
-//      only writes settings.json (it never spawns a template); see Templates.qml.
+//      then optionally keep the result as a theme of your own. No auto-forking — changing a setting
+//      only writes settings.json; a theme of yours is made when you ask for one (Theme.fork).
 //   5. MOTION     — the elastic "soft-mass" emergence knobs.
-// The raw UI-style picker is parked with the other styles (it jumped straight into unfinished ones);
-// the machinery all stays in the code for when the styles come back.
+// Parked themes (`wip` in their theme.json) are filtered out of the grid until they are built out.
 Item {
     id: root
 
     // "" = main page, "build" = the theme-builder sub-page.
     property string page: ""
+
+    // The picture on the desk right now. A theme is judged against YOUR wallpaper, not a stock one,
+    // so the preview cards show it — read once here rather than once per card. Same file every
+    // wallpaper surface reads, watched, so a change anywhere reaches the cards.
+    property string deskWallpaper: ""
+    FileView {
+        id: deskWall
+        path: (Quickshell.env("VELUMERON_USER_DIR") || (Quickshell.env("HOME") + "/.config/velumeron"))
+              + "/quickshell/wallpapers.json"
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: {
+            try {
+                var j = JSON.parse(deskWall.text())
+                var mon = UiState.menuMon || ""
+                var e = j[mon] || j[Object.keys(j)[0]]
+                root.deskWallpaper = (e && e.type !== "video" && e.path) ? ("" + e.path) : ""
+            } catch (err) { root.deskWallpaper = "" }
+        }
+    }
+    // Which room is on show (Look · Menu · Theme · Motion). Not persisted: a settings page opens
+    // where its subject starts, and a menu that remembers the tab you left last week hands you a
+    // page you have to re-orient in.
+    property string tab: "look"
 
     // Menu size (per placement) as a % of the monitor. Anything under the floor would be a panel
     // nobody can read, so stepping below it clears the key instead — which is also the way back to
@@ -205,39 +227,21 @@ Item {
 
     Component.onCompleted: reload()
 
-    // Picking a theme applies its ARRANGEMENT as well as its id. Declared on the ROOT: a function
-    // written inside the Column below belongs to that Column, and `root.pickTheme(...)` then throws
-    // "not a function" at click time — silently, because a TypeError in a signal handler only warns. Tokens restyle a surface; the
-    // arrangement decides where the surfaces are, and no token can say "the bar is a status line
-    // along the bottom". The keys are written through SettingsStore like any other setting, so they
-    // stay yours to change afterwards — picking the theme again puts them back.
-    function pickTheme(id) {
-        SettingsStore.set("theme", id)
-        arrangeProc.command = ["python3", (Quickshell.env("VELUMERON_DIR") || "")
-                               + "/assets/scripts/theme-list.py", "arrangement", id]
-        arrangeProc.running = false
-        arrangeProc.running = true
-        // The WINDOW frames follow the theme too. hyprland.lua reads <USER_DIR>/active-theme and
-        // dofiles hypr.lua/themes/<name>.lua, so handing it the theme id is what makes a switch
-        // reach the compositor instead of stopping at the shell's own surfaces.
-        frameProc.command = ["bash", (Quickshell.env("VELUMERON_DIR") || "")
-                             + "/assets/scripts/apply-ui-style.sh", id]
-        frameProc.running = false
-        frameProc.running = true
+    // What a theme's own settings page is handed. `settings` is the theme's namespace as an object
+    // so its controls BIND to it and move when it moves; `set` writes back into that same namespace
+    // and nowhere else, so a theme can invent any knob it likes and can never reach a shell key.
+    readonly property var themePageContext: {
+        var c = Style.themeContext()
+        c.settings = Theme.settings
+        c.set = function (k, v) { SettingsStore.set(Theme.settingKey(k), v) }
+        return c
     }
-    property Process frameProc: Process {}
-    property Process arrangeProc: Process {
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var t = ("" + this.text).trim()
-                if (t === "" || t === "{}") return
-                try {
-                    var a = JSON.parse(t)
-                    for (var k in a) SettingsStore.set(k, a[k])
-                } catch (e) { console.warn("theme: arrangement is not valid JSON:", e.message) }
-            }
-        }
-    }
+
+    // Wearing a theme is Theme.wear()'s job — the picker only says which one. Declared on the ROOT:
+    // a function written inside the Column below belongs to that Column, and `root.pickTheme(...)`
+    // then throws "not a function" at click time, silently, because a TypeError in a signal handler
+    // only warns.
+    function pickTheme(id) { Theme.wear(id) }
 
     onVisibleChanged:      if (visible) { reload(); presetPreviewDebounce.restart() }
 
@@ -537,25 +541,39 @@ Item {
     Timer { id: colorClear; interval: 4000
             onTriggered: if (!root.colorStatus.endsWith("…")) root.colorStatus = "" }
 
-    // ── Template rename editor state (rename only — creation happens in the builder) ──
-    property string _tplEdit: ""   // "" | "rename"
-    function _tplBeginRename() { _tplEdit = "rename"; tplNameInput.text = Templates.activeName;  tplNameInput.forceActiveFocus() }
-    function _tplCommit() {
-        var n = ("" + tplNameInput.text).trim()
-        if (n === "") { _tplEdit = ""; return }
-        Templates.rename(Templates.activeId, n)
-        _tplEdit = ""
+    // ── Theme rename editor state (rename only — a new theme is forked from the one you wear) ──
+    property string _themeEdit: ""   // "" | "rename"
+    // Only a theme of your own can be renamed or deleted; a shipped one is a folder in the package.
+    readonly property bool themeIsMine: {
+        var list = Theme.available
+        for (var i = 0; i < list.length; i++)
+            if (list[i].id === Theme.themeId) return list[i].source === "user"
+        return false
     }
-
-    // Mini-mock colours per ui_style: a hint of each style's mood for cards without a wallpaper.
-    function styleTint(s) {
-        return ({ futuristic: "#0d2236", grimoire: "#2b2015", nostalgic: "#0e4a45",
-                  cupertino: "#26293c", sketch: "#31313b", wobbly: "#33283e",
-                  straight: "#20242a", cards: "#252c38", outlined: "#22262e" })[s] ?? "#262b36"
+    function _themeBeginRename() {
+        _themeEdit = "rename"
+        themeNameInput.text = Theme.name
+        themeNameInput.forceActiveFocus()
+    }
+    function _themeCommit() {
+        var n = ("" + themeNameInput.text).trim()
+        if (n !== "") Theme.rename(Theme.themeId, n)
+        _themeEdit = ""
+    }
+    // Deleting the theme you are wearing would leave the shell pointing at a folder that is gone,
+    // so step back to the default first and remove the folder afterwards.
+    function deleteTheme(id) {
+        if (Theme.themeId === id) root.pickTheme("mirobo")
+        Theme.remove(id)
+    }
+    // A fresh fork is what you want to be wearing — that is the reason you made it.
+    Connections {
+        target: Theme
+        function onForked(id) { root.pickTheme(id) }
     }
 
     // ════════════════════════════════════════════════════════════════════════════════
-    // MAIN PAGE — templates · appearance · build-a-theme
+    // MAIN PAGE — themes · colours · appearance · build-a-theme
     // ════════════════════════════════════════════════════════════════════════════════
     // Pinned colour preview — a FIXED header on the main page: it stays put while the cards below
     // scroll, so you always see the palette while tweaking the Colours options further down. Shows
@@ -563,7 +581,9 @@ Item {
     // re-derives it via preview-palette.py, fixed mode shows the picked scheme (see _pcol).
     Rectangle {
         id: pinnedPreview
-        visible: root.page === ""
+        // Only where colours are what you are changing. Above the menu's own layout or the motion
+        // curves it is a picture with nothing to do with the question on screen.
+        visible: root.page === "" && (root.tab === "look" || root.tab === "theme")
         anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 4 }
         height: 92; radius: Style.rCard
         color: root._pcol(0, Colors.bgPrimary)
@@ -635,8 +655,31 @@ Item {
         }
     }
 
+    // ── Four rooms, not one page ────────────────────────────────────────────────
+    // Style was five subjects under one heading — menu navigation, the palette, the theme, motion
+    // and a five-step builder — and every one of them was open at once. The strip picks which is on
+    // show; the rest stop taking space. Same device the Bar page uses, so this is a room you
+    // already know how to walk into.
+    //
+    // Anchored to the top with the preview's height folded into the margin rather than to its
+    // bottom edge: a hidden Item still occupies its height, and anchoring to it would leave a strip
+    // of empty panel above the tabs in the rooms that do not show a palette.
+    PageTabs {
+        id: tabStrip
+        visible: root.page === ""
+        anchors { top: parent.top; left: parent.left; right: parent.right
+                  topMargin: pinnedPreview.visible ? pinnedPreview.height + Style.cardGap : 0 }
+        equal:   false                       // as wide as their labels, not a toolbar
+        current: root.tab
+        tabs: [{ icon: "󰏘", label: "Look",   key: "look"   },
+               { icon: "󰍜", label: "Menu",   key: "menu"   },
+               { icon: "󰝥", label: "Theme",  key: "theme"  },
+               { icon: "󰛐", label: "Motion", key: "motion" }]
+        onPicked: key => root.tab = key
+    }
+
     Flickable {
-        anchors { top: pinnedPreview.bottom; topMargin: Style.cardGap
+        anchors { top: tabStrip.bottom; topMargin: 18
                   left: parent.left; right: parent.right; bottom: parent.bottom }
         visible: root.page === ""
         contentHeight: col.implicitHeight
@@ -649,720 +692,731 @@ Item {
             topPadding: 4
             spacing: Style.cardGap
 
-            // ── Settings-menu navigation mode (experimental) ──────────────────
-            Card {
-                CardLabel { text: "MENU NAVIGATION"
-                            hint: "How this settings menu is navigated, and where the pages appear." }
-                // Navigation and placement are two questions, not one. They used to share a single
-                // three-way switch in which "Float" silently also meant "Pages", so there was no
-                // way to float the sidebar and no way to go back to a docked page list.
-                FieldLabel { text: "Navigation" }
-                Segmented {
-                    equal: true
-                    current: VtlConfig.settingsNavMode
-                    segments: [{ label: "Sidebar", key: "sidebar" },
-                               { label: "Pages",   key: "page"    }]
-                    onPicked: SettingsStore.set("settings_nav_mode", key)
-                }
-                SubLabel {
-                    text: VtlConfig.settingsNavMode === "sidebar" ? "Icon rail down the side." : "Gear on Home opens the page list."
-                }
+            Column {
+                visible: root.tab === "look"
+                width:   col.width
+                spacing: Style.cardGap
 
-                // The sidebar's own options belong to the sidebar, so they sit directly under it and
-                // are indented — not stranded below Placement as a third equal-looking row, which
-                // is where they were and read as unrelated.
-                Toggle {
-                    visible: VtlConfig.settingsNavMode === "sidebar"
-                    indent:  true
-                    label:   "Show section names"
-                    sub:     "Spell the names out next to the icons instead of only on hover. The rail gets wider."
-                    on:      VtlConfig.settingsSidebarLabels
-                    onToggled: SettingsStore.set("settings_sidebar_labels", !VtlConfig.settingsSidebarLabels)
-                }
-                Column {
-                    visible: VtlConfig.settingsNavMode === "sidebar"
-                    width:   parent.width - 12
-                    x:       12                       // indented to match the Toggle above it
-                    spacing: 6
-                    FieldLabel { text: "Scrolling" }
-                    Segmented {
-                        equal:   true
-                        current: VtlConfig.settingsSidebarScroll
-                        segments: [{ label: "Sectioned", key: "segmented" },
-                                   { label: "Endless",   key: "endless"   }]
-                        onPicked: SettingsStore.set("settings_sidebar_scroll", key)
-                    }
-                    SubLabel {
-                        width: parent.width
-                        text: VtlConfig.settingsSidebarScroll === "segmented"
-                              ? "One group at a time; wheel to move." : "All icons, one strip."
-                    }
-                }
+                // ── Colours: wallust auto / fixed palette — always here, independent of any theme ──
+                Card {
+                    CardLabel { text: "COLOURS"
+                                hint: "Where your colours come from. Leave it on “Follow the wallpaper” and the palette is pulled from whatever image is behind you; turn it off to pick a fixed scheme instead. Colours are separate from the style — switching a style or applying a preset never touches them." }
 
-                FieldLabel { text: "Placement" }
-                Segmented {
-                    equal: true
-                    current: VtlConfig.settingsFloat ? "float" : "docked"
-                    segments: [{ label: "Docked", key: "docked",
-                                 hint: "Attached to the bar, growing out of the icon you opened it from." },
-                               { label: "Floating", key: "float",
-                                 hint: VtlConfig.settingsNavMode === "sidebar"
-                                       ? "Opens centred, as a window of its own."
-                                       : "The dashboard stays on the bar; the pages open as a centred window." }]
-                    onPicked: {
-                        SettingsStore.set("settings_float", key === "float")
-                        // Migrate the legacy combined value in the same breath, so the old "float"
-                        // string can never come back and override what was just chosen here.
-                        if (VtlConfig.settingsNavMode !== "")
-                            SettingsStore.set("settings_nav_mode", VtlConfig.settingsNavMode)
-                    }
-                }
-
-                // Size belongs to the placement that has it: the docked panel and the floating
-                // window are two different shapes with two different jobs, and one number for both
-                // is what forced the docked panel to be derived from the dashboard instead of set.
-                // Auto is the old behaviour kept as an option, not a coupling: docked Auto is as big
-                // as a dashboard page needs, floating Auto is 74% of the monitor. Step once and it
-                // is yours — the dashboard's own size settings never move either way.
-                SubGroup {
-                    // Which screen these two are for. A percentage is a share of the screen it
-                    // lands on, so one number cannot fit a 2560 desk monitor and a 1080 portrait
-                    // one at once — hence the chips rather than a single global value.
-                    FieldLabel {
-                        visible: root.menuScreens.length > 1
-                        text: "Size for"
-                        hint: "Which screen the two rows below are written for. \"All monitors\" is the "
-                            + "value every screen starts from; pick one to override just that screen."
-                    }
-                    Flow {
-                        visible: root.menuScreens.length > 1
-                        width: parent.width; spacing: 6
-                        Chip {
-                            label: "All monitors"
-                            selected: root.menuMon === ""
-                            onClicked: root.menuMon = ""
-                        }
-                        Repeater {
-                            model: root.menuScreens
-                            delegate: Chip {
-                                required property var modelData
-                                label:    modelData.name
-                                selected: root.menuMon === modelData.name
-                                onClicked: root.menuMon = modelData.name
-                            }
-                        }
+                    Toggle {
+                        label: "Follow the wallpaper"
+                        sub:   "Re-pick the palette from each new wallpaper automatically"
+                        on:    root.autoMode
+                        onToggled: root.setAutoFollow(!root.autoMode)
                     }
 
-                    Stepper {
-                        visible: !VtlConfig.settingsFloat
-                        label: "Width"; unit: root.menuPct("menu_dock_width_pct") > 0 ? "%" : ""
-                        step: 2; min: -1; max: 100
-                        value:   root.menuPct("menu_dock_width_pct") > 0
-                                 ? root.menuPct("menu_dock_width_pct") : UiState.menuPctDockW
-                        display: root.menuPct("menu_dock_width_pct") > 0 ? "" : "Auto"
-                        hint: "Width of the docked menu, as a share of this monitor. Auto = as wide as a "
-                            + "dashboard page needs."
-                        onChanged: root.saveMenuPct("menu_dock_width_pct", v)
-                    }
-                    Stepper {
-                        visible: !VtlConfig.settingsFloat
-                        label: "Height"; unit: root.menuPct("menu_dock_height_pct") > 0 ? "%" : ""
-                        step: 2; min: -1; max: 100
-                        value:   root.menuPct("menu_dock_height_pct") > 0
-                                 ? root.menuPct("menu_dock_height_pct") : UiState.menuPctDockH
-                        display: root.menuPct("menu_dock_height_pct") > 0 ? "" : "Auto"
-                        hint: "Height of the docked menu, as a share of this monitor. Auto = as tall as a "
-                            + "dashboard page needs; set it shorter and the dashboard pages what no longer fits."
-                        onChanged: root.saveMenuPct("menu_dock_height_pct", v)
-                    }
-                    Stepper {
-                        visible: VtlConfig.settingsFloat
-                        label: "Width"; unit: root.menuPct("menu_float_width_pct") > 0 ? "%" : ""
-                        step: 2; min: -1; max: 100
-                        value:   root.menuPct("menu_float_width_pct") > 0
-                                 ? root.menuPct("menu_float_width_pct") : UiState.menuPctFloatW
-                        display: root.menuPct("menu_float_width_pct") > 0 ? "" : "Auto"
-                        hint: "Width of the floating settings window, as a share of this monitor. Auto = 74%."
-                        onChanged: root.saveMenuPct("menu_float_width_pct", v)
-                    }
-                    Stepper {
-                        visible: VtlConfig.settingsFloat
-                        label: "Height"; unit: root.menuPct("menu_float_height_pct") > 0 ? "%" : ""
-                        step: 2; min: -1; max: 100
-                        value:   root.menuPct("menu_float_height_pct") > 0
-                                 ? root.menuPct("menu_float_height_pct") : UiState.menuPctFloatH
-                        display: root.menuPct("menu_float_height_pct") > 0 ? "" : "Auto"
-                        hint: "Height of the floating settings window, as a share of this monitor. Auto = 74%."
-                        onChanged: root.saveMenuPct("menu_float_height_pct", v)
-                    }
-                }
-            }
-
-            // ── Theme ─────────────────────────────────────────────────────────
-            // A theme is a whole desktop on top of Velumeron, not a colour scheme: its own tokens,
-            // its own components for the surfaces it wants to own, and its own settings pages. See
-            // quickshell/Theme.qml. Colours stay wallust's under every one of them.
-            Card {
-                // Re-scan when the page comes up: a theme is a folder, so one can appear while the
-                // shell is running and the picker has no other way to notice.
-                Component.onCompleted: Theme.refresh()
-                CardLabel { text: "THEME"
-                            hint: "A theme decides the shape of the shell and brings its own "
-                                  + "lockscreen. Mirobo is the default. Colours always come from "
-                                  + "your wallpaper, whichever theme you run." }
-                Repeater {
-                    model: Theme.available
-                    delegate: StyledRect {
-                        id: thRow
-                        required property var modelData
-                        readonly property bool on: Theme.themeId === thRow.modelData.id
-                        width: parent.width
-                        height: 52
-                        radius: Style.rControl
-                        color: thRow.on ? Style.selFill
-                                        : (thHov.containsMouse ? Style.controlHover : Style.controlFill)
-                        borderWidth: thRow.on ? Style.selBorderW : Style.controlBorderW
-                        borderColor: thRow.on ? Style.selBorderColor : Style.controlBorderColor
-
-                        Column {
-                            anchors { left: parent.left; leftMargin: 12; right: chk.left; rightMargin: 8
-                                      verticalCenter: parent.verticalCenter }
-                            spacing: 2
-                            Text {
-                                text: thRow.modelData.name
-                                      + (thRow.modelData.source === "user" ? "  · yours" : "")
-                                color: thRow.on ? Style.selText : Colors.fgPrimary
-                                font.family: Style.font; font.pixelSize: 13; font.bold: thRow.on
-                            }
-                            Text {
-                                text: {
-                                    var bits = []
-                                    var c = thRow.modelData.components || []
-                                    if (c.length > 0) bits.push(c.length === 1 ? "own " + c[0]
-                                                                               : c.length + " own surfaces")
-                                    if (thRow.modelData.pages > 0)
-                                        bits.push(thRow.modelData.pages === 1 ? "a settings page"
-                                                                              : thRow.modelData.pages + " settings pages")
-                                    return bits.length ? bits.join(" · ") : "tokens only"
-                                }
-                                color: thRow.on ? Style.selText : Colors.fgMuted
-                                opacity: thRow.on ? 0.8 : 1
-                                font.family: Style.font; font.pixelSize: 11
-                            }
-                        }
-                        Text {
-                            id: chk
-                            anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                            visible: thRow.on
-                            text: "\u{F012C}"; color: Style.selText
-                            font.family: Style.font; font.pixelSize: 15
-                        }
-                        MouseArea {
-                            id: thHov
-                            anchors.fill: parent; hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: if (!thRow.on) root.pickTheme(thRow.modelData.id)
-                        }
-                    }
-                }
-            }
-
-            // ── Template cards ────────────────────────────────────────────────
-            Card {
-                CardLabel { text: "STYLE"
-                            hint: "Mirobo is the built-out style — click it to apply, then tweak it in the builder. The other styles are still in progress and will unlock over time. Your changes save to your own config; the shipped styles are never overwritten." }
-
-                Flow {
-                    id: tplGrid
-                    width: parent.width; spacing: 8
-                    readonly property real cw: Math.floor((width - spacing) / 2)
-                    Repeater {
-                        // Parked "SOON" styles (built-ins other than mirobo) are hidden entirely for
-                        // now — only mirobo and the user's own forks show. The TemplateCard's wip
-                        // handling stays in the code for when they return; flip this filter to re-show.
-                        model: Templates.templates.filter(function (t) {
-                            return !(t.builtin && (t.id || "") !== "mirobo")
-                        })
-                        delegate: TemplateCard { required property var modelData; tpl: modelData; width: tplGrid.cw }
-                    }
-                }
-
-                // Inline rename editor.
-                Rectangle {
-                    width: parent.width; height: 40; radius: Style.rControl
-                    visible: root._tplEdit !== ""
-                    color: Style.controlFill
-                    border.width: Style.controlBorderW; border.color: Style.controlBorderColor
-                    Row {
-                        anchors { fill: parent; leftMargin: 12; rightMargin: 8 }
-                        spacing: 8
-                        TextInput {
-                            id: tplNameInput
-                            width: parent.width - 128
-                            anchors.verticalCenter: parent.verticalCenter
-                            color: Colors.fgBright; font.pixelSize: Style.fsLabel; font.family: Style.font
-                            clip: true; selectByMouse: true
-                            onAccepted: root._tplCommit()
-                            Keys.onEscapePressed: root._tplEdit = ""
-                            Text { anchors.fill: parent; verticalAlignment: Text.AlignVCenter
-                                   visible: tplNameInput.text === ""; text: "Template name…"
-                                   color: Colors.fgMuted; font: tplNameInput.font }
-                        }
-                        TextButton { primary: true; label: "OK"; anchors.verticalCenter: parent.verticalCenter
-                                     onClicked: root._tplCommit() }
-                        TextButton { label: "Cancel"; anchors.verticalCenter: parent.verticalCenter
-                                     onClicked: root._tplEdit = "" }
-                    }
-                }
-
-                Flow {
-                    width: parent.width; spacing: 8
-                    TextButton { label: "Duplicate"; onClicked: Templates.duplicate(Templates.activeSource, Templates.activeId, "") }
-                    TextButton { label: "Rename"; visible: !Templates.activeIsBuiltin && Templates.activeId !== ""
-                                 onClicked: root._tplBeginRename() }
-                    TextButton { label: "Delete"; visible: !Templates.activeIsBuiltin && Templates.activeId !== ""
-                                 onClicked: Templates.remove(Templates.activeId) }
-                }
-            }
-
-            // ── Colours: wallust auto / fixed palette — always here, independent of any template ──
-            Card {
-                CardLabel { text: "COLOURS"
-                            hint: "Where your colours come from. Leave it on “Follow the wallpaper” and the palette is pulled from whatever image is behind you; turn it off to pick a fixed scheme instead. Colours are separate from the style — switching a style or applying a preset never touches them." }
-
-                Toggle {
-                    label: "Follow the wallpaper"
-                    sub:   "Re-pick the palette from each new wallpaper automatically"
-                    on:    root.autoMode
-                    onToggled: root.setAutoFollow(!root.autoMode)
-                }
-
-                // Auto (wallust): the human dials up front, the engine internals folded into “Advanced”.
-                Column {
-                    width: parent.width; spacing: Style.rowGap
-                    visible: root.autoMode
-
-                    FieldLabel { text: "Look"
-                                 hint: "Pick a starting look — each is a ready-made recipe, previewed on your wallpaper. Fine-tune it below."
-                                       + "\n\n" + "How punchy the colours are — higher is more saturated, lower is muted." }
+                    // Auto (wallust): the human dials up front, the engine internals folded into “Advanced”.
                     Column {
-                        width: parent.width; spacing: 6
+                        width: parent.width; spacing: Style.rowGap
+                        visible: root.autoMode
+
+                        FieldLabel { text: "Look"
+                                     hint: "Pick a starting look — each is a ready-made recipe, previewed on your wallpaper. Fine-tune it below."
+                                           + "\n\n" + "How punchy the colours are — higher is more saturated, lower is muted." }
+                        Column {
+                            width: parent.width; spacing: 6
+                            Repeater {
+                                model: root.genPresets
+                                delegate: Item {
+                                    id: prow
+                                    required property var modelData
+                                    readonly property bool sel: root._presetActive(modelData)
+                                    width: parent ? parent.width : 0
+                                    height: 52
+
+                                    StyledRect {
+                                        anchors.fill: parent
+                                        radius:      Style.rControl
+                                        color:       prow.sel ? Style.selFill : (ph.containsMouse ? Style.controlHover : Style.controlFill)
+                                        borderWidth: prow.sel ? Style.selBorderW : Style.controlBorderW
+                                        borderColor: prow.sel ? Style.selBorderColor : Style.controlBorderColor
+                                        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
+                                    }
+                                    Column {
+                                        anchors { left: parent.left; leftMargin: 12; right: pswatch.left
+                                                  rightMargin: 8; verticalCenter: parent.verticalCenter }
+                                        spacing: 1
+                                        Text { text: prow.modelData.name
+                                               color: prow.sel ? Style.selText : Colors.fgPrimary
+                                               font.pixelSize: Style.fsLabel; font.bold: true; font.family: Style.font }
+                                        Text { width: parent.width; elide: Text.ElideRight
+                                               text: prow.modelData.desc; color: Colors.fgMuted
+                                               font.pixelSize: 10; font.family: Style.font }
+                                    }
+                                    Row {
+                                        id: pswatch
+                                        anchors { right: pcheck.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                                        spacing: 3
+                                        Repeater {
+                                            model: [0, 2, 3, 4, 5, 6, 15]
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                width: 13; height: 13; radius: 3
+                                                color: root._ppcol(prow.modelData.key, modelData, Colors["color" + modelData])
+                                                border.width: 1; border.color: Qt.rgba(0, 0, 0, 0.25)
+                                            }
+                                        }
+                                    }
+                                    Text {
+                                        id: pcheck
+                                        visible: prow.sel
+                                        anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                                        text: "✓"; color: Style.selText; font.pixelSize: 12; font.family: Style.font
+                                    }
+                                    MouseArea { id: ph; anchors.fill: parent; hoverEnabled: true
+                                                onClicked: root._applyPreset(prow.modelData) }
+                                }
+                            }
+                        }
+
+                    }
+
+                    // ── Surface contrast — how far cards and rows lift off the panel behind them ──
+                    // Sits right under the Look presets because that is where you go looking for it,
+                    // but it is NOT a wallust dial: it writes settings.json (a style value, snapshotted
+                    // into a theme package), not options.json — hence its own block outside the auto-mode
+                    // column, so it stays available for a fixed scheme too. It is deliberately not a
+                    // preset: the step is a fraction of the accent, so how visible it lands would ride
+                    // on whichever colour the wallpaper happens to yield (measured across wallpapers —
+                    // no palette/backend/colorspace combination moves it reliably). See Style.lift().
+                    FieldLabel { text: "Surface contrast"
+                                 hint: "How far cards and list rows lift off the panel behind them — the step between a "
+                                       + "menu's background and the cards sitting on it."
+                                       + "\n\n" + "This is not a palette setting on purpose: the step is a fraction of the "
+                                       + "accent colour, so leaving it to the palette would make it depend on whichever "
+                                       + "colour your wallpaper yields. Set here, it looks the same under every palette." }
+                    Segmented {
+                        equal: true
+                        current: VtlConfig.surfaceContrast
+                        segments: [{ label: "Subtle", key: "subtle" },
+                                   { label: "Normal", key: "normal" },
+                                   { label: "Strong", key: "strong" }]
+                        onPicked: root.save("surface_contrast", key)
+                    }
+
+                    Column {
+                        width: parent.width; spacing: Style.rowGap
+                        visible: root.autoMode
+
+                        // Contrast (check_contrast) is ALWAYS on now — no toggle — so text never turns
+                        // unreadable. Vividness lives inside Advanced below.
+
+                        // ── Advanced — the wallust engine dials, collapsed; most people never touch these. ──
+                        Rectangle {
+                            id: advHead
+                            property bool open: false
+                            width: parent.width; height: 34; radius: Style.rControl
+                            color: advHov.containsMouse ? Style.controlHover : Style.controlFill
+                            border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+                            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
+                            Text {
+                                anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                                text: "Advanced — raw wallust dials"; color: Colors.fgPrimary
+                                font.pixelSize: Style.fsLabel; font.family: Style.font
+                            }
+                            Text {
+                                anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                                text: advHead.open ? "▴" : "▾"; color: Colors.fgMuted
+                                font.pixelSize: 12; font.family: Style.font
+                            }
+                            MouseArea { id: advHov; anchors.fill: parent; hoverEnabled: true
+                                        onClicked: advHead.open = !advHead.open }
+                        }
+                        Column {
+                            width: parent.width; spacing: Style.rowGap
+                            visible: advHead.open
+
+                            Stepper {
+                                label: "Vividness"
+                                value: root.wallustOpts.saturation ?? 20
+                                min:   0; max: 100; step: 5
+                                onChanged: root.setOpt("saturation", v)
+                            }
+
+                            FieldLabel { text: "Palette" }
+                            Dropdown {
+                                summary: root.optLabel(root.paletteOptions, root.wallustOpts.palette ?? "saliencedarkdistributed")
+                                options: root.paletteOptions.map(function(o) {
+                                    return { key: o.key, label: o.label,
+                                             on: (root.wallustOpts.palette ?? "saliencedarkdistributed") === o.key }
+                                })
+                                onPicked: root.setOpt("palette", key)
+                            }
+
+                            FieldLabel { text: "Backend" }
+                            Dropdown {
+                                summary: root.optLabel(root.backendOptions, root.wallustOpts.backend ?? "wal")
+                                options: root.backendOptions.map(function(o) {
+                                    return { key: o.key, label: o.label,
+                                             on: (root.wallustOpts.backend ?? "wal") === o.key }
+                                })
+                                onPicked: root.setOpt("backend", key)
+                            }
+
+                            FieldLabel { text: "Colorspace"
+                                         hint: "How wallust pulls the palette out of the image and spreads it across the slots. The defaults suit most wallpapers."
+                                               + "\n\n" + "The pinned preview at the top updates as you tweak these. Hit “Apply” to push the new colours to the whole desktop now (otherwise they land on the next wallpaper change)." }
+                            Dropdown {
+                                summary: root.optLabel(root.colorspaceOptions, root.wallustOpts.colorspace ?? "lab")
+                                options: root.colorspaceOptions.map(function(o) {
+                                    return { key: o.key, label: o.label,
+                                             on: (root.wallustOpts.colorspace ?? "lab") === o.key }
+                                })
+                                onPicked: root.setOpt("colorspace", key)
+                            }
+                        }
+
+                    }
+
+                    CardLabel {
+                        visible: !root.autoMode
+                        text: root.schemes.length ? "FIXED SCHEME" : "No schemes in fixed_colors/"
+                                hint: "A hand-picked palette that ignores the wallpaper. Click one to apply it — the pinned preview at the top updates to match." }
+                    Column {
+                        width: parent.width; spacing: 4
+                        visible: !root.autoMode
                         Repeater {
-                            model: root.genPresets
+                            model: root.schemes
                             delegate: Item {
-                                id: prow
-                                required property var modelData
-                                readonly property bool sel: root._presetActive(modelData)
+                                required property string modelData
+                                readonly property bool   sel:    root.selected === modelData
+                                readonly property var    cmap:   root.schemeColors[modelData] ?? {}
                                 width: parent ? parent.width : 0
-                                height: 52
+                                height: 50
 
                                 StyledRect {
                                     anchors.fill: parent
-                                    radius:      Style.rControl
-                                    color:       prow.sel ? Style.selFill : (ph.containsMouse ? Style.controlHover : Style.controlFill)
-                                    borderWidth: prow.sel ? Style.selBorderW : Style.controlBorderW
-                                    borderColor: prow.sel ? Style.selBorderColor : Style.controlBorderColor
+                                    radius:       Style.rControl
+                                    color:        sel ? Style.selFill : (hov.containsMouse ? Style.controlHover : Style.controlFill)
+                                    borderWidth:  sel ? Style.selBorderW : Style.controlBorderW
+                                    borderColor:  sel ? Style.selBorderColor : Style.controlBorderColor
                                     Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
                                 }
-                                Column {
-                                    anchors { left: parent.left; leftMargin: 12; right: pswatch.left
-                                              rightMargin: 8; verticalCenter: parent.verticalCenter }
-                                    spacing: 1
-                                    Text { text: prow.modelData.name
-                                           color: prow.sel ? Style.selText : Colors.fgPrimary
-                                           font.pixelSize: Style.fsLabel; font.bold: true; font.family: Style.font }
-                                    Text { width: parent.width; elide: Text.ElideRight
-                                           text: prow.modelData.desc; color: Colors.fgMuted
-                                           font.pixelSize: 10; font.family: Style.font }
+                                Text {
+                                    anchors { left: parent.left; leftMargin: 12
+                                              verticalCenter: parent.verticalCenter }
+                                    text:  root.displayName(modelData)
+                                    color: sel ? Style.selText : Colors.fgPrimary
+                                    font.pixelSize: Style.fsLabel; font.family: Style.font
+                                    font.capitalization: Font.Capitalize
                                 }
                                 Row {
-                                    id: pswatch
-                                    anchors { right: pcheck.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                                    anchors { right: checkMark.left; rightMargin: 8
+                                              verticalCenter: parent.verticalCenter }
                                     spacing: 3
                                     Repeater {
-                                        model: [0, 2, 3, 4, 5, 6, 15]
+                                        model: root.swatchKeys
                                         delegate: Rectangle {
-                                            required property var modelData
-                                            width: 13; height: 13; radius: 3
-                                            color: root._ppcol(prow.modelData.key, modelData, Colors["color" + modelData])
-                                            border.width: 1; border.color: Qt.rgba(0, 0, 0, 0.25)
+                                            required property string modelData
+                                            width: 14; height: 14; radius: 3
+                                            color: cmap[modelData] ?? "transparent"
+                                            border.width: 1
+                                            border.color: Qt.rgba(0,0,0,0.25)
                                         }
                                     }
                                 }
                                 Text {
-                                    id: pcheck
-                                    visible: prow.sel
-                                    anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
-                                    text: "✓"; color: Style.selText; font.pixelSize: 12; font.family: Style.font
+                                    id: checkMark
+                                    visible: sel
+                                    anchors { right: parent.right; rightMargin: 10
+                                              verticalCenter: parent.verticalCenter }
+                                    text: "✓"; color: Style.selText
+                                    font.pixelSize: 12; font.family: Style.font
                                 }
-                                MouseArea { id: ph; anchors.fill: parent; hoverEnabled: true
-                                            onClicked: root._applyPreset(prow.modelData) }
+                                MouseArea { id: hov; anchors.fill: parent; hoverEnabled: true
+                                            onClicked: { root.selected = modelData; root.applyColours() } }
                             }
                         }
                     }
 
+                    // ── Build your own + saved custom palettes ─────────────────────────
+                    Column {
+                        width: parent.width; spacing: 6
+                        visible: !root.autoMode
+
+                        CardLabel { visible: root.userPalettes.length > 0; text: "YOUR PALETTES"
+                                    hint: "Set your own colours in a live editor — the rest derives with readable contrast." }
+                        Repeater {
+                            model: root.userPalettes
+                            delegate: Item {
+                                id: urow
+                                required property var modelData
+                                readonly property var pcolors: modelData.colors ?? ({})
+                                width: parent ? parent.width : 0; height: 50
+                                StyledRect {
+                                    anchors.fill: parent; radius: Style.rControl
+                                    color: uh.containsMouse ? Style.controlHover : Style.controlFill
+                                    borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
+                                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
+                                }
+                                // Whole-row click applies the palette (declared first = under the edit button).
+                                MouseArea { id: uh; anchors.fill: parent; hoverEnabled: true
+                                            onClicked: root.applyCustom(urow.modelData.path) }
+                                Text {
+                                    anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                                    text: urow.modelData.name + "  · yours"; color: Colors.fgPrimary
+                                    font.pixelSize: Style.fsLabel; font.family: Style.font; font.capitalization: Font.Capitalize
+                                }
+                                Row {
+                                    anchors { right: editBtn.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                                    spacing: 3
+                                    Repeater {
+                                        model: root.swatchKeys
+                                        delegate: Rectangle {
+                                            required property string modelData
+                                            width: 14; height: 14; radius: 3
+                                            color: urow.pcolors[modelData] ?? "transparent"
+                                            border.width: 1; border.color: Qt.rgba(0, 0, 0, 0.25)
+                                        }
+                                    }
+                                }
+                                // Edit: reopen the build-your-own editor loaded with this palette.
+                                Rectangle {
+                                    id: editBtn
+                                    anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                                    width: 30; height: 30; radius: Style.rControl
+                                    color: ebHov.containsMouse ? Style.controlHover : "transparent"
+                                    Text { anchors.centerIn: parent; text: "󰏫"; color: Colors.fgMuted
+                                           font.pixelSize: 14; font.family: Style.font }
+                                    MouseArea {
+                                        id: ebHov; anchors.fill: parent; hoverEnabled: true
+                                        onClicked: {
+                                            UiState.paletteEditorSeed = { colors: urow.modelData.colors, name: urow.modelData.name }
+                                            UiState.paletteEditorMon = UiState.menuMon
+                                            UiState.openDropdown = ""
+                                            UiState.paletteEditorOpen = true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            width: parent.width; height: 44; radius: Style.rControl
+                            color: byoHov.containsMouse ? Style.accent : Style.tint(Style.accent, 0.22)
+                            border.width: 1; border.color: Style.accent
+                            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
+                            Text { anchors.centerIn: parent; text: "󰏘   Build your own"
+                                   color: byoHov.containsMouse ? Style.onAccent : Colors.fgPrimary
+                                   font.pixelSize: 14; font.bold: true; font.family: Style.font }
+                            MouseArea { id: byoHov; anchors.fill: parent; hoverEnabled: true
+                                        onClicked: {
+                                            UiState.paletteEditorSeed = null   // fresh, from the live palette
+                                            UiState.paletteEditorMon = UiState.menuMon
+                                            UiState.openDropdown = ""
+                                            UiState.paletteEditorOpen = true
+                                        } }
+                        }
+                    }
+
+                    Row {
+                        width: parent.width
+                        Text {
+                            width: parent.width - 72; anchors.verticalCenter: parent.verticalCenter
+                            text: root.colorStatus; color: Colors.fgMuted; font.pixelSize: 11
+                            elide: Text.ElideRight; font.family: Style.font
+                        }
+                        TextButton { primary: true; label: "Apply"; onClicked: root.applyColours() }
+                    }
                 }
 
-                // ── Surface contrast — how far cards and rows lift off the panel behind them ──
-                // Sits right under the Look presets because that is where you go looking for it,
-                // but it is NOT a wallust dial: it writes settings.json (a style value, snapshotted
-                // into templates), not options.json — hence its own block outside the auto-mode
-                // column, so it stays available for a fixed scheme too. It is deliberately not a
-                // preset: the step is a fraction of the accent, so how visible it lands would ride
-                // on whichever colour the wallpaper happens to yield (measured across wallpapers —
-                // no palette/backend/colorspace combination moves it reliably). See Style.lift().
-                FieldLabel { text: "Surface contrast"
-                             hint: "How far cards and list rows lift off the panel behind them — the step between a "
-                                   + "menu's background and the cards sitting on it."
-                                   + "\n\n" + "This is not a palette setting on purpose: the step is a fraction of the "
-                                   + "accent colour, so leaving it to the palette would make it depend on whichever "
-                                   + "colour your wallpaper yields. Set here, it looks the same under every palette." }
-                Segmented {
-                    equal: true
-                    current: VtlConfig.surfaceContrast
-                    segments: [{ label: "Subtle", key: "subtle" },
-                               { label: "Normal", key: "normal" },
-                               { label: "Strong", key: "strong" }]
-                    onPicked: root.save("surface_contrast", key)
+                // ── Appearance: desktop-wide dark/light + app theming ─────────────
+                Card {
+                    CardLabel { text: "APPEARANCE"
+                                hint: "Desktop-wide dark/light preference (xdg color-scheme + GTK variant) for portal-aware apps and websites. Shell and terminal colours stay untouched." }
+                    Segmented {
+                        equal: true
+                        segments: [{ label: "󰖔  Dark", key: "dark" }, { label: "󰖨  Light", key: "light" }]
+                        current: root.appMode
+                        onPicked: key => root.appTheme("mode " + key)
+                    }
+                    Toggle {
+                        label: "Theme GTK apps"
+                        sub:   "adw-gtk3 + live wallust palette"
+                        on:    root.gtkTheming
+                        onToggled: root.appTheme("gtk " + (root.gtkTheming ? "off" : "on"))
+                    }
+                    Toggle {
+                        label: "Theme Qt apps"
+                        sub:   "qt5ct/qt6ct palette from the live colors"
+                        on:    root.qtTheming
+                        onToggled: root.appTheme("qt " + (root.qtTheming ? "off" : "on"))
+                    }
+                    FieldLabel { text: "App icon theme"
+                                 hint: "Applies the icon theme to GTK/Qt apps live (gsettings + gtk-3/4 settings.ini). The shell's own icons re-theme on the next restart." }
+                    Dropdown {
+                        summary: root.appIcon === "" ? "(system default)" : root.appIcon
+                        options: root.iconThemes.map(function (t) {
+                            return { label: t, key: t, on: t === root.appIcon }
+                        })
+                        // JSON.stringify quotes the name so themes with spaces (e.g. "Papirus Dark")
+                        // reach the script as one argument.
+                        onPicked: key => { root.appIcon = key; root.appTheme("icon " + JSON.stringify(key)) }
+                    }
+                    // Live preview of the picked theme — sits right under the selection so a switch is
+                    // visible immediately (the shell's own icons only re-theme on the next restart).
+                    Row {
+                        spacing: 8
+                        visible: root.iconPreview.length > 0
+                        Repeater {
+                            model: root.iconPreview
+                            delegate: Rectangle {
+                                required property var modelData
+                                width: 34; height: 34; radius: Style.rControl
+                                color: Colors.bgElement
+                                border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+                                Image {
+                                    anchors.centerIn: parent
+                                    width: 24; height: 24; sourceSize.width: 48; sourceSize.height: 48
+                                    fillMode: Image.PreserveAspectFit; smooth: true; asynchronous: true; cache: false
+                                    source: "file://" + modelData
+                                }
+                            }
+                        }
+                    }
                 }
+            }
 
-                Column {
-                    width: parent.width; spacing: Style.rowGap
-                    visible: root.autoMode
+            Column {
+                visible: root.tab === "menu"
+                width:   col.width
+                spacing: Style.cardGap
 
-                    // Contrast (check_contrast) is ALWAYS on now — no toggle — so text never turns
-                    // unreadable. Vividness lives inside Advanced below.
+                // ── Settings-menu navigation mode (experimental) ──────────────────
+                Card {
+                    CardLabel { text: "MENU NAVIGATION"
+                                hint: "How this settings menu is navigated, and where the pages appear." }
+                    // Navigation and placement are two questions, not one. They used to share a single
+                    // three-way switch in which "Float" silently also meant "Pages", so there was no
+                    // way to float the sidebar and no way to go back to a docked page list.
+                    FieldLabel { text: "Navigation" }
+                    Segmented {
+                        equal: true
+                        current: VtlConfig.settingsNavMode
+                        segments: [{ label: "Sidebar", key: "sidebar" },
+                                   { label: "Pages",   key: "page"    }]
+                        onPicked: SettingsStore.set("settings_nav_mode", key)
+                    }
+                    SubLabel {
+                        text: VtlConfig.settingsNavMode === "sidebar" ? "Icon rail down the side." : "Gear on Home opens the page list."
+                    }
 
-                    // ── Advanced — the wallust engine dials, collapsed; most people never touch these. ──
-                    Rectangle {
-                        id: advHead
-                        property bool open: false
-                        width: parent.width; height: 34; radius: Style.rControl
-                        color: advHov.containsMouse ? Style.controlHover : Style.controlFill
-                        border.width: Style.controlBorderW; border.color: Style.controlBorderColor
-                        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
-                        Text {
-                            anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                            text: "Advanced — raw wallust dials"; color: Colors.fgPrimary
-                            font.pixelSize: Style.fsLabel; font.family: Style.font
-                        }
-                        Text {
-                            anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                            text: advHead.open ? "▴" : "▾"; color: Colors.fgMuted
-                            font.pixelSize: 12; font.family: Style.font
-                        }
-                        MouseArea { id: advHov; anchors.fill: parent; hoverEnabled: true
-                                    onClicked: advHead.open = !advHead.open }
+                    // The sidebar's own options belong to the sidebar, so they sit directly under it and
+                    // are indented — not stranded below Placement as a third equal-looking row, which
+                    // is where they were and read as unrelated.
+                    Toggle {
+                        visible: VtlConfig.settingsNavMode === "sidebar"
+                        indent:  true
+                        label:   "Show section names"
+                        sub:     "Spell the names out next to the icons instead of only on hover. The rail gets wider."
+                        on:      VtlConfig.settingsSidebarLabels
+                        onToggled: SettingsStore.set("settings_sidebar_labels", !VtlConfig.settingsSidebarLabels)
                     }
                     Column {
-                        width: parent.width; spacing: Style.rowGap
-                        visible: advHead.open
+                        visible: VtlConfig.settingsNavMode === "sidebar"
+                        width:   parent.width - 12
+                        x:       12                       // indented to match the Toggle above it
+                        spacing: 6
+                        FieldLabel { text: "Scrolling" }
+                        Segmented {
+                            equal:   true
+                            current: VtlConfig.settingsSidebarScroll
+                            segments: [{ label: "Sectioned", key: "segmented" },
+                                       { label: "Endless",   key: "endless"   }]
+                            onPicked: SettingsStore.set("settings_sidebar_scroll", key)
+                        }
+                        SubLabel {
+                            width: parent.width
+                            text: VtlConfig.settingsSidebarScroll === "segmented"
+                                  ? "One group at a time; wheel to move." : "All icons, one strip."
+                        }
+                    }
+
+                    FieldLabel { text: "Placement" }
+                    Segmented {
+                        equal: true
+                        current: VtlConfig.settingsFloat ? "float" : "docked"
+                        segments: [{ label: "Docked", key: "docked",
+                                     hint: "Attached to the bar, growing out of the icon you opened it from." },
+                                   { label: "Floating", key: "float",
+                                     hint: VtlConfig.settingsNavMode === "sidebar"
+                                           ? "Opens centred, as a window of its own."
+                                           : "The dashboard stays on the bar; the pages open as a centred window." }]
+                        onPicked: {
+                            SettingsStore.set("settings_float", key === "float")
+                            // Migrate the legacy combined value in the same breath, so the old "float"
+                            // string can never come back and override what was just chosen here.
+                            if (VtlConfig.settingsNavMode !== "")
+                                SettingsStore.set("settings_nav_mode", VtlConfig.settingsNavMode)
+                        }
+                    }
+
+                    // Size belongs to the placement that has it: the docked panel and the floating
+                    // window are two different shapes with two different jobs, and one number for both
+                    // is what forced the docked panel to be derived from the dashboard instead of set.
+                    // Auto is the old behaviour kept as an option, not a coupling: docked Auto is as big
+                    // as a dashboard page needs, floating Auto is 74% of the monitor. Step once and it
+                    // is yours — the dashboard's own size settings never move either way.
+                    SubGroup {
+                        // Which screen these two are for. A percentage is a share of the screen it
+                        // lands on, so one number cannot fit a 2560 desk monitor and a 1080 portrait
+                        // one at once — hence the chips rather than a single global value.
+                        FieldLabel {
+                            visible: root.menuScreens.length > 1
+                            text: "Size for"
+                            hint: "Which screen the two rows below are written for. \"All monitors\" is the "
+                                + "value every screen starts from; pick one to override just that screen."
+                        }
+                        Flow {
+                            visible: root.menuScreens.length > 1
+                            width: parent.width; spacing: 6
+                            Chip {
+                                label: "All monitors"
+                                selected: root.menuMon === ""
+                                onClicked: root.menuMon = ""
+                            }
+                            Repeater {
+                                model: root.menuScreens
+                                delegate: Chip {
+                                    required property var modelData
+                                    label:    modelData.name
+                                    selected: root.menuMon === modelData.name
+                                    onClicked: root.menuMon = modelData.name
+                                }
+                            }
+                        }
 
                         Stepper {
-                            label: "Vividness"
-                            value: root.wallustOpts.saturation ?? 20
-                            min:   0; max: 100; step: 5
-                            onChanged: root.setOpt("saturation", v)
+                            visible: !VtlConfig.settingsFloat
+                            label: "Width"; unit: root.menuPct("menu_dock_width_pct") > 0 ? "%" : ""
+                            step: 2; min: -1; max: 100
+                            value:   root.menuPct("menu_dock_width_pct") > 0
+                                     ? root.menuPct("menu_dock_width_pct") : UiState.menuPctDockW
+                            display: root.menuPct("menu_dock_width_pct") > 0 ? "" : "Auto"
+                            hint: "Width of the docked menu, as a share of this monitor. Auto = as wide as a "
+                                + "dashboard page needs."
+                            onChanged: root.saveMenuPct("menu_dock_width_pct", v)
                         }
-
-                        FieldLabel { text: "Palette" }
-                        Dropdown {
-                            summary: root.optLabel(root.paletteOptions, root.wallustOpts.palette ?? "saliencedarkdistributed")
-                            options: root.paletteOptions.map(function(o) {
-                                return { key: o.key, label: o.label,
-                                         on: (root.wallustOpts.palette ?? "saliencedarkdistributed") === o.key }
-                            })
-                            onPicked: root.setOpt("palette", key)
+                        Stepper {
+                            visible: !VtlConfig.settingsFloat
+                            label: "Height"; unit: root.menuPct("menu_dock_height_pct") > 0 ? "%" : ""
+                            step: 2; min: -1; max: 100
+                            value:   root.menuPct("menu_dock_height_pct") > 0
+                                     ? root.menuPct("menu_dock_height_pct") : UiState.menuPctDockH
+                            display: root.menuPct("menu_dock_height_pct") > 0 ? "" : "Auto"
+                            hint: "Height of the docked menu, as a share of this monitor. Auto = as tall as a "
+                                + "dashboard page needs; set it shorter and the dashboard pages what no longer fits."
+                            onChanged: root.saveMenuPct("menu_dock_height_pct", v)
                         }
-
-                        FieldLabel { text: "Backend" }
-                        Dropdown {
-                            summary: root.optLabel(root.backendOptions, root.wallustOpts.backend ?? "wal")
-                            options: root.backendOptions.map(function(o) {
-                                return { key: o.key, label: o.label,
-                                         on: (root.wallustOpts.backend ?? "wal") === o.key }
-                            })
-                            onPicked: root.setOpt("backend", key)
+                        Stepper {
+                            visible: VtlConfig.settingsFloat
+                            label: "Width"; unit: root.menuPct("menu_float_width_pct") > 0 ? "%" : ""
+                            step: 2; min: -1; max: 100
+                            value:   root.menuPct("menu_float_width_pct") > 0
+                                     ? root.menuPct("menu_float_width_pct") : UiState.menuPctFloatW
+                            display: root.menuPct("menu_float_width_pct") > 0 ? "" : "Auto"
+                            hint: "Width of the floating settings window, as a share of this monitor. Auto = 74%."
+                            onChanged: root.saveMenuPct("menu_float_width_pct", v)
                         }
-
-                        FieldLabel { text: "Colorspace"
-                                     hint: "How wallust pulls the palette out of the image and spreads it across the slots. The defaults suit most wallpapers."
-                                           + "\n\n" + "The pinned preview at the top updates as you tweak these. Hit “Apply” to push the new colours to the whole desktop now (otherwise they land on the next wallpaper change)." }
-                        Dropdown {
-                            summary: root.optLabel(root.colorspaceOptions, root.wallustOpts.colorspace ?? "lab")
-                            options: root.colorspaceOptions.map(function(o) {
-                                return { key: o.key, label: o.label,
-                                         on: (root.wallustOpts.colorspace ?? "lab") === o.key }
-                            })
-                            onPicked: root.setOpt("colorspace", key)
-                        }
-                    }
-
-                }
-
-                CardLabel {
-                    visible: !root.autoMode
-                    text: root.schemes.length ? "FIXED SCHEME" : "No schemes in fixed_colors/"
-                            hint: "A hand-picked palette that ignores the wallpaper. Click one to apply it — the pinned preview at the top updates to match." }
-                Column {
-                    width: parent.width; spacing: 4
-                    visible: !root.autoMode
-                    Repeater {
-                        model: root.schemes
-                        delegate: Item {
-                            required property string modelData
-                            readonly property bool   sel:    root.selected === modelData
-                            readonly property var    cmap:   root.schemeColors[modelData] ?? {}
-                            width: parent ? parent.width : 0
-                            height: 50
-
-                            StyledRect {
-                                anchors.fill: parent
-                                radius:       Style.rControl
-                                color:        sel ? Style.selFill : (hov.containsMouse ? Style.controlHover : Style.controlFill)
-                                borderWidth:  sel ? Style.selBorderW : Style.controlBorderW
-                                borderColor:  sel ? Style.selBorderColor : Style.controlBorderColor
-                                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
-                            }
-                            Text {
-                                anchors { left: parent.left; leftMargin: 12
-                                          verticalCenter: parent.verticalCenter }
-                                text:  root.displayName(modelData)
-                                color: sel ? Style.selText : Colors.fgPrimary
-                                font.pixelSize: Style.fsLabel; font.family: Style.font
-                                font.capitalization: Font.Capitalize
-                            }
-                            Row {
-                                anchors { right: checkMark.left; rightMargin: 8
-                                          verticalCenter: parent.verticalCenter }
-                                spacing: 3
-                                Repeater {
-                                    model: root.swatchKeys
-                                    delegate: Rectangle {
-                                        required property string modelData
-                                        width: 14; height: 14; radius: 3
-                                        color: cmap[modelData] ?? "transparent"
-                                        border.width: 1
-                                        border.color: Qt.rgba(0,0,0,0.25)
-                                    }
-                                }
-                            }
-                            Text {
-                                id: checkMark
-                                visible: sel
-                                anchors { right: parent.right; rightMargin: 10
-                                          verticalCenter: parent.verticalCenter }
-                                text: "✓"; color: Style.selText
-                                font.pixelSize: 12; font.family: Style.font
-                            }
-                            MouseArea { id: hov; anchors.fill: parent; hoverEnabled: true
-                                        onClicked: { root.selected = modelData; root.applyColours() } }
+                        Stepper {
+                            visible: VtlConfig.settingsFloat
+                            label: "Height"; unit: root.menuPct("menu_float_height_pct") > 0 ? "%" : ""
+                            step: 2; min: -1; max: 100
+                            value:   root.menuPct("menu_float_height_pct") > 0
+                                     ? root.menuPct("menu_float_height_pct") : UiState.menuPctFloatH
+                            display: root.menuPct("menu_float_height_pct") > 0 ? "" : "Auto"
+                            hint: "Height of the floating settings window, as a share of this monitor. Auto = 74%."
+                            onChanged: root.saveMenuPct("menu_float_height_pct", v)
                         }
                     }
                 }
+            }
 
-                // ── Build your own + saved custom palettes ─────────────────────────
-                Column {
-                    width: parent.width; spacing: 6
-                    visible: !root.autoMode
+            Column {
+                visible: root.tab === "theme"
+                width:   col.width
+                spacing: Style.cardGap
 
-                    CardLabel { visible: root.userPalettes.length > 0; text: "YOUR PALETTES"
-                                hint: "Set your own colours in a live editor — the rest derives with readable contrast." }
-                    Repeater {
-                        model: root.userPalettes
-                        delegate: Item {
-                            id: urow
-                            required property var modelData
-                            readonly property var pcolors: modelData.colors ?? ({})
-                            width: parent ? parent.width : 0; height: 50
-                            StyledRect {
-                                anchors.fill: parent; radius: Style.rControl
-                                color: uh.containsMouse ? Style.controlHover : Style.controlFill
-                                borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
-                                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
-                            }
-                            // Whole-row click applies the palette (declared first = under the edit button).
-                            MouseArea { id: uh; anchors.fill: parent; hoverEnabled: true
-                                        onClicked: root.applyCustom(urow.modelData.path) }
-                            Text {
-                                anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                                text: urow.modelData.name + "  · yours"; color: Colors.fgPrimary
-                                font.pixelSize: Style.fsLabel; font.family: Style.font; font.capitalization: Font.Capitalize
-                            }
-                            Row {
-                                anchors { right: editBtn.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                                spacing: 3
-                                Repeater {
-                                    model: root.swatchKeys
-                                    delegate: Rectangle {
-                                        required property string modelData
-                                        width: 14; height: 14; radius: 3
-                                        color: urow.pcolors[modelData] ?? "transparent"
-                                        border.width: 1; border.color: Qt.rgba(0, 0, 0, 0.25)
-                                    }
-                                }
-                            }
-                            // Edit: reopen the build-your-own editor loaded with this palette.
-                            Rectangle {
-                                id: editBtn
-                                anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                                width: 30; height: 30; radius: Style.rControl
-                                color: ebHov.containsMouse ? Style.controlHover : "transparent"
-                                Text { anchors.centerIn: parent; text: "󰏫"; color: Colors.fgMuted
-                                       font.pixelSize: 14; font.family: Style.font }
-                                MouseArea {
-                                    id: ebHov; anchors.fill: parent; hoverEnabled: true
-                                    onClicked: {
-                                        UiState.paletteEditorSeed = { colors: urow.modelData.colors, name: urow.modelData.name }
-                                        UiState.paletteEditorMon = UiState.menuMon
-                                        UiState.openDropdown = ""
-                                        UiState.paletteEditorOpen = true
-                                    }
-                                }
-                            }
+                // ── Theme ─────────────────────────────────────────────────────────
+                // A theme is a whole desktop on top of Velumeron, not a colour scheme: its own tokens,
+                // its own arrangement, its own components for the surfaces it wants to own, and its own
+                // settings pages. See quickshell/Theme.qml. There used to be a second picker next to
+                // this one — "styles", the template registry — which said where the bar goes in a
+                // second place and could fight what a theme had just arranged. Themes absorbed it.
+                Card {
+                    // Re-scan when the page comes up: a theme is a folder, so one can appear while the
+                    // shell is running and the picker has no other way to notice.
+                    Component.onCompleted: Theme.refresh()
+                    CardLabel { text: "THEME"
+                                hint: "A theme decides the shape of the shell — where the bar goes, "
+                                      + "the chrome, the font, its own lockscreen. Click one to wear "
+                                      + "it, click it again to open the builder. Colours always come "
+                                      + "from your wallpaper, whichever theme you run." }
+
+                    Flow {
+                        id: themeGrid
+                        width: parent.width; spacing: 8
+                        // A card is a WINDOW onto a desktop, so it keeps a desktop's proportions —
+                        // two per row on a docked panel is right, and two per row on a floating one
+                        // 1870 px wide turns each into a letterbox. So the width is a target, not a
+                        // share: as many columns as fit at ~300 px, and the leftover is spread
+                        // across them rather than stretching two cards over the whole page.
+                        readonly property int cols: Math.max(1, Math.min(5, Math.floor(width / 300)))
+                        readonly property real cw: Math.floor((width - spacing * (cols - 1)) / cols)
+                        Repeater {
+                            // Parked themes (shipped but not built out, `wip` in their theme.json) are
+                            // hidden entirely for now. ThemeCard still draws the SOON badge, so
+                            // dropping this filter is all it takes to bring them back.
+                            model: Theme.available.filter(function (t) { return !t.wip })
+                            delegate: ThemeCard { required property var modelData; theme: modelData; width: themeGrid.cw }
                         }
                     }
 
+                    // Inline rename editor.
+                    Rectangle {
+                        width: parent.width; height: 40; radius: Style.rControl
+                        visible: root._themeEdit !== ""
+                        color: Style.controlFill
+                        border.width: Style.controlBorderW; border.color: Style.controlBorderColor
+                        Row {
+                            anchors { fill: parent; leftMargin: 12; rightMargin: 8 }
+                            spacing: 8
+                            TextInput {
+                                id: themeNameInput
+                                width: parent.width - 128
+                                anchors.verticalCenter: parent.verticalCenter
+                                color: Colors.fgBright; font.pixelSize: Style.fsLabel; font.family: Style.font
+                                clip: true; selectByMouse: true
+                                onAccepted: root._themeCommit()
+                                Keys.onEscapePressed: root._themeEdit = ""
+                                Text { anchors.fill: parent; verticalAlignment: Text.AlignVCenter
+                                       visible: themeNameInput.text === ""; text: "Theme name…"
+                                       color: Colors.fgMuted; font: themeNameInput.font }
+                            }
+                            TextButton { primary: true; label: "OK"; anchors.verticalCenter: parent.verticalCenter
+                                         onClicked: root._themeCommit() }
+                            TextButton { label: "Cancel"; anchors.verticalCenter: parent.verticalCenter
+                                         onClicked: root._themeEdit = "" }
+                        }
+                    }
+
+                    Flow {
+                        width: parent.width; spacing: 8
+                        // "Make mine" rather than "Duplicate": the copy carries the settings you have
+                        // actually made, not the shipped snapshot you started from.
+                        TextButton { label: "Make mine"; onClicked: Theme.fork(Theme.themeId, "") }
+                        // Wearing a theme restores YOUR version of it. This is the way back to the
+                        // shipped one, and the only thing that forgets what you changed.
+                        TextButton { label: "Reset to default"
+                                     visible: Theme.arrangementFor(Theme.themeId) !== null
+                                     onClicked: Theme.resetArrangement(Theme.themeId) }
+                        TextButton { label: "Rename"; visible: root.themeIsMine
+                                     onClicked: root._themeBeginRename() }
+                        TextButton { label: "Delete"; visible: root.themeIsMine
+                                     onClicked: root.deleteTheme(Theme.themeId) }
+                    }
+                }
+
+                // ── What the THEME itself offers ──────────────────────────────────────
+                // A theme may bring its own controls, and they belong here rather than in a page of
+                // their own: the theme is picked one card up, and its knobs are part of picking it.
+                // Wear a theme that brings none and this simply is not here — which is also why it is a
+                // Repeater over the pages the theme declares rather than something the shell knows.
+                //
+                // The page draws its own controls. It cannot see the shell's component library any more
+                // than it can see Style, so it gets a context and a height, and nothing else.
+                Repeater {
+                    model: Theme.settingsPages
+                    delegate: Card {
+                        id: themeCard
+                        required property var modelData
+                        CardLabel {
+                            text: ("" + (themeCard.modelData.title || Theme.name)).toUpperCase()
+                            hint: "Brought by the " + Theme.name + " theme. Another theme brings its "
+                                  + "own, or none — and your settings here wait for you to come back."
+                        }
+                        Loader {
+                            id: themePage
+                            width: parent.width
+                            height: themePage.item ? themePage.item.implicitHeight : 0
+                            source: themeCard.modelData.url || ""
+                            // Bound, not assigned: the context carries the theme's live settings object,
+                            // so a control on this page has to move when the value it writes moves.
+                            onLoaded: themePage.item.ctx = Qt.binding(function () { return root.themePageContext })
+                            onStatusChanged: if (status === Loader.Error)
+                                console.warn("theme:", Theme.themeId, "settings page failed to load:",
+                                             themeCard.modelData.url)
+                        }
+                    }
+                }
+
+                // ── Build a theme ─────────────────────────────────────────────────
+                Card {
+                    CardLabel { text: "BUILD A THEME"
+                                hint: "Fine-tune the live look step by step — bar, menus, launcher, font — and optionally save it as a named preset. Everything applies live." }
                     Rectangle {
                         width: parent.width; height: 44; radius: Style.rControl
-                        color: byoHov.containsMouse ? Style.accent : Style.tint(Style.accent, 0.22)
+                        color: buildHov.containsMouse ? Style.accent : Style.tint(Style.accent, 0.22)
                         border.width: 1; border.color: Style.accent
                         Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
-                        Text { anchors.centerIn: parent; text: "󰏘   Build your own"
-                               color: byoHov.containsMouse ? Style.onAccent : Colors.fgPrimary
+                        Text { anchors.centerIn: parent; text: "󰏘   Build a theme"
+                               color: buildHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
                                font.pixelSize: 14; font.bold: true; font.family: Style.font }
-                        MouseArea { id: byoHov; anchors.fill: parent; hoverEnabled: true
-                                    onClicked: {
-                                        UiState.paletteEditorSeed = null   // fresh, from the live palette
-                                        UiState.paletteEditorMon = UiState.menuMon
-                                        UiState.openDropdown = ""
-                                        UiState.paletteEditorOpen = true
-                                    } }
+                        MouseArea { id: buildHov; anchors.fill: parent; hoverEnabled: true
+                                    onClicked: { root.page = "build"; buildName.text = "" } }
                     }
-                }
-
-                Row {
-                    width: parent.width
-                    Text {
-                        width: parent.width - 72; anchors.verticalCenter: parent.verticalCenter
-                        text: root.colorStatus; color: Colors.fgMuted; font.pixelSize: 11
-                        elide: Text.ElideRight; font.family: Style.font
-                    }
-                    TextButton { primary: true; label: "Apply"; onClicked: root.applyColours() }
                 }
             }
 
-            // ── Appearance: desktop-wide dark/light + app theming ─────────────
-            Card {
-                CardLabel { text: "APPEARANCE"
-                            hint: "Desktop-wide dark/light preference (xdg color-scheme + GTK variant) for portal-aware apps and websites. Shell and terminal colours stay untouched." }
-                Segmented {
-                    equal: true
-                    segments: [{ label: "󰖔  Dark", key: "dark" }, { label: "󰖨  Light", key: "light" }]
-                    current: root.appMode
-                    onPicked: key => root.appTheme("mode " + key)
-                }
-                Toggle {
-                    label: "Theme GTK apps"
-                    sub:   "adw-gtk3 + live wallust palette"
-                    on:    root.gtkTheming
-                    onToggled: root.appTheme("gtk " + (root.gtkTheming ? "off" : "on"))
-                }
-                Toggle {
-                    label: "Theme Qt apps"
-                    sub:   "qt5ct/qt6ct palette from the live colors"
-                    on:    root.qtTheming
-                    onToggled: root.appTheme("qt " + (root.qtTheming ? "off" : "on"))
-                }
-                FieldLabel { text: "App icon theme"
-                             hint: "Applies the icon theme to GTK/Qt apps live (gsettings + gtk-3/4 settings.ini). The shell's own icons re-theme on the next restart." }
-                Dropdown {
-                    summary: root.appIcon === "" ? "(system default)" : root.appIcon
-                    options: root.iconThemes.map(function (t) {
-                        return { label: t, key: t, on: t === root.appIcon }
-                    })
-                    // JSON.stringify quotes the name so themes with spaces (e.g. "Papirus Dark")
-                    // reach the script as one argument.
-                    onPicked: key => { root.appIcon = key; root.appTheme("icon " + JSON.stringify(key)) }
-                }
-                // Live preview of the picked theme — sits right under the selection so a switch is
-                // visible immediately (the shell's own icons only re-theme on the next restart).
-                Row {
-                    spacing: 8
-                    visible: root.iconPreview.length > 0
-                    Repeater {
-                        model: root.iconPreview
-                        delegate: Rectangle {
-                            required property var modelData
-                            width: 34; height: 34; radius: Style.rControl
-                            color: Colors.bgElement
-                            border.width: Style.controlBorderW; border.color: Style.controlBorderColor
-                            Image {
-                                anchors.centerIn: parent
-                                width: 24; height: 24; sourceSize.width: 48; sourceSize.height: 48
-                                fillMode: Image.PreserveAspectFit; smooth: true; asynchronous: true; cache: false
-                                source: "file://" + modelData
-                            }
+            Column {
+                visible: root.tab === "motion"
+                width:   col.width
+                spacing: Style.cardGap
+
+                // ── Motion (elastic "soft-mass" emergence) ────────────────────────
+                Card {
+                    CardLabel { text: "MOTION"
+                                hint: "How panels, menus and OSDs spring open. The free edges bow out by the spring's overshoot and wobble flat. Changes show the next time a surface opens." }
+
+                    Slider { label: "Spring";   from: 0.5;  to: 12;   decimals: 1
+                             value: VtlConfig.elasticSpring
+                             onMoved: v => root.save("elastic_spring", v) }
+                    Slider { label: "Wobble";   from: 0.05; to: 0.6;  decimals: 2; labelWidth: 96
+                             // stored as damping (inverse of wobble): drag right = MORE wobble = less damping
+                             value: (0.65 - VtlConfig.elasticDamping)
+                             onMoved: v => root.save("elastic_damping", Math.max(0.05, 0.65 - v)) }
+                    Slider { label: "Edge bow";  from: 0; to: 260; decimals: 0; step: 2
+                             value: VtlConfig.elasticTopBulge
+                             onMoved: v => root.save("elastic_top_bulge", v) }
+                    Slider { label: "Side bow";  from: 0; to: 300; decimals: 0; step: 2
+                             value: VtlConfig.elasticSideBulge
+                             onMoved: v => root.save("elastic_side_bulge", v) }
+                    Slider { label: "Size over"; from: 0; to: 0.4; decimals: 2
+                             value: VtlConfig.elasticSizeOver
+                             onMoved: v => root.save("elastic_size_over", v) }
+
+                    TextButton {
+                        label: "Reset motion"
+                        onClicked: {
+                            root.save("elastic_spring", 5.0);   root.save("elastic_damping", 0.36)
+                            root.save("elastic_top_bulge", 86); root.save("elastic_side_bulge", 144)
+                            root.save("elastic_size_over", 0.10)
                         }
                     }
-                }
-            }
 
-            // ── Build a theme ─────────────────────────────────────────────────
-            Card {
-                CardLabel { text: "BUILD A THEME"
-                            hint: "Fine-tune the live look step by step — bar, menus, launcher, font — and optionally save it as a named preset. Everything applies live." }
-                Rectangle {
-                    width: parent.width; height: 44; radius: Style.rControl
-                    color: buildHov.containsMouse ? Style.accent : Style.tint(Style.accent, 0.22)
-                    border.width: 1; border.color: Style.accent
-                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
-                    Text { anchors.centerIn: parent; text: "󰏘   Build a theme"
-                           color: buildHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
-                           font.pixelSize: 14; font.bold: true; font.family: Style.font }
-                    MouseArea { id: buildHov; anchors.fill: parent; hoverEnabled: true
-                                onClicked: { root.page = "build"; buildName.text = "" } }
-                }
-            }
-
-            // ── Motion (elastic "soft-mass" emergence) ────────────────────────
-            Card {
-                CardLabel { text: "MOTION"
-                            hint: "How panels, menus and OSDs spring open. The free edges bow out by the spring's overshoot and wobble flat. Changes show the next time a surface opens." }
-
-                Slider { label: "Spring";   from: 0.5;  to: 12;   decimals: 1
-                         value: VtlConfig.elasticSpring
-                         onMoved: v => root.save("elastic_spring", v) }
-                Slider { label: "Wobble";   from: 0.05; to: 0.6;  decimals: 2; labelWidth: 96
-                         // stored as damping (inverse of wobble): drag right = MORE wobble = less damping
-                         value: (0.65 - VtlConfig.elasticDamping)
-                         onMoved: v => root.save("elastic_damping", Math.max(0.05, 0.65 - v)) }
-                Slider { label: "Edge bow";  from: 0; to: 260; decimals: 0; step: 2
-                         value: VtlConfig.elasticTopBulge
-                         onMoved: v => root.save("elastic_top_bulge", v) }
-                Slider { label: "Side bow";  from: 0; to: 300; decimals: 0; step: 2
-                         value: VtlConfig.elasticSideBulge
-                         onMoved: v => root.save("elastic_side_bulge", v) }
-                Slider { label: "Size over"; from: 0; to: 0.4; decimals: 2
-                         value: VtlConfig.elasticSizeOver
-                         onMoved: v => root.save("elastic_size_over", v) }
-
-                TextButton {
-                    label: "Reset motion"
-                    onClicked: {
-                        root.save("elastic_spring", 5.0);   root.save("elastic_damping", 0.36)
-                        root.save("elastic_top_bulge", 86); root.save("elastic_side_bulge", 144)
-                        root.save("elastic_size_over", 0.10)
+                    Toggle {
+                        label: "Low memory mode"
+                        sub:   "Shares one render thread across all windows (~290 MB less RAM) at the cost of animation smoothness. Restart the shell to apply."
+                        on:    VtlConfig.lowMemoryMode
+                        onToggled: root.save("low_memory_mode", !VtlConfig.lowMemoryMode)
                     }
                 }
-
-                Toggle {
-                    label: "Low memory mode"
-                    sub:   "Shares one render thread across all windows (~290 MB less RAM) at the cost of animation smoothness. Restart the shell to apply."
-                    on:    VtlConfig.lowMemoryMode
-                    onToggled: root.save("low_memory_mode", !VtlConfig.lowMemoryMode)
-                }
             }
+
         }
     }
 
@@ -1389,7 +1443,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 Text { text: "Build a theme"; color: Colors.fgBright
                        font.pixelSize: 15; font.bold: true; font.family: Style.font }
-                Text { text: "Base: " + (Templates.activeName || "—"); color: Colors.fgMuted
+                Text { text: "Base: " + (Theme.name || "—"); color: Colors.fgMuted
                        font.pixelSize: 10; font.family: Style.font }
             }
         }
@@ -1404,10 +1458,10 @@ Item {
                 width: parent.width
                 spacing: Style.cardGap
 
-                // 1 · Save the current look as a named preset (snapshots settings.json as it is right now).
+                // 1 · Keep the current look as a theme of your own (a fork of the one you wear).
                 Card {
-                    CardLabel { text: "1 · SAVE AS PRESET"
-                                hint: "Snapshots the current look into a named preset you can re-apply later. Adjust the sections below first, then save — your live settings and the shipped styles are untouched either way. Optional." }
+                    CardLabel { text: "1 · SAVE AS A THEME"
+                                hint: "Forks the theme you are wearing into one that is yours, carrying the settings you have made. Adjust the sections below first, then save — the shipped themes are never touched. Optional."  }
                     Rectangle {
                         width: parent.width; height: 40; radius: Style.rControl
                         color: Style.controlFill
@@ -1421,13 +1475,13 @@ Item {
                                 anchors.verticalCenter: parent.verticalCenter
                                 color: Colors.fgBright; font.pixelSize: Style.fsLabel; font.family: Style.font
                                 clip: true; selectByMouse: true
-                                onAccepted: if (text.trim() !== "") { Templates.createAndBuild(text.trim()); buildName.text = "" }
+                                onAccepted: if (text.trim() !== "") { Theme.fork(Theme.themeId, text.trim()); buildName.text = "" }
                                 Text { anchors.fill: parent; verticalAlignment: Text.AlignVCenter
-                                       visible: buildName.text === ""; text: "Preset name…"
+                                       visible: buildName.text === ""; text: "Theme name…"
                                        color: Colors.fgMuted; font: buildName.font }
                             }
-                            TextButton { primary: true; label: "Save preset"; anchors.verticalCenter: parent.verticalCenter
-                                         onClicked: if (buildName.text.trim() !== "") { Templates.createAndBuild(buildName.text.trim()); buildName.text = "" } }
+                            TextButton { primary: true; label: "Save theme"; anchors.verticalCenter: parent.verticalCenter
+                                         onClicked: if (buildName.text.trim() !== "") { Theme.fork(Theme.themeId, buildName.text.trim()); buildName.text = "" } }
                         }
                     }
                 }
@@ -1580,18 +1634,31 @@ Item {
         }
     }
 
-    // ── Template preview card: mini-mock of bar position/mode over the template's wallpaper
-    //    (or a per-style tint), name + built-in tag, active ring. Click activates. ──────────
-    component TemplateCard: Item {
+    // One card = one theme, drawn as a shrunken desktop rather than a name in a list.
+    //
+    // It draws with THAT THEME's tokens, not the shell's current ones: every card looked identical
+    // apart from where the bar sat, because they all read the active Style. Now the card resolves
+    // the theme's own table (Theme.tableFor → Style.resolveTable) — its radii, its fills, its
+    // borders — against the LIVE wallust palette. So the shape on the card is the shape you will
+    // get, and the colours are still yours, which is the one thing a theme never decides.
+    component ThemeCard: Item {
         id: tc
-        property var tpl: ({})
-        readonly property bool  active: !!tpl.active
-        readonly property string pos:  tpl.bar_position || "top"
-        readonly property string mode: tpl.bar_mode || "frame"
-        // Only mirobo (and the user's own forks of it) is a real, selectable style for now; every
-        // other shipped style is parked as a dimmed "SOON" preview until it is fully built out.
-        readonly property bool  wip:  !!tpl.builtin && (tpl.id || "") !== "mirobo"
-        height: 150
+        property var theme: ({})
+        readonly property bool   active: Theme.themeId === (tc.theme.id || "")
+        readonly property string pos:    tc.theme.bar_position || "top"
+        readonly property string mode:   tc.theme.bar_mode || "frame"
+        // Parked: shipped but not built out. Dimmed, badged, and inert until it is finished.
+        readonly property bool   wip:    !!tc.theme.wip
+        // The theme's own look, resolved.
+        readonly property var    look:   Style.resolveTable(Theme.tableFor(tc.theme.base || "flat",
+                                                                          tc.theme.tokens || ({})))
+        readonly property int    barR:   tc.theme.bar_inner_radius || 0
+        readonly property bool   pills:  (tc.theme.bar_module_bg || "module") !== "none"
+        // A screen's proportions, plus the two lines of caption under it. Fixed at 150 the card
+        // stretched into a letterbox the moment the panel got wide, and a desktop drawn in a
+        // letterbox stops reading as a desktop.
+        readonly property int captionH: 46
+        height: Math.round((tc.width - 10) * 9 / 16) + tc.captionH
 
         StyledRect {
             anchors.fill: parent
@@ -1603,88 +1670,63 @@ Item {
             Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         }
 
-        // Mock viewport.
-        Item {
+        // ── The preview: a window onto the desktop this theme makes ─────────────────────────────
+        // Not a drawing of one. Three attempts at a drawn card all failed the same way — the shell
+        // can only vary a corner radius and a typeface for a theme it does not know, so a terminal
+        // report and a card desktop came out as the same picture twice. ThemePreview shows instead:
+        // the picture actually on your desk, the theme's own backdrop over it, the bar its
+        // arrangement asks for, and its real dashboard component where it brings one.
+        //
+        // What those components are handed: the shared context (live palette — colours belong to
+        // the wallpaper, not to the theme) with the THEME's font and resolved tokens written over
+        // it, plus enough plausible facts to draw with. Fixed figures on purpose: a picker card is
+        // not a monitor, and wiring one to the live services would start them per card.
+        readonly property var cardCtx: {
+            var c = Style.themeContext()
+            c.font   = (tc.theme.ui_font || "") !== "" ? tc.theme.ui_font : Style.font
+            c.tokens = tc.look
+            c.name   = tc.theme.name || tc.theme.id || ""
+            c.worn   = tc.active
+            c.surfaces = (tc.theme.components || []).length
+            c.insets = ({ "top": 0, "bottom": 0, "left": 0, "right": 0 })
+            c.settings = ({})
+            c.host = "velumeron"; c.kernel = "7.1.8"; c.uptime = "1d 23h"; c.user = "vredix"
+            c.load = ({ "cpu": 6, "mem": 38, "disk": 81 })
+            c.battery = ({ "present": false })
+            c.media = ({ "title": "", "playing": false })
+            c.notifications = ({ "count": 0, "dnd": false })
+            c.workspaces = [{ "slot": 1, "focused": true }]
+            c.state = ({ "volume": 0.7, "brightness": 1.0, "profile": "balanced" })
+            c.actions = ({})
+            return c
+        }
+
+        ThemePreview {
             id: mock
             opacity: tc.wip ? 0.4 : 1
             anchors { top: parent.top; left: parent.left; right: parent.right; margins: 5 }
-            height: parent.height - 34
-            clip: true
-
-            // ── Mini desktop mock — a shrunken real UI, not just a font sample: it reads the LIVE
-            //    palette (Colors) + style tokens (Style) + the template's font, so the card shows the
-            //    theme's colours, chrome and bar shape at a glance. ────────────────────────────────
-            readonly property string tcFont: (tc.tpl.ui_font || "") !== "" ? tc.tpl.ui_font : Style.font
-            // Palette-tinted backdrop (subtle accent wash) + an optional wallpaper the template carries.
-            Rectangle {
-                anchors.fill: parent; radius: 5
-                gradient: Gradient {
-                    GradientStop { position: 0.0; color: Colors.bgPrimary }
-                    GradientStop { position: 1.0; color: Style.tint(Colors.bgActive, 0.12) }
-                }
-            }
-            Image {
-                anchors.fill: parent; visible: (tc.tpl.wallpaper || "") !== ""
-                source: (tc.tpl.wallpaper || "") !== "" ? "file://" + tc.tpl.wallpaper : ""
-                fillMode: Image.PreserveAspectCrop; sourceSize.width: 200; asynchronous: true; opacity: 0.5
-            }
-            // Mini bar: workspace pill (accent) + dots · clock in the theme font · status dots.
-            Rectangle {
-                id: miniBar
-                anchors { left: parent.left; right: parent.right; top: parent.top
-                          margins: tc.mode === "float" ? 6 : 0 }
-                height: 20; radius: tc.mode === "float" ? 6 : 0
-                color: Style.tint(Colors.bgElement, 0.9)
-                Row {
-                    anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
-                    spacing: 3
-                    Rectangle { width: 13; height: 8; radius: 4; color: Colors.bgActive; anchors.verticalCenter: parent.verticalCenter }
-                    Rectangle { width: 6; height: 6; radius: 3; color: Style.tint(Colors.fgMuted, 0.6); anchors.verticalCenter: parent.verticalCenter }
-                    Rectangle { width: 6; height: 6; radius: 3; color: Style.tint(Colors.fgMuted, 0.6); anchors.verticalCenter: parent.verticalCenter }
-                }
-                Text {
-                    anchors.centerIn: parent; text: "12:34"; color: Colors.fgBright
-                    font.family: tc.tcFont; font.pixelSize: 11; font.bold: true
-                }
-                Row {
-                    anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
-                    spacing: 4
-                    Rectangle { width: 6; height: 6; radius: 3; color: Colors.fgMuted; anchors.verticalCenter: parent.verticalCenter }
-                    Rectangle { width: 6; height: 6; radius: 3; color: Colors.fgMuted; anchors.verticalCenter: parent.verticalCenter }
-                }
-            }
-            // Mini menu card — shows the style's chrome (radius / border / fill) + an accent header.
-            Rectangle {
-                anchors { left: parent.left; leftMargin: 10; top: miniBar.bottom; topMargin: 10 }
-                width: Math.round(parent.width * 0.48)
-                height: parent.height - miniBar.height - 30
-                radius: Math.max(3, Math.round(Style.rCard * 0.55))
-                color: Style.tint(Colors.bgElement, 0.7)
-                border.width: 1; border.color: Style.tint(Colors.boNormal, 0.5)
-                Column {
-                    anchors { left: parent.left; top: parent.top; leftMargin: 6; topMargin: 6; right: parent.right; rightMargin: 6 }
-                    spacing: 5
-                    Rectangle { width: 24; height: 5; radius: 2.5; color: Colors.bgActive }
-                    Rectangle { width: parent.width; height: 3; radius: 1.5; color: Style.tint(Colors.fgMuted, 0.7) }
-                    Rectangle { width: Math.round(parent.width * 0.75); height: 3; radius: 1.5; color: Style.tint(Colors.fgMuted, 0.7) }
-                }
-            }
-            // Palette swatches — a peek at the actual wallust colours.
-            Row {
-                anchors { right: parent.right; bottom: parent.bottom; rightMargin: 9; bottomMargin: 9 }
-                spacing: 3
-                Repeater {
-                    model: [Colors.bgActive, Colors.color2, Colors.color5, Colors.color9, Colors.fgBright]
-                    delegate: Rectangle {
-                        required property var modelData
-                        width: 10; height: 10; radius: 2; color: modelData
-                        border.width: 1; border.color: Qt.rgba(0, 0, 0, 0.25)
-                    }
-                }
-            }
+            height: parent.height - tc.captionH
+            theme:     tc.theme
+            look:      tc.look
+            wallpaper: root.deskWallpaper
+            ctx:       tc.cardCtx
         }
 
-        // "SOON" badge on the parked styles.
+        // What the theme replaces, as a fact rather than as a picture that cannot hold it: a theme
+        // taking over fourteen surfaces is a different desktop, and no thumbnail says that.
+        Text {
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom
+                      leftMargin: 9; rightMargin: 9; bottomMargin: 24 }
+            text: ((tc.theme.components || []).length > 0
+                   ? ((tc.theme.components || []).length + " own surfaces")
+                   : "shipped surfaces")
+                  + "  ·  " + ((tc.theme.ui_font || "") !== "" ? tc.theme.ui_font : "shell font")
+            color: Colors.fgMuted
+            font.pixelSize: 10; font.family: Style.font
+            elide: Text.ElideRight
+        }
+
+        // "SOON" badge on the parked themes.
         Rectangle {
             visible: tc.wip
             anchors { top: mock.top; right: mock.right; topMargin: 4; rightMargin: 4 }
@@ -1700,7 +1742,7 @@ Item {
             spacing: 6
             Text {
                 width: parent.width - (tc.active ? 30 : 0)
-                text: (tc.tpl.name || "") + (tc.tpl.builtin ? "" : "  · yours")
+                text: (tc.theme.name || "") + (tc.theme.source === "user" ? "  · yours" : "")
                 color: tc.wip ? Colors.fgMuted : (tc.active ? Colors.fgBright : Colors.fgPrimary)
                 font.pixelSize: 12; font.bold: tc.active; font.family: Style.font
                 elide: Text.ElideRight
@@ -1709,15 +1751,14 @@ Item {
                    font.pixelSize: 13; font.family: Style.font }
         }
 
-        // mirobo (and its forks) activate on click; the active card re-opens the customiser.
-        // Parked "SOON" styles are inert until they are built out.
+        // Click to wear it; the one you are already wearing opens the builder.
         MouseArea {
             id: tcHov; anchors.fill: parent; hoverEnabled: !tc.wip
             cursorShape: tc.wip ? Qt.ArrowCursor : Qt.PointingHandCursor
             onClicked: {
                 if (tc.wip) return
                 if (tc.active) root.page = "build"
-                else           Templates.activate(tc.tpl.source, tc.tpl.id)
+                else           root.pickTheme(tc.theme.id)
             }
         }
     }
