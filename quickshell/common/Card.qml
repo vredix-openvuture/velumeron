@@ -9,8 +9,14 @@ StyledRect {
     // A card fills its parent, unless the parent is laying cards into COLUMNS — then it takes the
     // column width it is told. Asked for as a property rather than assigned by the container, so
     // the width stays a binding and a page that overrides it still wins.
-    width:        (parent && parent.cardWidth !== undefined) ? parent.cardWidth
-                                                             : (parent ? parent.width : 0)
+    //
+    // `spans` is the card saying it needs the whole row: the grid already places such a card at
+    // x = 0 and resumes the columns under it, and this is the other half of that — without it the
+    // card sat in a column's width at the full row's position.
+    property bool spans: false
+    width:        (parent && parent.cardWidth !== undefined)
+                  ? (card.spans ? parent.width : parent.cardWidth)
+                  : (parent ? parent.width : 0)
     radius:       Style.rCard
     color:        Style.cardFill
     borderWidth:  Style.cardBorderW

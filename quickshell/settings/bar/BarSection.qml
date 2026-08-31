@@ -56,6 +56,16 @@ Item {
     property var    modules:    ({})            // {edge:{group:[keys]}}
     property string activeEdge: "top"
     property string addTarget:  ""              // "edge:group" while the add-picker is open
+    // Which zone the in-page catalogue adds to, and how wide its chips are — one width for all of
+    // them, so the list reads as a list.
+    property string addZone: "start"
+    property real availChipW: 150
+    function isPlaced(key) {
+        var gs = ["start", "center", "end"]
+        for (var i = 0; i < gs.length; i++)
+            if (root.modList(root.activeEdge, gs[i]).indexOf(key) >= 0) return true
+        return false
+    }
     property string tab:        "form"          // form | style | modules — top-level tab
     property string customizeKey: ""            // module key whose customization overlay is open
     property var    fonts:      []              // installed font families (lazy fc-list)
@@ -919,34 +929,144 @@ Item {
                           + "here, this screen follows what you built instead."
                 }
 
+                // The edge picker is only a choice when the frame actually spans more than one
+                // edge — a dock or a float has exactly one, and a selector with a single option is
+                // just a row that cannot be used. It bands across the zones because it scopes all
+                // three of them.
                 Card {
-                    visible: root.mode !== "none"
+                    spans: true
+                    visible: root.mode !== "none" && root.currentEdges().length > 1
                     CardLabel {
-                        text: "PLACEMENT"
-                        hint: "Drag a chip to reorder it, or into another zone to move it there. The gear "
-                            + "opens that module's own settings, ✕ takes it off the bar."
-                    }
-                    // The edge picker is only a choice when the frame actually spans more than one
-                    // edge — a dock or a float has exactly one, and a selector with a single option
-                    // is just a row that cannot be used.
-                    FieldLabel {
-                        visible: root.currentEdges().length > 1
-                        text: "Edge"; hint: "Each edge of the frame carries its own set of modules."
+                        text: "EDGE"
+                        hint: "Each edge of the frame carries its own set of modules."
                     }
                     Segmented {
-                        visible:  root.currentEdges().length > 1
                         equal:    true
                         current:  root.activeEdge
                         segments: root.currentEdges().map(function (e) { return { label: root.cap(e), key: e } })
                         onPicked: root.activeEdge = key
                     }
+                }
 
-                    Zone { title: "Start";  grp: "start"
-                           hint: "The leading end of the bar — left on a horizontal bar, top on a vertical one." }
-                    Zone { title: "Center"; grp: "center"
-                           hint: "Centred on the bar, whatever the other two zones happen to hold." }
-                    Zone { title: "End";    grp: "end"
-                           hint: "The trailing end — right on a horizontal bar, bottom on a vertical one." }
+                // One card across the whole page, with the three zones side by side inside it — the
+                // bar itself is one strip with a start, a middle and an end, and stacking them as
+                // three blocks down a narrow column said nothing about that.
+                Card {
+                    visible: root.mode !== "none"
+                    CardLabel {
+                        text: "PLACEMENT"
+                        hint: "Drag a chip to reorder it, or into another zone to move it there. The "
+                            + "gear opens that module's own settings, ✕ takes it off the bar."
+                    }
+                    // Three across when the card is wide enough to carry them, stacked when it is
+                    // not — a zone under 260 px cannot hold a chip with a readable label.
+                    Grid {
+                        id: zoneGrid
+                        width: parent.width
+                        columns: width >= 3 * 260 + 2 * Style.cardGap ? 3 : 1
+                        columnSpacing: Style.cardGap
+                        rowSpacing: Style.cardGap
+                        readonly property real colW:
+                            Math.floor((width - (columns - 1) * Style.cardGap) / columns)
+                        Zone { width: zoneGrid.colW; title: "Start";  grp: "start"
+                               hint: "The leading end of the bar — left on a horizontal bar, top on a vertical one." }
+                        Zone { width: zoneGrid.colW; title: "Center"; grp: "center"
+                               hint: "Centred on the bar, whatever the other two zones happen to hold." }
+                        Zone { width: zoneGrid.colW; title: "End";    grp: "end"
+                               hint: "The trailing end — right on a horizontal bar, bottom on a vertical one." }
+                    }
+                }
+
+                // ── What you can add ────────────────────────────────────────────────────────
+                // The catalogue used to be a sub-page behind each zone's "+", so the tab showed
+                // only what was already placed and the other half of the job was hidden behind a
+                // button. Both halves are on the page now: what is ON the bar, and what there is
+                // to put on it. The "+" still opens the full-screen picker for anyone who prefers
+                // it; this is the same list, in place.
+                Card {
+                    visible: root.mode !== "none"
+                    CardLabel {
+                        text: "AVAILABLE"
+                        hint: "Click a module to add it to the zone picked beside this heading. "
+                            + "Anything already on this edge is dimmed — a module sits in one zone "
+                            + "at a time."
+                    }
+                    Row {
+                        width: parent.width
+                        spacing: 10
+                        FieldLabel { text: "Add to"; anchors.verticalCenter: parent.verticalCenter }
+                        Segmented {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Math.min(300, parent.width * 0.4)
+                            equal: true
+                            current: root.addZone
+                            segments: [{ label: "Start", key: "start" },
+                                       { label: "Center", key: "center" },
+                                       { label: "End", key: "end" }]
+                            onPicked: root.addZone = key
+                        }
+                    }
+                    Repeater {
+                        model: root.categories
+                        delegate: Column {
+                            id: catRow
+                            required property var modelData
+                            width: parent.width
+                            spacing: 6
+                            FieldLabel { text: catRow.modelData.title }
+                            Flow {
+                                width: parent.width
+                                spacing: 6
+                                Repeater {
+                                    model: catRow.modelData.keys
+                                    delegate: StyledRect {
+                                        id: avail
+                                        required property string modelData
+                                        readonly property bool placed: root.isPlaced(avail.modelData)
+                                        width:  root.availChipW
+                                        height: 28
+                                        radius: Style.rControl
+                                        opacity: avail.placed ? 0.42 : 1
+                                        color: avHov.containsMouse && !avail.placed ? Style.controlHover
+                                                                                    : Style.controlFill
+                                        borderWidth: Style.controlBorderW
+                                        borderColor: Style.controlBorderColor
+                                        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
+                                        Row {
+                                            anchors { left: parent.left; right: parent.right
+                                                      leftMargin: 8; rightMargin: 8
+                                                      verticalCenter: parent.verticalCenter }
+                                            spacing: 6
+                                            Text { anchors.verticalCenter: parent.verticalCenter
+                                                   text: root.iconFor(avail.modelData)
+                                                   color: Colors.fgPrimary
+                                                   font.pixelSize: 13; font.family: Style.iconFont }
+                                            Text { anchors.verticalCenter: parent.verticalCenter
+                                                   width: Math.max(0, parent.width - 13 - parent.spacing)
+                                                   elide: Text.ElideRight
+                                                   text: root.labelFor(avail.modelData)
+                                                   color: Colors.fgPrimary
+                                                   font.pixelSize: 12; font.family: Style.font }
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            id: avHov
+                                            hoverEnabled: true
+                                            cursorShape: avail.placed ? Qt.ArrowCursor : Qt.PointingHandCursor
+                                            onClicked: {
+                                                if (avail.placed) return
+                                                if (avail.modelData === "__new_group")
+                                                    root.addGroup(root.activeEdge, root.addZone)
+                                                else
+                                                    root.addModule(root.activeEdge, root.addZone,
+                                                                   avail.modelData)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1069,14 +1189,22 @@ Item {
 
     // One zone (Start / Center / End) for the active edge: a labelled drop area whose chips can
     // be dragged to reorder, with a subtle "+" that opens the add-module overlay.
+    // One zone of the bar — the drop area and its chips. Its NAME is the card's heading and the +
+    // sits beside it, so the three zones read as three cards rather than as three blocks stacked
+    // inside one, which is what made this tab look like a list with no shape.
     component Zone: Column {
         id: zone
         property string title: ""
         property string grp:   ""
         property string hint:  ""
         readonly property var mods: root.modList(root.activeEdge, zone.grp)
-        width:   parent ? parent.width : 0
         spacing: 6
+        // Two chips to a row, all the same width. Sized to their labels they came out at five
+        // different lengths and the zone read as a ragged pile; a module list is a list, and a
+        // list lines up.
+        readonly property int  chipCols: (zone.width - 12 - 6) / 2 >= 150 ? 2 : 1
+        readonly property real chipW: Math.max(90, Math.floor((zone.width - 12 - 6 * (zone.chipCols - 1))
+                                                              / zone.chipCols))
 
         Row {
             width: parent.width; spacing: 8
@@ -1091,6 +1219,7 @@ Item {
                        color: addHov.containsMouse ? Style.onAccent : Colors.fgPrimary
                        font.pixelSize: 14; font.family: Style.font }
                 MouseArea { id: addHov; anchors.fill: parent; hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
                             onClicked: root.addTarget = root.activeEdge + ":" + zone.grp }
             }
         }
@@ -1158,7 +1287,7 @@ Item {
 
                         Rectangle {
                             id: chipV
-                            width:  crow.implicitWidth + 16
+                            width:  zone.chipW
                             height: 28
                             radius: Style.rControl
                             color:  dragMA.drag.active ? Style.selFill : Style.controlFill
@@ -1202,13 +1331,20 @@ Item {
                             }
                             Row {
                                 id: crow
-                                anchors.centerIn: parent
+                                anchors { left: parent.left; right: parent.right
+                                          leftMargin: 8; rightMargin: 6
+                                          verticalCenter: parent.verticalCenter }
                                 spacing: 6
                                 Text { anchors.verticalCenter: parent.verticalCenter
                                        text: root.iconFor(slot.modelData)
                                        color: dragMA.drag.active ? Style.selText : Colors.fgPrimary
                                        font.pixelSize: 13; font.family: Style.iconFont }
                                 Text { anchors.verticalCenter: parent.verticalCenter
+                                       // Takes whatever the two buttons leave, and elides — a fixed
+                                       // chip width means a long module name has to give way rather
+                                       // than push the buttons out of the chip.
+                                       width: Math.max(0, crow.width - crow.spacing * 3 - 13 - 2 * 16)
+                                       elide: Text.ElideRight
                                        text: root.labelFor(slot.modelData)
                                        color: dragMA.drag.active ? Style.selText : Colors.fgPrimary
                                        font.pixelSize: 12; font.family: Style.font }

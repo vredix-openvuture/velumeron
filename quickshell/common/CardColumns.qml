@@ -100,7 +100,11 @@ Item {
             if (c.spans === true) {
                 flush()
                 if (c.rowHeight !== undefined) c.rowHeight = 0
-                rows.push({ "items": [c], "h": c.height, "span": true })
+                // A full-width CARD still grows with the rest — it is a row like any other, just
+                // one column wide times all of them. Only a bare band (a lead-in line, a nested
+                // layout with a height of its own) keeps what it is.
+                rows.push({ "items": [c], "h": c.contentHeight !== undefined ? c.contentHeight : c.height,
+                            "span": true, "fixed": c.rowHeight === undefined })
                 continue
             }
             row.push(c)
@@ -114,7 +118,7 @@ Item {
         var natural = 0, stretchable = 0
         for (var r = 0; r < rows.length; r++) {
             natural += rows[r].h
-            if (!rows[r].span) stretchable += rows[r].h
+            if (!rows[r].fixed) stretchable += rows[r].h
         }
         natural += Math.max(0, rows.length - 1) * cols.gap
         var surplus = (cols.fillHeight > 0 && stretchable > 0)
@@ -122,7 +126,7 @@ Item {
 
         for (var q = 0; q < rows.length; q++) {
             var rw = rows[q]
-            var h2 = rw.span ? rw.h : rw.h + surplus * (rw.h / stretchable)
+            var h2 = rw.fixed ? rw.h : rw.h + surplus * (rw.h / stretchable)
             for (var b = 0; b < rw.items.length; b++) {
                 var it = rw.items[b]
                 if (it.rowHeight !== undefined) it.rowHeight = h2
