@@ -18,6 +18,11 @@ Item {
 
     property var ctx: ({})
 
+    // Which row is selected. The shell owns it and binds it here directly rather than passing it
+    // inside `ctx`: it moves on every step, and a context object rebuilt that often hands this
+    // component a new model each time, which resets the view to the top.
+    property int cursor: 0
+
     readonly property var  pal:    root.ctx.palette || ({})
     readonly property string font: root.ctx.font || "monospace"
     readonly property color accent: root.pal.accent    || "#b269e0"
@@ -124,7 +129,7 @@ Item {
         clip: true
         interactive: false
         model: root.ctx.results || []
-        currentIndex: root.ctx.index || 0
+        currentIndex: root.cursor
         // The shell owns the selection, so the view follows it rather than the other way round.
         onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
 
