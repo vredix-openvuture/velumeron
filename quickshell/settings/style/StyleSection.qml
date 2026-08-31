@@ -23,6 +23,11 @@ Item {
     readonly property int pageCols: (parent && parent.pageCols !== undefined) ? parent.pageCols : 0
     // Its rooms have no ids: the visible one is whatever the column is currently as tall as.
     readonly property real pageContentH: col.implicitHeight + pinnedPreview.height + Style.cardGap + tabStrip.height + 18
+    // Where this page's card grid starts inside it. Zero for a page that is nothing but
+    // its grid; the ones with a header of their own say so, and the menu lines its
+    // preview card up with the grid rather than with the top of the page.
+    readonly property real pageGridY: (pinnedPreview.visible ? pinnedPreview.height + Style.cardGap : 0)
+                                      + tabStrip.height + 18
     readonly property real pageFillH: (parent && parent.pageFillH !== undefined) ? parent.pageFillH : 0
     readonly property real pageRowMin: (parent && parent.pageRowMin !== undefined) ? parent.pageRowMin : 0
 

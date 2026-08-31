@@ -21,6 +21,10 @@ Item {
     // How tall this page's content is, so the menu can be the size of its page rather than
     // a fixed box with half of it empty.
     readonly property real pageContentH: col.visible ? col.implicitHeight : 0
+    // Where this page's card grid starts inside it. Zero for a page that is nothing but
+    // its grid; the ones with a header of their own say so, and the menu lines its
+    // preview card up with the grid rather than with the top of the page.
+    readonly property real pageGridY: 0
     readonly property real pageFillH: (parent && parent.pageFillH !== undefined) ? parent.pageFillH : 0
     readonly property real pageRowMin: (parent && parent.pageRowMin !== undefined) ? parent.pageRowMin : 0
 

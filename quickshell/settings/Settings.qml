@@ -1161,7 +1161,12 @@ PanelWindow {
                 // The height the page has to work with, so its rows can grow into it instead of
                 // leaving the bottom half of the panel empty. The scroll still takes over when the
                 // content is genuinely taller than this.
-                property real pageFillH: pageLdr.height - 8
+                // Where the page's own grid starts, and how much height it has from there. Both are
+                // measured from the SAME line the preview beside it uses, or the two end on
+                // different rows and the cards stop lining up at the bottom.
+                readonly property real gridY: (pageLdr.item && pageLdr.item.pageGridY !== undefined)
+                                              ? pageLdr.item.pageGridY : 0
+                property real pageFillH: Math.max(120, pageLdr.height - 8 - pageLdr.gridY)
                 anchors.left:   parent.left
                 anchors.right:  content.previewOn ? deskSide.left : parent.right
                 anchors.bottom: parent.bottom
@@ -1183,8 +1188,9 @@ PanelWindow {
                 id: deskSide
                 visible: content.previewOn && pageLdr.visible
                 width: content.previewW
-                rowHeight: pageLdr.height - 8      // fills its column, like the rows beside it
-                anchors { right: parent.right; rightMargin: 18; top: pageLdr.top }
+                rowHeight: pageLdr.pageFillH       // exactly the rows beside it, top and bottom
+                anchors { right: parent.right; rightMargin: 18
+                          top: pageLdr.top; topMargin: pageLdr.gridY }
 
                 CardLabel {
                     text: root.sectionTitle(root.shownSection).toUpperCase()
