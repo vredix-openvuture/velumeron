@@ -500,6 +500,9 @@ PanelWindow {
                     font.family: Style.font; font.pixelSize: 10
                 }
 
+                // The theme's own veil over this panel (Console's scanlines).
+                ThemeSkin { anchors.fill: parent; kind: "notifications"; radius: Style.rCard }
+
                 // A theme that brings its own notification list draws the entries; the shell keeps
                 // the service, the pinning, the do-not-disturb switch and the panel itself.
                 ThemeSurface {

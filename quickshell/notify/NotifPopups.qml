@@ -348,6 +348,13 @@ PanelWindow {
         // The bar modules' pill fill: bgElement at the module-bg opacity, over the tray → the exact
         // colour the modules render as (a subtle lighter tint on the bar-coloured surface).
         readonly property color pill: Style.tint(Colors.bgElement, Style.lift(VtlConfig.barModuleBgOpacity))
+        // A toast is drawn as a bar module by default — it grows out of the tray and belongs to the
+        // strip. A theme that states what a card surface looks like means that here too: Console's
+        // toast has to be the same near-black square as everything else it draws, not a lighter
+        // rounded pill sitting on a phosphor screen.
+        readonly property color surface: Theme.declares("cardFill") ? Style.cardFill : card.pill
+        readonly property int   corner:  Math.min(12, Style.rCard)
+        readonly property int   edgeW:   Theme.declares("cardBorderW") ? Style.cardBorderW : 0
 
         width: col.width
 
@@ -413,9 +420,13 @@ PanelWindow {
 
         Rectangle {
             anchors.fill: parent
-            radius: 12
-            color: card.pill
+            radius: card.corner
+            color: card.surface
+            border.width: card.edgeW
+            border.color: Style.cardBorderColor
         }
+        // The theme's own veil over the toast (Console's scanlines).
+        ThemeSkin { anchors.fill: parent; kind: "notification"; radius: card.corner }
 
         // App icon — the notification's own image/icon hint, else the sending app's desktop-entry icon
         // (via NotifService.iconFor), else a bell fallback.

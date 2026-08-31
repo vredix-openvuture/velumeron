@@ -21,8 +21,6 @@ PanelWindow {
     readonly property string mon: monitor?.name ?? ""
     readonly property bool active: UiState.screensaverOn && !LockState.locked
 
-    onActiveChanged: console.warn("[saverdbg] surface", root.mon, "active", root.active,
-                                  "screensaverOn", UiState.screensaverOn, "locked", LockState.locked)
     visible: root.active || view.fade > 0.01
     color: "transparent"
     anchors { top: true; left: true; right: true; bottom: true }

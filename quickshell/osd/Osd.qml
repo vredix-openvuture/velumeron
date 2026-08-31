@@ -149,9 +149,44 @@ PanelWindow {
             root.kind   = "workspace"
             root.wsId   = id
             root.wsName = ci >= 0 ? d.substring(ci + 1) : ""
+            root._measureWs()          // the width may only grow; it never follows one workspace
             root.show()
         }
     }
+
+    // ── The workspace banner's fixed width ──────────────────────────────────────────
+    // The widest this monitor's banner could ever need: every dot it has, plus the longest label it
+    // could ever print. Measured once per set of workspaces rather than bound to the current one,
+    // so switching from "3" to a named workspace does not resize the card under your eyes.
+    TextMetrics {
+        id: wsMetric
+        font.pixelSize: 18; font.bold: true; font.family: Style.font
+    }
+    property real wsLabelW: 0
+    function _measureWs() {
+        var list = ShellFacts.workspacesFor(root.mon)
+        var w = 0
+        for (var i = 0; i < list.length; i++) {
+            var e = list[i]
+            wsMetric.text = (e.name !== undefined && e.name !== "" && e.name !== ("" + e.id))
+                            ? ("" + e.name) : ("" + e.slot)
+            w = Math.max(w, wsMetric.advanceWidth)
+        }
+        // The one on screen may carry a name the list does not (the event names it), so it counts too.
+        wsMetric.text = (root.wsName !== "" && root.wsName !== ("" + root.wsId))
+                        ? root.wsName : ("" + Compositor.wsSlot(root.wsId))
+        root.wsLabelW = Math.max(w, wsMetric.advanceWidth)
+    }
+    Component.onCompleted: root._measureWs()
+    readonly property int wsCount: ShellFacts.workspacesFor(root.mon).length
+    onWsCountChanged: root._measureWs()
+    // dots: n at 12 px, 8 px apart, and the active one is 28 instead of 12.
+    readonly property real wsDotsW: VtlConfig.osdWorkspaceDisplay === "number_only" ? 0
+                                  : Math.max(0, root.wsCount * 12 + (root.wsCount - 1) * 8 + 16)
+    readonly property int  wsWidth: Math.max(120, Math.round(
+        root.wsDotsW
+        + (VtlConfig.osdWorkspaceDisplay === "dots_only" ? 0 : root.wsLabelW + (root.wsDotsW > 0 ? 16 : 0))
+        + 40))
 
     readonly property string icon: {
         if (root.kind === "brightness") return "󰃠"
@@ -235,6 +270,14 @@ PanelWindow {
         c.muted = root.muted
         c.glyph = root.icon
         c.device = root.deviceLine ? root.deviceName : ""
+        // The workspace banner is an OSD too, and a theme that owns the surface owns every kind of
+        // it — the shell's own content is hidden the moment a theme brings one. Console drew "VOL
+        // 0 %" over every workspace change because it was never handed the two facts it needed.
+        c.workspace = { "id": root.wsId, "name": root.wsName,
+                        "slot": Compositor.wsSlot(root.wsId) }
+        // The whole row for this monitor, so a theme can draw where you ARE among where you could
+        // be rather than one number in the middle of an empty card.
+        c.workspaces = ShellFacts.workspacesFor(root.mon)
         return c
     }
     readonly property string deviceName:  Pipewire.defaultAudioSink?.description ?? Pipewire.defaultAudioSink?.name ?? ""
@@ -341,8 +384,15 @@ PanelWindow {
         Item {
             id: card
             // Volume/brightness use the configured width (the bar needs room); the workspace banner
-            // shrinks to its content so dots and number sit close together.
-            width:  root.kind === "workspace" ? Math.max(120, wsRow.implicitWidth + 40) : VtlConfig.osdWidth
+            // is narrower — dots and a number sit close together — but its width is FIXED per
+            // monitor rather than fitted to whatever is on screen. Sized to the content, the card
+            // grew and shrank as you walked along workspaces with names of different lengths, which
+            // turns a banner into a thing that flinches. See `wsWidth`.
+            //
+            // Only when the shell draws that row, though: a theme's OSD is one card whatever the
+            // kind, and sizing it from a row it does not own would clip whatever it drew instead.
+            width:  (root.kind === "workspace" && !Theme.hasComponent("osd"))
+                    ? root.wsWidth : VtlConfig.osdWidth
             height: VtlConfig.osdHeight + (root.deviceLine ? 16 : 0)
 
             property real reveal: root.open ? 1 : 0
@@ -433,6 +483,9 @@ PanelWindow {
                 }
             }
 
+            // The theme's own veil over the card (Console's scanlines).
+            ThemeSkin { anchors.fill: parent; kind: "osd"; radius: Style.rCard; z: 1 }
+
             // A theme that brings its own OSD draws the whole card face. The shell keeps the card,
             // its placement, its reveal and the sources behind the numbers.
             ThemeSurface {
@@ -505,17 +558,16 @@ PanelWindow {
                     visible: VtlConfig.osdWorkspaceDisplay !== "number_only"
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 8
+                    // THIS monitor's workspaces, by slot. It used to filter `id <= 10`, which is
+                    // only true on the first monitor: with a block of a hundred ids per screen the
+                    // second one runs 101… and the third 201…, so every screen but the main one
+                    // showed a single dot for the workspace it was already on.
                     Repeater {
-                        model: Compositor.workspaces
+                        model: ShellFacts.workspacesFor(root.mon)
                         delegate: Rectangle {
                             required property var modelData
-                            readonly property string wsMon:  modelData.monitor?.name ?? modelData.lastIpcObject?.monitor ?? ""
-                            readonly property bool   isMine: wsMon === root.monitor?.name
-                            readonly property bool   isActive: modelData.id === root.wsId && isMine
-                            visible: modelData.id > 0 && modelData.id <= 10
-                                     && !Compositor.isShowcaseWs(modelData.id)
-                                     && (isMine || isActive)
-                            width:   visible ? (isActive ? 28 : 12) : 0
+                            readonly property bool isActive: modelData.focused
+                            width:   isActive ? 28 : 12
                             height:  12; radius: 6
                             color:   isActive ? Colors.boActive : Colors.bgElement
                             Behavior on width { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
@@ -525,7 +577,13 @@ PanelWindow {
                 Text {
                     visible: VtlConfig.osdWorkspaceDisplay !== "dots_only"
                     anchors.verticalCenter: parent.verticalCenter
-                    text:  root.wsName !== "" ? root.wsName : ("" + root.wsId)
+                    // The SLOT, not the id. With a block of a hundred ids per monitor the second
+                    // screen announces "104" for the workspace its own pills call 4 — the same
+                    // reason the bar's pills carry slots (ShellFacts.workspacesFor).
+                    // An UNNAMED workspace arrives with its id as its name ("104"), so a plain
+                    // "is there a name" test prints the raw id on every monitor but the first.
+                    text:  (root.wsName !== "" && root.wsName !== ("" + root.wsId))
+                           ? root.wsName : ("" + Compositor.wsSlot(root.wsId))
                     color: Colors.fgBright
                     font.pixelSize: 18; font.bold: true; font.family: Style.font
                 }

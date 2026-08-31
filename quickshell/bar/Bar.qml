@@ -640,9 +640,12 @@ PanelWindow {
     EdgeModules { edge: "left";   x: root.stripRect("left")[0];   y: root.stripRect("left")[1];   width: root.stripRect("left")[2];   height: root.stripRect("left")[3]   }
     EdgeModules { edge: "right";  x: root.stripRect("right")[0];  y: root.stripRect("right")[1];  width: root.stripRect("right")[2];  height: root.stripRect("right")[3]  }
 
-    // What a theme's bar is handed. Rebuilt on the clock tick, which is 1 Hz — nothing here changes
-    // faster, and a bar that rebuilt its context every frame would do it for the whole session.
-    function barContext(edge, w, h) {
+    // What a theme's bar WOULD be handed. Nothing shipped uses it any more: a theme may restyle the
+    // strip (tokens, the font, ThemeSkin) but it does not replace its contents, because which
+    // modules sit where is the user's answer under every look — see Theme.userKeys. Kept because
+    // the contract is written down in the wiki and a theme that wants to draw a whole bar can still
+    // declare one; it just no longer takes the module lanes away when it does.
+    function barContext(edge, w, h, surface) {
         var c = Style.themeContext()
         c.w = w
         c.h = h
@@ -659,6 +662,43 @@ PanelWindow {
                     "playing": ShellFacts.mediaPlaying }
         c.battery = { "present": ShellFacts.batPresent, "percent": ShellFacts.batPercent,
                       "charging": ShellFacts.batCharging }
+        // What a theme's bar can DO. Without this half it can only ever be a picture of a bar: the
+        // first Console bar read the machine out beautifully and swallowed every click, because
+        // nothing in the context could reach back into the shell.
+        //
+        // `fire` is the same vocabulary the hot corners and the dashboard buttons already speak
+        // (Actions.fire): settings, launcher, notifications, wallpaper, cheatsheet, lock, dispatch,
+        // command, app. `flyout` grows one of the bar's own popouts out of a point the THEME names,
+        // in its own item space — only the shell knows where that strip actually sits, so the
+        // mapping stays on this side.
+        // The bar's own measurements. A theme draws the strip, but the numbers on Settings → Bar →
+        // Style are the USER's — icon and font size, the padding modules keep from the edge, the
+        // spacing between them, whether a module carries a background. Without these in the context
+        // a theme's bar could only ignore them, which is exactly what Console did: the sliders moved
+        // and nothing on screen did.
+        c.metrics = {
+            "fontSize":  VtlConfig.barFontSizeFor(root.mon),
+            "iconSize":  VtlConfig.barIconSizeFor(root.mon),
+            "padding":   VtlConfig.barModuleMarginFor(root.mon),
+            "spacing":   VtlConfig.barModuleSpacingFor(root.mon),
+            "moduleBg":  VtlConfig.barModuleBgFor(root.mon),
+            "bgOpacity": VtlConfig.barModuleBgOpacityFor(root.mon),
+            "thickness": VtlConfig.barThicknessFor(root.mon)
+        }
+        c.actions = {
+            "fire": function (type, value) {
+                Actions.fire({ "type": "" + type, "value": value === undefined ? "" : "" + value },
+                             root.mon)
+            },
+            "workspace": function (slot) {
+                Hyprland.dispatch("hl.dsp.focus({ workspace = " + slot + " })")
+            },
+            "flyout": function (kind, x, y) {
+                if (!surface) return
+                var p = surface.mapToItem(null, x, y)
+                UiState.toggleFlyout("" + kind, p.x, p.y, edge, "center", root.mon)
+            }
+        }
         return c
     }
 
@@ -679,6 +719,10 @@ PanelWindow {
         opacity: root.peekOpacity
         enabled: root.barShown
 
+        // The theme's own veil over the strip (Console's scanlines). Nothing when the theme brings
+        // no skin; never takes input, and it sits under the modules.
+        ThemeSkin { anchors.fill: parent; kind: "bar" }
+
         // ── The corner stays neutral ─────────────────────────────────────────────────────────────
         // Where two strips meet, the corner square belongs to BOTH of them, and a module dropped in
         // it reads as sitting in the wrong one — it is also the one place a popout has to be able to
@@ -692,22 +736,8 @@ PanelWindow {
         // The lane the three groups actually live in — the strip minus those two squares. Centre
         // stays centred IN THE LANE, so a corner on one side alone does not shove it off-centre by
         // half a strip.
-        // A theme that brings its own bar draws the whole lane. It gets the strip and the facts and
-        // decides what a bar even IS — Console's is one line of text, not a row of modules — so the
-        // three module groups below are simply not built for it.
-        ThemeSurface {
-            x:      em.horiz ? em.cornerLo : 0
-            y:      em.horiz ? 0 : em.cornerLo
-            width:  em.horiz ? Math.max(0, em.width - em.cornerLo - em.cornerHi) : em.width
-            height: em.horiz ? em.height : Math.max(0, em.height - em.cornerLo - em.cornerHi)
-            visible: Theme.hasComponent("bar")
-            surface: Theme.hasComponent("bar") ? "bar" : ""
-            ctx: root.barContext(em.edge, width, height)
-        }
-
         Item {
             id: lane
-            visible: !Theme.hasComponent("bar")
             x:      em.horiz ? em.cornerLo : 0
             y:      em.horiz ? 0 : em.cornerLo
             width:  em.horiz ? Math.max(0, em.width - em.cornerLo - em.cornerHi) : em.width
@@ -913,13 +943,24 @@ PanelWindow {
         // outline is read as belonging to the module, while one tucked safely inside reads as part
         // of the content. Nothing in the bar clips, so the overhang survives.
         readonly property int dotOver: Math.max(2, Math.round(Style.dotSize(root.mon) * 0.25))
+        // WHICH box, though. With a per-module pill the pill is the module and the dot sits on its
+        // corner. WITHOUT one the slot spans the whole bar thickness so a tall text module and a
+        // small icon centre on one line — and a dot in THAT corner floats half a bar above the
+        // glyph it belongs to, reading as a mark on the bar rather than on the module. So the box
+        // is the module's own drawing whenever there is no pill to sit on.
+        readonly property real dotBoxW: ms.moduleBg ? ms.width
+                                                    : Math.min(ms.width,  ms.rotated ? ms.ih : ms.iw)
+        readonly property real dotBoxH: ms.moduleBg ? ms.height
+                                                    : Math.min(ms.height, ms.rotated ? ms.iw : ms.ih)
         StatusDot {
+            id: msDot
             barMon: root.mon
             on:     ms.dotOn
             tone:   ms.dotTone
             z:      11
-            anchors { right: parent.right; top: parent.top
-                      rightMargin: -ms.dotOver; topMargin: -ms.dotOver }
+            // Placed rather than anchored: the box it hangs off is not the slot's rect.
+            x: (ms.width  + ms.dotBoxW) / 2 - msDot.width + ms.dotOver
+            y: (ms.height - ms.dotBoxH) / 2 - ms.dotOver
         }
 
         Loader {

@@ -53,7 +53,9 @@ PanelWindow {
         id: probe
         Connections {
             target: probe.Window.window
-            enabled: !SplashState.curtainUp
+            // Per RUN, not on the monotonic gate: a preview replay from the settings page has to
+            // report its own first frame too, or its clock would never start.
+            enabled: !SplashState.onScreen
             function onFrameSwapped() { SplashState.painted() }
         }
     }
@@ -62,10 +64,11 @@ PanelWindow {
     Region { id: nothing }
     mask: SplashState.shown ? whole : nothing      // stop swallowing input the moment it starts to go
 
-    // One-way: the contents breathe in at the start, but never fade out on their own — the iris
-    // over the whole curtain is what takes them away.
-    property bool appeared: false
-    Component.onCompleted: root.appeared = true
+    // One-way: the contents breathe in on the first frame the curtain is really on screen — not
+    // when this object was constructed, which is a good second earlier and used to mean the fade
+    // had run out before anyone could see it. They never fade out on their own; the iris over the
+    // whole curtain is what takes them away.
+    readonly property bool appeared: SplashState.onScreen
 
     // 0 = closed curtain, 1 = torn wide open. Driven by an EXPLICIT animation, the way LockContent
     // does it — a Behaviour on the property did not animate inside that surface.
@@ -99,6 +102,10 @@ PanelWindow {
         c.host = ShellFacts.host
         c.kernel = ShellFacts.kernel
         c.user = ShellFacts.user
+        // The wordmark itself, resolved for the curtain's own background. The charging Velumeron
+        // logo is the one thing every splash shows, whatever theme is running — a theme decides how
+        // it is presented, not whether it is there — and a theme cannot know where the asset lives.
+        c.brandmark = mark._src
         return c
     }
 
@@ -151,22 +158,12 @@ PanelWindow {
             z: 5
         }
 
-        // ── Centre: the OpenVuture mascot, static ────────────────────────────────────────────────
-        Image {
-            visible: !Theme.hasComponent("splash")
-            anchors.centerIn: parent
-            source: "file://" + root._vtlDir + "/assets/splash_openvuture.png"
-            width:  Math.round(Math.min(root.width * 0.30, root.height * 0.44, 520))
-            height: width                                    // the source is square
-            sourceSize.width: 640
-            fillMode: Image.PreserveAspectFit
-            smooth: true; mipmap: true; antialiasing: true
-            // Breathe in with the curtain instead of landing hard on the first frame.
-            opacity: root.appeared ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
-        }
-
-        // ── Bottom left: the Velumeron wordmark, charging ────────────────────────────────────────
+        // ── The Velumeron wordmark, charging ─────────────────────────────────────────────────────
+        // The whole face of the default curtain, and the one thing every splash has in common: a
+        // theme decides how the logo is presented, never whether it is there. It used to share the
+        // screen with the OpenVuture mascot, which made the start about who made the thing rather
+        // than about the thing.
+        //
         // Two stacked copies of the same image: a dimmed base, and the full-brightness one revealed
         // left to right by a clipping window.
         //
@@ -178,12 +175,10 @@ PanelWindow {
             property real charge: 0
             readonly property string _src: "file://" + root._vtlDir + "/assets/icons/velumeron_banner-"
                                            + (root._darkBg ? "white" : "black") + ".png"
-            readonly property int _pad: Math.round(Math.max(24, Math.min(Math.min(root.width, root.height) * 0.05, 72)))
 
-            width:  Math.round(Math.min(root.width * 0.17, 320))
+            width:  Math.round(Math.min(root.width * 0.42, 620))
             height: Math.round(width * 1000 / 1900)          // the banner's own aspect
-            x: mark._pad
-            y: root.height - height - mark._pad
+            anchors.centerIn: parent
             // Hidden, never stopped, when a theme draws the splash: this wordmark's fill IS the
             // splash's clock — the curtain tears the moment it is full — so halting it would stop
             // the splash from ever ending.
@@ -193,7 +188,7 @@ PanelWindow {
             Image {
                 anchors.fill: parent
                 source: mark._src
-                sourceSize.width: 640
+                sourceSize.width: 1280
                 fillMode: Image.PreserveAspectFit
                 smooth: true; mipmap: true; antialiasing: true
                 opacity: 0.20                                 // the "empty" state
@@ -209,15 +204,30 @@ PanelWindow {
                     width:  mark.width
                     height: mark.height
                     source: mark._src
-                    sourceSize.width: 640
+                    sourceSize.width: 1280
                     fillMode: Image.PreserveAspectFit
                     smooth: true; mipmap: true; antialiasing: true
                 }
             }
+            // A soft rule under it, filling with the same charge. Mirobo's whole idiom is round
+            // and unhurried, and a logo alone on a dark screen reads as a still image rather than
+            // as something loading — one line is enough to say the difference.
+            Rectangle {
+                anchors { left: parent.left; right: parent.right; top: parent.bottom
+                          topMargin: Math.round(mark.height * 0.28) }
+                height: 4; radius: 2
+                color: Style.tint(Style.accent, 0.16)
+                Rectangle {
+                    width: parent.width * mark.charge
+                    height: parent.height; radius: parent.radius
+                    color: Style.accent
+                }
+            }
+
             // One run, sized to the hold — minus a short beat so you actually SEE it full before
             // the tear starts, instead of the last pixel and the rip landing on the same frame.
             NumberAnimation on charge {
-                running: SplashState.active
+                running: SplashState.ticking
                 from: 0; to: 1
                 duration: Math.max(400, SplashState.holdMs - 280)
                 easing.type: Easing.InOutQuad

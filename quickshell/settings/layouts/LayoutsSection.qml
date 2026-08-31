@@ -208,7 +208,7 @@ Item {
                 // Per-monitor override: one dropdown per connected screen.
                 FieldLabel { text: "Per monitor" }
                 Repeater {
-                    model: Quickshell.screens
+                    model: Compositor.screensOrdered
                     delegate: Column {
                         id: mrow
                         required property var modelData

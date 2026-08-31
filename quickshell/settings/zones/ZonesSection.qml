@@ -79,7 +79,7 @@ Item {
                     visible: Quickshell.screens.length > 1
                     current: root.editMon
                     segments: [{ label: "Global", key: "" }].concat(
-                        Quickshell.screens.map(function (s) { return { label: s.name, key: s.name } }))
+                        Compositor.screensOrdered.map(function (s) { return { label: s.name, key: s.name } }))
                     onPicked: key => root.editMon = key
                 }
                 Row {

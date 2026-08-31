@@ -453,7 +453,6 @@ PanelWindow {
         c.w = root.width
         c.h = root.height
         c.query = search.text
-        c.index = list.currentIndex
         c.count = root.filtered.length
         c.capped = root.filtered.length > root.themeResultCap
         var out = []
@@ -748,12 +747,24 @@ PanelWindow {
             // `content` is faded rather than hidden, because `visible: false` takes its TextInput
             // out of the focus chain and the launcher would stop accepting keys entirely. It costs
             // a hidden GridView for as long as the launcher is open, which is the cheaper mistake.
+            ThemeSkin { anchors.fill: parent; kind: "launcher"; radius: Style.rCard }
+
             ThemeSurface {
+                id: themedLauncher
                 anchors.fill: content
                 visible: Theme.hasComponent("launcher")
                 surface: Theme.hasComponent("launcher") ? "launcher" : ""
                 ctx: root.launcherContext
                 z: 2
+            }
+            // The selected row, bound on its own rather than carried in `ctx`. It moves on every
+            // arrow key, and rebuilding the context object rebuilds `results` with it — which is a
+            // new model for the view drawing them, and a new model scrolls back to the top.
+            Binding {
+                target:   themedLauncher.item
+                property: "cursor"
+                value:    list.currentIndex
+                when:     themedLauncher.item !== null
             }
 
             Column {

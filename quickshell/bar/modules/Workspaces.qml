@@ -109,7 +109,11 @@ Row {
                 anchors.centerIn: parent
                 width:  parent.width
                 height: wsDot.dotD
-                radius: height / 2
+                // A pill by default, a block under a square theme: the corner comes from the
+                // theme's own tile radius rather than from `height / 2`, which is a hardcoded
+                // "always round" that no theme could ever answer. Clamped to a half-height so a
+                // large radius still reads as a pill instead of a bulge.
+                radius: Math.min(height / 2, Style.rTile)
                 color: {
                     if (wsDot.isActive) return root._activeCol
                     if (wsDot.hovered)  return Colors.fgPrimary

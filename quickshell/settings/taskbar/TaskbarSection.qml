@@ -4,7 +4,7 @@ import Quickshell
 import Quickshell.Io
 
 // Taskbar OSD settings — a Windows-style strip of open windows (quickshell/osd/Taskbar.qml). Placement
-// mirrors the OSD; writes live to settings.json (the template copy-on-write watcher persists/forks it).
+// mirrors the OSD; writes live to settings.json.
 Item {
     id: root
 
@@ -91,7 +91,7 @@ Item {
                 FieldLabel { text: "Per monitor"
                              hint: "Override the master switch on individual screens." }
                 Repeater {
-                    model: Quickshell.screens
+                    model: Compositor.screensOrdered
                     delegate: Toggle {
                         required property var modelData
                         label: modelData.name

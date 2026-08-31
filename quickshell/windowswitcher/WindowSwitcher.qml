@@ -23,7 +23,6 @@ PanelWindow {
         var c = Style.themeContext()
         c.w = root.width
         c.h = root.height
-        c.index = root.sel
         var out = []
         for (var i = 0; i < root.wins.length; i++) {
             var wi = root.wins[i]
@@ -171,12 +170,22 @@ PanelWindow {
             // A theme that brings its own switcher draws the list. The shell keeps the keyboard, the
             // most-recently-used order and the raise on release.
             ThemeSurface {
+                id: themedSwitcher
                 anchors.fill: parent
                 anchors.margins: 14
                 visible: Theme.hasComponent("switcher")
                 surface: Theme.hasComponent("switcher") ? "switcher" : ""
                 ctx: root.switcherContext
                 z: 2
+            }
+            // Bound on its own, not carried in `ctx`: see the launcher and the wallpaper picker —
+            // a context rebuilt on every step hands the theme a new window list each time, and the
+            // view drawing it resets to the top.
+            Binding {
+                target:   themedSwitcher.item
+                property: "cursor"
+                value:    root.sel
+                when:     themedSwitcher.item !== null
             }
 
             ListView {

@@ -368,6 +368,10 @@ PanelWindow {
             }
         }
 
+        // The theme's own veil over this panel (Console's scanlines). Nothing when the theme
+        // brings no skin; never takes input.
+        ThemeSkin { anchors.fill: parent; kind: "flyout"; radius: Style.rCard }
+
         // Content taller than maxH scrolls (wheel/touch) instead of getting cut off.
         Flickable {
             id: scroller

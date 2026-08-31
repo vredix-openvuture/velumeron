@@ -9,7 +9,7 @@ import Quickshell.Io
 // act on it. Restarting used to mean a terminal; it belongs here, because a cold start is what
 // picks up edited QML — the shell compiles a component once and keeps it.
 // IMPORT / EXPORT: a single-file backup of the effective settings, the wallust palette options and
-// your private templates. All the file work lives in assets/scripts/velumeron-config.py; this page
+// the themes you made yourself. All the file work lives in assets/scripts/settings-backup.py; this page
 // only picks a path with the native zenity dialog and reports the result. Device-bound keys
 // (monitors / bluetooth / per-monitor wallpaper folders) are always re-taken from THIS machine on
 // import, so restoring a foreign export is safe.
@@ -77,7 +77,7 @@ Item {
         exportProc.command = ["bash", "-c",
             "p=$(zenity --file-selection --save --confirm-overwrite " +
             "--filename=\"$HOME/settings_$(date +%y-%m-%d).velbak\" --title='Export Velumeron settings' 2>/dev/null) " +
-            "|| exit 0; [ -n \"$p\" ] && python3 \"$VELUMERON_DIR/assets/scripts/velumeron-config.py\" export \"$p\""]
+            "|| exit 0; [ -n \"$p\" ] && python3 \"$VELUMERON_DIR/assets/scripts/settings-backup.py\" export \"$p\""]
         exportProc.running = false; exportProc.running = true
     }
     Process {
@@ -96,7 +96,7 @@ Item {
             // Older exports carry .json, so they stay selectable next to the current .velbak.
             "p=$(zenity --file-selection --title='Import Velumeron settings' " +
             "--file-filter='Velumeron backup | *.velbak *.json' 2>/dev/null) " +
-            "|| exit 0; [ -n \"$p\" ] && python3 \"$VELUMERON_DIR/assets/scripts/velumeron-config.py\" import \"$p\""]
+            "|| exit 0; [ -n \"$p\" ] && python3 \"$VELUMERON_DIR/assets/scripts/settings-backup.py\" import \"$p\""]
         importProc.running = false; importProc.running = true
     }
     Process {
@@ -111,7 +111,7 @@ Item {
             if (running) { _imported = false; return }
             UiState.pickerOpen = false
             if (_imported) {
-                Templates.refresh()          // pick up restored templates / active
+                Theme.refresh()              // pick up restored themes
                 root._say("Settings imported — applied live.", true)
             }
         }

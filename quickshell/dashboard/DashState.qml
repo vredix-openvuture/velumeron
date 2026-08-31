@@ -30,7 +30,10 @@ Singleton {
         }
         return s
     }
-    function has(k) { return root._keys[k] === true }
+    // A theme that draws the dashboard has no grid to read module keys from, and it may well use
+    // every one of these — so for it the gate is simply open. Mirobo keeps paying for exactly the
+    // tiles it placed.
+    function has(k) { return Theme.hasComponent("dashboard") || root._keys[k] === true }
     function _on(k) { return root.active && root.has(k) }
 
     // ── Volume (Pipewire) ──────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ import Quickshell
 import Quickshell.Io
 
 // Window-tags settings — the little name chips on every window's edge (quickshell/windowtags/
-// WindowTags.qml). Writes live to settings.json (the template copy-on-write watcher persists/forks).
+// WindowTags.qml). Writes live to settings.json.
 Item {
     id: root
 
@@ -55,7 +55,7 @@ Item {
                 CardLabel { text: "PER MONITOR"
                             hint: "Override the master switch per monitor." }
                 Repeater {
-                    model: Quickshell.screens
+                    model: Compositor.screensOrdered
                     delegate: Toggle {
                         required property var modelData
                         label: modelData.name

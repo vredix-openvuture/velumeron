@@ -5,7 +5,7 @@ import Quickshell.Io
 
 // Hot corners / screen edges settings. A visual screen proxy with 8 clickable zones (4 corners +
 // 4 edge centres); the selected zone gets an action + optional per-zone dwell. Writes live to
-// settings.json (the template copy-on-write watcher persists/forks it). See corners/HotCorners.qml.
+// settings.json. See corners/HotCorners.qml.
 Item {
     id: root
 
@@ -16,7 +16,7 @@ Item {
     readonly property bool   perMon:   VtlConfig.cornerPerMonitor
     property string          editMon:  ""
     readonly property string effMon:   (root.perMon && root.editMon) ? root.editMon : ""
-    readonly property var    monNames: Quickshell.screens.map(function (s) { return s.name })
+    readonly property var    monNames: Compositor.screensOrdered.map(function (s) { return s.name })
     function _ensureEditMon() {
         if (root.perMon && (root.editMon === "" || root.monNames.indexOf(root.editMon) < 0) && root.monNames.length)
             root.editMon = root.monNames[0]
