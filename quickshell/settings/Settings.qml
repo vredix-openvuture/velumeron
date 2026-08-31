@@ -1116,19 +1116,86 @@ PanelWindow {
                     }
                 }
             }
+            // ── The page, and the desktop it is about ───────────────────────────────────
+            // A panel wide enough for three columns of cards is wide enough that most pages run out
+            // of content before they run out of panel, and a half-filled page reads as badly as a
+            // stretched one. So the leftover goes to a drawn miniature of the surface the page
+            // owns, fed by the same settings the controls write. It appears only where there IS
+            // something to show and only where there is room for it — docked there is neither.
+            readonly property string previewKind: {
+                var k = { "bar": "bar", "taskbar": "taskbar", "osd": "osd",
+                          "notifications": "notifications", "launcher": "launcher",
+                          "lockscreen": "lock", "screensaver": "screensaver",
+                          "wallpaper": "wallpaper", "style": "style" }[root.shownSection]
+                return k || ""
+            }
+            readonly property int previewW: Math.round(Math.max(340, Math.min(760, content.width * 0.36)))
+            readonly property bool previewOn: content.previewKind !== ""
+                                              && !(content.pageMode && root.shownNavPage)
+                                              && content.width > 980
+
             Loader {
+                id: pageLdr
                 anchors.left:   parent.left
-                anchors.right:  parent.right
+                anchors.right:  content.previewOn ? deskSide.left : parent.right
                 anchors.bottom: parent.bottom
                 anchors.top:    featureHeader.visible ? featureHeader.bottom
                                 : (backBar.visible ? backBar.bottom : parent.top)
                 anchors.topMargin:    (featureHeader.visible || backBar.visible) ? 12 : 18
                 anchors.leftMargin:   18
-                anchors.rightMargin:  18
+                anchors.rightMargin:  content.previewOn ? 14 : 18
                 anchors.bottomMargin: 12
                 active:  (content.activeMeta?.comp ?? null) !== null && !(content.pageMode && root.shownNavPage)
                 visible: active
                 sourceComponent: content.activeMeta?.comp ?? null
+            }
+
+            Column {
+                id: deskSide
+                visible: content.previewOn && pageLdr.visible
+                width: content.previewW
+                spacing: 8
+                anchors { right: parent.right; rightMargin: 18; top: pageLdr.top }
+
+                CardLabel {
+                    text: root.sectionTitle(root.shownSection).toUpperCase()
+                    hint: "Drawn from your settings as you change them — shape and placement, not a "
+                        + "screenshot. The menu is over the real thing while you are in here."
+                }
+                DeskPreview {
+                    id: deskMini
+                    width: parent.width
+                    kind:  content.previewKind
+                    mon:   root.mon
+                }
+                // The numbers the miniature cannot show at this size, read back where you are
+                // looking rather than hunted for among the controls that hold them.
+                Card {
+                    width: parent.width
+                    Repeater {
+                        model: deskMini.facts
+                        delegate: Item {
+                            required property var modelData
+                            width: parent.width
+                            height: 22
+                            Text {
+                                anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                                text: modelData.k
+                                color: Colors.fgMuted
+                                font.pixelSize: Style.fsSub; font.family: Style.font
+                            }
+                            Text {
+                                anchors { right: parent.right; verticalCenter: parent.verticalCenter
+                                          left: parent.horizontalCenter; leftMargin: 8 }
+                                text: "" + modelData.v
+                                color: Colors.fgBright
+                                horizontalAlignment: Text.AlignRight
+                                elide: Text.ElideRight
+                                font.pixelSize: Style.fsLabel; font.family: Style.font
+                            }
+                        }
+                    }
+                }
             }
 
             // ── Page-mode nav list: heading + a scrollable, sectioned list of every menu (icon + title) ──
