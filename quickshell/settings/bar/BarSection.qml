@@ -728,13 +728,30 @@ Item {
                                                 !VtlConfig.barFullscreenPeekFor(root.editMon), root.editMon)
                     }
                     // Only means anything with a second screen connected.
-                    Toggle {
+                    FieldLabel {
                         visible: root.monitors.length > 1
-                        label: "Minimal secondary bars"
-                        sub:   "Every screen but the main one carries just the clock and the submap / workspace "
-                             + "indicator. One setting for the whole machine, whichever screen you are editing."
-                        on:    VtlConfig.secondaryBarsMinimal
-                        onToggled: root.saveKey("secondary_bars_minimal", !VtlConfig.secondaryBarsMinimal, "")
+                        text: "Other screens"
+                        hint: "What the screens you have NOT set up get. A screen you have arranged "
+                            + "modules on keeps what you gave it, whichever of these is picked. One "
+                            + "setting for the whole machine, whichever screen you are editing."
+                    }
+                    Segmented {
+                        visible: root.monitors.length > 1
+                        equal: true
+                        current: VtlConfig.barSecondary
+                        segments: [{ label: "No bar",  key: "off"     },
+                                   { label: "Minimal", key: "minimal" },
+                                   { label: "Same",    key: "full"    }]
+                        onPicked: root.saveKey("bar_secondary", key, "")
+                    }
+                    SubLabel {
+                        visible: root.monitors.length > 1
+                        width: parent.width
+                        text: VtlConfig.barSecondary === "off"
+                              ? "Nothing is drawn there until you set one up."
+                              : VtlConfig.barSecondary === "minimal"
+                                ? "Just the clock and the submap / workspace indicator."
+                                : "The same bar as the main screen."
                     }
                 }
             }

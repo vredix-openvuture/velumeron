@@ -397,20 +397,39 @@ QtObject {
     readonly property var deviceKeys: ["theme", "wallpaper_dirs", "wallpaper_sets", "bt_aliases",
                                        "bt_groups", "bar_per_monitor", "bar_monitors",
                                        "taskbar_pinned", "lock_weather_city", "lock_weather_unit"]
-    // And the ones that are simply YOURS, whatever theme is on: which modules sit where, how big
-    // the bar is, how big its type is. A theme decides the shape of the desktop; it does not get to
-    // rearrange the bar you built or resize it under you. This is a rule, not a default — there is
-    // no theme that may write these.
-    // `bar_mode`, `bar_edges` and `bar_position` are in here too, and that is the whole point rather
-    // than an oversight: a module arrangement is filed per edge COMBINATION, so a theme that moves
-    // the bar re-keys the layout and the modules you placed are simply not what the bar reads any
-    // more. The bar is yours — where it sits, how big it is, what is on it.
-    readonly property var userKeys: ["bar_thickness", "bar_font_size", "bar_icon_size",
-                                     "bar_mode", "bar_edges", "bar_position",
-                                     "bar_module_bg", "bar_module_bg_radius", "bar_module_bg_opacity",
-                                     "bar_module_spacing", "bar_module_margin",
-                                     "bar_modules", "bar_modules_m", "bar_modules_left",
-                                     "bar_modules_center", "bar_modules_right"]
+    // ── The bar belongs to the theme ────────────────────────────────────────────────────────────
+    // It used to be the opposite, and the reasoning was that the bar is the thing you build by hand
+    // and a theme has no business rearranging it. What that produced is two desktops as far apart
+    // as Console and mirobo wearing the SAME strip: a status line and a card desktop want different
+    // modules in different places, and a theme that cannot say so is not a whole desktop after all.
+    //
+    // So these keys are the theme's, and they travel with it: leaving a theme files your version of
+    // them under its id, wearing it again plays that back. Build a bar for Console, switch to
+    // mirobo, build a different one — each keeps what you made of it.
+    //
+    // They are snapshotted even when the package does not mention them, which is the difference
+    // between this list and the arrangement: a theme need not ship a bar to end up owning yours.
+    readonly property var themeScopedKeys: ["bar_thickness", "bar_font_size", "bar_icon_size",
+                                            "bar_mode", "bar_edges", "bar_position",
+                                            "bar_module_bg", "bar_module_bg_radius",
+                                            "bar_module_bg_opacity",
+                                            "bar_module_spacing", "bar_module_margin",
+                                            "bar_modules", "bar_modules_m", "bar_modules_left",
+                                            "bar_modules_center", "bar_modules_right",
+                                            "bar_secondary",
+                                            // Also the per-monitor blocks, and that is not a
+                                            // contradiction of deviceKeys below: a theme PACKAGE
+                                            // still may not write them (it would set monitor names
+                                            // from someone else's desk), but YOUR version of them
+                                            // travels with the theme you made it under. Building a
+                                            // bar on the screen you actually use is the normal way
+                                            // to build one, and it would otherwise be the one part
+                                            // that did not come along.
+                                            "bar_per_monitor", "bar_monitors"]
+    // Nothing is off-limits to a theme any more except what belongs to the MACHINE (deviceKeys) and
+    // another theme's namespace. The list stays as the hook for anything that turns out to be
+    // yours-whatever-you-wear.
+    readonly property var userKeys: []
     function themeMayWrite(key) {
         return root.deviceKeys.indexOf(key) < 0 && root.userKeys.indexOf(key) < 0
                && key.indexOf("theme_") !== 0
@@ -430,12 +449,19 @@ QtObject {
         return (s && typeof s === "object") ? s : null
     }
     function _snapshotCurrent() {
-        var a = root.pkg.arrangement
+        var a = root.pkg.arrangement || ({})
         var id = root.pkg.id
-        if (!a || !id) return
+        if (!id) return
         var snap = {}
         for (var k in a)
             if (root.themeMayWrite(k)) snap[k] = VtlConfig.rawSetting(k, a[k])
+        // …plus the keys a theme owns whether or not its package mentions them. Without this a
+        // theme that ships no bar would leave the one you built behind for the next theme to wear.
+        for (var i = 0; i < root.themeScopedKeys.length; i++) {
+            var t = root.themeScopedKeys[i]
+            var v = VtlConfig.rawSetting(t, undefined)
+            if (v !== undefined && v !== null) snap[t] = v
+        }
         var all = {}
         for (var t in root.savedArrangements) all[t] = root.savedArrangements[t]
         all[id] = snap

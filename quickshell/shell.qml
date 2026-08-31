@@ -476,8 +476,15 @@ ShellRoot {
     // icons, workspace pills) and is simply there when the curtain tears open, instead of
     // assembling in the frames before the curtain lands. The reserving surfaces below wait with it,
     // so the window layout settles while nobody can see it either.
+    // Not on every screen: `bar_secondary` says what the screens you have NOT configured get, and
+    // "off" (the shipped default) means no bar is built for them at all rather than one that is
+    // hidden. A screen with its own module arrangement is never affected — see isSecondaryOff.
     Variants {
-        model: VtlConfig.componentEnabled("bar") ? root.bootScreens : []
+        model: VtlConfig.componentEnabled("bar")
+               ? root.bootScreens.filter(function (s) {
+                     return !VtlConfig.isSecondaryOff(s && s.name ? s.name : "")
+                 })
+               : []
         delegate: Bar {
             required property var modelData
             screen: modelData

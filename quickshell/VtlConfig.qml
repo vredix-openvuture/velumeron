@@ -241,11 +241,28 @@ Item {
     // the settings editor and back-compat (they resolve the global value).
     readonly property bool barPerMonitor: _data.bar_per_monitor ?? false
 
-    // With more than one monitor connected, every NON-main monitor (main = lowest Hyprland id, the
-    // same rule the notification "main only" option uses) gets a stripped-down bar: just the clock
-    // at the start and the submap + workspace indicator at the end of its primary edge. Keeps the
-    // secondary screens uncluttered without per-monitor hand-configuring. Toggle in Settings → Bar.
-    readonly property bool secondaryBarsMinimal: _data.secondary_bars_minimal ?? true
+    // What the OTHER screens get. Main = lowest Hyprland id, the same rule the notification
+    // "main only" option uses.
+    //
+    //   off      no bar at all — the shipped default, and the one a fresh install wants: a bar is
+    //            built for the screen you work on, and a second screen inherits a strip nobody
+    //            asked for. Set one up per monitor when you want one.
+    //   minimal  clock at the start, submap + workspaces at the end of the primary edge
+    //   full     the same bar as the main screen
+    //
+    // A screen you HAVE configured outranks all three (hasOwnBarModules): once you have said what
+    // belongs on it, having the shell quietly ignore that is the worst of both.
+    //
+    // `secondary_bars_minimal` was the old boolean and is still read when the new key is absent, so
+    // an existing configuration keeps the bars it has.
+    readonly property string barSecondary: {
+        var v = _data.bar_secondary
+        if (v === "off" || v === "minimal" || v === "full") return v
+        if (_data.secondary_bars_minimal === true)  return "minimal"
+        if (_data.secondary_bars_minimal === false) return "full"
+        return "off"
+    }
+    readonly property bool secondaryBarsMinimal: barSecondary === "minimal"
     function _mainMonName() {
         var vs = Hyprland.monitors.values
         if (!vs.length) return ""
@@ -261,15 +278,20 @@ Item {
         for (var k in o.bar_modules_m) return true
         return false
     }
-    function isSecondaryMinimal(mon) {
-        if (!secondaryBarsMinimal || !mon) return false
-        if (Hyprland.monitors.values.length < 2) return false   // single monitor → full bar
-        // An explicit arrangement outranks the convenience. "Minimal secondary bars" is a default
-        // for screens nobody has configured; once you HAVE configured one, having the shell quietly
-        // ignore the layout you just built is the worst of both — and there was no sign anywhere
-        // that it was doing so.
-        if (hasOwnBarModules(mon)) return false
+    // Is this a screen the `bar_secondary` rule applies to at all? Everything below asks this
+    // first, so the three values differ only in what they DO with the answer.
+    function _isUnconfiguredSecondary(mon) {
+        if (!mon) return false
+        if (Hyprland.monitors.values.length < 2) return false   // single monitor → it is the main one
+        if (hasOwnBarModules(mon)) return false                 // you configured it; it is yours
         return mon !== _mainMonName()
+    }
+    function isSecondaryMinimal(mon) {
+        return barSecondary === "minimal" && _isUnconfiguredSecondary(mon)
+    }
+    // No bar on this screen at all. Read by the bar surface itself, so nothing is built for it.
+    function isSecondaryOff(mon) {
+        return barSecondary === "off" && _isUnconfiguredSecondary(mon)
     }
 
     // The whole per-monitor bar map, for writers that have to merge into it (settings pages must
