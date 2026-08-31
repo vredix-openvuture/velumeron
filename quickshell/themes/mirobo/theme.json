@@ -11,9 +11,6 @@
     "slide",
     "push"
   ],
-  "tokens": {
-    "cardBorderW": 1
-  },
   "lock": {
     "layout": "breath",
     "reveal": "bubble",

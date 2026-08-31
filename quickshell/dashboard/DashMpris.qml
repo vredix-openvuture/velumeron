@@ -26,7 +26,10 @@ DashTile {
         // low, so the wave stays a backdrop instead of a second subject fighting the artwork.
         // Clipped to the tile's own corner radius, so the outer bars end WITH the card
         // instead of poking over its rounded bottom corners.
-        radius: Style.rCard
+        // MINUS the inset. A clip inset by 1 px but rounded with the full radius leaves the outer
+        // bars a sliver of room outside the card's own curve, which is what makes the bottom
+        // corners of a playing tile look squared off.
+        radius: Math.max(0, Style.rCard - 1)
         bars: 10
         intensity: 0.45
         barGap: 3
