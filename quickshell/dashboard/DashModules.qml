@@ -336,6 +336,38 @@ Singleton {
             out.push(e)
             if (e.x < 0 || e.y < 0) pending.push(e)
         }
+        // ── Nothing may land on top of anything ─────────────────────────────────────────────
+        // The clamp above squeezes a stored position into the CURRENT column count, and squeezing
+        // is what creates collisions: a layout arranged in four columns and shown in three has
+        // every tile at x=3 pulled left onto the one already at x=1. Free placement means nobody
+        // pushes back, so the two are simply drawn over each other — which is what "the dashboard
+        // is scrambled" looks like after the column count changes under a saved layout.
+        //
+        // So a clamped entry that lands on an occupied cell loses its coordinates and goes through
+        // the same seeding the never-placed ones use. First come, first served, in list order: the
+        // tiles that still fit keep exactly where they were, and only the ones that cannot are
+        // moved. A GROUP travels as one — relocating half of it would take the group apart, which
+        // is worse than the overlap it is fixing.
+        var accepted = []
+        var groupBumped = {}
+        for (var q = 0; q < out.length; q++) {
+            var e2 = out[q]
+            if (e2.x < 0 || e2.y < 0) continue                      // already pending
+            if (e2.g !== "" && groupBumped[e2.g]) { e2.x = -1; e2.y = -1; pending.push(e2); continue }
+            if (!root.collides(accepted, e2, e2.id)) { accepted.push(e2); continue }
+            e2.x = -1; e2.y = -1
+            pending.push(e2)
+            if (e2.g === "") continue
+            // Pull the members of this group that were already accepted back out with it.
+            groupBumped[e2.g] = true
+            for (var z = accepted.length - 1; z >= 0; z--) {
+                if (accepted[z].g !== e2.g) continue
+                accepted[z].x = -1; accepted[z].y = -1
+                pending.push(accepted[z])
+                accepted.splice(z, 1)
+            }
+        }
+
         // Seed the unplaced ones against everything that already has a home.
         for (var j = 0; j < pending.length; j++) {
             var p = pending[j]
