@@ -148,6 +148,11 @@ QtObject {
     property bool   dashEditOpen: false
     property string dashEditMon:  ""
     property string dashEditTarget: "dashboard"      // dashboard | desk
+    // Which layout of that screen is being arranged: "" is the screen's own, a path is the one that
+    // belongs to THAT picture (right-click in the wallpaper gallery). The editor never guesses this
+    // from the live wallpaper — you can arrange the desk for a picture that is not on screen, and
+    // the preview then shows the picture you are arranging FOR, not the one you are looking at.
+    property string dashEditWallpaper: ""
     property string _dashEditReturn: ""
     // Measured viewport of the live dashboard, published by HomeHub — the editor previews at the
     // real size instead of re-deriving it from menu %, rail, paddings and the session bar.
@@ -162,10 +167,13 @@ QtObject {
     property int    menuPctDockH:  0
     property int    menuPctFloatW: 0
     property int    menuPctFloatH: 0
-    function openDashEdit(mon, target) {
+    function openDashEdit(mon, target, wallpaper) {
         ui._dashEditReturn = ui.openDropdown
         ui.dashEditMon    = mon
         ui.dashEditTarget = (target === "desk") ? "desk" : "dashboard"
+        // Only the desk knows what a wallpaper is. Asking for one on the dashboard would arrange the
+        // settings home page against a picture it never shows.
+        ui.dashEditWallpaper = (ui.dashEditTarget === "desk" && typeof wallpaper === "string") ? wallpaper : ""
         ui.dashEditOpen   = true
     }
     function closeDashEdit() {

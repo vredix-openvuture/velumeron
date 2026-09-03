@@ -38,6 +38,26 @@ Item {
         root.save("desk_monitors", all)
     }
 
+    // Drop ONE picture's layout from a screen. The last one takes the map with it, so a screen that
+    // has no per-wallpaper layouts left carries no empty object either — settings.json should read
+    // like the state it describes.
+    function removeWpLayout(mon, path) {
+        var wps = {}, cur = VtlConfig.deskWallpaperLayouts(mon), any = false
+        for (var k in cur) if (k !== path) { wps[k] = cur[k]; any = true }
+        root.setBlock(mon, "wallpapers", any ? wps : undefined)
+    }
+    // Only the file name. A wallpaper path is a folder tree and a name, and the name is the half
+    // that identifies the picture to the person who chose it.
+    function stem(p) { return ("" + p).split("/").pop() }
+    // How many per-wallpaper layouts exist at all, across every screen — the card says its piece
+    // either way, but an empty one has to say something different.
+    readonly property int wpLayoutCount: {
+        var n = 0, screens = Compositor.screensOrdered
+        for (var i = 0; i < screens.length; i++)
+            n += VtlConfig.deskWallpapersWithLayout(screens[i].name).length
+        return n
+    }
+
     Flickable {
         anchors.fill: parent
         contentHeight: col.implicitHeight
@@ -146,6 +166,66 @@ Item {
                                     visible: monRow.own
                                     label: "Reset"
                                     onClicked: root.setBlock(monRow.name, "modules", undefined)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // A layout that belongs to one picture is the only arrangement in the shell you cannot
+            // find by looking at the thing it applies to — the picture has to be ON the screen for
+            // the desk to show it. So it is listed here, by screen, with the way out next to it.
+            Card {
+                CardLabel {
+                    text: "WALLPAPERS WITH THEIR OWN LAYOUT"
+                    hint: "Right-click a picture in the wallpaper gallery to arrange the widgets "
+                        + "for that one picture. Every other wallpaper keeps the screen's layout."
+                }
+                SubLabel {
+                    visible: root.wpLayoutCount === 0
+                    width: parent.width
+                    text: "No wallpaper has a layout of its own."
+                }
+                Repeater {
+                    model: Compositor.screensOrdered
+                    delegate: Column {
+                        id: wpMon
+                        required property var modelData
+                        readonly property string name: wpMon.modelData.name
+                        readonly property var paths: VtlConfig.deskWallpapersWithLayout(wpMon.name)
+                        visible: wpMon.paths.length > 0
+                        width: parent.width
+                        spacing: 4
+
+                        SubLabel { width: parent.width; text: wpMon.name }
+                        Repeater {
+                            model: wpMon.paths
+                            delegate: Row {
+                                id: wpRow
+                                required property string modelData
+                                width: parent.width
+                                spacing: 8
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: Math.max(60, wpRow.width - editBtn.width - dropBtn.width - 24)
+                                    text: root.stem(wpRow.modelData)
+                                    color: Colors.fgPrimary
+                                    elide: Text.ElideMiddle
+                                    font.family: Style.font; font.pixelSize: Style.fsLabel
+                                }
+                                // Arranging from here opens the editor on that screen scoped to that
+                                // picture, exactly as the gallery's own entry does — one editor,
+                                // one scope, two doors to it.
+                                TextButton {
+                                    id: editBtn
+                                    label: "󰏫  Arrange"
+                                    onClicked: UiState.openDashEdit(wpMon.name, "desk", wpRow.modelData)
+                                }
+                                TextButton {
+                                    id: dropBtn
+                                    label: "Remove"
+                                    onClicked: root.removeWpLayout(wpMon.name, wpRow.modelData)
                                 }
                             }
                         }

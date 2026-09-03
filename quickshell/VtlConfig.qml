@@ -413,9 +413,17 @@ Item {
     // (DashModules.deskRaster). What IS stored is which raster a layout was arranged in, so it can
     // be converted when the screen, the resolution or the margin changes under it. Absent = the
     // reference raster the shipped layout is written in.
-    function deskLayoutColsFor(mon) { return Math.max(1, root._deskNum(mon, "cols", DashModules.refCols)) }
-    function deskLayoutRowsFor(mon) { return Math.max(1, root._deskNum(mon, "rows", DashModules.refRows)) }
-    function _deskNum(mon, field, fallback) {
+    // The stamp travels with the layout it belongs to: a per-wallpaper arrangement was made in its
+    // own raster, and rescaling it by the SCREEN's stamp would stretch it by whatever ratio the two
+    // rasters happen to differ in. `wp` "" = the screen's own layout.
+    function deskLayoutColsForKey(mon, wp) { return Math.max(1, root._deskNum(mon, wp, "cols", DashModules.refCols)) }
+    function deskLayoutRowsForKey(mon, wp) { return Math.max(1, root._deskNum(mon, wp, "rows", DashModules.refRows)) }
+    function _deskNum(mon, wp, field, fallback) {
+        var b = root._deskWpBlock(mon, wp)
+        if (b && Array.isArray(b.modules)) {
+            var bv = b[field]
+            return (typeof bv === "number") ? bv : fallback
+        }
         var o = root._deskBlock(mon)
         var v = o ? o[field] : undefined
         return (typeof v === "number") ? v : fallback
@@ -454,11 +462,58 @@ Item {
         var v = o ? o.workspace : undefined
         return (typeof v === "number" && v > 0) ? v : 0
     }
+    // ── Per-wallpaper layouts ─────────────────────────────────────────────────
+    // A screen can hold a second kind of layout: one arranged for ONE picture. Right-click a
+    // wallpaper in the gallery → "Edit homescreen for this wallpaper" and the arrangement is stored
+    // under that file's path instead of under the screen:
+    //
+    //   desk_monitors.<mon>.wallpapers: { "<abs path>": { cols, rows, modules: [ … ] } }
+    //
+    // Strictly opt-in, and that is the whole design. A wallpaper that has no entry here is not
+    // "inheriting" anything — the question is never asked for it, and the screen's own layout is
+    // what a desk shows. So the feature costs a map lookup for people who never touch it, and
+    // nothing else: no switch to find, no state to explain, no default that can surprise you.
+    //
+    // The path is the key because the path is what wallpaper-set.sh writes into wallpapers.json.
+    // It follows the file, not the entry in a picker, so renaming the picture drops the layout —
+    // which is the honest outcome: that arrangement was made for a picture that no longer exists
+    // under that name. Settings → Widgets lists what a screen has, so an orphan is findable.
+    function deskWallpaperLayouts(mon) {
+        var o = root._deskBlock(mon)
+        return (o && o.wallpapers && typeof o.wallpapers === "object") ? o.wallpapers : ({})
+    }
+    function _deskWpBlock(mon, wp) {
+        if (!wp || wp === "") return null
+        var b = root.deskWallpaperLayouts(mon)["" + wp]
+        return (b && typeof b === "object") ? b : null
+    }
+    // Does this picture carry an arrangement of its own on this screen?
+    function deskHasWallpaperLayout(mon, wp) {
+        var b = root._deskWpBlock(mon, wp)
+        return !!(b && Array.isArray(b.modules))
+    }
+    // Every picture that does, as a plain array of paths — the settings page lists them so a layout
+    // made months ago is never invisible state.
+    function deskWallpapersWithLayout(mon) {
+        var out = [], m = root.deskWallpaperLayouts(mon)
+        for (var k in m) if (m[k] && Array.isArray(m[k].modules)) out.push("" + k)
+        out.sort()
+        return out
+    }
+
     // The layout THIS screen shows. Every screen is arranged on its own — a widget is placed against
     // a particular desk, and a second monitor is a different desk, not a copy of the first. A screen
     // nobody has arranged yet shows `desk_modules`, the starting layout, and gets a list of its own
     // the moment you move something on it; clearing that list puts it back on the starting one.
-    function deskModulesFor(mon) {
+    //
+    // `wp` is the picture the answer is for: "" asks for the screen's own layout, a path asks for
+    // that picture's — and falls back to the screen's when the picture has none. Keyed rather than
+    // reading the live wallpaper here on purpose. This file must not depend on WallpaperState (the
+    // reverse dependency is what would make two singletons construct each other), and the desk has
+    // to hold a changing wallpaper back until its crossfade is over anyway — see desk/DeskWindow.
+    function deskModulesForKey(mon, wp) {
+        var b = root._deskWpBlock(mon, wp)
+        if (b && Array.isArray(b.modules)) return b.modules
         var o = root._deskBlock(mon)
         return (o && Array.isArray(o.modules)) ? o.modules : root.deskModules
     }

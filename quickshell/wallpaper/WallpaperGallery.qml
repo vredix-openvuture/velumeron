@@ -233,6 +233,54 @@ PanelWindow {
     }
     function close() { UiState.wallpaperGalleryOpen = false }
 
+    // ── Right-click: this picture's own homescreen ──────────────────────────────────────────────
+    // A wallpaper can carry a desk layout of its own, and this is the only place it can be asked
+    // for — right-click the card, "Edit homescreen for this wallpaper", and the editor opens scoped
+    // to that file (VtlConfig: desk_monitors.<mon>.wallpapers). Opt-in per picture: a wallpaper
+    // nobody asked this of has no layout and is never treated as if it might.
+    //
+    // Drawn HERE rather than through common/ContextMenu.qml, which is the shell's context menu for
+    // the desktop and the bar. That one is its own Overlay surface, and this gallery is an Overlay
+    // surface created after it — so the menu would open behind the picker, and both would want
+    // exclusive keyboard focus. Inside this surface there is neither problem, and the picker is
+    // full-screen so there is always room.
+    property bool ctxOpen: false
+    property real ctxX: 0
+    property real ctxY: 0
+    // The PATH, latched when the menu opens — not an index into `entries`. The catalogue reloads
+    // when the folder, the stack or the target monitor changes, and an index kept across that
+    // points at whatever moved into the slot: the menu would then arrange the homescreen of a
+    // picture you never right-clicked.
+    property string ctxPath: ""
+    readonly property bool ctxHasLayout: root.ctxPath !== ""
+                                         && VtlConfig.deskHasWallpaperLayout(root.selMon, root.ctxPath)
+    // A set is several pictures, one per monitor — there is no single file for a layout to belong
+    // to, so a set has no menu rather than a menu with a dead entry on it.
+    function openCtx(i, x, y) {
+        var e = root.entries[i]
+        if (!e || e.kind !== "wall") return
+        root.menuOpen = false
+        root.ctxPath = "" + e.path
+        root.ctxX = x
+        root.ctxY = y
+        root.ctxOpen = true
+    }
+    readonly property var ctxEntries: [
+        { icon: "󰸉", label: "Set as wallpaper", act: "apply" },
+        { icon: "󰏫", label: root.ctxHasLayout ? "Edit this wallpaper's homescreen"
+                                              : "Edit homescreen for this wallpaper", act: "desk" }
+    ]
+    function ctxActivate(i) {
+        var path = root.ctxPath
+        var e = root.ctxEntries[i]
+        root.ctxOpen = false
+        if (!e || path === "") return
+        if (e.act === "apply") { feed.apply(path); root.close(); return }
+        // The editor takes over the screen, and opening it closes this picker on its own
+        // (UiState._closeMenusExcept) — the desk it arranges is behind the picker, not in it.
+        UiState.openDashEdit(root.selMon, "desk", path)
+    }
+
     // ── Card geometry ───────────────────────────────────────────────────────────────────────────
     // A card is a miniature of the TARGET monitor: same aspect, height a share of this screen. In
     // percent rather than pixels because "46" means the same thing on a 1080p laptop and a 4K desk
@@ -265,7 +313,12 @@ PanelWindow {
         // first, and only close the gallery once nothing is layered over it.
         MouseArea {
             anchors.fill: parent
-            onClicked: { if (root.menuOpen) root.menuOpen = false; else root.close() }
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: {
+                if (root.ctxOpen)       root.ctxOpen  = false
+                else if (root.menuOpen) root.menuOpen = false
+                else                    root.close()
+            }
         }
     }
 
@@ -350,16 +403,24 @@ PanelWindow {
         opacity: root.themed ? 1 : Style.popFade(root.reveal)
         scale:   root.themed ? 1 : Style.popScale(root.reveal)
 
-        Keys.onEscapePressed:  { if (root.menuOpen) root.menuOpen = false; else root.close() }
-        Keys.onLeftPressed:    root.move(-1)
-        Keys.onRightPressed:   root.move(1)
-        Keys.onUpPressed:      root.move(-1)
-        Keys.onDownPressed:    root.move(1)
-        Keys.onReturnPressed:  root.activate(flow.currentIndex)
-        Keys.onEnterPressed:   root.activate(flow.currentIndex)
+        Keys.onEscapePressed:  {
+            if (root.ctxOpen)       root.ctxOpen  = false
+            else if (root.menuOpen) root.menuOpen = false
+            else                    root.close()
+        }
+        // Every one of these is off while the card's own menu is open: moving the row under an open
+        // menu leaves the menu pointing at a picture that is no longer the one you right-clicked,
+        // and Return would apply a wallpaper from behind it.
+        Keys.onLeftPressed:    if (!root.ctxOpen) root.move(-1)
+        Keys.onRightPressed:   if (!root.ctxOpen) root.move(1)
+        Keys.onUpPressed:      if (!root.ctxOpen) root.move(-1)
+        Keys.onDownPressed:    if (!root.ctxOpen) root.move(1)
+        Keys.onReturnPressed:  if (!root.ctxOpen) root.activate(flow.currentIndex)
+        Keys.onEnterPressed:   if (!root.ctxOpen) root.activate(flow.currentIndex)
         // Tab is the pile switch — the same two things the control on the left edge picks between.
         Keys.onShortcutOverride: e => { if (e.key === Qt.Key_Tab || e.key === Qt.Key_Backtab) e.accepted = true }
         Keys.onPressed: e => {
+            if (root.ctxOpen) return          // same rule as the arrows above
             // hjkl beside the arrows: the picker is a list you walk, and half the people who will
             // ever open it never take their hands off the home row.
             if      (e.key === Qt.Key_H || e.key === Qt.Key_K) { root.move(-1); e.accepted = true; return }
@@ -696,6 +757,36 @@ PanelWindow {
                              && (card.modelData.path === root.curPath || card.modelData.path === feed.applying)
                     onPicked: root.activate(card.index)
                 }
+
+                // This picture carries a homescreen of its own. Top LEFT — the top right is where
+                // WallThumb puts the "this one is up" dot, and the two are different questions.
+                // Without a mark, an arrangement made once would be a layout that appears out of
+                // nowhere months later with nothing on screen to explain it.
+                Rectangle {
+                    visible: card.modelData.kind === "wall"
+                             && VtlConfig.deskHasWallpaperLayout(root.selMon, card.modelData.path)
+                    anchors { left: parent.left; top: parent.top; leftMargin: 6; topMargin: 6 }
+                    width: 22; height: 22
+                    radius: Style.rTile === 0 ? 0 : 11
+                    color: Qt.rgba(0, 0, 0, 0.45)
+                    border.width: 1; border.color: Style.tint(Style.accent, 0.8)
+                    Text {
+                        anchors.centerIn: parent
+                        text: "󱂬"
+                        color: Style.accent
+                        font.pixelSize: 12; font.family: Style.iconFont
+                    }
+                }
+
+                // Right button only, so the ordinary click still reaches WallThumb underneath.
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.RightButton
+                    onClicked: mouse => {
+                        var p = card.mapToItem(root, mouse.x, mouse.y)
+                        root.openCtx(card.index, p.x, p.y)
+                    }
+                }
             }
         }
 
@@ -851,6 +942,76 @@ PanelWindow {
                    color: xh.containsMouse ? Colors.fgBright : Colors.fgPrimary
                    font.family: Style.font; font.pixelSize: Style.fsSection }
             MouseArea { id: xh; anchors.fill: parent; hoverEnabled: true; onClicked: root.close() }
+        }
+    }
+
+    // ── The card's context menu ─────────────────────────────────────────────────────────────────
+    // Outside the keyboard scope and above everything in here (the chrome is z 5, the live player
+    // z 4): a menu that a rotated coverflow card could turn away from the screen would be a menu
+    // you cannot read. It opens at the pointer and folds back at the screen edge, exactly like the
+    // shell's own context menu — the same behaviour, drawn in the surface that can host it.
+    StyledRect {
+        id: ctxCard
+        readonly property real pad: 6
+        visible: root.ctxOpen && root.ctxPath !== ""
+        z: 20
+        width:  Math.max(220, ctxRows.implicitWidth + 2 * ctxCard.pad)
+        height: ctxRows.implicitHeight + 2 * ctxCard.pad
+        x: Math.max(8, Math.min(root.ctxX, root.width  - ctxCard.width  - 8))
+        y: Math.max(8, Math.min(root.ctxY, root.height - ctxCard.height - 8))
+        radius: Style.rCard
+        color:  Colors.bgPrimary
+        borderWidth: 1
+        borderColor: Style.chromeBorder
+        MouseArea { anchors.fill: parent }          // the card is not the backdrop
+
+        Column {
+            id: ctxRows
+            anchors { fill: parent; margins: ctxCard.pad }
+            spacing: 2
+
+            Repeater {
+                model: root.ctxEntries
+                delegate: StyledRect {
+                    id: ctxRow
+                    required property var modelData
+                    required property int index
+                    width:  ctxRows.width
+                    height: Style.ctrlH
+                    radius: Style.rControl
+                    color:  ctxHov.containsMouse ? Style.accent : "transparent"
+                    Behavior on color { ColorAnimation { duration: Style.popColorMs } }
+
+                    Row {
+                        anchors { fill: parent; leftMargin: 10; rightMargin: 12 }
+                        spacing: 10
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            // Same rule as the shell's menu: a theme made of type marks the hovered
+                            // row instead of drawing a pictogram nobody could have typed.
+                            width: Style.typedGlyphs ? 10 : implicitWidth
+                            text: Style.typedGlyphs ? (ctxHov.containsMouse ? "▸" : "") : ctxRow.modelData.icon
+                            color: ctxHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
+                            font.pixelSize: Style.typedGlyphs ? 13 : 15
+                            font.family: Style.typedGlyphs ? Style.font : Style.iconFont
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: Style.typedGlyphs ? ctxRow.modelData.label.toLowerCase()
+                                                    : ctxRow.modelData.label
+                            color: ctxHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
+                            font.pixelSize: 13; font.family: Style.font
+                        }
+                    }
+                    MouseArea {
+                        id: ctxHov
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.ctxActivate(ctxRow.index)
+                    }
+                }
+            }
         }
     }
 }

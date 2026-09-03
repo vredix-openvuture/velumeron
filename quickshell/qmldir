@@ -21,6 +21,7 @@ singleton SoundService 1.0 SoundService.qml
 singleton LockState 1.0 lock/LockState.qml
 singleton ShellFacts 1.0 ShellFacts.qml
 singleton WeatherService 1.0 WeatherService.qml
+singleton WallpaperState 1.0 WallpaperState.qml
 singleton KeyboardService 1.0 KeyboardService.qml
 singleton FontList  1.0 FontList.qml
 

@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 import ".."
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import Quickshell.Wayland
 
 // Dashboard editor — a full-screen overlay, opened from the settings home page's pencil. Built in
@@ -61,11 +60,20 @@ PanelWindow {
     readonly property string target: UiState.dashEditTarget          // dashboard | desk
     readonly property bool   isDesk: root.target === "desk"
     readonly property string host:   root.isDesk ? "desk" : "hub"
+    // "" = the screen's own layout; a path = the layout that belongs to that picture. Everything
+    // downstream is keyed on this one string: what is read, what is written, what Reset drops and
+    // which picture the canvas shows.
+    readonly property string scopeWp:   root.isDesk ? UiState.dashEditWallpaper : ""
+    readonly property bool   wpScoped:  root.scopeWp !== ""
+    // The file name alone. The full path is unreadable in a header and its interesting half is the
+    // end, which is the half a middle-elided label throws away first.
+    readonly property string scopeName: root.scopeWp === "" ? ""
+                                        : ("" + root.scopeWp).split("/").pop()
 
     readonly property var modules: DashModules.resolve(
-        root.isDesk ? DashModules.rescale(VtlConfig.deskModulesFor(root.mon),
-                                          VtlConfig.deskLayoutColsFor(root.mon),
-                                          VtlConfig.deskLayoutRowsFor(root.mon),
+        root.isDesk ? DashModules.rescale(VtlConfig.deskModulesForKey(root.mon, root.scopeWp),
+                                          VtlConfig.deskLayoutColsForKey(root.mon, root.scopeWp),
+                                          VtlConfig.deskLayoutRowsForKey(root.mon, root.scopeWp),
                                           root.cols, root.dashRows)
                     : VtlConfig.dashboardModules,
         root.cols, root.dashRows)
@@ -102,21 +110,22 @@ PanelWindow {
         ? root.raster.rows
         : Math.max(1, Math.floor((root.dashH + Style.cardGap)
                                  / (VtlConfig.dashboardCellH + Style.cardGap)))
-    // The picture on THIS monitor right now. Only read for the desk canvas; the hub preview is a
-    // menu and has no wallpaper behind it.
-    property string wallpaper: ""
-    readonly property FileView _wpFile: FileView {
-        path: (Quickshell.env("VELUMERON_USER_DIR") || (Quickshell.env("HOME") + "/.config/velumeron"))
-              + "/quickshell/wallpapers.json"
-        watchChanges: true
-        onFileChanged: reload()
-        onLoaded: {
-            try {
-                var j = JSON.parse(_wpFile.text())
-                var e = j[root.mon] || j[Object.keys(j)[0]]
-                root.wallpaper = (e && e.path && e.type !== "video") ? e.path : ""
-            } catch (err) { root.wallpaper = "" }
-        }
+    // The picture the canvas is arranged against. Only read for the desk; the hub preview is a menu
+    // and has no wallpaper behind it.
+    //
+    // Scoped to a wallpaper this is the picture you CHOSE, not the one on the monitor — the whole
+    // point of arranging for a picture is being able to do it while looking at a different one.
+    // A live wallpaper is skipped: an mp4 in an Image never reaches Ready and would only log for it.
+    readonly property string wallpaper: {
+        if (root.wpScoped) return /\.(mp4|mkv|webm|mov)$/i.test(root.scopeWp) ? "" : root.scopeWp
+        if (WallpaperState.isVideoFor(root.mon)) return ""
+        var p = WallpaperState.pathFor(root.mon)
+        if (p !== "") return p
+        // A screen wallpapers.json has no entry for yet: any picture is a better backdrop than none.
+        var cur = WallpaperState.current
+        for (var k in cur)
+            if (cur[k] && cur[k].path && cur[k].type !== "video") return "" + cur[k].path
+        return ""
     }
 
     property int page: 0
@@ -163,11 +172,17 @@ PanelWindow {
         if (!root.isDesk) { SettingsStore.set("dashboard_modules", list); return }
         // Stamp the raster it was arranged in along with it. Without that stamp a layout is a set
         // of numbers with no unit: the same 8x4 means a third of one screen and a sixth of the next.
-        var all = root._withField("modules", list)
-        all[root.mon].cols = root.cols
-        all[root.mon].rows = root.dashRows
+        // The stamp goes wherever the list went — a per-wallpaper layout carries its own.
+        var all = root.wpScoped ? root._withWallpaper({ modules: list, cols: root.cols, rows: root.dashRows })
+                                : root._withField("modules", list)
+        if (!root.wpScoped) {
+            all[root.mon].cols = root.cols
+            all[root.mon].rows = root.dashRows
+        }
         SettingsStore.set("desk_monitors", all)
     }
+    // Clone the whole per-screen map, replace one field of THIS screen's block. SettingsStore knows
+    // no nested path, so writing a block in place is how the other screens' blocks get dropped.
     function _withField(field, value) {
         var all = {}, cur = VtlConfig.deskMonitors
         for (var k in cur) all[k] = (typeof cur[k] === "boolean") ? { "enabled": cur[k] } : cur[k]
@@ -177,6 +192,18 @@ PanelWindow {
         else                blk[field] = value
         all[root.mon] = blk
         return all
+    }
+    // One level deeper, same rule: clone the screen's `wallpapers` map and replace the entry for the
+    // picture in scope. `block` null removes it — that is what makes Reset an opt-OUT rather than a
+    // snapshot of today's screen layout pinned to a picture forever.
+    function _withWallpaper(block) {
+        var wps = {}, cur = VtlConfig.deskWallpaperLayouts(root.mon)
+        for (var k in cur) wps[k] = cur[k]
+        if (block === null) delete wps[root.scopeWp]
+        else                wps[root.scopeWp] = block
+        var empty = true
+        for (var k2 in wps) { empty = false; break }
+        return root._withField("wallpapers", empty ? null : wps)
     }
     function _withLayout(list) { return root._withField("modules", list) }
     function setDeskField(field, value) { SettingsStore.set("desk_monitors", root._withField(field, value)) }
@@ -334,8 +361,13 @@ PanelWindow {
     // it there instead of pinning a snapshot of today's default to it forever.
     function resetLayout() {
         root.selIds = []; root.page = 0
-        if (root.isDesk) SettingsStore.set("desk_monitors", root._withLayout(null))
-        else             SettingsStore.set("dashboard_modules", VtlConfig.dashboardDefault)
+        // Scoped to a picture, Reset REMOVES that picture's layout — the desk goes back to the
+        // screen's own arrangement and the picture stops being one that has an opinion. That is the
+        // opt-out, and the only one: there is no other place a per-wallpaper layout can be undone
+        // from except the list on Settings → Widgets, which calls the same thing.
+        if (root.wpScoped)   SettingsStore.set("desk_monitors", root._withWallpaper(null))
+        else if (root.isDesk) SettingsStore.set("desk_monitors", root._withLayout(null))
+        else                  SettingsStore.set("dashboard_modules", VtlConfig.dashboardDefault)
     }
 
     // Small round page-flip button for the preview's page nav.
@@ -627,6 +659,19 @@ PanelWindow {
                            color: Colors.fgBright
                            font.family: Style.font; font.pixelSize: 15; font.weight: Font.Medium }
 
+                    // Scoped to a picture, this line is the whole warning label. Nothing else on the
+                    // editor looks different, and an arrangement that silently belonged to one
+                    // wallpaper would be the worst kind of hidden state — so it says so, in the
+                    // accent, right under the title, and names the file.
+                    Text {
+                        visible: root.wpScoped
+                        width: parent.width
+                        text: "for this wallpaper only · " + root.scopeName
+                        color: Style.accent
+                        elide: Text.ElideMiddle
+                        font.family: Style.font; font.pixelSize: 12
+                    }
+
                     // ── The picked module(s) ─────────────────────────────────────
                     Card {
                         visible: root.selIds.length > 0
@@ -880,7 +925,9 @@ PanelWindow {
                 Row {
                     anchors { right: parent.right; verticalCenter: parent.verticalCenter; verticalCenterOffset: 2 }
                     spacing: 8
-                    TextButton { label: "Reset layout"; onClicked: root.resetLayout() }
+                    // Scoped, Reset is a removal, not a revert — say which one the button is.
+                    TextButton { label: root.wpScoped ? "Remove this layout" : "Reset layout"
+                                 onClicked: root.resetLayout() }
                     TextButton { label: "Done"; primary: true; onClicked: root.close() }
                 }
             }

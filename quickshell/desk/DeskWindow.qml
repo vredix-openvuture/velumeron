@@ -44,6 +44,28 @@ PanelWindow {
     readonly property bool on: VtlConfig.deskEnabledFor(root.mon) && root.wsMatch && root.mon !== ""
     visible: root.on
 
+    // ── Which picture this desk is arranged for ─────────────────────────────────
+    // A wallpaper can carry a layout of its own (opt-in, from the gallery's right-click menu). That
+    // makes the arrangement depend on a value that changes UNDER A CROSSFADE: wallpapers.json is
+    // rewritten when the new picture starts fading in, and a layout swap on that same frame would
+    // rebuild the widget tree in the middle of an animation — the shape that has already cost us a
+    // SIGSEGV in QtQmlModels once. So the key SETTLES: the live path is watched, the swap happens
+    // one transition later, and the widgets change over on a picture that has finished arriving.
+    //
+    // No binding on `wpKey` on purpose. A binding would re-evaluate on the same frame the file
+    // changed, which is exactly what the timer exists to prevent; the first fill is done by hand.
+    property string wpKey: ""
+    readonly property string wpLive: WallpaperState.pathFor(root.mon)
+    onWpLiveChanged: {
+        if (root.wpKey === "") { root.wpKey = root.wpLive; return }   // first fill: no crossfade to wait out
+        wpSettle.restart()
+    }
+    Timer {
+        id: wpSettle
+        interval: Math.max(150, VtlConfig.wallpaperTransitionMs) + 120
+        onTriggered: root.wpKey = root.wpLive
+    }
+
     // What this desk is showing, for the pollers behind the widgets (UiState.deskKeys → DashState,
     // WeatherService). Published from the STORED list rather than from the grid: `resolve` only
     // fills in coordinates, the type keys are the same, and reading the settings value keeps this
@@ -52,7 +74,7 @@ PanelWindow {
     readonly property var moduleKeys: {
         var s = {}
         if (!root.on) return s
-        var l = VtlConfig.deskModulesFor(root.mon)
+        var l = VtlConfig.deskModulesForKey(root.mon, root.wpKey)
         for (var i = 0; i < l.length; i++) {
             var k = l[i]?.key
             if (!k) continue
@@ -164,9 +186,9 @@ PanelWindow {
             // This screen's layout — its own once arranged — converted from the raster it was
             // arranged in to the one this screen has now.
             items: DashModules.resolve(
-                       DashModules.rescale(VtlConfig.deskModulesFor(root.mon),
-                                           VtlConfig.deskLayoutColsFor(root.mon),
-                                           VtlConfig.deskLayoutRowsFor(root.mon),
+                       DashModules.rescale(VtlConfig.deskModulesForKey(root.mon, root.wpKey),
+                                           VtlConfig.deskLayoutColsForKey(root.mon, root.wpKey),
+                                           VtlConfig.deskLayoutRowsForKey(root.mon, root.wpKey),
                                            root.raster.cols, root.raster.rows),
                        root.raster.cols, root.raster.rows)
             cols:  root.raster.cols

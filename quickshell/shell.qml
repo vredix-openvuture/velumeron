@@ -269,6 +269,13 @@ ShellRoot {
     IpcHandler {
         target: "desk"
         function edit():  void { UiState.openDashEdit(Compositor.focusedMonitorName, "desk") }
+        // …and the same door for the layout that belongs to ONE picture: `ipc call desk editFor
+        // /path/to/wallpaper.png`. The gallery's right-click menu is where a person asks for this;
+        // this is where a script does, and it is the only way to reach the scoped editor without a
+        // pointer — which is also what makes the scoped path testable.
+        function editFor(wallpaper: string): void {
+            UiState.openDashEdit(Compositor.focusedMonitorName, "desk", wallpaper)
+        }
         function close(): void { UiState.closeDashEdit() }
     }
 
