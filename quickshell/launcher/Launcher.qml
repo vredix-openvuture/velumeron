@@ -357,8 +357,14 @@ PanelWindow {
     // bar's own transparency/blur switches, with the region tracking the card as it morphs. It was
     // blurring the whole screen instead — the "blur backdrop" behaviour, which is right only when
     // it floats free of the bar, and which is why it never picked up the bar's setting.
-    readonly property bool blurDocked: root.dock && root.dockEdge !== ""
-                                       && VtlConfig.edgeActiveFor(root.dockEdge, root.mon)
+    // Docked is about the SHAPE, not about whether a bar happens to occupy that edge. This used to
+    // require edgeActiveFor(dockEdge) as well, and that is the wrong question to ask about frosting:
+    // a launcher docked bottom-centre while the bar runs top+left then satisfied neither branch —
+    // no bar on its edge, so no bar blur, and `launcher_blur` is the FLOATING backdrop switch, off
+    // by default. The result was the one popout in the shell that stayed unfrosted while every
+    // other one followed the bar's transparency. Flyout, Settings and NotifCenter ask only the two
+    // switches; this now asks the same two.
+    readonly property bool blurDocked: root.dock
     BackgroundEffect.blurRegion: !root.active ? null
         : root.blurDocked ? ((VtlConfig.barBlurFor(root.mon) && VtlConfig.barOpacityEnabledFor(root.mon))
                              ? cardBlur : null)
