@@ -7,6 +7,18 @@ import QtQuick
 WidgetOpts {
     id: o
 
+    FieldLabel { text: "Look" }
+    Segmented {
+        width: parent.width
+        equal: true
+        current: "" + o.val("style", "ring")
+        segments: [{ key: "ring", label: "Gauges", hint: "An arc per reading, the value inside it" },
+                   { key: "bars", label: "Bars",   hint: "The reading as a number with a filling bar under it" }]
+        onPicked: o.optSet("style", key)
+    }
+    // Both faces fall back to a row of chips when the widget is too small to draw them — a ring
+    // with an illegible number in it is worse than the number on its own.
+
     Toggle {
         label: "CPU"
         on:    o.flag("cpu")
@@ -29,8 +41,9 @@ WidgetOpts {
         onToggled: o.optSet("uptime", !o.flag("uptime"))
     }
     Toggle {
-        label: "Gauges"
-        sub:   "A filling bar under each percentage"
+        visible: ("" + o.val("style", "ring")) === "bars"
+        label: "Filling bar"
+        sub:   "The bar under each percentage. The gauge look is the bar."
         on:    o.flag("bars")
         onToggled: o.optSet("bars", !o.flag("bars"))
     }
