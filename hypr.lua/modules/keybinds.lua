@@ -143,6 +143,9 @@ hl.bind(MOD .. " + ALT + L", hl.dsp.window.resize({ x =  50, y =   0, relative =
 -- SUPER+CTRL — Systemebene / Destruktiv
 -- ══════════════════════════════════════════════════════
 
+-- Theme picker (the wardrobe: one card per installed theme, Enter wears it).
+hl.bind(MOD .. " + CONTROL + SPACE", hl.dsp.exec_cmd("qs -p " .. VTL_DIR .. "/quickshell ipc call theme toggle"))
+
 hl.bind(MOD .. " + CONTROL + L",   hl.dsp.exec_cmd(on_lock))
 hl.bind(MOD .. " + CONTROL + Q",   hl.dsp.exec_cmd(session_menu))
 hl.bind(MOD .. " + CONTROL + C",   hl.dsp.window.kill())

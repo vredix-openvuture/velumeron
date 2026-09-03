@@ -39,6 +39,7 @@ require("modules.gpu")
 require("modules.variables")
 require("modules.environment")
 require("modules.devices")
+require("modules.color")          -- VTL_darken / VTL_brighten for the theme files
 require("modules.look_and_feel")
 
 -- Active UI style — the design chosen in Settings also themes hyprland.
