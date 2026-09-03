@@ -13,6 +13,8 @@ Item {
 
     property string barMon:  ""     // monitor name, for per-monitor icon/font size
     property bool vertical: false   // set by ModSlot: rotate to read along a vertical sidebar
+    // Turned 90 degrees on a vertical bar (see Bar.qml ModSlot): only with the username beside the face.
+    readonly property bool rotateOnVertical: VtlConfig.moduleSetting("user", "show_username", true)
     property string barEdge: "top"  // set by Bar; drives the click-glide direction
 
     readonly property string _homeDir: Quickshell.env("HOME") ?? ""
@@ -55,7 +57,7 @@ Item {
             Text {
                 anchors.centerIn: parent
                 text:  ""
-                color: Colors.fgMuted
+                color: Style.barDim(root.barMon)
                 font.family:    Style.font
                 font.pointSize: 10
                 visible: faceImage.status !== Image.Ready

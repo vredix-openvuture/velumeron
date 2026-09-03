@@ -6,14 +6,15 @@ import Quickshell.Io
 // Style settings — the main page holds:
 //   1. THEME      — one preview card per installed theme. Clicking a card wears it: the theme id
 //      plus its whole arrangement, written key by key so everything stays yours to change
-//      afterwards. Clicking the card you already wear opens the builder.
+//      afterwards. Clicking the card you already wear puts its arrangement back.
 //   2. COLOURS    — palette source (wallust auto / fixed scheme). Always here, independent of the
 //      theme — persisted in wallust/color-mode + options.json, never inside a theme package.
 //   3. APPEARANCE — the desktop-wide dark/light preference + GTK/Qt app theming.
-//   4. BUILD A THEME — the builder sub-page: adjust bar, menus, launcher, font on the LIVE config,
-//      then optionally keep the result as a theme of your own. No auto-forking — changing a setting
-//      only writes settings.json; a theme of yours is made when you ask for one (Theme.fork).
-//   5. MOTION     — the elastic "soft-mass" emergence knobs.
+//   4. MOTION     — the elastic "soft-mass" emergence knobs.
+// Nothing here ever forks a theme. What you change is filed under the theme you are wearing
+// (Theme._snapshotCurrent) and played back when you wear it again, so your version of a theme
+// survives a switch and an update without a copy of the package. "Make mine" and the builder that
+// went with it are archived under .internal/archive/theme-builder/.
 // Parked themes (`wip` in their theme.json) are filtered out of the grid until they are built out.
 Item {
     id: root
@@ -21,18 +22,36 @@ Item {
     // How many columns the menu has given this page. It lays one grid across the whole
     // content area — switch, cards, preview — and every page sits on it.
     readonly property int pageCols: (parent && parent.pageCols !== undefined) ? parent.pageCols : 0
+    readonly property real pageColW: (parent && parent.pageColW !== undefined) ? parent.pageColW : 0
+    // Applying the colour recipe is the page's action, not one card's — it goes in the head bar.
+    // Only in the room it belongs to; the other three have nothing to apply.
+    readonly property var pageActions: root.tab === "look"
+                                       ? [{ key: "colours", label: "Apply", primary: true }] : []
+    readonly property string pageStatus: root.tab === "look" ? root.colorStatus : ""
+    function pageAct(key) { if (key === "colours") root.applyColours() }
+    // The room on screen is the one that answers — the other three are not laid out at all.
+    readonly property int pageFirstCols: (parent && parent.pageFirstCols !== undefined) ? parent.pageFirstCols : 0
+    readonly property int pageCards: lookGrid.visible   ? lookGrid.cardCount
+                                   : menuGrid.visible   ? menuGrid.cardCount
+                                   : themeRoom.visible  ? themeRoom.cardCount
+                                   : motionGrid.visible ? motionGrid.cardCount : 0
+    readonly property real pageRowH: lookGrid.visible   ? lookGrid.firstRowH
+                                   : menuGrid.visible   ? menuGrid.firstRowH
+                                   : themeRoom.visible  ? themeRoom.firstRowH
+                                   : motionGrid.visible ? motionGrid.firstRowH : 0
     // Its rooms have no ids: the visible one is whatever the column is currently as tall as.
-    readonly property real pageContentH: col.implicitHeight + pinnedPreview.height + Style.cardGap + tabStrip.height + 18
+    // The rooms this page splits into — drawn by the menu in its head card, not here.
+    readonly property var pageTabs: [{ icon: "󰏘", label: "Look",   key: "look"   },
+                                     { icon: "󰍜", label: "Menu",   key: "menu"   },
+                                     { icon: "󰝥", label: "Theme",  key: "theme"  },
+                                     { icon: "󰛐", label: "Motion", key: "motion" }]
+    readonly property real pageContentH: col.implicitHeight + root.pageGridY
     // Where this page's card grid starts inside it. Zero for a page that is nothing but
     // its grid; the ones with a header of their own say so, and the menu lines its
     // preview card up with the grid rather than with the top of the page.
-    readonly property real pageGridY: (pinnedPreview.visible ? pinnedPreview.height + Style.cardGap : 0)
-                                      + tabStrip.height + 18
+    readonly property real pageGridY: (pinnedPreview.visible ? pinnedPreview.height + Style.cardGap : 0) + 4
     readonly property real pageFillH: (parent && parent.pageFillH !== undefined) ? parent.pageFillH : 0
     readonly property real pageRowMin: (parent && parent.pageRowMin !== undefined) ? parent.pageRowMin : 0
-
-    // "" = main page, "build" = the theme-builder sub-page.
-    property string page: ""
 
     // The picture on the desk right now. A theme is judged against YOUR wallpaper, not a stock one,
     // so the preview cards show it — read once here rather than once per card. Same file every
@@ -554,7 +573,7 @@ Item {
     Timer { id: colorClear; interval: 4000
             onTriggered: if (!root.colorStatus.endsWith("…")) root.colorStatus = "" }
 
-    // ── Theme rename editor state (rename only — a new theme is forked from the one you wear) ──
+    // ── Theme rename editor state (for a theme of your own: a folder under $VELUMERON_USER_DIR) ──
     property string _themeEdit: ""   // "" | "rename"
     // Only a theme of your own can be renamed or deleted; a shipped one is a folder in the package.
     readonly property bool themeIsMine: {
@@ -579,14 +598,8 @@ Item {
         if (Theme.themeId === id) root.pickTheme("mirobo")
         Theme.remove(id)
     }
-    // A fresh fork is what you want to be wearing — that is the reason you made it.
-    Connections {
-        target: Theme
-        function onForked(id) { root.pickTheme(id) }
-    }
-
     // ════════════════════════════════════════════════════════════════════════════════
-    // MAIN PAGE — themes · colours · appearance · build-a-theme
+    // MAIN PAGE — themes · colours · appearance · motion
     // ════════════════════════════════════════════════════════════════════════════════
     // Pinned colour preview — a FIXED header on the main page: it stays put while the cards below
     // scroll, so you always see the palette while tweaking the Colours options further down. Shows
@@ -596,7 +609,7 @@ Item {
         id: pinnedPreview
         // Only where colours are what you are changing. Above the menu's own layout or the motion
         // curves it is a picture with nothing to do with the question on screen.
-        visible: root.page === "" && (root.tab === "look" || root.tab === "theme")
+        visible: root.tab === "look" || root.tab === "theme"
         anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 4 }
         height: 92; radius: Style.rCard
         color: root._pcol(0, Colors.bgPrimary)
@@ -670,31 +683,18 @@ Item {
 
     // ── Four rooms, not one page ────────────────────────────────────────────────
     // Style was five subjects under one heading — menu navigation, the palette, the theme, motion
-    // and a five-step builder — and every one of them was open at once. The strip picks which is on
+    // and a five-step builder (archived, see .internal/archive/theme-builder/) — and every one of
+    // them was open at once. The strip picks which is on
     // show; the rest stop taking space. Same device the Bar page uses, so this is a room you
     // already know how to walk into.
     //
     // Anchored to the top with the preview's height folded into the margin rather than to its
     // bottom edge: a hidden Item still occupies its height, and anchoring to it would leave a strip
     // of empty panel above the tabs in the rooms that do not show a palette.
-    PageTabs {
-        id: tabStrip
-        visible: root.page === ""
-        anchors { top: parent.top; left: parent.left; right: parent.right
-                  topMargin: pinnedPreview.visible ? pinnedPreview.height + Style.cardGap : 0 }
-        equal:   false                       // as wide as their labels, not a toolbar
-        current: root.tab
-        tabs: [{ icon: "󰏘", label: "Look",   key: "look"   },
-               { icon: "󰍜", label: "Menu",   key: "menu"   },
-               { icon: "󰝥", label: "Theme",  key: "theme"  },
-               { icon: "󰛐", label: "Motion", key: "motion" }]
-        onPicked: key => root.tab = key
-    }
-
     Flickable {
-        anchors { top: tabStrip.bottom; topMargin: 18
+        anchors { top: parent.top
+                  topMargin: (pinnedPreview.visible ? pinnedPreview.height + Style.cardGap : 0) + 4
                   left: parent.left; right: parent.right; bottom: parent.bottom }
-        visible: root.page === ""
         contentHeight: col.implicitHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds
@@ -702,11 +702,16 @@ Item {
         Column {
             id: col
             width: parent.width
-            topPadding: 4
+            // No padding of its own: `pageGridY` is what tells the menu where this grid starts, and
+            // four pixels the menu cannot see put its preview card four pixels above every card
+            // beside it. Air at the top of the page belongs in that one number.
             spacing: Style.cardGap
 
             CardColumns {
+                id: lookGrid
                 forced:  root.pageCols
+                colW:    root.pageColW
+                firstRowCols: root.pageFirstCols
                 firstRowMin: root.pageRowMin
                 fillHeight: root.pageFillH
                 height:  implicitHeight
@@ -1029,15 +1034,6 @@ Item {
                         }
                     }
 
-                    Row {
-                        width: parent.width
-                        Text {
-                            width: parent.width - 72; anchors.verticalCenter: parent.verticalCenter
-                            text: root.colorStatus; color: Colors.fgMuted; font.pixelSize: 11
-                            elide: Text.ElideRight; font.family: Style.font
-                        }
-                        TextButton { primary: true; label: "Apply"; onClicked: root.applyColours() }
-                    }
                 }
 
                 // ── Appearance: desktop-wide dark/light + app theming ─────────────
@@ -1098,7 +1094,10 @@ Item {
             }
 
             CardColumns {
+                id: menuGrid
                 forced:  root.pageCols
+                colW:    root.pageColW
+                firstRowCols: root.pageFirstCols
                 firstRowMin: root.pageRowMin
                 fillHeight: root.pageFillH
                 height:  implicitHeight
@@ -1256,7 +1255,10 @@ Item {
             }
 
             CardColumns {
+                id: themeRoom
                 forced:  root.pageCols
+                colW:    root.pageColW
+                firstRowCols: root.pageFirstCols
                 firstRowMin: root.pageRowMin
                 fillHeight: root.pageFillH
                 height:  implicitHeight
@@ -1276,7 +1278,7 @@ Item {
                     CardLabel { text: "THEME"
                                 hint: "A theme decides the shape of the shell — where the bar goes, "
                                       + "the chrome, the font, its own lockscreen. Click one to wear "
-                                      + "it, click it again to open the builder. Colours always come "
+                                      + "it, click it again to put its arrangement back. Colours always come "
                                       + "from your wallpaper, whichever theme you run." }
 
                     Flow {
@@ -1287,8 +1289,14 @@ Item {
                         // 1870 px wide turns each into a letterbox. So the width is a target, not a
                         // share: as many columns as fit at ~300 px, and the leftover is spread
                         // across them rather than stretching two cards over the whole page.
-                        readonly property int cols: Math.max(1, Math.min(5, Math.floor(width / 300)))
-                        readonly property real cw: Math.floor((width - spacing * (cols - 1)) / cols)
+                        // A tile is a WINDOW onto a desktop, so it keeps a desktop's proportions.
+                        // Both ends of the range are capped: a single 560 px tile in a one-column
+                        // card is a screenshot blown up until the shell inside it looks cramped, and
+                        // five per row on a wide panel are stamps. So the target is 260 and the tile
+                        // never grows past 340 — the leftover is space, not scale.
+                        readonly property int cols: Math.max(1, Math.min(5, Math.floor(width / 260)))
+                        readonly property real cw: Math.min(340,
+                            Math.floor((width - spacing * (cols - 1)) / cols))
                         Repeater {
                             // Parked themes (shipped but not built out, `wip` in their theme.json) are
                             // hidden entirely for now. ThemeCard still draws the SOON badge, so
@@ -1328,9 +1336,6 @@ Item {
 
                     Flow {
                         width: parent.width; spacing: 8
-                        // "Make mine" rather than "Duplicate": the copy carries the settings you have
-                        // actually made, not the shipped snapshot you started from.
-                        TextButton { label: "Make mine"; onClicked: Theme.fork(Theme.themeId, "") }
                         // Wearing a theme restores YOUR version of it. This is the way back to the
                         // shipped one, and the only thing that forgets what you changed.
                         TextButton { label: "Reset to default"
@@ -1340,6 +1345,52 @@ Item {
                                      onClicked: root._themeBeginRename() }
                         TextButton { label: "Delete"; visible: root.themeIsMine
                                      onClicked: root.deleteTheme(Theme.themeId) }
+                    }
+                }
+
+                // ── The picker on the keybind ─────────────────────────────────────────
+                // Super+Ctrl+Space offers the same themes as the grid above, in one of two shapes.
+                // The knobs live here rather than on a page of their own for the same reason the
+                // theme's own controls do: this is where you are when you care about them.
+                Card {
+                    CardLabel { text: "PICKER"
+                                hint: "Super+Ctrl+Space, or `qs ipc call theme toggle`. Gallery fills "
+                                      + "the screen with one card per theme; Popout grows the same "
+                                      + "cards out of the bar." }
+                    Segmented {
+                        equal: true
+                        current: VtlConfig.themePickerStyle
+                        segments: [{ label: "Gallery", key: "gallery" }, { label: "Popout", key: "popout" }]
+                        onPicked: root.save("theme_picker_style", key)
+                    }
+                    Stepper {
+                        visible: VtlConfig.themePickerStyle !== "popout"
+                        label: "Card size"; unit: "%"; step: 2; min: 15; max: 70; labelWidth: 88
+                        value: VtlConfig.themePickerSize
+                        onChanged: root.save("theme_picker_size", v)
+                    }
+                    Toggle {
+                        visible: VtlConfig.themePickerStyle !== "popout"
+                        label: "Blur behind"; on: VtlConfig.themePickerBlur
+                        sub: "Frost the desktop behind the picker (ext-background-effect-v1)."
+                        onToggled: root.save("theme_picker_blur", !VtlConfig.themePickerBlur)
+                    }
+                    Stepper {
+                        visible: VtlConfig.themePickerStyle === "popout"
+                        label: "Columns"; step: 1; min: 1; max: 5; labelWidth: 88
+                        value: VtlConfig.themePickerCols
+                        onChanged: root.save("theme_picker_cols", v)
+                    }
+                    Stepper {
+                        visible: VtlConfig.themePickerStyle === "popout"
+                        label: "Card width"; unit: "px"; step: 10; min: 120; max: 400; labelWidth: 88
+                        value: VtlConfig.themePickerPreview
+                        onChanged: root.save("theme_picker_preview", v)
+                    }
+                    PosGrid {
+                        visible: VtlConfig.themePickerStyle === "popout"
+                        current: VtlConfig.themePickerPos
+                        onPicked: root.save("theme_picker_position", key)
                     }
                 }
 
@@ -1376,26 +1427,14 @@ Item {
                     }
                 }
 
-                // ── Build a theme ─────────────────────────────────────────────────
-                Card {
-                    CardLabel { text: "BUILD A THEME"
-                                hint: "Fine-tune the live look step by step — bar, menus, launcher, font — and optionally save it as a named preset. Everything applies live." }
-                    Rectangle {
-                        width: parent.width; height: 44; radius: Style.rControl
-                        color: buildHov.containsMouse ? Style.accent : Style.tint(Style.accent, 0.22)
-                        border.width: 1; border.color: Style.accent
-                        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
-                        Text { anchors.centerIn: parent; text: "󰏘   Build a theme"
-                               color: buildHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
-                               font.pixelSize: 14; font.bold: true; font.family: Style.font }
-                        MouseArea { id: buildHov; anchors.fill: parent; hoverEnabled: true
-                                    onClicked: { root.page = "build"; buildName.text = "" } }
-                    }
-                }
+
             }
 
             CardColumns {
+                id: motionGrid
                 forced:  root.pageCols
+                colW:    root.pageColW
+                firstRowCols: root.pageFirstCols
                 firstRowMin: root.pageRowMin
                 fillHeight: root.pageFillH
                 height:  implicitHeight
@@ -1445,346 +1484,18 @@ Item {
         }
     }
 
-    // ════════════════════════════════════════════════════════════════════════════════
-    // BUILDER SUB-PAGE — name it, then assemble the theme top to bottom
-    // ════════════════════════════════════════════════════════════════════════════════
-    Item {
-        anchors.fill: parent
-        visible: root.page === "build"
 
-        Row {
-            id: buildBack
-            anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 2 }
-            height: 34; spacing: 8
-            Rectangle {
-                width: 34; height: 34; radius: 8
-                color: bbHov.containsMouse ? Style.accent : Style.controlFill
-                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
-                Text { anchors.centerIn: parent; text: "󰁍"; color: Colors.fgBright
-                       font.pixelSize: 16; font.family: Style.font }
-                MouseArea { id: bbHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.page = "" }
-            }
-            Column {
-                anchors.verticalCenter: parent.verticalCenter
-                Text { text: "Build a theme"; color: Colors.fgBright
-                       font.pixelSize: 15; font.bold: true; font.family: Style.font }
-                Text { text: "Base: " + (Theme.name || "—"); color: Colors.fgMuted
-                       font.pixelSize: 10; font.family: Style.font }
-            }
-        }
-
-        Flickable {
-            anchors { top: buildBack.bottom; topMargin: 12; left: parent.left; right: parent.right; bottom: parent.bottom }
-            contentHeight: buildCol.implicitHeight
-            clip: true; boundsBehavior: Flickable.StopAtBounds
-
-            Column {
-                id: buildCol
-                width: parent.width
-                spacing: Style.cardGap
-
-                // 1 · Keep the current look as a theme of your own (a fork of the one you wear).
-                Card {
-                    CardLabel { text: "1 · SAVE AS A THEME"
-                                hint: "Forks the theme you are wearing into one that is yours, carrying the settings you have made. Adjust the sections below first, then save — the shipped themes are never touched. Optional."  }
-                    Rectangle {
-                        width: parent.width; height: 40; radius: Style.rControl
-                        color: Style.controlFill
-                        border.width: Style.controlBorderW; border.color: Style.controlBorderColor
-                        Row {
-                            anchors { fill: parent; leftMargin: 12; rightMargin: 8 }
-                            spacing: 8
-                            TextInput {
-                                id: buildName
-                                width: parent.width - 108
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: Colors.fgBright; font.pixelSize: Style.fsLabel; font.family: Style.font
-                                clip: true; selectByMouse: true
-                                onAccepted: if (text.trim() !== "") { Theme.fork(Theme.themeId, text.trim()); buildName.text = "" }
-                                Text { anchors.fill: parent; verticalAlignment: Text.AlignVCenter
-                                       visible: buildName.text === ""; text: "Theme name…"
-                                       color: Colors.fgMuted; font: buildName.font }
-                            }
-                            TextButton { primary: true; label: "Save theme"; anchors.verticalCenter: parent.verticalCenter
-                                         onClicked: if (buildName.text.trim() !== "") { Theme.fork(Theme.themeId, buildName.text.trim()); buildName.text = "" } }
-                        }
-                    }
-                }
-
-                // UI-style switching is parked while only mirobo is built out — the other styles
-                // return as their own cards on the Style page, each carrying its own ui_style, so the
-                // builder no longer offers a raw style picker (it would jump into unfinished styles).
-
-                // 2 · Bar basics — placement lives here, the module arrangement in Settings → Bar.
-                Card {
-                    CardLabel { text: "2 · BAR" }
-                    FieldLabel { text: "Mode" }
-                    Segmented {
-                        equal: true
-                        current: VtlConfig.barModeFor("")
-                        segments: [{ label: "Dock", key: "dock" }, { label: "Float", key: "float" },
-                                   { label: "Frame", key: "frame" }, { label: "None", key: "none" }]
-                        onPicked: root.save("bar_mode", key)
-                    }
-                    FieldLabel { text: "Position"
-                                 hint: "Modules, per-edge arrangement and sizing: Settings → Bar." }
-                    Segmented {
-                        equal: true
-                        current: VtlConfig.barPositionFor("")
-                        segments: [{ label: "Top", key: "top" }, { label: "Bottom", key: "bottom" },
-                                   { label: "Left", key: "left" }, { label: "Right", key: "right" }]
-                        // Frame reads bar_edges, not bar_position — mirror the pick into the
-                        // edge list so the choice takes effect there too (multi-edge frames
-                        // stay a Settings → Bar affair).
-                        onPicked: { root.save("bar_position", key)
-                                    if (VtlConfig.barModeFor("") === "frame") root.save("bar_edges", [key]) }
-                    }
-                    Stepper { label: "Thickness"; unit: "px"; min: 16; max: 80; step: 2; labelWidth: 110
-                              value: VtlConfig.barThicknessFor("")
-                              onChanged: root.save("bar_thickness", v) }
-                }
-
-                // 4 · Menus & transitions
-                Card {
-                    CardLabel { text: "3 · MENUS" }
-                    Toggle {
-                        label: "Colorful"
-                        sub:   "Blend a hint of the accent into surfaces"
-                        on:    VtlConfig.colorfulEnabled
-                        onToggled: root.save("colorful_enabled", !VtlConfig.colorfulEnabled)
-                    }
-                    Column {
-                        width:   parent.width
-                        spacing: 6
-                        visible: VtlConfig.colorfulEnabled
-                        Toggle { indent: true; label: "Bar";   on: VtlConfig.colorfulBarSub
-                                 onToggled: root.save("colorful_bar",   !VtlConfig.colorfulBarSub) }
-                        Toggle { indent: true; label: "Menus"; on: VtlConfig.colorfulMenusSub
-                                 onToggled: root.save("colorful_menus", !VtlConfig.colorfulMenusSub) }
-                        Toggle { indent: true; label: "OSD";   on: VtlConfig.colorfulOsdSub
-                                 onToggled: root.save("colorful_osd",   !VtlConfig.colorfulOsdSub) }
-                    }
-
-                    FieldLabel { text: "Transition — on a bar" }
-                    Dropdown {
-                        summary: root.styleLabel(VtlConfig.transitionGlobalRaw("bar"))
-                        options: root.styleOpts(VtlConfig.transitionGlobalRaw("bar"), false)
-                        onPicked: root.save("transition_style_bar", key)
-                    }
-                    FieldLabel { text: "Transition — on a monitor edge" }
-                    Dropdown {
-                        summary: root.styleLabel(VtlConfig.transitionGlobalRaw("edge"))
-                        options: root.styleOpts(VtlConfig.transitionGlobalRaw("edge"), false)
-                        onPicked: root.save("transition_style_edge", key)
-                    }
-
-                    // Per-menu overrides — collapsed until opened.
-                    Rectangle {
-                        id: perMenuHead
-                        property bool open: false
-                        width: parent.width; height: 34; radius: Style.rControl
-                        color: phHov.containsMouse ? Style.controlHover : Style.controlFill
-                        border.width: Style.controlBorderW; border.color: Style.controlBorderColor
-                        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
-                        Text {
-                            anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                            text: "Per-menu overrides"; color: Colors.fgPrimary
-                            font.pixelSize: Style.fsLabel; font.family: Style.font
-                        }
-                        Text {
-                            anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                            text: perMenuHead.open ? "▴" : "▾"; color: Colors.fgMuted
-                            font.pixelSize: 12; font.family: Style.font
-                        }
-                        MouseArea { id: phHov; anchors.fill: parent; hoverEnabled: true
-                                    onClicked: perMenuHead.open = !perMenuHead.open }
-                    }
-                    Column {
-                        width: parent.width; spacing: 10
-                        visible: perMenuHead.open
-                        Repeater {
-                            model: root.menus
-                            delegate: Column {
-                                required property var modelData
-                                width: parent ? parent.width : 0
-                                spacing: 3
-                                FieldLabel { text: modelData.label }
-                                SubLabel { text: "On a bar" }
-                                Dropdown {
-                                    summary: root.styleLabelG(VtlConfig.transitionMenuRaw(modelData.key, "bar"))
-                                    options: root.styleOpts(VtlConfig.transitionMenuRaw(modelData.key, "bar"), true)
-                                    onPicked: root.save("transition_style_" + modelData.key + "_bar", key)
-                                }
-                                SubLabel { text: "On a monitor edge" }
-                                Dropdown {
-                                    summary: root.styleLabelG(VtlConfig.transitionMenuRaw(modelData.key, "edge"))
-                                    options: root.styleOpts(VtlConfig.transitionMenuRaw(modelData.key, "edge"), true)
-                                    onPicked: root.save("transition_style_" + modelData.key + "_edge", key)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 5 · Launcher
-                Card {
-                    CardLabel { text: "4 · LAUNCHER" }
-                    FieldLabel { text: "Position" }
-                    Dropdown {
-                        summary: VtlConfig.launcherPosition
-                        options: ["top-center", "center", "bottom-center", "top-left", "top-right",
-                                  "bottom-left", "bottom-right"].map(function (k) {
-                            return { key: k, label: k, on: VtlConfig.launcherPosition === k }
-                        })
-                        onPicked: root.save("launcher_position", key)
-                    }
-                    Toggle { label: "Dock against the bar"; on: VtlConfig.launcherDock
-                             onToggled: root.save("launcher_dock", !VtlConfig.launcherDock) }
-                    Toggle { label: "Blur behind"; on: VtlConfig.launcherBlur
-                             onToggled: root.save("launcher_blur", !VtlConfig.launcherBlur) }
-                }
-
-                // 6 · Font
-                Card {
-                    CardLabel { text: "5 · FONT" }
-                    Dropdown {
-                        summary: root.fontLabel(VtlConfig.uiFont)
-                        options: root.fontOptions.map(function (o) {
-                            return { key: o.key, label: o.label, on: VtlConfig.uiFont === o.key }
-                        })
-                        onPicked: root.pickFont(key)
-                    }
-                }
-            }
-        }
-    }
-
-    // One card = one theme, drawn as a shrunken desktop rather than a name in a list.
-    //
-    // It draws with THAT THEME's tokens, not the shell's current ones: every card looked identical
-    // apart from where the bar sat, because they all read the active Style. Now the card resolves
-    // the theme's own table (Theme.tableFor → Style.resolveTable) — its radii, its fills, its
-    // borders — against the LIVE wallust palette. So the shape on the card is the shape you will
-    // get, and the colours are still yours, which is the one thing a theme never decides.
-    component ThemeCard: Item {
+    // One card = one theme. The tile itself is shared with the theme picker (common/ThemeTile.qml)
+    // so the two places that show themes cannot drift apart; what stays here is only what a click
+    // means on THIS page.
+    component ThemeCard: ThemeTile {
         id: tc
-        property var theme: ({})
-        readonly property bool   active: Theme.themeId === (tc.theme.id || "")
-        readonly property string pos:    tc.theme.bar_position || "top"
-        readonly property string mode:   tc.theme.bar_mode || "frame"
-        // Parked: shipped but not built out. Dimmed, badged, and inert until it is finished.
-        readonly property bool   wip:    !!tc.theme.wip
-        // The theme's own look, resolved.
-        readonly property var    look:   Style.resolveTable(Theme.tableFor(tc.theme.base || "flat",
-                                                                          tc.theme.tokens || ({})))
-        readonly property int    barR:   tc.theme.bar_inner_radius || 0
-        readonly property bool   pills:  (tc.theme.bar_module_bg || "module") !== "none"
-        // A screen's proportions, plus the two lines of caption under it. Fixed at 150 the card
-        // stretched into a letterbox the moment the panel got wide, and a desktop drawn in a
-        // letterbox stops reading as a desktop.
-        readonly property int captionH: 46
-        height: Math.round((tc.width - 10) * 9 / 16) + tc.captionH
-
-        StyledRect {
-            anchors.fill: parent
-            radius: Style.rControl
-            color: tc.active ? Style.tint(Style.accent, 0.14)
-                             : (!tc.wip && tcHov.containsMouse ? Style.controlHover : Style.controlFill)
-            borderWidth: tc.active ? 2 : Style.controlBorderW
-            borderColor: tc.active ? Style.accent : Style.controlBorderColor
-            Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
-        }
-
-        // ── The preview: a window onto the desktop this theme makes ─────────────────────────────
-        // Not a drawing of one. Three attempts at a drawn card all failed the same way — the shell
-        // can only vary a corner radius and a typeface for a theme it does not know, so a terminal
-        // report and a card desktop came out as the same picture twice. ThemePreview shows instead:
-        // the picture actually on your desk, the theme's own backdrop over it, the bar its
-        // arrangement asks for, and its real dashboard component where it brings one.
-        //
-        // What those components are handed: the shared context (live palette — colours belong to
-        // the wallpaper, not to the theme) with the THEME's font and resolved tokens written over
-        // it, plus enough plausible facts to draw with. Fixed figures on purpose: a picker card is
-        // not a monitor, and wiring one to the live services would start them per card.
-        readonly property var cardCtx: {
-            var c = Style.themeContext()
-            c.font   = (tc.theme.ui_font || "") !== "" ? tc.theme.ui_font : Style.font
-            c.tokens = tc.look
-            c.name   = tc.theme.name || tc.theme.id || ""
-            c.worn   = tc.active
-            c.surfaces = (tc.theme.components || []).length
-            c.insets = ({ "top": 0, "bottom": 0, "left": 0, "right": 0 })
-            c.settings = ({})
-            c.host = "velumeron"; c.kernel = "7.1.8"; c.uptime = "1d 23h"; c.user = "vredix"
-            c.load = ({ "cpu": 6, "mem": 38, "disk": 81 })
-            c.battery = ({ "present": false })
-            c.media = ({ "title": "", "playing": false })
-            c.notifications = ({ "count": 0, "dnd": false })
-            c.workspaces = [{ "slot": 1, "focused": true }]
-            c.state = ({ "volume": 0.7, "brightness": 1.0, "profile": "balanced" })
-            c.actions = ({})
-            return c
-        }
-
-        ThemePreview {
-            id: mock
-            opacity: tc.wip ? 0.4 : 1
-            anchors { top: parent.top; left: parent.left; right: parent.right; margins: 5 }
-            height: parent.height - tc.captionH
-            theme:     tc.theme
-            look:      tc.look
-            wallpaper: root.deskWallpaper
-            ctx:       tc.cardCtx
-        }
-
-        // What the theme replaces, as a fact rather than as a picture that cannot hold it: a theme
-        // taking over fourteen surfaces is a different desktop, and no thumbnail says that.
-        Text {
-            anchors { left: parent.left; right: parent.right; bottom: parent.bottom
-                      leftMargin: 9; rightMargin: 9; bottomMargin: 24 }
-            text: ((tc.theme.components || []).length > 0
-                   ? ((tc.theme.components || []).length + " own surfaces")
-                   : "shipped surfaces")
-                  + "  ·  " + ((tc.theme.ui_font || "") !== "" ? tc.theme.ui_font : "shell font")
-            color: Colors.fgMuted
-            font.pixelSize: 10; font.family: Style.font
-            elide: Text.ElideRight
-        }
-
-        // "SOON" badge on the parked themes.
-        Rectangle {
-            visible: tc.wip
-            anchors { top: mock.top; right: mock.right; topMargin: 4; rightMargin: 4 }
-            width: soonLbl.implicitWidth + 12; height: 17; radius: 8
-            color: Style.tint(Colors.bgActive, 0.9)
-            Text { id: soonLbl; anchors.centerIn: parent; text: "SOON"; color: Colors.bgPrimary
-                   font.pixelSize: 9; font.bold: true; font.family: Style.font; font.letterSpacing: 0.5 }
-        }
-
-        Row {
-            anchors { left: parent.left; right: parent.right; bottom: parent.bottom
-                      leftMargin: 9; rightMargin: 9; bottomMargin: 7 }
-            spacing: 6
-            Text {
-                width: parent.width - (tc.active ? 30 : 0)
-                text: (tc.theme.name || "") + (tc.theme.source === "user" ? "  · yours" : "")
-                color: tc.wip ? Colors.fgMuted : (tc.active ? Colors.fgBright : Colors.fgPrimary)
-                font.pixelSize: 12; font.bold: tc.active; font.family: Style.font
-                elide: Text.ElideRight
-            }
-            Text { visible: tc.active; text: "󰄬"; color: Style.accent
-                   font.pixelSize: 13; font.family: Style.font }
-        }
-
-        // Click to wear it; the one you are already wearing opens the builder.
-        MouseArea {
-            id: tcHov; anchors.fill: parent; hoverEnabled: !tc.wip
-            cursorShape: tc.wip ? Qt.ArrowCursor : Qt.PointingHandCursor
-            onClicked: {
-                if (tc.wip) return
-                if (tc.active) root.page = "build"
-                else           root.pickTheme(tc.theme.id)
-            }
-        }
+        monitor:   UiState.menuMon
+        wallpaper: root.deskWallpaper
+        // Clicking the one you already wear puts its arrangement back — the same thing Enter does
+        // on the worn card in the picker. It used to open the theme builder; that page walked the
+        // bar, the menus, the launcher and the font a second time, went unused, and is archived
+        // under .internal/archive/theme-builder/.
+        onPicked: root.pickTheme(tc.theme.id)
     }
 }

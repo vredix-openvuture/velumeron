@@ -20,9 +20,14 @@ singleton IdleService 1.0 IdleService.qml
 singleton SoundService 1.0 SoundService.qml
 singleton LockState 1.0 lock/LockState.qml
 singleton ShellFacts 1.0 ShellFacts.qml
+singleton WeatherService 1.0 WeatherService.qml
+singleton KeyboardService 1.0 KeyboardService.qml
+singleton FontList  1.0 FontList.qml
 
 # Shared UI component library (token-driven; used by every settings page)
 ThemeSurface 1.0 common/ThemeSurface.qml
+# One theme drawn as a shrunken desktop (settings picker + the Super+Ctrl+Space picker)
+ThemeTile   1.0 common/ThemeTile.qml
 ThemeSkin   1.0 common/ThemeSkin.qml
 ThemeMaterial 1.0 ThemeMaterial.qml
 StyledRect  1.0 common/StyledRect.qml
@@ -50,7 +55,9 @@ PosGrid     1.0 common/PosGrid.qml
 TextButton  1.0 common/TextButton.qml
 WallThumb   1.0 common/WallThumb.qml
 RoundedImage 1.0 common/RoundedImage.qml
+WeatherIcon 1.0 common/WeatherIcon.qml
 InputField  1.0 common/InputField.qml
+CityField   1.0 common/CityField.qml
 AppField    1.0 common/AppField.qml
 IconGlyphPicker 1.0 common/IconGlyphPicker.qml
 ColorPicker      1.0 common/ColorPicker.qml
@@ -76,6 +83,8 @@ StatusDot   1.0 common/StatusDot.qml
 WallpaperWindow   1.0 WallpaperWindow.qml
 WallpaperFeed     1.0 wallpaper/WallpaperFeed.qml
 WallpaperGallery  1.0 wallpaper/WallpaperGallery.qml
+# Theme picker — full-screen shape (the bar-docked shape is themepicker/ThemeQuick.qml)
+ThemeGallery      1.0 themepicker/ThemeGallery.qml
 Launcher          1.0 launcher/Launcher.qml
 LauncherRail      1.0 launcher/LauncherRail.qml
 LauncherOverview  1.0 launcher/LauncherOverview.qml
@@ -106,12 +115,14 @@ PerformanceGlide  1.0 osd/PerformanceGlide.qml
 UserGlide         1.0 osd/UserGlide.qml
 NetworkGlide      1.0 osd/NetworkGlide.qml
 BtGlide           1.0 osd/BtGlide.qml
+MicGlide          1.0 osd/MicGlide.qml
 TrayGlide         1.0 osd/TrayGlide.qml
 WorkspaceGlide    1.0 osd/WorkspaceGlide.qml
 NotifPeekGlide    1.0 osd/NotifPeekGlide.qml
 UpdatesGlide      1.0 osd/UpdatesGlide.qml
 ShareGlide        1.0 osd/ShareGlide.qml
 WallpaperQuick    1.0 osd/WallpaperQuick.qml
+ThemeQuick        1.0 themepicker/ThemeQuick.qml
 Taskbar           1.0 osd/Taskbar.qml
 TaskbarReserve    1.0 osd/TaskbarReserve.qml
 WindowTags        1.0 windowtags/WindowTags.qml
@@ -146,10 +157,16 @@ singleton ZonesState 1.0 zones/ZonesState.qml
 ZoneOverlay          1.0 zones/ZoneOverlay.qml
 ZonesSection         1.0 settings/zones/ZonesSection.qml
 
+# The desk — the same cell grid on the wallpaper, under the windows (Settings -> Widgets)
+DeskWindow        1.0 desk/DeskWindow.qml
+ContextMenu       1.0 common/ContextMenu.qml
+DeskSection       1.0 settings/desk/DeskSection.qml
+
 # Dashboard (the settings menu's home page — a cell grid the user arranges themselves)
 singleton DashState   1.0 dashboard/DashState.qml
 singleton DashModules 1.0 dashboard/DashModules.qml
 DashGrid              1.0 dashboard/DashGrid.qml
+DashClock             1.0 dashboard/DashClock.qml
 DashEditor            1.0 dashboard/DashEditor.qml
 DashTile              1.0 dashboard/DashTile.qml
 DashGreeting          1.0 dashboard/DashGreeting.qml
@@ -159,9 +176,15 @@ DashToggle            1.0 dashboard/DashToggle.qml
 DashAction            1.0 dashboard/DashAction.qml
 DashGlance            1.0 dashboard/DashGlance.qml
 DashMpris             1.0 dashboard/DashMpris.qml
+DashWeather           1.0 dashboard/DashWeather.qml
+# Per-widget option panels — one per module type, loaded by the editor's inspector
+WidgetOpts            1.0 dashboard/opts/WidgetOpts.qml
+ClockOpts             1.0 dashboard/opts/ClockOpts.qml
+MprisOpts             1.0 dashboard/opts/MprisOpts.qml
+WeatherOpts           1.0 dashboard/opts/WeatherOpts.qml
+GlanceOpts            1.0 dashboard/opts/GlanceOpts.qml
 DashNetwork       1.0 dashboard/DashNetwork.qml
 DashBluetooth     1.0 dashboard/DashBluetooth.qml
-DashSpacer            1.0 dashboard/DashSpacer.qml
 DashSpacer            1.0 dashboard/DashSpacer.qml
 
 # Notifications (server + popups + centre + shared list)
@@ -176,6 +199,7 @@ singleton PhoneService 1.0 phone/PhoneService.qml
 PhoneMenu             1.0 phone/PhoneMenu.qml
 
 # Bar modules
+singleton Popouts 1.0 bar/Popouts.qml
 BarSeparator    1.0 bar/modules/BarSeparator.qml
 Clock           1.0 bar/modules/Clock.qml
 Workspaces      1.0 bar/modules/Workspaces.qml
@@ -211,6 +235,19 @@ Updates         1.0 bar/modules/Updates.qml
 LayoutSwitcher  1.0 bar/modules/LayoutSwitcher.qml
 GroupModule     1.0 bar/modules/GroupModule.qml
 LayoutMenu      1.0 bar/modules/LayoutMenu.qml
+ButtonModule    1.0 bar/modules/ButtonModule.qml
+PopoutButton    1.0 bar/modules/PopoutButton.qml
+QuickToggle     1.0 bar/modules/QuickToggle.qml
+Brightness      1.0 bar/modules/Brightness.qml
+PowerProfile    1.0 bar/modules/PowerProfile.qml
+FocusedWindow   1.0 bar/modules/FocusedWindow.qml
+ThemeSwitcher   1.0 bar/modules/ThemeSwitcher.qml
+Weather         1.0 bar/modules/Weather.qml
+WeatherMenu     1.0 bar/modules/WeatherMenu.qml
+Microphone      1.0 bar/modules/Microphone.qml
+MicMenu         1.0 bar/modules/MicMenu.qml
+KeyboardLayout  1.0 bar/modules/KeyboardLayout.qml
+KeyboardMenu    1.0 bar/modules/KeyboardMenu.qml
 
 # Settings menu (the corner dropdown) + its pages
 Settings             1.0 settings/Settings.qml

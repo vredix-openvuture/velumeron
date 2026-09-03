@@ -10,6 +10,8 @@ import Quickshell.Io
 Item {
     id: root
     property bool vertical: false   // set by ModSlot: rotate to read along a vertical sidebar
+    // Turned 90 degrees on a vertical bar (see Bar.qml ModSlot): the count sits beside the glyph.
+    readonly property bool rotateOnVertical: true
     property string barMon:   ""    // monitor name, for per-monitor icon/font size
     property string barEdge:  "top"
     property string barGroup: "start"

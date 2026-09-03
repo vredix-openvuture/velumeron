@@ -25,8 +25,8 @@ Item {
     // Per-module customization (Settings → Bar → Module → gear). Colour override = the active state.
     readonly property string _font: VtlConfig.moduleFontFor("bluetooth")
     readonly property color _col: (root._powered && root._connected > 0)
-                                  ? (Colors[VtlConfig.moduleColorName("bluetooth")] ?? Colors.boActive) : Colors.fgMuted
-    readonly property bool menuOpen: UiState.flyout === "bluetooth" && UiState.flyoutMon === root.barMon
+                                  ? (Colors[VtlConfig.moduleColorName("bluetooth")] ?? Colors.boActive) : Style.barDim(root.barMon)
+    readonly property bool menuOpen: Popouts.isOpen("bluetooth", root.barMon)
 
     function _publishGlide() {
         var c = root.mapToItem(null, root.width / 2, root.height / 2)
@@ -37,7 +37,7 @@ Item {
     function _toggleMenu() {
         var c = root.mapToItem(null, root.width / 2, root.height / 2)
         UiState.btHover = false
-        UiState.toggleFlyout("bluetooth", c.x, c.y, root.barEdge, root.barGroup, root.barMon)
+        Popouts.openFor("bluetooth", root, root.barEdge, root.barGroup, root.barMon)
     }
 
     Text {

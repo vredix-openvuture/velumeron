@@ -31,7 +31,11 @@ Item {
     readonly property real liveAlpha: 0.11
 
     Repeater {
-        model: Math.ceil(root.height / root.pitch)
+        // Clamped at zero. A panel this sits in reports a NEGATIVE height for a frame or two while
+        // its spring settles (Style.elDockH overshoots through the collapsed size), and a Repeater
+        // handed a negative model logs "Model size of -45 is less than 0" and draws nothing —
+        // five of them on every cold start, before any of this was on screen.
+        model: Math.max(0, Math.ceil(root.height / root.pitch))
         delegate: Rectangle {
             required property int index
             y: index * root.pitch

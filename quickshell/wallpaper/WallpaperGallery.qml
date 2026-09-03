@@ -149,17 +149,34 @@ PanelWindow {
     // Latched: the player is built once and then kept for the life of the window. Destroying an
     // MpvVideo aborts inside libmpv, so it must never be unloaded.
     //
-    // Built as soon as the OPEN gallery has any live wallpaper to show, not when one first reaches
-    // the middle — which is what made the preview take about two seconds. Almost none of that was
-    // decoding: it was creating the mpv instance and, worse, waiting for its render context, which
-    // only exists once the item has been through a frame. With both already done, a source needs
-    // ~50 ms to put up its first picture (measured). So the player is built and warmed while you
-    // are still looking at the stack, and parked 2 px wide behind the cards until it is wanted —
-    // parked rather than hidden on purpose: an item that is not rendered never gets the context,
-    // which would put the whole wait back where it was.
-    readonly property bool liveWarm: root.livePreview && feed.nLive > 0
+    // BUILT WHEN A VIDEO IS ACTUALLY WANTED, not when the picker opens. The build is expensive and
+    // the cost cannot be moved: making the mpv instance and — the real weight — waiting for its
+    // render context blocks the GUI thread for about two seconds, and that context only exists once
+    // the item has been through a RENDERED frame, so building it early behind a hidden window buys
+    // nothing. Measured on the picker's first open: 2.00 s with live preview on, 0.06 s with it off,
+    // and still 1.84 s with the player built at startup anyway.
+    //
+    // It used to be built as soon as an open picker had any live wallpaper in the folder, which put
+    // those two seconds on the click that opened it — the one moment somebody is waiting. Now the
+    // picker opens instantly, a folder of stills never pays at all, and the first video you dwell on
+    // takes the two seconds once.
     property bool everLive: false
-    onLiveWarmChanged: if (root.liveWarm) root.everLive = true
+    onLivePathChanged: if (root.livePath !== "") root.everLive = true
+
+    // The catalogue is fetched at rest instead of on the click, on the main monitor only: every
+    // screen has a gallery of its own and a python listing per screen is not worth it for a picker
+    // nobody may open. The other screens list on their first open, exactly as this one used to.
+    property bool _warmed: false
+    readonly property bool _isMainMon: root.mon !== "" && root.mon === VtlConfig._mainMonName()
+    Timer {
+        interval: 4000
+        running: !root._warmed && root._isMainMon
+        onTriggered: {
+            root._warmed = true
+            if (feed.mon === "") feed.mon = root.mon
+            feed.refresh()
+        }
+    }
 
     // The box a theme's picker offers for the live player, with the TARGET MONITOR's aspect fitted
     // inside it. The theme hands over the pane it has free (`liveRect`, in its own coordinates,

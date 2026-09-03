@@ -6,6 +6,8 @@ import Quickshell.Services.Pipewire
 Item {
     id: root
     property bool vertical: false   // set by ModSlot: rotate to read along a vertical sidebar
+    // Turned 90 degrees on a vertical bar (see Bar.qml ModSlot): only with the percentage beside the glyph.
+    readonly property bool rotateOnVertical: root._showPct
     property string barMon:   ""    // monitor name, for per-monitor icon/font size
     property string barEdge:  "top" // set by Bar; drives the hover-glide direction
     property string barGroup: "start" // set by Bar; start/end → menu merges into the corner
@@ -22,7 +24,7 @@ Item {
 
     // Per-module customization (Settings → Bar → Module → gear).
     readonly property string _font:    VtlConfig.moduleFontFor("volume")
-    readonly property color  _col:     Colors[VtlConfig.moduleColorName("volume")] ?? Colors.fgMuted
+    readonly property color  _col:     Colors[VtlConfig.moduleColorName("volume")] ?? Style.barDim(root.barMon)
     readonly property bool   _showPct: VtlConfig.moduleSetting("volume", "show_percent", false)
     readonly property int    _scroll:  VtlConfig.moduleSetting("volume", "scroll_step", 5)
 
@@ -46,8 +48,7 @@ Item {
 
     // Click opens the Volume menu (docked out of the bar); hover only shows the glide.
     function _toggleMenu() {
-        var c = root.mapToItem(null, root.width / 2, root.height / 2)
-        UiState.toggleFlyout("volume", c.x, c.y, root.barEdge, root.barGroup, root.barMon)
+        Popouts.openFor("volume", root, root.barEdge, root.barGroup, root.barMon)
     }
 
     Row {

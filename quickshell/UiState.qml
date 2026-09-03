@@ -142,8 +142,12 @@ QtObject {
     // panel left no room for the module list. Opening it HIDES the settings menu (the editor joins
     // the draft-holding class in _closeMenusExcept — it closes others, nothing auto-closes it) and
     // Done brings the menu back exactly where it was.
+    // The same editor arranges two rasters — the settings home page and the desk (widgets on the
+    // wallpaper). They differ in which settings key they write and how big the canvas is, nothing
+    // else, so the target is a string here rather than a second editor window.
     property bool   dashEditOpen: false
     property string dashEditMon:  ""
+    property string dashEditTarget: "dashboard"      // dashboard | desk
     property string _dashEditReturn: ""
     // Measured viewport of the live dashboard, published by HomeHub — the editor previews at the
     // real size instead of re-deriving it from menu %, rail, paddings and the session bar.
@@ -158,16 +162,34 @@ QtObject {
     property int    menuPctDockH:  0
     property int    menuPctFloatW: 0
     property int    menuPctFloatH: 0
-    function openDashEdit(mon) {
+    function openDashEdit(mon, target) {
         ui._dashEditReturn = ui.openDropdown
-        ui.dashEditMon  = mon
-        ui.dashEditOpen = true
+        ui.dashEditMon    = mon
+        ui.dashEditTarget = (target === "desk") ? "desk" : "dashboard"
+        ui.dashEditOpen   = true
     }
     function closeDashEdit() {
         var back = ui._dashEditReturn
         ui._dashEditReturn = ""
         ui.dashEditOpen = false
         if (back !== "") { ui.menuMon = ui.dashEditMon; ui.openDropdown = back }
+    }
+
+    // ── The shell's context menu ───────────────────────────────────────────────
+    // Right-click on the empty desktop (kind "desk") or on the bare strip of the bar ("bar"). ONE
+    // surface draws both (common/ContextMenu.qml) and the kind picks the list; the position travels
+    // through here because a context menu opens at the pointer and nothing else knows where that was.
+    property bool   ctxMenuOpen: false
+    property string ctxMenuKind: "desk"          // desk | bar
+    property string ctxMenuMon:  ""
+    property real   ctxMenuX: 0
+    property real   ctxMenuY: 0
+    function openContextMenu(kind, mon, x, y) {
+        ui.ctxMenuKind = (kind === "bar") ? "bar" : "desk"
+        ui.ctxMenuMon = mon
+        ui.ctxMenuX = x
+        ui.ctxMenuY = y
+        ui.ctxMenuOpen = true
     }
 
     // Anchor of the placed wallpaper-switcher module on the focused monitor — so the keybind opens the
@@ -184,6 +206,12 @@ QtObject {
     // open alongside the popout — openWallpaperQuick() below routes to one or the other.
     property bool   wallpaperGalleryOpen: false
     property string wallpaperGalleryMon:  ""
+
+    // The THEME picker's full-screen shape (Settings → Style → Picker → Style = Gallery). Its
+    // popout shape is a flyout like the wallpaper one ("theme"), so only this one needs state of
+    // its own; openThemePicker() below routes to whichever shape is configured.
+    property bool   themePickerOpen: false
+    property string themePickerMon:  ""
 
     // ── Corner-menu morph progress ────────────────────────────────────────────
     // 0 = fully closed, 1 = fully open. Animated centrally so the menu panel (CornerMenu)
@@ -304,6 +332,30 @@ QtObject {
         barGaps = m
     }
 
+    // ── Which widget types a LIVE desk is showing ───────────────────────────────
+    // The desk is a second host for the dashboard's modules, and the pollers behind them are gated
+    // on "is anyone looking" (DashState). For the hub that question is one boolean — the menu is
+    // open or it is not. For the desk it is per screen: a desk can be switched off, or scoped to a
+    // workspace that is not the one showing, and a widget nobody can see must not start a poller
+    // any more than a closed menu does.
+    //
+    // So each DeskWindow publishes what IT is showing, keyed by monitor, and drops the entry the
+    // moment it goes dark. The union is what "the desk wants this" means. Readers: DashState's
+    // sampling gate and WeatherService's fetch gate — a weather widget on the desk has to be able
+    // to ask for a reading exactly as the bar's popout does.
+    property var deskKeys: ({})
+    function setDeskKeys(mon, map) {
+        if (!mon) return
+        var m = {}
+        for (var k in deskKeys) if (k !== mon) m[k] = deskKeys[k]
+        if (map) m[mon] = map
+        deskKeys = m
+    }
+    function deskWants(key) {
+        for (var mon in deskKeys) if (deskKeys[mon][key] === true) return true
+        return false
+    }
+
     // ── Notification-centre anchor + morph ──────────────────────────────────────
     // The notiftray bell publishes its edge / group / along-edge position so the centre grows out
     // of the bar from the bell, exactly like the vuture-icon grows the corner menu. notifReveal
@@ -375,6 +427,20 @@ QtObject {
     property string btEdge:     "top"
     property string btMon:      ""
     property string btStatus:   ""         // connected device names for the hover glide
+
+    // WHICH module placed the notification centre's anchor. The bell re-publishes its own on every
+    // open so the centre follows it when the keybind or the IPC opens it — but any module can be
+    // pointed at the centre now, and the bell would then drag the panel back to itself. The opener
+    // stamps its key here and the bell stands down for anyone but itself.
+    property string notifAnchorKey: ""
+
+    // Microphone: the hover pill that names what is recording right now. The list itself is read
+    // straight off PipeWire in the glide — only WHERE and WHETHER to show it lives here.
+    property bool   micHover:   false
+    property real   micAnchorX: 0
+    property real   micAnchorY: 0
+    property string micEdge:    "top"
+    property string micMon:     ""
 
     property bool   wsHover:    false      // workspaces: windows-on-this-workspace preview glide (hover)
     property real   wsAnchorX:  0
@@ -471,6 +537,24 @@ QtObject {
         ui.wallpaperGalleryOpen = true
     }
 
+    // ── The theme picker ────────────────────────────────────────────────────────────────────────
+    // Same two shapes as the wallpaper picker, and the same rule about which one opens: a setting,
+    // not a separate feature. Everything that asks for the picker (the keybind, `ipc call theme
+    // toggle`, a hot corner, a dashboard tile) comes through here, so all of them land on the shape
+    // the user chose and on the monitor the request came from.
+    function openThemePicker(monName, mw, mh) {
+        if (VtlConfig.themePickerStyle !== "popout") { ui.toggleThemePicker(monName); return }
+        var a = ui.wallpaperAnchor(mw, mh, VtlConfig.themePickerPos)
+        ui.toggleFlyout("theme", a.ax, a.ay, a.edge, a.group, monName)
+    }
+    // Full-screen shape, latched to the monitor it was asked for: re-asking on the SAME monitor
+    // closes it, asking on another moves it across.
+    function toggleThemePicker(monName) {
+        if (ui.themePickerOpen && ui.themePickerMon === monName) { ui.themePickerOpen = false; return }
+        ui.themePickerMon  = monName
+        ui.themePickerOpen = true
+    }
+
     function wallpaperAnchor(mw, mh, pos) {
         var p = ("" + pos).split("-")
         var v = p[0], h = p[1] || "center"
@@ -505,6 +589,7 @@ QtObject {
                                       || ui.windowSwitcherOpen || ui.layoutSwitcherOpen
                                       || ui.sessionOpen || ui.keybindContext !== ""
                                       || ui.trayMenuOpen || ui.wallpaperGalleryOpen
+                                      || ui.themePickerOpen || ui.ctxMenuOpen
 
     function _closeMenusExcept(keep) {
         if (keep !== "dropdown"  && ui.openDropdown       !== "") ui.openDropdown       = ""
@@ -518,6 +603,8 @@ QtObject {
         if (keep !== "keybind"   && ui.keybindContext     !== "") ui.keybindContext     = ""
         if (keep !== "tray"      && ui.trayMenuOpen)              ui.trayMenuOpen       = false
         if (keep !== "wallgal"   && ui.wallpaperGalleryOpen)      ui.wallpaperGalleryOpen = false
+        if (keep !== "themepick" && ui.themePickerOpen)           ui.themePickerOpen    = false
+        if (keep !== "ctxmenu"   && ui.ctxMenuOpen)               ui.ctxMenuOpen        = false
     }
     onOpenDropdownChanged:       if (ui.openDropdown   !== "") ui._closeMenusExcept("dropdown")
     onFlyoutChanged:             if (ui.flyout         !== "") ui._closeMenusExcept("flyout")
@@ -531,6 +618,8 @@ QtObject {
     onKeybindContextChanged:     if (ui.keybindContext !== "") ui._closeMenusExcept("keybind")
     onTrayMenuOpenChanged:       if (ui.trayMenuOpen)          ui._closeMenusExcept("tray")
     onWallpaperGalleryOpenChanged: if (ui.wallpaperGalleryOpen) ui._closeMenusExcept("wallgal")
+    onThemePickerOpenChanged:      if (ui.themePickerOpen)      ui._closeMenusExcept("themepick")
+    onCtxMenuOpenChanged:          if (ui.ctxMenuOpen)          ui._closeMenusExcept("ctxmenu")
     // The editors take over the whole screen — clear the set, but stay out of it themselves.
     onPaletteEditorOpenChanged:  if (ui.paletteEditorOpen)     ui._closeMenusExcept("")
 }

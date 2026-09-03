@@ -233,6 +233,10 @@ Item {
     // mode: "dock"  — flush to one edge, reserves space.
     //       "float" — one edge, gap from the screen + rounded, still reserves space.
     //       "frame" — multi-edge frame with rounded inner corners (the classic L-bar).
+    //       "capsule" — a frame that draws NOTHING: same edges, same thickness, same reserved
+    //                 space and the same module lanes, but no fill and no outline, so the modules
+    //                 stand on the wallpaper by themselves. Give them a per-module background and
+    //                 you get the row-of-pills look; leave it off and the bar is just its contents.
     //
     // Per-monitor: when bar_per_monitor is on, every bar setting can be overridden per
     // monitor under bar_monitors.<name>.<key>; otherwise the top-level key (global) wins.
@@ -336,7 +340,11 @@ Item {
     function barModuleMarginFor(mon)  { return _bv("bar_module_margin", mon) ?? 12 }
     function barModuleSpacingFor(mon) { return _bv("bar_module_spacing", mon)?? 10 }
     function barModuleBgFor(mon)      { return _bv("bar_module_bg", mon)     ?? "none" }
-    function barModuleBgRadiusFor(mon){ return _bv("bar_module_bg_radius", mon)  ?? 8 }
+    // -1 = Auto: the THEME's own module corner (Style.moduleR resolves it). A number is the user
+    // overruling the theme, the same shape as the bar border's Auto. The default moved from 8 to
+    // Auto so a theme can ship a square cell — mirobo's Auto IS 8, so nothing changed for anyone
+    // who never touched this.
+    function barModuleBgRadiusFor(mon){ return _bv("bar_module_bg_radius", mon)  ?? -1 }
     function barModuleBgOpacityFor(mon){return _bv("bar_module_bg_opacity", mon) ?? 0.22 }
     function barIconSizeFor(mon)      { return _bv("bar_icon_size", mon)     ?? 18 }
     function barFontSizeFor(mon)      { return _bv("bar_font_size", mon)     ?? 13 }
@@ -394,6 +402,77 @@ Item {
         { id: "d11", key: "mpris",    w: 3, h: 2 }
     ]
 
+    // ── The desk (widgets on the wallpaper) ───────────────────────────────────
+    // Same raster and the same module entries as the dashboard, on a surface of its own between the
+    // wallpaper and the windows. The cell SIZE is not a setting here: the desk owns a whole screen,
+    // so the raster is a count and the cells divide what is left after the bar took its reservation.
+    // A widget that spans 4 of 12 columns is a third of the desk on every monitor there is.
+    // The margin is not a setting — see DashModules.deskMargin for why. The old `desk_margin` key
+    // and any per-screen override are simply no longer read.
+    // The raster is NOT stored and NOT set — it is derived from the screen every time
+    // (DashModules.deskRaster). What IS stored is which raster a layout was arranged in, so it can
+    // be converted when the screen, the resolution or the margin changes under it. Absent = the
+    // reference raster the shipped layout is written in.
+    function deskLayoutColsFor(mon) { return Math.max(1, root._deskNum(mon, "cols", DashModules.refCols)) }
+    function deskLayoutRowsFor(mon) { return Math.max(1, root._deskNum(mon, "rows", DashModules.refRows)) }
+    function _deskNum(mon, field, fallback) {
+        var o = root._deskBlock(mon)
+        var v = o ? o[field] : undefined
+        return (typeof v === "number") ? v : fallback
+    }
+    readonly property var deskModules: _data.desk_modules ?? deskDefault
+    // A widget under a window is not a widget, it is a distraction with a window on it. Fading it
+    // out costs one intersection test per widget per window event — see desk/DeskWindow.qml.
+    readonly property bool deskHideWhenCovered: _data.desk_hide_when_covered ?? true
+    // Does anything need window GEOMETRY kept fresh for the desk? Hyprland emits no event for an
+    // interactive move or resize, so this is the one case that has to be polled — see Hyprwindows.
+    readonly property bool deskWatchesWindows: componentEnabled("desk") && deskHideWhenCovered
+    // Everything that is per screen, in one block per screen — the shape bar_monitors uses, for the
+    // same reason: a settings page has to clone-and-replace the whole map (SettingsStore knows no
+    // nested path), and one map means one clone rather than three that can fall out of step.
+    //
+    //   desk_monitors: { "<name>": { "enabled": bool, "workspace": int, "modules": [ … ] } }
+    //
+    // A bare boolean is the older shape and still reads as { enabled: <bool> }.
+    readonly property var deskMonitors: (_data.desk_monitors && typeof _data.desk_monitors === "object")
+                                        ? _data.desk_monitors : ({})
+    function _deskBlock(mon) {
+        var o = (mon && _data.desk_monitors) ? _data.desk_monitors[mon] : undefined
+        if (o === undefined || o === null) return null
+        if (typeof o === "boolean") return { "enabled": o }
+        return (typeof o === "object") ? o : null
+    }
+    function deskEnabledFor(mon) {
+        var o = root._deskBlock(mon)
+        if (o && o.enabled !== undefined && o.enabled !== null) return o.enabled
+        return componentEnabled("desk")
+    }
+    // 0 = every workspace on that monitor, N = only workspace slot N (the per-monitor slot, so 3 is
+    // the third workspace of THIS screen no matter which block Hyprland numbered it in).
+    function deskWorkspaceFor(mon) {
+        var o = root._deskBlock(mon)
+        var v = o ? o.workspace : undefined
+        return (typeof v === "number" && v > 0) ? v : 0
+    }
+    // The layout THIS screen shows. Every screen is arranged on its own — a widget is placed against
+    // a particular desk, and a second monitor is a different desk, not a copy of the first. A screen
+    // nobody has arranged yet shows `desk_modules`, the starting layout, and gets a list of its own
+    // the moment you move something on it; clearing that list puts it back on the starting one.
+    function deskModulesFor(mon) {
+        var o = root._deskBlock(mon)
+        return (o && Array.isArray(o.modules)) ? o.modules : root.deskModules
+    }
+    function deskHasOwnLayout(mon) {
+        var o = root._deskBlock(mon)
+        return !!(o && Array.isArray(o.modules))
+    }
+    // One widget, so a fresh desk is a desk and not an empty screen with an editor hint on it.
+    // Written in the REFERENCE raster (DashModules.refCols x refRows) like everything else that
+    // ships; the screen's own raster converts it on the way in.
+    readonly property var deskDefault: [
+        { id: "w1", key: "clock", x: 0, y: 0, w: 4, h: 2, bg: false }
+    ]
+
     // ── Per-module customization (Settings → Bar → Module → gear) ─────────────────
     // Each bar module type ("clock", "performance" …) can override its font / colour role /
     // font size / icon size and its own bespoke options, stored globally under
@@ -429,6 +508,24 @@ Item {
     // pages as the framework grows. Mirobo is the default and stays it. See Theme.qml.
     readonly property string theme:           _data.theme             ?? "mirobo"
 
+    // The theme PICKER (Super+Ctrl+Space / `ipc call theme toggle`). Same two shapes as the
+    // wallpaper picker and for the same reason: a theme card is a window onto a whole desktop, so
+    // browsing them wants the screen — but swapping to the one you already know wants a panel on
+    // the bar. Gallery is the default here (a theme is a bigger decision than a picture), popout is
+    // the quick one. A theme may bring its own picker for either shape; see Theme.hasComponent.
+    readonly property string themePickerStyle:   _data.theme_picker_style   ?? "gallery"   // gallery | popout
+    // Card height as a PERCENT of the screen, like the wallpaper gallery: the cards are miniatures
+    // of a monitor, so the width follows from its aspect and a pixel size would mean something
+    // different on every screen.
+    readonly property int    themePickerSize:    _data.theme_picker_size    ?? 42
+    readonly property bool   themePickerBlur:    _data.theme_picker_blur    ?? true
+    // Popout shape: how many cards per row, and how wide one is.
+    readonly property int    themePickerCols:    _data.theme_picker_cols    ?? 2
+    readonly property int    themePickerPreview: _data.theme_picker_preview ?? 190   // card width px
+    // Where the popout grows from when no theme module sits on the bar — same grid of anchors the
+    // wallpaper quick-menu uses.
+    readonly property string themePickerPos:     _data.theme_picker_position ?? "top-center"
+
     // Resolved main display font (blank ui_font → the default nerd face). Also the fallback for a
     // bar module's font, so the theme/user font flows to the bar unless a module overrides it.
     readonly property string uiFontResolved: uiFont !== "" ? uiFont : "FantasqueSansM Nerd Font"
@@ -441,9 +538,25 @@ Item {
     function activeEdgesFor(mon) {
         var m = barModeFor(mon)
         if (m === "none") return []                      // no bar at all
-        return m === "frame" ? barEdgesFor(mon) : [barPositionFor(mon)]
+        // Capsule IS a frame — the only thing it drops is the chrome (see barChromeless).
+        return (m === "frame" || m === "capsule") ? barEdgesFor(mon) : [barPositionFor(mon)]
     }
     function edgeActiveFor(edge, mon) { return activeEdgesFor(mon).indexOf(edge) >= 0 }
+    // A bar with no fill and no outline. It still occupies its edges, still reserves its space and
+    // still carries its modules — but there is no strip for another surface to merge INTO, so every
+    // panel that would normally flow out of the bar keeps its own complete outline instead.
+    function barChromeless(mon) { return barModeFor(mon) === "capsule" }
+    // The margin a DETACHED panel keeps — in the DEPTH away from the bar and ALONG it alike, so it
+    // shows one even border on every side instead of standing off the bar on one side and touching
+    // the screen on the other. That asymmetry is what a chromeless bar exposes: with a strip to
+    // merge into, "flush with the end of the bar" is the correct answer and the panel is supposed
+    // to run into the corner; with nothing to merge into it just reads as a panel stuck to the
+    // bezel.
+    //
+    // Capsule takes the MODULE MARGIN for it. That is already the margin the modules keep from the
+    // ends of the strip, so the panel's edge lines up with the first pill rather than inventing a
+    // second inset nobody set. Cupertino keeps the 8 px it has always had.
+    function barDetachGapFor(mon) { return barChromeless(mon) ? barModuleMarginFor(mon) : 8 }
 
     // The key an arrangement is stored under. Dock and float carry ONE bar, so the mode is enough
     // (which edge it is on lives inside the map). FRAME carries several at once, and a set of bars
@@ -452,9 +565,9 @@ Item {
     // "top+left" and "left+top" are the same desk. Adding an edge therefore lands on a blank
     // arrangement, and taking it away again brings the old one straight back.
     function barLayoutKeyOf(mode, edges) {
-        if (mode !== "frame") return mode
+        if (mode !== "frame" && mode !== "capsule") return mode
         var es = (edges || []).slice().sort()
-        return es.length ? "frame:" + es.join("+") : "frame"
+        return es.length ? mode + ":" + es.join("+") : mode
     }
     function barLayoutKey(mode, mon) { return barLayoutKeyOf(mode, barEdgesFor(mon)) }
     // The raw arrangement store, so the settings page can write a layout through SettingsStore
@@ -490,7 +603,7 @@ Item {
         // `frame` map. It stands in until the combination it belongs to is saved under its own key
         // (BarSection does that the moment the edge set changes) — otherwise upgrading would look
         // like the bar had been emptied.
-        if (!m && mode === "frame" && store && store["frame"]) m = store["frame"]
+        if (!m && (mode === "frame" || mode === "capsule") && store && store[mode]) m = store[mode]
         if (m && m[edge] && Array.isArray(m[edge][group])) return m[edge][group]
         // The pre-store maps below are a MIGRATION fallback, not a default. Once this configuration
         // holds any arrangement for THIS mode, a layout with no entry is an empty layout — that is
@@ -520,6 +633,28 @@ Item {
             || barModulesFor(edge, "center", mon).length > 0
             || barModulesFor(edge, "end", mon).length    > 0
     }
+    // Is this module placed ANYWHERE — any layout, any edge, any monitor override? A service that
+    // costs something to run (the weather fetch, a poll) has to know whether anyone is asking, and
+    // barModulePlacedFor only answers for one monitor and only for the layout that monitor is
+    // currently in. This walks the raw store instead, so a module on a bar the user is not looking
+    // at right now still counts.
+    function barModulePlacedAnywhere(key) {
+        function inMap(m) {
+            for (var e in (m || {}))
+                for (var g in (m[e] || {}))
+                    if (Array.isArray(m[e][g]) && m[e][g].indexOf(key) >= 0) return true
+            return false
+        }
+        function inStore(o) {
+            if (!o) return false
+            for (var lk in (o.bar_modules_m || {})) if (inMap(o.bar_modules_m[lk])) return true
+            return inMap(o.bar_modules)
+        }
+        if (inStore(_data)) return true
+        var bm = _data.bar_monitors
+        if (bm && typeof bm === "object") for (var mn in bm) if (inStore(bm[mn])) return true
+        return false
+    }
     function barModulePlacedFor(key, mon) {
         var es = ["top", "left", "bottom", "right"], gs = ["start", "center", "end"]
         for (var i = 0; i < es.length; i++)
@@ -528,7 +663,8 @@ Item {
         return false
     }
     function edgeThicknessFor(edge, mon) {
-        return (barModeFor(mon) === "frame" && !edgeHasModulesFor(edge, mon))
+        var m = barModeFor(mon)
+        return ((m === "frame" || m === "capsule") && !edgeHasModulesFor(edge, mon))
                ? Math.round(barThicknessFor(mon) / 2) : barThicknessFor(mon)
     }
 
@@ -555,7 +691,8 @@ Item {
     // stops short of both ends by the side gap, and a panel that ignored that hung off the end of
     // the very bar it grows out of. `len` is the screen size along that edge.
     function barSpanFor(edge, mon, len) {
-        if (barModeFor(mon) === "frame") return [0, len]
+        var bm = barModeFor(mon)
+        if (bm === "frame" || bm === "capsule") return [0, len]
         var s = Math.min(barSideGapFor(mon), Math.max(0, len / 2 - 40))
         return [s, len - s]
     }
@@ -726,6 +863,23 @@ Item {
     // look: where the weather comes from. When the screen locks is on its own timer above.
     readonly property string lockWeatherCity:   _data.lock_weather_city   ?? ""
     readonly property string lockWeatherUnit:   _data.lock_weather_unit   ?? "c"        // c | f
+    // "lat,lon" of the place the user PICKED from the city field's suggestions, empty when the name
+    // was typed by hand. It is what the fetch actually asks for, because a name is ambiguous (two
+    // German towns are called Neustadt) while a fix is not. See common/CityField.qml.
+    readonly property string lockWeatherCoords: _data.lock_weather_coords ?? ""
+    // The city the SHELL fetches for. One weather.json, so one city: the bar module's own field
+    // wins when it carries one, otherwise the lockscreen's — which is where the setting lived
+    // before there was a bar module at all, so an existing configuration keeps working untouched.
+    readonly property string weatherCity: moduleSetting("weather", "city", "") !== ""
+                                          ? ("" + moduleSetting("weather", "city", "")) : lockWeatherCity
+    readonly property string weatherUnit: moduleSetting("weather", "unit", "") !== ""
+                                          ? ("" + moduleSetting("weather", "unit", "")) : lockWeatherUnit
+    // Follows weatherCity's choice, never mixes the two: the module's fix belongs to the module's
+    // name, and pairing one surface's coordinates with the other's name would silently fetch a
+    // place nobody asked for.
+    readonly property string weatherCoords: moduleSetting("weather", "city", "") !== ""
+                                            ? ("" + moduleSetting("weather", "city_coords", ""))
+                                            : lockWeatherCoords
 
     // ── Startup splash (Settings → Velumeron → Shell) ─────────────────────────
     // Curtain over the shell's own start-up, once per session. See splash/SplashState.qml.
@@ -741,7 +895,12 @@ Item {
     // Wallpaper quick-menu (opened by IPC / keybind / hub / the bar module). Two shapes of the SAME
     // picker: "popout" grows the grid out of the bar (position/cols/rows/preview below), "gallery"
     // takes the whole screen and turns the folder into a coverflow you scroll through.
-    readonly property string wallpaperQuickStyle:   _data.wallpaper_quick_style    ?? "popout"   // popout | gallery
+    //
+    // GALLERY is the default. Picking a wallpaper is looking at pictures, and a 2x4 grid of
+    // thumbnails hanging off the bar is a list of file names with colours on them — the full-screen
+    // shape shows the picture at a size you can actually judge. The popout stays one setting away
+    // for anyone who wants the quick grab.
+    readonly property string wallpaperQuickStyle:   _data.wallpaper_quick_style    ?? "gallery"  // gallery | popout
     readonly property string wallpaperQuickPos:     _data.wallpaper_quick_position ?? "top-center"
     readonly property int    wallpaperQuickCols:    _data.wallpaper_quick_cols     ?? 3
     readonly property int    wallpaperQuickRows:    _data.wallpaper_quick_rows     ?? 3

@@ -13,6 +13,8 @@ Row {
     spacing: 8
     property string barMon: ""   // monitor name, for per-monitor icon/font size
     property bool vertical: false   // set by ModSlot: rotate to read along a vertical sidebar
+    // Turned 90 degrees on a vertical bar (see Bar.qml ModSlot): only with the percentage beside the glyph.
+    readonly property bool rotateOnVertical: root._showPct
 
     // ── Internal battery (laptop) ────────────────────────────────────────────────
     readonly property UPowerDevice dev: UPower.displayDevice
@@ -71,7 +73,7 @@ Row {
     readonly property bool   _showPct:     VtlConfig.moduleSetting("battery", "show_percent", true)
     readonly property bool   _showDevices: VtlConfig.moduleSetting("battery", "show_devices", true)
     readonly property bool   _warnLow:     VtlConfig.moduleSetting("battery", "low_warning", true)
-    readonly property color  _normCol: Colors[VtlConfig.moduleColorName("battery")] ?? Colors.fgMuted
+    readonly property color  _normCol: Colors[VtlConfig.moduleColorName("battery")] ?? Style.barDim(root.barMon)
     readonly property int    _fs: VtlConfig.moduleFontSizeFor("battery", root.barMon)
     readonly property int    _is: VtlConfig.moduleIconSizeFor("battery", root.barMon)
 

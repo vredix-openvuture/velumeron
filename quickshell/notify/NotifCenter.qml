@@ -123,11 +123,12 @@ PanelWindow {
     // Cupertino detaches ALWAYS: macOS panels are free dropdowns under the strip.
     // See Flyout.detached: a floating bar docks its panels now (the published inner face already
     // carries the float gap); only cupertino still hangs them free.
-    readonly property bool detached:  root.edgeBar && Style.isCupertino
-    readonly property int  detachGap: detached ? 8 : 0
+    // Chromeless (capsule) bars detach as well — see the note in bar/Flyout.qml.
+    readonly property bool detached:  root.edgeBar && (Style.isCupertino || VtlConfig.barChromeless(root.mon))
+    readonly property int  detachGap: detached ? VtlConfig.barDetachGapFor(root.mon) : 0
     readonly property bool _mergeAll:  VtlConfig.transitionMergeAllFor("notify_center", root._tctx)
     // See Flyout.endsFree: no corner where the strip stops short of one.
-    readonly property bool endsFree:   VtlConfig.barModeFor(root.mon) !== "frame"
+    readonly property bool endsFree:   (VtlConfig.barModeFor(root.mon) !== "frame" && VtlConfig.barModeFor(root.mon) !== "capsule")
                                        && (VtlConfig.barModeFor(root.mon) === "float"
                                            || VtlConfig.barSideGapFor(root.mon) > 0)
     readonly property var  barSpan:    VtlConfig.barSpanFor(root.mEdge, root.mon,
@@ -315,9 +316,12 @@ PanelWindow {
         // screen corner (merging into the perpendicular bar there, or the bare edge if none).
         // Clamped to the STRIP's span, not the screen — see Flyout.
         readonly property real alongSize: root.vert ? height : width
-        readonly property real alongLo:  root.edgeBar ? root.barSpan[0] : 0
+        // The same margin at the two ends that detachGap keeps in the depth — see bar/Flyout.qml.
+        // 0 for a merged panel, so docked geometry is untouched.
+        readonly property real alongLo:  (root.edgeBar ? root.barSpan[0] : 0) + root.detachGap
         readonly property real alongHi:  (root.edgeBar ? root.barSpan[1]
-                                                       : (root.vert ? root.scrH : root.scrW)) - alongSize
+                                                       : (root.vert ? root.scrH : root.scrW))
+                                         - alongSize - root.detachGap
         readonly property real alongMax: Math.max(alongLo, alongHi)
         readonly property real along: root.mergeStart ? alongLo
                                     : root.mergeEnd   ? alongMax

@@ -30,11 +30,26 @@ Singleton {
         }
         return s
     }
+    // The same four backends now feed BAR modules as well, and a bar module is on screen whether or
+    // not the hub is open — so placing one has to open the gate too, or the brightness chip would
+    // sit at its default 100 until somebody happened to open the dashboard.
+    readonly property var _barKeys: ({ "slider:brightness": "brightness", "profile": "powerprofile",
+                                       "toggle:night": "nightlight",     "toggle:caffeine": "caffeine" })
+    function _onBar(k) {
+        var m = root._barKeys[k]
+        return m !== undefined && VtlConfig.barModulePlacedAnywhere(m)
+    }
     // A theme that draws the dashboard has no grid to read module keys from, and it may well use
     // every one of these — so for it the gate is simply open. Mirobo keeps paying for exactly the
     // tiles it placed.
-    function has(k) { return Theme.hasComponent("dashboard") || root._keys[k] === true }
-    function _on(k) { return root.active && root.has(k) }
+    function _hubHas(k) { return Theme.hasComponent("dashboard") || root._keys[k] === true }
+    // The DESK is the second host, and it is a different kind of gate. The hub is open or shut; a
+    // desk is a surface per screen that may be switched off or scoped to another workspace, so the
+    // desks themselves publish what they are showing while they are showing it (UiState.deskKeys).
+    // No `active` for this half — a visible desk IS the looking.
+    function _deskHas(k) { return UiState.deskWants(k) }
+    function has(k) { return root._hubHas(k) || root._deskHas(k) || root._onBar(k) }
+    function _on(k) { return (root.active && root._hubHas(k)) || root._deskHas(k) }
 
     // ── Volume (Pipewire) ──────────────────────────────────────────────────────
     PwObjectTracker { objects: [Pipewire.defaultAudioSink] }
@@ -109,6 +124,20 @@ Singleton {
     // what's placed — a dashboard without those modules asks nothing.
     Component.onCompleted: root.refresh()
 
+    // A bar chip is visible all the time, and night light / the power profile / the backlight can
+    // all be changed from outside the shell. Every set already re-polls, so this only has to catch
+    // the outside changes — once a minute, and only while one of those chips is actually placed.
+    readonly property Timer _barPoll: Timer {
+        interval: 60000
+        repeat: true
+        triggeredOnStart: true
+        running: root._onBar("slider:brightness") || root._onBar("profile") || root._onBar("toggle:night")
+        onTriggered: root.refresh()
+    }
+    // Placing one mid-session must not wait a minute for its first reading: the timer's `running`
+    // binding reads the module map through _onBar, so it re-evaluates when settings.json is
+    // reloaded, and `triggeredOnStart` takes the reading right then.
+
     // ── System glance (cpu / mem / temp / uptime) ───────────────────────────────
     property real   cpu:    0
     property real   mem:    0
@@ -141,7 +170,12 @@ Singleton {
                         "/proc/uptime"]
               stdout: SplitParser { onRead: line => { root.uptime = line.trim() } } }
     Timer {
-        interval: 2500; repeat: true; running: root._on("glance"); triggeredOnStart: true
+        // Slower for a desk-only reader. The hub is a menu somebody is looking AT, so 2.5 s is the
+        // refresh rate of a thing being read; a desk widget is furniture that stays on screen all
+        // day, and four subprocesses every 2.5 s from now until logout is a different bill. Five
+        // seconds is still a live gauge and halves it.
+        interval: root.active ? 2500 : 5000
+        repeat: true; running: root._on("glance"); triggeredOnStart: true
         onTriggered: {
             glCpu.running = false;  glCpu.running = true
             glMem.running = false;  glMem.running = true

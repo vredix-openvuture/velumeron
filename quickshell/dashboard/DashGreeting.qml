@@ -11,7 +11,7 @@ DashTile {
     readonly property string home: Quickshell.env("HOME") ?? ""
 
     property var now: new Date()
-    Timer { interval: 30000; repeat: true; running: DashState.active; triggeredOnStart: true
+    Timer { interval: 30000; repeat: true; running: root.live; triggeredOnStart: true
             onTriggered: root.now = new Date() }
 
     // ── Upright: avatar over centred text ───────────────────────────────────────

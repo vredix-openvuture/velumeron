@@ -377,13 +377,8 @@ QtObject {
         root._wanted = id
         SettingsStore.set("theme", id)
         if (root.pkg.id === id) root._applyArrangement()     // already loaded (re-picking it)
-        // The WINDOW frames follow the theme too: hyprland.lua reads <USER_DIR>/active-theme and
-        // dofiles hypr.lua/themes/<name>.lua, so handing it the id is what makes a switch reach the
-        // compositor instead of stopping at the shell's own surfaces.
-        root._frameProc.command = ["bash", (Quickshell.env("VELUMERON_DIR") || "")
-                                   + "/assets/scripts/apply-ui-style.sh", id]
-        root._frameProc.running = false
-        root._frameProc.running = true
+        // The WINDOW frames follow the theme too, but not from here: shell.qml watches the `theme`
+        // key and hands it to Hyprland, so a switch reaches the compositor whoever wrote the key.
     }
     // Settings that describe THIS MACHINE rather than a look. A theme has no business naming them,
     // and the shipped packages do not — but a theme is a folder anyone can drop in, and one that
@@ -396,7 +391,8 @@ QtObject {
     // the trade: the setup you built by hand outranks the one a theme suggests.
     readonly property var deviceKeys: ["theme", "wallpaper_dirs", "wallpaper_sets", "bt_aliases",
                                        "bt_groups", "bar_per_monitor", "bar_monitors",
-                                       "taskbar_pinned", "lock_weather_city", "lock_weather_unit"]
+                                       "taskbar_pinned", "lock_weather_city", "lock_weather_coords",
+                                       "lock_weather_unit"]
     // ── The bar belongs to the theme ────────────────────────────────────────────────────────────
     // It used to be the opposite, and the reasoning was that the bar is the thing you build by hand
     // and a theme has no business rearranging it. What that produced is two desktops as far apart
@@ -478,7 +474,32 @@ QtObject {
         if (!a) return
         var out = {}
         for (var k in a) if (root.themeMayWrite(k)) out[k] = a[k]
+        for (var i = 0; i < root.mergedKeys.length; i++) {
+            var mk = root.mergedKeys[i]
+            if (out[mk] !== undefined) out[mk] = root._mergeSetting(mk, out[mk])
+        }
         SettingsStore.setAll(out)
+    }
+
+    // Arrangement keys that are a MAP OF THE USER'S OWN ENTRIES rather than one value, and are
+    // therefore merged into what is already there instead of replacing it.
+    //
+    // `module_settings` is the whole reason this exists: it is keyed by bar module, and a package
+    // that wants to say one thing about one module ("the clock is set in Audiowide") wrote the
+    // whole object — which silently deleted the update command, the weather city and every other
+    // module's configuration. A theme has an opinion about the modules it mentions and none at all
+    // about the rest, and that is what a merge says.
+    //
+    // One level deep on purpose: the theme replaces a module's block outright, so it can still say
+    // "the clock has no date" without inheriting a leftover.
+    readonly property var mergedKeys: ["module_settings"]
+    function _mergeSetting(key, incoming) {
+        var cur = VtlConfig.rawSetting(key, undefined)
+        if (!cur || typeof cur !== "object" || !incoming || typeof incoming !== "object") return incoming
+        var out = {}
+        for (var k in cur) out[k] = cur[k]
+        for (var k2 in incoming) out[k2] = incoming[k2]
+        return out
     }
     function _applyArrangement() {
         root._wanted = ""
@@ -488,7 +509,6 @@ QtObject {
     }
     // The package arrives asynchronously (FileView), so the arrangement is applied when it lands.
     onPkgChanged: if (root._wanted !== "" && root.pkg.id === root._wanted) root._applyArrangement()
-    readonly property Process _frameProc: Process {}
 
     // ── Themes of your own ──────────────────────────────────────────────────────────────────────
     // A shipped theme stays a folder that only ever arrives and leaves. What a picker does need is

@@ -8,6 +8,8 @@ Item {
     id: root
     property string barMon: ""   // monitor name, for per-monitor icon/font size
     property bool vertical: false   // set by ModSlot: rotate to read along a vertical sidebar
+    // Turned 90 degrees on a vertical bar (see Bar.qml ModSlot): only with the SSID beside the glyph.
+    readonly property bool rotateOnVertical: root._showSsid
     implicitWidth:  label.implicitWidth
     implicitHeight: label.implicitHeight
 
@@ -34,11 +36,11 @@ Item {
     property string barEdge:  "top"   // set by Bar; drives the hover-glide / menu direction
     property string barGroup: "start"
     // Suppress the hover glide while the network menu is open on this monitor.
-    readonly property bool menuOpen: UiState.flyout === "network" && UiState.flyoutMon === root.barMon
+    readonly property bool menuOpen: Popouts.isOpen("network", root.barMon)
     function _toggleMenu() {
         var c = root.mapToItem(null, root.width / 2, root.height / 2)
         UiState.netHover = false
-        UiState.toggleFlyout("network", c.x, c.y, root.barEdge, root.barGroup, root.barMon)
+        Popouts.openFor("network", root, root.barEdge, root.barGroup, root.barMon)
     }
 
     // ── Down / up throughput, shown gliding out of the bar on hover (NetworkGlide) ──────────────
@@ -71,7 +73,7 @@ Item {
         id: label
         spacing: 6
         // Colour override applies when connected; disconnected keeps the warning colour.
-        readonly property color c: root._type ? (Colors[VtlConfig.moduleColorName("network")] ?? Colors.fgMuted) : Colors.color5
+        readonly property color c: root._type ? (Colors[VtlConfig.moduleColorName("network")] ?? Style.barDim(root.barMon)) : Colors.color5
         Text {
             anchors.verticalCenter: parent.verticalCenter
             text:           root._icon

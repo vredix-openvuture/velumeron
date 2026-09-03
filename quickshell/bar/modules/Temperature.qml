@@ -8,6 +8,8 @@ import Quickshell.Io
 Item {
     id: root
     property bool vertical: false   // set by ModSlot: rotate to read along a vertical sidebar
+    // Turned 90 degrees on a vertical bar (see Bar.qml ModSlot): the reading is a line of text.
+    readonly property bool rotateOnVertical: true
     property string barMon: ""      // monitor name, for per-monitor font size
     implicitWidth:  label.implicitWidth
     implicitHeight: label.implicitHeight
@@ -21,7 +23,7 @@ Item {
     // Per-module customization (Settings → Bar → Module → gear).
     readonly property string _font:    VtlConfig.moduleFontFor("temperature")
     readonly property string _unit:    VtlConfig.moduleSetting("temperature", "unit", "C")
-    readonly property color  _normCol: Colors[VtlConfig.moduleColorName("temperature")] ?? Colors.fgMuted
+    readonly property color  _normCol: Colors[VtlConfig.moduleColorName("temperature")] ?? Style.barDim(root.barMon)
     function _disp(c) { return (root._unit === "F" ? Math.round(c * 9 / 5 + 32) : c) + "°" }
 
     Text {

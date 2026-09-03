@@ -245,8 +245,7 @@ FocusScope {
     }
     function _widgetGlyph(name) {
         if (name === "media")   return "\u{F0388}"
-        if (name === "weather") return (root.weather && root.weather.ok && root.weather.icon)
-                                     ? root.weather.icon : "\u{F0590}"
+        if (name === "weather") return WeatherService.glyph
         if (name === "battery") return root._batCharging ? "\u{F0084}" : root._batGlyph
         if (name === "user")    return "\u{F0004}"
         if (name === "notifs")   return "\u{F009C}"    // the same bell the bar's tray shows
@@ -284,7 +283,7 @@ FocusScope {
         var out = []
         for (var i = 0; i < src.length && out.length < n; i++) out.push(src[i])
         if (out.length === 0 && root.preview)
-            for (var j = 0; j < n; j++) out.push({ date: "", icon: "", min: "", max: "" })
+            for (var j = 0; j < n; j++) out.push({ date: "", cond: "cloudy", min: "", max: "" })
         return out
     }
 
@@ -329,14 +328,11 @@ FocusScope {
     // Account name shown by the user widget — same source as the bar's User module ($USER).
     readonly property string _userName: Quickshell.env("USER") ?? "user"
 
-    // ── Weather (written by weather-fetch.sh) ────────────────────────────────────────────────────
-    property var weather: null
-    FileView {
-        path: (Quickshell.env("VELUMERON_USER_DIR") || (Quickshell.env("HOME") + "/.config/velumeron")) + "/quickshell/weather.json"
-        watchChanges: true
-        onLoaded:      { try { root.weather = JSON.parse(text()) } catch (e) { root.weather = null } }
-        onFileChanged: reload()
-    }
+    // ── Weather ──────────────────────────────────────────────────────────────────────────────────
+    // Read straight off WeatherService, which owns both the fetch and the file watch — this used to
+    // keep a FileView of its own, and a second reader of the same JSON is a second thing to keep in
+    // step for no gain. The shape is the file's, unchanged, so everything below still applies.
+    readonly property var weather: WeatherService.data
 
     property var now: new Date()
     Timer { interval: 1000; running: true; repeat: true; onTriggered: root.now = new Date() }
@@ -447,9 +443,12 @@ FocusScope {
                 spacing: root._wxDays.length > 0 ? 10 : 0
                 Row {
                     id: wRow; anchors.horizontalCenter: parent.horizontalCenter; spacing: 14
-                    Text { anchors.verticalCenter: parent.verticalCenter
-                           text: root.weather && root.weather.ok ? (root.weather.icon || "") : ""
-                           color: Colors.fgBright; font.family: Style.font; font.pixelSize: 34 }
+                    WeatherIcon { anchors.verticalCenter: parent.verticalCenter
+                                  visible: !!(root.weather && root.weather.ok)
+                                  width: 40; height: 40
+                                  cond:  root.weather ? ("" + (root.weather.cond ?? "cloudy")) : "cloudy"
+                                  night: !WeatherService.daytime
+                                  cloudColor: Colors.fgBright }
                     Column {
                         anchors.verticalCenter: parent.verticalCenter; spacing: 2
                         Text { text: root.weather && root.weather.ok
@@ -486,9 +485,10 @@ FocusScope {
                             Text { anchors.horizontalCenter: parent.horizontalCenter
                                    text: parent._day; color: Colors.fgMuted
                                    font.family: Style.font; font.pixelSize: 11 }
-                            Text { anchors.horizontalCenter: parent.horizontalCenter
-                                   text: modelData.icon || ""; color: Colors.fgBright
-                                   font.family: Style.font; font.pixelSize: 18 }
+                            WeatherIcon { anchors.horizontalCenter: parent.horizontalCenter
+                                          width: 22; height: 22
+                                          cond: "" + (modelData.cond ?? "cloudy")
+                                          cloudColor: Colors.fgBright }
                             Text { anchors.horizontalCenter: parent.horizontalCenter
                                    text: (modelData.max || "–") + "° / " + (modelData.min || "–") + "°"
                                    color: Colors.fgMuted; font.family: Style.font; font.pixelSize: 11 }

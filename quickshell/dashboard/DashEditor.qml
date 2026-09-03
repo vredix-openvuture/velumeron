@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import ".."
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 
 // Dashboard editor — a full-screen overlay, opened from the settings home page's pencil. Built in
@@ -33,26 +34,91 @@ PanelWindow {
     WlrLayershell.keyboardFocus: root.active ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusiveZone: 0
     visible: root.active
-    onActiveChanged: { if (root.active) keyScope.forceActiveFocus(); root.selIds = []; root.page = 0 }
+    onActiveChanged: {
+        if (root.active) { keyScope.forceActiveFocus(); FontList.load() }
+        root.selIds = []; root.page = 0
+    }
 
     function close() { UiState.closeDashEdit() }
 
-    readonly property var modules: DashModules.resolve(VtlConfig.dashboardModules,
-                                                       VtlConfig.dashboardCols, root.dashRows)
-    // The dashboard's real viewport, latched by the hub when the pencil was clicked.
-    // Taken straight from the raster, not from the size HomeHub publishes. That value is
-    // deliberately frozen while the editor is open (so the menu's collapse animation
-    // cannot leak stale sizes into it) — which meant changing rows or columns did nothing
-    // until you closed and reopened. The menu is BUILT from these two numbers now, so the
-    // preview can read them at the source and follows every change immediately.
-    readonly property real dashW: Math.max(320, Style.dashGridW)
-    readonly property real dashH: Math.max(200, Style.dashGridH)
-    // DERIVED from the pixel viewport with the hub's own formula, never latched as a number:
-    // changing the row height in this very panel changes how many rows fit, and a latched count
-    // would leave the editor showing a different page break than the menu does.
-    readonly property int dashRows:
-        Math.max(1, Math.floor((root.dashH + Style.cardGap)
-                               / (VtlConfig.dashboardCellH + Style.cardGap)))
+    // Palette roles for the two colour pickers. Shared with the bar's module customization through
+    // DashModules.colorRoles — one vocabulary, so "Accent" means the same thing in both places.
+    function roleLabel(name, dflt) {
+        var n = "" + (name ?? "")
+        var r = DashModules.colorRoles
+        for (var i = 0; i < r.length; i++) if (r[i].name === n && n !== "") return r[i].label
+        return dflt
+    }
+    function roleOptions(name) {
+        var cur = "" + (name ?? "")
+        return DashModules.colorRoles.map(function (r) {
+            return { label: r.label, key: r.name, on: r.name === cur, swatch: r.name }
+        })
+    }
+
+    // Which raster this session is arranging. Both are the same engine on the same entry shape;
+    // they differ in the settings key they write and in how big the canvas is.
+    readonly property string target: UiState.dashEditTarget          // dashboard | desk
+    readonly property bool   isDesk: root.target === "desk"
+    readonly property string host:   root.isDesk ? "desk" : "hub"
+
+    readonly property var modules: DashModules.resolve(
+        root.isDesk ? DashModules.rescale(VtlConfig.deskModulesFor(root.mon),
+                                          VtlConfig.deskLayoutColsFor(root.mon),
+                                          VtlConfig.deskLayoutRowsFor(root.mon),
+                                          root.cols, root.dashRows)
+                    : VtlConfig.dashboardModules,
+        root.cols, root.dashRows)
+    readonly property int cols: root.isDesk ? root.raster.cols : VtlConfig.dashboardCols
+    readonly property int deskMargin: DashModules.deskMargin
+    // The screen's raster, derived exactly as the desk derives it — same function, same area.
+    readonly property var raster: DashModules.deskRaster(root.deskAreaW, root.deskAreaH)
+    // What the desk actually has to fill on THIS screen — the same arithmetic desk/DeskWindow.qml
+    // does, including the strip the bars reserved. Preview it from the screen size alone and the
+    // square cell comes out a bar's thickness too big.
+    readonly property var _reserved: {
+        var r = root.monitor?.lastIpcObject?.reserved
+        return (r && r.length === 4) ? r : [0, 0, 0, 0]
+    }
+    readonly property real deskAreaW: Math.max(120, root.screen.width  - root._reserved[0]
+                                               - root._reserved[2] - 2 * root.deskMargin)
+    readonly property real deskAreaH: Math.max(120, root.screen.height - root._reserved[1]
+                                               - root._reserved[3] - 2 * root.deskMargin)
+    readonly property real deskCell: root.raster.cell
+    // The canvas being arranged. For the hub that is its real viewport, taken straight from the
+    // raster rather than from the size HomeHub publishes: the menu is BUILT from those two numbers,
+    // so reading them at the source is what makes a row-height change show up here immediately
+    // instead of on the next open. For the desk it is the screen minus the margin the desk keeps —
+    // the preview has to carry the same aspect or a widget lands somewhere else than it looked.
+    readonly property real dashW: root.isDesk ? root.raster.cols * root.raster.cell
+                                              : Math.max(320, Style.dashGridW)
+    readonly property real dashH: root.isDesk ? root.raster.rows * root.raster.cell
+                                              : Math.max(200, Style.dashGridH)
+    // The hub pages, so its row count is DERIVED from the pixel viewport with the hub's own formula
+    // and never latched: changing the row height in this very panel changes how many rows fit, and a
+    // latched count would show a different page break than the menu does. The desk does not page —
+    // it owns a whole screen, its rows ARE the setting, and the cell height falls out of them.
+    readonly property int dashRows: root.isDesk
+        ? root.raster.rows
+        : Math.max(1, Math.floor((root.dashH + Style.cardGap)
+                                 / (VtlConfig.dashboardCellH + Style.cardGap)))
+    // The picture on THIS monitor right now. Only read for the desk canvas; the hub preview is a
+    // menu and has no wallpaper behind it.
+    property string wallpaper: ""
+    readonly property FileView _wpFile: FileView {
+        path: (Quickshell.env("VELUMERON_USER_DIR") || (Quickshell.env("HOME") + "/.config/velumeron"))
+              + "/quickshell/wallpapers.json"
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: {
+            try {
+                var j = JSON.parse(_wpFile.text())
+                var e = j[root.mon] || j[Object.keys(j)[0]]
+                root.wallpaper = (e && e.path && e.type !== "video") ? e.path : ""
+            } catch (err) { root.wallpaper = "" }
+        }
+    }
+
     property int page: 0
     // Move every module off the last page and `pages` drops — but the nav that would take you back
     // is `visible: grid.pages > 1`, so it vanishes at the same moment and leaves you looking at a
@@ -90,7 +156,30 @@ PanelWindow {
     // ── Layout mutations ────────────────────────────────────────────────────────
     // Always write the freshly built list, never a value read back from settings.json — the store
     // writes asynchronously, so a re-read would hand us the state from before this very gesture.
-    function save(list) { SettingsStore.set("dashboard_modules", list) }
+    // The dashboard is one layout; the desk is one PER SCREEN, and the screen is the one this editor
+    // opened on. Cloning the whole map is not a flourish: SettingsStore has no notion of a nested
+    // path, so writing a block in place is how the other screens' blocks get dropped.
+    function save(list) {
+        if (!root.isDesk) { SettingsStore.set("dashboard_modules", list); return }
+        // Stamp the raster it was arranged in along with it. Without that stamp a layout is a set
+        // of numbers with no unit: the same 8x4 means a third of one screen and a sixth of the next.
+        var all = root._withField("modules", list)
+        all[root.mon].cols = root.cols
+        all[root.mon].rows = root.dashRows
+        SettingsStore.set("desk_monitors", all)
+    }
+    function _withField(field, value) {
+        var all = {}, cur = VtlConfig.deskMonitors
+        for (var k in cur) all[k] = (typeof cur[k] === "boolean") ? { "enabled": cur[k] } : cur[k]
+        var blk = {}, mine = all[root.mon]
+        if (mine) for (var f in mine) blk[f] = mine[f]
+        if (value === null) delete blk[field]
+        else                blk[field] = value
+        all[root.mon] = blk
+        return all
+    }
+    function _withLayout(list) { return root._withField("modules", list) }
+    function setDeskField(field, value) { SettingsStore.set("desk_monitors", root._withField(field, value)) }
     function copy() {
         var out = []
         for (var i = 0; i < root.modules.length; i++) {
@@ -118,8 +207,8 @@ PanelWindow {
         for (var i = 0; i < l.length; i++) (l[i].g === gid ? members : others).push(l[i])
         if (members.length === 0) return
 
-        var cols = VtlConfig.dashboardCols
-        var rows = Math.max(1, VtlConfig.dashboardRows)
+        var cols = root.cols
+        var rows = Math.max(1, root.dashRows)
         for (var m = 0; m < members.length; m++) {
             var nx = members[m].x + dx, ny = members[m].y + dy
             if (nx < 0 || ny < 0 || nx + members[m].w > cols) return
@@ -152,10 +241,10 @@ PanelWindow {
         }
         if (!any) return
         nw -= bx; nh -= by
-        var rows = Math.max(1, VtlConfig.dashboardRows)
+        var rows = Math.max(1, root.dashRows)
         // Never below the natural box (the members still own those cells), never past the
         // right edge, never across a page break.
-        var w = Math.max(nw, Math.min(gw, VtlConfig.dashboardCols - bx))
+        var w = Math.max(nw, Math.min(gw, root.cols - bx))
         var h = Math.max(nh, Math.min(gh, rows - (by % rows)))
         var changed = false
         for (var k = 0; k < l.length; k++)
@@ -164,11 +253,55 @@ PanelWindow {
             }
         if (changed) root.save(l)
     }
+    // Position AND size in one write: a corner other than the bottom-right moves the origin too,
+    // and splitting that into a move plus a resize would build the second list from a settings read
+    // that has not caught up with the first.
+    function resizeModuleAt(id, x, y, w, h) {
+        var l = root.copy()
+        for (var i = 0; i < l.length; i++)
+            if (l[i].id === id) { l[i].x = x; l[i].y = y; l[i].w = w; l[i].h = h }
+        root.save(l)
+    }
     function resizeModule(id, w, h) {
         var l = root.copy()
         for (var i = 0; i < l.length; i++) if (l[i].id === id) { l[i].w = w; l[i].h = h }
         root.save(l)
     }
+    // One option on one placed widget. `opts` is CLONED rather than written into: the value in
+    // `root.modules` came out of DashModules.resolve, several entries can share the same object
+    // literal from the stored list, and mutating it in place would change a sibling's options and
+    // then save a list that no longer matches what the grid is drawing.
+    //
+    // A value equal to the default is stored anyway. Pruning it back out would be smaller on disk
+    // and wrong the first time a default changes: "Auto" chosen in 2026 has to stay Auto when a
+    // later version decides the default is something else.
+    function setOpt(id, key, value) {
+        var l = root.copy()
+        for (var i = 0; i < l.length; i++) {
+            if (l[i].id !== id) continue
+            var o = {}
+            for (var k in (l[i].opts ?? {})) o[k] = l[i].opts[k]
+            o[key] = value
+            l[i].opts = o
+        }
+        root.save(l)
+    }
+    // Which option panel a type brings. A type with none simply has no card — the framework
+    // controls (font, colour) still apply, because every widget draws text.
+    function optsFor(key) {
+        switch (key) {
+        case "clock":   return clockOpts
+        case "mpris":   return mprisOpts
+        case "weather": return weatherOpts
+        case "glance":  return glanceOpts
+        }
+        return null
+    }
+    Component { id: clockOpts;   ClockOpts   {} }
+    Component { id: mprisOpts;   MprisOpts   {} }
+    Component { id: weatherOpts; WeatherOpts {} }
+    Component { id: glanceOpts;  GlanceOpts  {} }
+
     function removeModule(id) {
         var l = root.copy(), out = []
         for (var i = 0; i < l.length; i++) if (l[i].id !== id) out.push(l[i])
@@ -179,19 +312,31 @@ PanelWindow {
     }
     function addModule(entry) {
         var l = root.copy()
-        var w = Math.min(VtlConfig.dashboardCols, entry.w), h = entry.h
+        // The catalogue is written in the reference raster; this one is finer, so a 4x2 tile has to
+        // arrive as the same SHARE of the screen rather than as four of these small cells.
+        var fx = root.isDesk ? root.cols / DashModules.refCols : 1
+        var fy = root.isDesk ? root.dashRows / DashModules.refRows : 1
+        var w = Math.min(root.cols, Math.max(1, Math.round(entry.w * fx)))
+        var h = Math.max(1, Math.round(entry.h * fy))
         var meta = DashModules.meta(entry.key) ?? ({})
         // Fill the space that already exists before asking for more board: if the only gap left is
         // a 1x1, the module arrives as a 1x1 rather than opening a page and leaving the hole. Every
         // module goes down to 1x1, so there is always an answer. Resize it afterwards if you meant
         // it bigger — that is what the grip is for.
         var spot = DashModules.fitFree(l, w, h, meta.minW ?? 1, meta.minH ?? 1,
-                                       VtlConfig.dashboardCols, root.dashRows, grid.pages)
+                                       root.cols, root.dashRows, grid.pages)
         l.push({ id: entry.key + "-" + Date.now(), key: entry.key, x: spot.x, y: spot.y,
                  w: spot.w, h: spot.h, g: "", bg: entry.bg !== false, gbg: true, opts: entry.opts })
         root.save(l)
     }
-    function resetLayout() { root.selIds = []; root.page = 0; SettingsStore.set("dashboard_modules", VtlConfig.dashboardDefault) }
+    // For the desk this drops the screen's OWN list rather than writing a copy of the default one:
+    // a screen with no list of its own is the state a fresh screen is in, and "reset" should leave
+    // it there instead of pinning a snapshot of today's default to it forever.
+    function resetLayout() {
+        root.selIds = []; root.page = 0
+        if (root.isDesk) SettingsStore.set("desk_monitors", root._withLayout(null))
+        else             SettingsStore.set("dashboard_modules", VtlConfig.dashboardDefault)
+    }
 
     // Small round page-flip button for the preview's page nav.
     component PageBtn: StyledRect {
@@ -358,11 +503,25 @@ PanelWindow {
                 scale: previewArea.k
 
                 StyledRect {
+                    id: canvas
                     anchors.fill: parent
-                    radius: Style.rCard
+                    // A desk is a screen: square corners, and the picture that is actually on it.
+                    // Arranging widgets over a flat panel colour tells you nothing about whether
+                    // the clock will be readable where you just put it.
+                    radius: root.isDesk ? 0 : Style.rCard
                     color: Colors.bgPrimary
                     borderWidth: 1
                     borderColor: Style.chromeBorder
+                    clip: true
+                    Image {
+                        anchors.fill: parent
+                        visible: root.isDesk && status === Image.Ready
+                        source: root.wallpaper !== "" ? "file://" + root.wallpaper : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        sourceSize.width: 1280
+                        smooth: true
+                    }
                 }
 
                 Item {
@@ -377,6 +536,17 @@ PanelWindow {
                         y: -grid.pageTop(root.page)
                         Behavior on y { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                         items: root.modules
+                        cols:  root.cols
+                        // The desk's cell is square and comes from the screen it belongs to; the hub
+                        // carries a pixel row height of its own.
+                        cellH: root.isDesk ? root.deskCell : VtlConfig.dashboardCellH
+                        // The desk's raster has no gap and gives its widgets air through the inset
+                        // instead — the preview has to arrange in the same units it will be drawn in.
+                        gap:       root.isDesk ? 0 : Style.cardGap
+                        tileInset: root.isDesk ? Math.round(Style.cardGap / 2) : 0
+                        // The stage is drawn at `previewArea.k`, so a one-pixel guide would land on
+                        // less than a device pixel and dissolve. Hand the grid the inverse.
+                        guidePx:   1 / Math.max(0.2, previewArea.k)
                         rowsPerPage: root.dashRows
                         editing: true
                         selectedIds: root.selIds
@@ -384,7 +554,7 @@ PanelWindow {
                         onMovedTo:      (id, x, y)   => root.moveModule(id, x, y)
                         onGroupMovedTo: (gid, dx, dy) => root.moveGroup(gid, dx, dy)
                         onGroupResized: (gid, gw, gh) => root.resizeGroup(gid, gw, gh)
-                        onResized:  (id, w, h) => root.resizeModule(id, w, h)
+                        onResizedAt: (id, x, y, w, h) => root.resizeModuleAt(id, x, y, w, h)
                         onRemoved:  id => root.removeModule(id)
                         onSelected: (id, additive) => root.toggleSel(id, additive)
                     }
@@ -427,7 +597,8 @@ PanelWindow {
                       + (grid.pages > 1 ? "page " + (root.page + 1) + " of " + grid.pages + "   ·   " : "")
                       + (previewArea.k >= 0.995 && previewArea.k <= 1.005
                          ? "actual size"
-                         : "shown at " + Math.round(previewArea.k * 100) + "% of the real menu size")
+                         : "shown at " + Math.round(previewArea.k * 100) + "% of the real "
+                           + (root.isDesk ? "screen" : "menu size"))
                 color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
             }
         }
@@ -450,7 +621,10 @@ PanelWindow {
                     width: parent.width
                     spacing: Style.cardGap
 
-                    Text { text: "ARRANGE DASHBOARD"; color: Colors.fgBright
+                    // The screen's name is part of the title on the desk: every screen is its own
+                    // desk, so "which one am I arranging" has to be answerable without counting.
+                    Text { text: root.isDesk ? ("ARRANGE WIDGETS · " + root.mon) : "ARRANGE DASHBOARD"
+                           color: Colors.fgBright
                            font.family: Style.font; font.pixelSize: 15; font.weight: Font.Medium }
 
                     // ── The picked module(s) ─────────────────────────────────────
@@ -513,12 +687,80 @@ PanelWindow {
                         }
                     }
 
+                    // ── What the picked widget looks like ────────────────────────
+                    // Type and colour are the two things EVERY widget has, so they live here rather
+                    // than in each type's own panel — and they are the same two fields, under the
+                    // same names, that a bar module carries (Settings → Bar → module → gear). A
+                    // colour is a palette role, never a value: the palette follows the wallpaper and
+                    // a widget pinned to a hex would be the one thing that stops following it.
+                    Card {
+                        visible: root.sel !== null
+                        CardLabel {
+                            text: "APPEARANCE"
+                            hint: "Type and colour for this widget alone. Two clocks on one desk can "
+                                + "be a big pale one over the wallpaper and a small accent one in the corner."
+                        }
+                        FieldLabel { text: "Font" }
+                        Dropdown {
+                            summary: { var f = "" + (root.sel?.opts?.font ?? ""); return f === "" ? "Theme font" : f }
+                            options: {
+                                var cur = "" + (root.sel?.opts?.font ?? "")
+                                var o = [{ label: "Theme font", key: "", on: cur === "" }]
+                                var fs = FontList.families
+                                for (var i = 0; i < fs.length; i++)
+                                    o.push({ label: fs[i], key: fs[i], on: cur === fs[i] })
+                                return o
+                            }
+                            onPicked: if (root.sel) root.setOpt(root.sel.id, "font", key)
+                        }
+                        FieldLabel { text: "Colour" }
+                        Dropdown {
+                            summary: root.roleLabel(root.sel?.opts?.color, "Bright")
+                            options: root.roleOptions(root.sel?.opts?.color)
+                            onPicked: if (root.sel) root.setOpt(root.sel.id, "color", key)
+                        }
+                        FieldLabel { text: "Secondary colour" }
+                        Dropdown {
+                            summary: root.roleLabel(root.sel?.opts?.color_sub, "Foreground")
+                            options: root.roleOptions(root.sel?.opts?.color_sub)
+                            onPicked: if (root.sel) root.setOpt(root.sel.id, "color_sub", key)
+                        }
+                        SubLabel {
+                            width: parent.width
+                            text: "Secondary is the date, the artist, the caption — whatever sits under "
+                                + "the widget's main reading."
+                        }
+                    }
+
+                    // ── …and what it shows ───────────────────────────────────────
+                    // One panel per type, because "what are this widget's options" has no answer in
+                    // general: a clock chooses formats, a player chooses which of its parts it
+                    // carries. Types with no panel simply have no card here.
+                    Card {
+                        visible: root.sel !== null && root.optsFor(root.sel.key) !== null
+                        CardLabel {
+                            text: root.sel ? (DashModules.labelFor(root.sel).toUpperCase() + " OPTIONS") : ""
+                            hint: "Options for this one widget. Every other copy of the same type keeps its own."
+                        }
+                        Loader {
+                            width: parent.width
+                            sourceComponent: root.sel ? root.optsFor(root.sel.key) : null
+                            onLoaded: {
+                                item.entry = Qt.binding(function () { return root.sel })
+                                item.optSet.connect(function (key, value) {
+                                    if (root.sel) root.setOpt(root.sel.id, key, value)
+                                })
+                            }
+                        }
+                    }
+
                     // ── The raster ───────────────────────────────────────────────
                     // These four numbers ARE the menu size now: the panel is built to hold
                     // exactly cols × rows cells, so no row is ever half-visible and nothing
                     // is left over under the last one. The old "menu width/height %" pair is
                     // gone — a size set independently of the raster could never divide evenly.
                     Card {
+                        visible: !root.isDesk
                         CardLabel {
                             text: "RASTER"
                             hint: "Columns and rows decide how big the settings menu is. There is "
@@ -537,12 +779,12 @@ PanelWindow {
                         }
                         Stepper {
                             label: "Column width"; unit: "px"; labelWidth: 110
-                            value: VtlConfig.dashboardCellW; step: 5; min: 70; max: 220
+                            value: VtlConfig.dashboardCellW; step: 1; min: 70; max: 220
                             onChanged: v => SettingsStore.set("dashboard_cell_w", v)
                         }
                         Stepper {
                             label: "Row height"; unit: "px"; labelWidth: 110
-                            value: VtlConfig.dashboardCellH; step: 4; min: 40; max: 120
+                            value: VtlConfig.dashboardCellH; step: 1; min: 40; max: 120
                             onChanged: v => SettingsStore.set("dashboard_cell_h", v)
                         }
                         SubLabel {
@@ -552,13 +794,14 @@ PanelWindow {
                         }
                     }
 
+
                     Card {
                         CardLabel {
                             text: "MODULES"
                             hint: "Click one to place it. Modules that can only exist once are ticked off."
                         }
                         Repeater {
-                            model: DashModules.paletteGroups
+                            model: DashModules.paletteGroupsFor(root.host)
                             delegate: Column {
                                 id: grp
                                 required property var modelData

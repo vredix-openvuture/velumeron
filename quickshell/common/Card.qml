@@ -14,7 +14,12 @@ StyledRect {
     // x = 0 and resumes the columns under it, and this is the other half of that — without it the
     // card sat in a column's width at the full row's position.
     property bool spans: false
-    width:        (parent && parent.cardWidth !== undefined)
+    // A width handed down by the grid: the last row of a page shares the columns it did not fill
+    // between the cards it has, in WHOLE columns, so nothing is left as a column-shaped hole and
+    // every card edge still sits on the same grid line as the rows above it. Zero = one column.
+    property real rowWidth: 0
+    width:        card.rowWidth > 0 ? card.rowWidth
+                  : (parent && parent.cardWidth !== undefined)
                   ? (card.spans ? parent.width : parent.cardWidth)
                   : (parent ? parent.width : 0)
     radius:       Style.rCard
@@ -26,7 +31,12 @@ StyledRect {
     // rather than laid out, and no amount of matching WIDTHS fixes that.
     property real rowHeight: 0
     readonly property real contentHeight: card._naturalH + Style.cardPad * 2
-    height:       Math.max(card.contentHeight, card.rowHeight)
+    // As tall as its contents, or as tall as the row it was put in — never capped. A card that does
+    // not fit the page is a card you scroll to; it does not scroll inside itself. (It did once: the
+    // grid handed down a ceiling and the card scrolled its own rows so the page's fold could never
+    // slice a frame. Two scrolls in one place, and the wheel went to whichever the pointer was
+    // over — see the note in CardColumns.relayout.)
+    height: Math.max(card.contentHeight, card.rowHeight)
 
     // Grimoire flourish: an inner hairline frame echoing the scalloped outline, plus corner
     // bosses — the diamond fittings on medieval book covers. Pure decoration under the content
@@ -77,20 +87,21 @@ StyledRect {
             if (inner.children[i] && inner.children[i].visible) n++
         return n
     }
-    readonly property real _slack: Math.max(0, card.height - 2 * Style.cardPad - card._naturalH)
-    // …but a heading belongs at the top of its card. Past this much slack the card stops centring
-    // and simply has room under its contents, because a title floating in the middle of a tall card
-    // reads as a mistake.
-    readonly property real _centreCap: 160
-
-    // A card given more height than its contents need keeps its rows TOGETHER and sits them in the
-    // middle of the space. Spreading the gaps was the other way to fill it and it reads worse: four
+    // A card given more height than its contents need holds them at the TOP and simply has room
+    // under them. Centring was tried and thrown out: a heading floating in the middle of a tall
+    // card reads as a mistake, and with several cards side by side their headings then no longer
+    // line up with each other. Spreading the gaps was the other way and reads worse still — four
     // rows a finger apart stop looking like one group and start looking like four unrelated lines.
-    Column {
-        id: inner
-        anchors { left: parent.left; right: parent.right
-                  leftMargin: Style.cardPad; rightMargin: Style.cardPad }
-        y: Style.cardPad + Math.min(card._slack, card._centreCap) / 2
-        spacing: Style.rowGap
+    Item {
+        id: scroller
+        anchors { fill: parent
+                  leftMargin: Style.cardPad; rightMargin: Style.cardPad
+                  topMargin: Style.cardPad;  bottomMargin: Style.cardPad }
+
+        Column {
+            id: inner
+            width: scroller.width
+            spacing: Style.rowGap
+        }
     }
 }

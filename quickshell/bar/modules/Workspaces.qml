@@ -11,6 +11,9 @@ Row {
     // Set true by the sidebar Loader (which rotates the whole module ±90°).
     // Used to counter-rotate the active-workspace number so it stays upright.
     property bool vertical: false
+    // Always turned on a vertical bar (see Bar.qml ModSlot) — the pills run along the strip and the
+    // numbers inside counter-rotate so they still read upright.
+    readonly property bool rotateOnVertical: true
     // Which edge we live on — set by the bar. The rotation is -90° on the left edge but
     // +90° on the right, so the upright counter-rotation and the layout order both flip.
     property string barEdge: ""
@@ -114,10 +117,16 @@ Row {
                 // "always round" that no theme could ever answer. Clamped to a half-height so a
                 // large radius still reads as a pill instead of a bulge.
                 radius: Math.min(height / 2, Style.rTile)
+                // The resting dot is a FADED FOREGROUND, never a background colour. It used to be
+                // Colors.bgElement, which is also what Style.moduleFill is made of — so with
+                // "modules: own pill each" every quiet workspace was painted in exactly the colour
+                // of the pill it sits on and the whole row vanished until it was hovered. A colour
+                // that borrows from the foreground contrasts with whatever ground it lands on,
+                // pill or bare strip, in any palette.
                 color: {
                     if (wsDot.isActive) return root._activeCol
                     if (wsDot.hovered)  return Colors.fgPrimary
-                    return Colors.bgElement
+                    return Style.tint(Colors.fgPrimary, 0.45)
                 }
                 Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
 

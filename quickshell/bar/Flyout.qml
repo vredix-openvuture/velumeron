@@ -62,8 +62,11 @@ PanelWindow {
     // strip's inner face (which since Bar._publishInner INCLUDES the float gap) and leaves its own
     // border off that side, so the bar's line is the one line between them. Cupertino still
     // detaches always — macOS menus are free dropdowns under the strip, that is the style.
-    readonly property bool   detached:  root.edgeBar && Style.isCupertino
-    readonly property int    detachGap: detached ? 8 : 0
+    // A CHROMELESS bar (capsule) detaches too, and for the same reason cupertino does: docking means
+    // leaving your own border off where the bar's line continues it, and a bar that draws no line
+    // has none to continue. The panel keeps its whole outline and hangs a gap below the modules.
+    readonly property bool   detached:  root.edgeBar && (Style.isCupertino || VtlConfig.barChromeless(root.mon))
+    readonly property int    detachGap: detached ? VtlConfig.barDetachGapFor(root.mon) : 0
     // An icon in the start/end group merges the menu into that end of the bar (the concave
     // L-transition); the perpendicular target is the side bar if present, else the bare screen edge.
     readonly property string startEdge: vert ? "top"    : "left"
@@ -75,7 +78,7 @@ PanelWindow {
     // corner there is nothing to merge INTO — the corner merge snaps the panel to the screen edge,
     // so it would hang off the end of the very strip it grows out of. Then it tracks its module
     // like a centre one does, and the span clamp below keeps it on the bar.
-    readonly property bool   endsFree:   VtlConfig.barModeFor(root.mon) !== "frame"
+    readonly property bool   endsFree:   (VtlConfig.barModeFor(root.mon) !== "frame" && VtlConfig.barModeFor(root.mon) !== "capsule")
                                          && (VtlConfig.barModeFor(root.mon) === "float"
                                              || VtlConfig.barSideGapFor(root.mon) > 0)
     // The stretch of this edge the strip covers — a docked panel stays inside it.
@@ -265,8 +268,13 @@ PanelWindow {
         // Inner content fades in only once there's room for it.
         readonly property real contentReveal: Style.popContentFade(reveal)
         // Auto-fit the content height, clamped to maxH and the screen.
+        // Auto-fit the content height, clamped to maxH and the screen — and to the SAME margin at
+        // the far end that `detachGap` keeps at the near one, so a panel tall enough to hit the
+        // ceiling still shows an even border rather than running into the bezel.
+        readonly property int  farPad: root.detachGap > 0 ? root.detachGap : 16
         readonly property int  targetH: Math.min(root.maxH,
-                                            Math.min(root.vert ? root.sh - 16 : root.sh - root.barT - 16,
+                                            Math.min(root.vert ? root.sh - root.detachGap - panel.farPad
+                                                               : root.sh - root.barT - root.detachGap - panel.farPad,
                                                      body.implicitHeight + 2 * root.inPad))
 
         // Elastic emergence — spring error drives the edge bulge + a touch of size overshoot.
@@ -296,8 +304,12 @@ PanelWindow {
         // than the screen, and a panel clamped to the screen slid past the end of it — visibly
         // hanging in the air next to the strip it is supposed to be attached to. Falls back to
         // centring on the span when the panel is wider than the bar is long.
-        readonly property real alongLo:  root.edgeBar ? root.barSpan[0] : 0
-        readonly property real alongHi:  (root.edgeBar ? root.barSpan[1] : (root.vert ? root.sh : root.sw)) - alongSize
+        // …and the same margin at the two ENDS. `detachGap` is 0 for a panel that merges into the
+        // bar, so a docked panel still travels the strip's full span and still closes flush with
+        // its ends — nothing about the merged geometry moves.
+        readonly property real alongLo:  (root.edgeBar ? root.barSpan[0] : 0) + root.detachGap
+        readonly property real alongHi:  (root.edgeBar ? root.barSpan[1] : (root.vert ? root.sh : root.sw))
+                                         - alongSize - root.detachGap
         readonly property real alongMax: Math.max(alongLo, alongHi)
         readonly property real anchor:   root.vert ? UiState.flyoutAnchorY : UiState.flyoutAnchorX
         // Centre the panel ON the anchor (was anchored at the panel's start → off-centre); start/end

@@ -9,14 +9,23 @@ import Quickshell.Services.SystemTray
 // scroll(). Lives on its own because it is rendered in TWO places: inline in the bar (Tray.qml) and
 // inside the hover glide when the module is collapsed to a single glyph (TrayGlide.qml). Keeping one
 // copy is the point — the click semantics are the fiddly part and must not drift between them.
-Row {
+//
+// A Grid rather than a Row because of the VERTICAL bar: the strip has to stack there, and it cannot
+// get there by being rotated — rotating the strip rotates every tray icon with it, and a sideways
+// application icon is not a smaller version of the upright one. So the module never rotates (Tray's
+// rotateOnVertical is false) and the icons re-flow into a column instead.
+Grid {
     id: strip
     property int    iconSize: 16
     property string barEdge:  "top"     // which side the context menu opens toward
     property string barMon:   ""
+    property bool   column:   false     // stack instead of running along
     signal menuOpened()                 // the glide listens, to stay up while the menu covers it
 
-    spacing: 2
+    rows:    strip.column ? 0 : 1
+    columns: strip.column ? 1 : 0
+    flow:    strip.column ? Grid.TopToBottom : Grid.LeftToRight
+    rowSpacing: 2; columnSpacing: 2
 
     // Publish the item's menu handle + the icon's anchor; the per-screen TrayMenu overlay renders it
     // with the shell's own styling. Both hosts are full-width surfaces, so scene x == screen x.

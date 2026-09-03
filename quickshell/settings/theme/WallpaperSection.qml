@@ -25,6 +25,17 @@ Item {
     property bool   showFolders: false
     property string tab:        "browse"   // browse | sets | quickselect | auto
 
+    // ── What the menu needs from this page ──────────────────────────────────────────────
+    // No desk preview: the gallery is a picture of the wallpaper already, and the menu's miniature
+    // was drawn straight over the thumbnails. The rooms go up into the head bar with every other
+    // page's, so this page starts on the same line as the rest of them.
+    readonly property bool pageWantsPreview: false
+    readonly property var  pageTabs: root.showFolders ? [] :
+        [{ label: "Browse", key: "browse" }, { label: "Sets", key: "sets" },
+         { label: "Quick",  key: "quickselect" }, { label: "Auto", key: "auto" }]
+    readonly property real pageGridY: 0
+    readonly property real pageContentH: 0
+
     function isVideo(n) { return /\.(mp4|webm|mkv|avi|mov)$/i.test(n) }
     function stem(n)    { return ("" + n).replace(/\.[^.]+$/, "") }
 
@@ -44,6 +55,7 @@ Item {
 
     function reload() {
         status = "Loading…"; items = []
+        listProc.acc = []
         listProc.command = ["bash", "-c",
             "python3 \"$VELUMERON_DIR/assets/scripts/wallpaper-list.py\" \"$1\"", "vtl", root.targetMon]
         listProc.running = false; listProc.running = true
@@ -66,8 +78,17 @@ Item {
     Timer { id: statusClear; interval: 5000
             onTriggered: { root.applying = ""; root.status = root.items.length + " wallpaper(s)" } }
 
+    // The listing arrives one line per file, and `items` is what the grid is built from — so every
+    // line used to rebuild it: slice, push, assign. That is O(n²) on a QVariantList AND it resets
+    // the ListView's model each time, so 157 wallpapers meant 157 model resets, each rebuilding up
+    // to 157 thumbnail cells. The page froze for seconds on open.
+    //
+    // The accumulator is a plain JS array held in a var property: `push` on it mutates in place,
+    // with no marshalling and no binding waking up. `items` is assigned ONCE, when the process is
+    // done — the grid is then built exactly once.
     Process {
         id: listProc
+        property var acc: []
         stdout: SplitParser {
             onRead: line => {
                 var t = ("" + line)
@@ -77,30 +98,36 @@ Item {
                 var sub  = t.slice(0, tab)
                 var full = t.slice(tab + 1)
                 if (full === "") return
-                var a = root.items.slice()
-                a.push({ path: full, name: full.split("/").pop(), sub: sub })
-                root.items = a
+                listProc.acc.push({ path: full, name: full.split("/").pop(), sub: sub })
             }
         }
-        onRunningChanged: if (!running) root.status = root.items.length + " wallpaper(s)"
+        onRunningChanged: if (!running) {
+            root.items  = listProc.acc
+            root.status = root.items.length + " wallpaper(s)"
+        }
     }
 
     Process { id: applyProc }
     Process { id: folderProc }
 
-    // ── Header: tabs + monitor selector + gear ─────────────────────────────────
+    // The card every other settings page is made of. This page lays itself out with anchors rather
+    // than in the card grid (a gallery is not a stack of rows), so it gets the frame drawn behind it
+    // instead of being built out of Cards — same fill, same radius, same edges as the rest.
+    StyledRect {
+        anchors.fill: parent
+        z: -1
+        radius:      Style.rCard
+        color:       Style.cardFill
+        borderWidth: Style.cardBorderW
+        borderColor: Style.cardBorderColor
+    }
+
+    // ── Header: monitor selector + gear (the rooms are in the menu's head bar) ──
     Item {
         id: head
-        anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 2 }
+        anchors { top: parent.top; left: parent.left; right: parent.right
+                  topMargin: Style.cardPad; leftMargin: Style.cardPad; rightMargin: Style.cardPad }
         height: 26
-        Segmented {
-            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-            visible: !root.showFolders
-            current: root.tab
-            segments: [{ label: "Browse", key: "browse" }, { label: "Sets", key: "sets" },
-                       { label: "Quick", key: "quickselect" }, { label: "Auto", key: "auto" }]
-            onPicked: root.tab = key
-        }
         Text {
             anchors { left: parent.left; verticalCenter: parent.verticalCenter }
             visible: root.showFolders
@@ -148,7 +175,9 @@ Item {
     // ── Thumbnail grid: one captioned section per subfolder ───────────────────
     ListView {
         id: grid
-        anchors { top: head.bottom; topMargin: 8; left: parent.left; right: parent.right
+        anchors { top: head.bottom; topMargin: 8
+                  left: parent.left; leftMargin: Style.cardPad
+                  right: parent.right; rightMargin: Style.cardPad
                   bottom: bottomBar.top; bottomMargin: 8 }
         clip: true
         visible: !root.showFolders && root.tab === "browse"
@@ -193,19 +222,28 @@ Item {
     // ── Path settings (gear) ─────────────────────────────────────────────────────
     WallpaperFolders {
         visible: root.showFolders
-        anchors { top: head.bottom; topMargin: 10; left: parent.left; right: parent.right; bottom: parent.bottom }
+        anchors { top: head.bottom; topMargin: 10
+                  left: parent.left; leftMargin: Style.cardPad
+                  right: parent.right; rightMargin: Style.cardPad
+                  bottom: parent.bottom; bottomMargin: Style.cardPad }
     }
 
     // ── Sets subtab ──────────────────────────────────────────────────────────────
     WallpaperSets {
         visible: !root.showFolders && root.tab === "sets"
-        anchors { top: head.bottom; topMargin: 10; left: parent.left; right: parent.right; bottom: parent.bottom }
+        anchors { top: head.bottom; topMargin: 10
+                  left: parent.left; leftMargin: Style.cardPad
+                  right: parent.right; rightMargin: Style.cardPad
+                  bottom: parent.bottom; bottomMargin: Style.cardPad }
     }
 
     // ── Quickselect subtab ─────────────────────────────────────────────────────────
     Flickable {
         visible: !root.showFolders && root.tab === "quickselect"
-        anchors { top: head.bottom; topMargin: 12; left: parent.left; right: parent.right; bottom: parent.bottom }
+        anchors { top: head.bottom; topMargin: 12
+                  left: parent.left; leftMargin: Style.cardPad
+                  right: parent.right; rightMargin: Style.cardPad
+                  bottom: parent.bottom; bottomMargin: Style.cardPad }
         contentHeight: qsCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
         Column {
             id: qsCol
@@ -265,7 +303,10 @@ Item {
     // ── Auto subtab ────────────────────────────────────────────────────────────────
     Flickable {
         visible: !root.showFolders && root.tab === "auto"
-        anchors { top: head.bottom; topMargin: 12; left: parent.left; right: parent.right; bottom: parent.bottom }
+        anchors { top: head.bottom; topMargin: 12
+                  left: parent.left; leftMargin: Style.cardPad
+                  right: parent.right; rightMargin: Style.cardPad
+                  bottom: parent.bottom; bottomMargin: Style.cardPad }
         contentHeight: autoCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
         Column {
             id: autoCol
@@ -307,7 +348,9 @@ Item {
     Item {
         id: bottomBar
         visible: !root.showFolders && root.tab === "browse"
-        anchors { bottom: parent.bottom; left: parent.left; right: parent.right; bottomMargin: 2 }
+        anchors { bottom: parent.bottom; bottomMargin: Style.cardPad
+                  left: parent.left; leftMargin: Style.cardPad
+                  right: parent.right; rightMargin: Style.cardPad }
         height: !root.showFolders && root.tab === "browse" ? 32 : 0
         Text {
             anchors { left: parent.left; verticalCenter: parent.verticalCenter }

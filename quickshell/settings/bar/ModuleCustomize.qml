@@ -13,6 +13,8 @@ Item {
     property var    fonts:     []        // installed font families (from BarSection's fc-list)
 
     signal changed(string name, var value)
+    // Several options at once, for a field whose value only makes sense together with a second one.
+    signal changedMany(var values)
     signal resetAll()
 
     // Semantic colour roles offered for the primary text/icon (first = inherit the module default).
@@ -30,6 +32,10 @@ Item {
 
     function ms(name, def) { return VtlConfig.moduleSetting(root.moduleKey, name, def) }
 
+    // Group instances and the Velumeron icon carry their own panel by definition — everything else
+    // gets the popout picker, including the modules that ship without one.
+    readonly property bool showsPopout: Popouts.customizable(root.moduleKey)
+
     // ── Per-module specific settings (descriptor-driven) ──────────────────────────
     function specFor(key) {
         // Dynamic group instances ("group:<n>"): name, icon, and the member list that the
@@ -38,6 +44,15 @@ Item {
             { type: "text",    name: "label",   label: "Group name", def: "Group" },
             { type: "text",    name: "icon",    label: "Icon glyph", def: "󰐱" },
             { type: "modules", name: "members", label: "Members",    def: [] } ]
+        // Dynamic button instances ("button:<n>"): the glyph, the words beside it, and what the
+        // click does. The action list is the shell's shared vocabulary (Actions.types), so a button
+        // can do anything a hot corner or a dashboard tile can — plus a plain command.
+        if (("" + key).indexOf("button:") === 0) return [
+            { type: "text",     name: "icon",   label: "Icon glyph", def: "󰐒" },
+            { type: "text",     name: "label",  label: "Text",       def: "" },
+            { type: "dropdown", name: "action", label: "On click",   def: "command",
+              options: Actions.types.map(function (t) { return { label: t.label, key: t.key } }) },
+            { type: "text",     name: "value",  label: "Command / argument", def: "" } ]
         switch (key) {
         case "clock": return [
             { type: "dropdown", name: "time_format", label: "Time format", def: "hh:mm",
@@ -105,6 +120,63 @@ Item {
             { type: "toggle", name: "collapse", label: "Collapse to one icon (hover glides them out)", def: false },
             { type: "text",   name: "icon",     label: "Tray icon glyph", def: "󰀻" } ]
         case "wallpaper-switcher": return [ { type: "text", name: "icon", label: "Icon glyph", def: "󰸉" } ]
+        // ── Round two ─────────────────────────────────────────────────────────────────────────
+        case "weather": return [
+            // One city for the whole shell — the lockscreen widget reads the same weather.json, so
+            // a second city here would only mean two fetchers overwriting each other.
+            { type: "city",    name: "city", label: "City", def: "" },
+            { type: "dropdown", name: "unit", label: "Unit", def: "c",
+              options: [{ label: "Celsius", key: "c" }, { label: "Fahrenheit", key: "f" }] },
+            { type: "toggle",  name: "show_temp",  label: "Show the temperature", def: true },
+            { type: "toggle",  name: "show_place", label: "Show the place",       def: false },
+            { type: "stepper", name: "forecast_days",   label: "Days in the popout", def: 3, min: 0, max: 3, step: 1 },
+            { type: "stepper", name: "menu_width_pct",  label: "Popout width %",      def: 16, min: 8, max: 40, step: 1 },
+            { type: "stepper", name: "menu_height_pct", label: "Popout max height %", def: 45, min: 20, max: 90, step: 5 } ]
+        case "window": return [
+            { type: "toggle",  name: "show_icon",  label: "Show the app icon", def: true },
+            { type: "toggle",  name: "show_title", label: "Show the name",     def: true },
+            { type: "dropdown", name: "text", label: "Name", def: "title",
+              options: [{ label: "Window title", key: "title" }, { label: "Application", key: "class" }] },
+            { type: "stepper", name: "max_width", label: "Max width px", def: 220, min: 60, max: 600, step: 10 },
+            { type: "text",    name: "empty_text", label: "With nothing focused", def: "Desktop" },
+            { type: "toggle",  name: "this_monitor_only", label: "Only this monitor's windows", def: false } ]
+        case "microphone": return [
+            { type: "toggle",  name: "show_percent", label: "Show the level", def: false },
+            { type: "toggle",  name: "hover_list",   label: "Name what is recording on hover", def: true },
+            { type: "dropdown", name: "click", label: "Left click", def: "mute",
+              options: [{ label: "Mute / unmute", key: "mute" }, { label: "Open the popout", key: "popout" }] },
+            { type: "stepper", name: "scroll_step", label: "Scroll step %", def: 5, min: 5, max: 25, step: 5 },
+            { type: "stepper", name: "menu_width_pct",  label: "Popout width %",      def: 17, min: 8, max: 40, step: 1 },
+            { type: "stepper", name: "menu_height_pct", label: "Popout max height %", def: 50, min: 20, max: 90, step: 5 } ]
+        case "keyboard": return [
+            { type: "toggle",  name: "show_icon", label: "Show the glyph", def: true },
+            { type: "dropdown", name: "text", label: "Text", def: "name",
+              options: [{ label: "Layout name (from the compositor)", key: "name" },
+                        { label: "Layout code", key: "code" }] },
+            { type: "stepper", name: "max_chars", label: "Cut after", def: 8, min: 2, max: 24, step: 1 },
+            { type: "toggle",  name: "uppercase", label: "Uppercase", def: true },
+            { type: "stepper", name: "menu_width_pct",  label: "Popout width %",      def: 13, min: 8, max: 40, step: 1 },
+            { type: "stepper", name: "menu_height_pct", label: "Popout max height %", def: 45, min: 20, max: 90, step: 5 } ]
+        case "theme": return [
+            { type: "text",   name: "icon",      label: "Icon glyph", def: "󰏘" },
+            { type: "toggle", name: "show_name", label: "Show the theme name", def: false } ]
+        case "brightness": return [
+            { type: "toggle",  name: "show_percent", label: "Show the level", def: true },
+            { type: "stepper", name: "scroll_step",  label: "Scroll step %", def: 5, min: 5, max: 25, step: 5 },
+            { type: "toggle",  name: "show_osd",     label: "Show the OSD while scrolling", def: true } ]
+        case "powerprofile": return [
+            { type: "toggle", name: "show_name", label: "Show the profile name", def: false } ]
+        case "dnd":
+        case "nightlight":
+        case "caffeine": return [
+            { type: "toggle", name: "show_label",    label: "Show the name",   def: false },
+            { type: "toggle", name: "hide_when_off", label: "Hide when off",   def: false } ]
+        case "calendar": return [
+            { type: "text",   name: "icon",       label: "Icon glyph", def: "󰸗" },
+            { type: "toggle", name: "show_label", label: "Show the name", def: false } ]
+        case "clipboard": return [
+            { type: "text",   name: "icon",       label: "Icon glyph", def: "󰅌" },
+            { type: "toggle", name: "show_label", label: "Show the name", def: false } ]
         default:            return []
         }
     }
@@ -188,7 +260,37 @@ Item {
                 }
 
                 // Reset belongs to the LAST card on the page, not below everything as a lone
-                // button — it only shows here for modules that have no settings card of their own.
+                // button — it only shows here for modules that have no card below them.
+                ResetAll { visible: !root.showsPopout && root.specFor(root.moduleKey).length === 0 }
+            }
+
+            // ── Popout ────────────────────────────────────────────────────────────
+            // WHICH panel this module grows, rather than the one it happens to ship with. Every
+            // popout in the shell is an independent surface keyed by an id, so the volume desk can
+            // sit on the microphone button, the system monitor on the battery, and a module that
+            // never had a panel can be given one. See bar/Popouts.qml.
+            Card {
+                visible: root.showsPopout
+                CardLabel { text: "POPOUT"
+                            hint: "The panel this module opens when you click it. Default is whatever the module ships with — everything else here is one of the shell's own popouts, wherever it normally lives." }
+
+                FieldLabel { text: "Panel" }
+                Dropdown {
+                    summary: {
+                        var v = root.ms("popout", "")
+                        var o = Popouts.options(root.moduleKey)
+                        for (var i = 0; i < o.length; i++) if (o[i].key === v) return o[i].label
+                        return v
+                    }
+                    options: {
+                        var v = root.ms("popout", "")
+                        return Popouts.options(root.moduleKey).map(function (o) {
+                            return { label: o.label, key: o.key, on: o.key === v }
+                        })
+                    }
+                    onPicked: root.changed("popout", key)
+                }
+
                 ResetAll { visible: root.specFor(root.moduleKey).length === 0 }
             }
 
@@ -206,6 +308,7 @@ Item {
                                        : modelData.type === "dropdown" ? dropdownC
                                        : modelData.type === "stepper"  ? stepperC
                                        : modelData.type === "text"     ? textC
+                                       : modelData.type === "city"     ? cityC
                                        : modelData.type === "modules"  ? modulesC
                                        : null
                         onLoaded: { item.spec = modelData }
@@ -286,6 +389,37 @@ Item {
             InputField {
                 text: txtRoot.spec ? root.ms(txtRoot.spec.name, txtRoot.spec.def) : ""
                 onEdited: if (txtRoot.spec) root.changed(txtRoot.spec.name, v)
+            }
+        }
+    }
+    // A place, not a string: the field offers real cities while you type and names back the one the
+    // weather service resolved. Picking a suggestion writes its "lat,lon" into a second key, so a
+    // name that several towns share still fetches the town that was chosen.
+    Component {
+        id: cityC
+        Column {
+            id: cityRoot
+            property var spec
+            width: parent ? parent.width : 0
+            spacing: 4
+            FieldLabel { text: cityRoot.spec ? cityRoot.spec.label : ""
+                         hint: "Type two letters and the field offers real places. Picking one "
+                               + "stores its coordinates too, so a name several towns share still "
+                               + "lands on the one you meant." }
+            // The fix is keyed off the field, not off the module, so a module with two city
+            // fields would not have them share one set of coordinates.
+            readonly property string coordsKey: cityRoot.spec ? cityRoot.spec.name + "_coords" : ""
+            CityField {
+                value:  cityRoot.spec ? root.ms(cityRoot.spec.name, cityRoot.spec.def) : ""
+                coords: cityRoot.coordsKey !== "" ? root.ms(cityRoot.coordsKey, "") : ""
+                placeholder: "Berlin"
+                onCommitted: (place, fix) => {
+                    if (!cityRoot.spec) return
+                    var values = {}
+                    values[cityRoot.spec.name] = place
+                    values[cityRoot.coordsKey] = fix
+                    root.changedMany(values)
+                }
             }
         }
     }

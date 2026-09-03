@@ -30,13 +30,19 @@ Item {
     // Anchor for the notification centre (mirrors VutureIcon.publishAnchor for the corner menu).
     function publishCenterAnchor() {
         if (!root.onFocusedMon || !VtlConfig.edgeActiveFor(root.barEdge, root.barMon)) return
+        // Another module was pointed at the notification centre and has just grown it out of
+        // ITSELF — the bell must not drag the panel back over here (UiState.notifAnchorKey).
+        if (UiState.notifAnchorKey !== "" && UiState.notifAnchorKey !== "notiftray") return
+        UiState.notifAnchorKey = "notiftray"
         var c = bell.mapToItem(null, bell.width / 2, bell.height / 2)
         UiState.notifEdge  = root.barEdge
         UiState.notifGroup = root.barGroup
         UiState.notifStart = root.vert ? c.y : c.x
         UiState.notifMon   = root.barMon   // latch the centre to this monitor (don't follow focus)
     }
-    function togglePanel() { publishCenterAnchor(); UiState.notifCenterOpen = !UiState.notifCenterOpen }
+    // The centre is this module's DEFAULT popout, not its only one — Popouts publishes the same
+    // anchor for it and can be pointed at any other panel instead (Settings -> Bar -> gear).
+    function togglePanel() { Popouts.openFor("notiftray", bell, root.barEdge, root.barGroup, root.barMon) }
 
     // Publish the bell anchor so the per-screen NotifPeekGlide can slide out a preview of the most
     // recent notifications on hover (suppressed while the full centre is open — it supersedes it).

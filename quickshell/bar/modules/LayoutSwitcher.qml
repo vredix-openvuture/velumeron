@@ -9,6 +9,8 @@ import Quickshell.Io
 Item {
     id: root
     property bool vertical: false
+    // Turned 90 degrees on a vertical bar (see Bar.qml ModSlot): only with the layout name beside the glyph.
+    readonly property bool rotateOnVertical: root._showName
     property string barMon:   ""
     property string barEdge:  "top"
     property string barGroup: "start"
@@ -22,7 +24,7 @@ Item {
     readonly property color  _col:      Colors[VtlConfig.moduleColorName("layout")] ?? Colors.fgPrimary
     readonly property bool   _showName: VtlConfig.moduleSetting("layout", "show_name", true)
 
-    readonly property bool menuOpen: UiState.flyout === "layoutmenu" && UiState.flyoutMon === root.barMon
+    readonly property bool menuOpen: Popouts.isOpen("layout", root.barMon)
 
     // Shared glyph/label mapping (the flyout uses the same helpers via its own copy of the kinds).
     function iconFor(l) {
@@ -65,8 +67,7 @@ Item {
         hoverEnabled: true
         cursorShape:  Qt.PointingHandCursor
         onClicked: {
-            var c = root.mapToItem(null, root.width / 2, root.height / 2)
-            UiState.toggleFlyout("layoutmenu", c.x, c.y, root.barEdge, root.barGroup, root.barMon)
+            Popouts.openFor("layout", root, root.barEdge, root.barGroup, root.barMon)
         }
     }
 

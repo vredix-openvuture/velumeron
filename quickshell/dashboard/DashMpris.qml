@@ -8,6 +8,13 @@ import QtQuick
 DashTile {
     id: root
     readonly property var  player: DashState.player
+    // What this instance draws. All four default ON — the tile is a player, and a player without a
+    // cover or a transport is a caption. They exist because a 1x1 in the corner of a desk wants to
+    // be a record and nothing else, while the same widget four cells wide wants everything.
+    readonly property bool showCover:     (root.opts?.cover     ?? true) !== false
+    readonly property bool showWave:      (root.opts?.wave      ?? true) !== false
+    readonly property bool showTransport: (root.opts?.transport ?? true) !== false
+    readonly property bool showProgress:  (root.opts?.progress  ?? true) !== false
     // Big = the full player. Also whenever the cell is upright: a cover-row in a portrait cell
     // wastes the height it was given.
     readonly property bool big: root.height >= 260 || (root.tall && root.height >= 150)
@@ -34,7 +41,8 @@ DashTile {
         intensity: 0.45
         barGap: 3
         opacity: 0.6
-        active: root.player !== null && (root.player?.isPlaying ?? false)
+        visible: root.showWave
+        active: root.showWave && root.player !== null && (root.player?.isPlaying ?? false)
     }
 
     // ── No player ────────────────────────────────────────────────────────────
@@ -55,7 +63,7 @@ DashTile {
         Text { anchors.horizontalCenter: parent.horizontalCenter
                visible: !root.tiny
                text: "Nothing playing"; color: Colors.fgMuted
-               font.pixelSize: 12; font.family: Style.font }
+               font.pixelSize: 12; font.family: root.uiFont }
     }
 
     // ── Compact: cover row + slim progress ───────────────────────────────────
@@ -66,7 +74,9 @@ DashTile {
                   right: parent.right; rightMargin: root.pad }
         spacing: 12
         VinylArt {
-            width: root.cover; height: root.cover
+            visible: root.showCover
+            width: root.showCover ? root.cover : 0
+            height: root.cover
             anchors.verticalCenter: parent.verticalCenter
             source: root.player?.trackArtUrl ?? ""
             spinning: root.player?.isPlaying ?? false
@@ -81,33 +91,34 @@ DashTile {
         }
         Column {
             anchors.verticalCenter: parent.verticalCenter
-            width: Math.max(0, parent.width - root.cover - ctl.width - 2 * 12)
+            width: Math.max(0, parent.width - (root.showCover ? root.cover : 0) - ctl.width - 2 * 12)
             spacing: 2
             MarqueeText { width: parent.width
-                          text: root.player?.trackTitle ?? ""; color: Colors.fgBright
-                          pixelSize: 13; bold: true }
+                          text: root.player?.trackTitle ?? ""; color: root.fgMain
+                          family: root.uiFont; pixelSize: 13; bold: true }
             MarqueeText { width: parent.width
                           visible: (root.player?.trackArtist ?? "") !== ""
-                          text: root.player?.trackArtist ?? ""; color: Colors.fgMuted
-                          pixelSize: 11 }
+                          text: root.player?.trackArtist ?? ""; color: root.fgSub
+                          family: root.uiFont; pixelSize: 11 }
         }
         Row {
             id: ctl
+            visible: root.showTransport
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 6
+            spacing: root.showTransport ? 6 : 0
             MediaBtn { icon: "󰒮"; onTrig: root.player?.previous() }
             MediaBtn { icon: root.player?.isPlaying ? "󰏤" : "󰐊"; onTrig: root.player?.togglePlaying() }
             MediaBtn { icon: "󰒭"; onTrig: root.player?.next() }
         }
     }
     Rectangle {
-        visible: !root.big && root.player !== null
+        visible: !root.big && root.player !== null && root.showProgress
         anchors { bottom: parent.bottom; bottomMargin: root.pad
                   left: parent.left; leftMargin: root.pad
                   right: parent.right; rightMargin: root.pad }
         height: 4; radius: 2; color: Style.liftSolid(Colors.bgElement)
         Rectangle { width: Math.round(parent.width * DashState.progress)
-                    height: parent.height; radius: parent.radius; color: Style.accent }
+                    height: parent.height; radius: parent.radius; color: root.fgTint }
     }
 
     // ── Big: cover fills the flexible room, info + transport below ────────────
@@ -117,7 +128,10 @@ DashTile {
         spacing: 12
         Item {
             width: parent.width
-            height: Math.max(0, parent.height - info.height - prog.height - bigCtl.height - 3 * parent.spacing)
+            visible: root.showCover
+            height: root.showCover
+                    ? Math.max(0, parent.height - info.height - prog.height - bigCtl.height - 3 * parent.spacing)
+                    : 0
             VinylArt {
                 // Equal air on three sides. The record is a circle inside a box that is rarely
                 // square itself, so whichever side is short decides its size and the other one
@@ -150,21 +164,25 @@ DashTile {
             width: parent.width
             spacing: 2
             MarqueeText { width: parent.width; hAlign: Text.AlignHCenter
-                          text: root.player?.trackTitle ?? ""; color: Colors.fgBright
-                          pixelSize: 15; bold: true }
+                          text: root.player?.trackTitle ?? ""; color: root.fgMain
+                          family: root.uiFont; pixelSize: 15; bold: true }
             MarqueeText { width: parent.width; hAlign: Text.AlignHCenter
                           visible: (root.player?.trackArtist ?? "") !== ""
-                          text: root.player?.trackArtist ?? ""; color: Colors.fgMuted
-                          pixelSize: 12 }
+                          text: root.player?.trackArtist ?? ""; color: root.fgSub
+                          family: root.uiFont; pixelSize: 12 }
         }
         Rectangle {
             id: prog
-            width: parent.width; height: 5; radius: 2; color: Style.liftSolid(Colors.bgElement)
+            visible: root.showProgress
+            width: parent.width; height: root.showProgress ? 5 : 0; radius: 2
+            color: Style.liftSolid(Colors.bgElement)
             Rectangle { width: Math.round(parent.width * DashState.progress)
-                        height: parent.height; radius: parent.radius; color: Style.accent }
+                        height: parent.height; radius: parent.radius; color: root.fgTint }
         }
         Row {
             id: bigCtl
+            visible: root.showTransport
+            height: root.showTransport ? implicitHeight : 0
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 16
             MediaBtn { size: 42; icon: "󰒮"; onTrig: root.player?.previous() }

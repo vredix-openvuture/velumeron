@@ -43,6 +43,9 @@ Item {
     readonly property int    barR:     VtlConfig.barInnerRadiusFor(prev.mon)
     readonly property int    barGap:   VtlConfig.barFloatGapFor(prev.mon)
     readonly property bool   pills:    VtlConfig.barModuleBgFor(prev.mon) === "module"
+    // The module corner as the THEME resolves it (Auto) or as you set it — the same call the real
+    // strip makes, so the picture and the bar cannot disagree about round versus square.
+    readonly property int    modR:     Style.moduleR(VtlConfig.barModuleBgRadiusFor(prev.mon))
     readonly property bool   tbOn:     VtlConfig.taskbarEnabledFor(prev.mon)
     readonly property string tbPos:    VtlConfig.taskbarPosition
     readonly property string osdPos:   VtlConfig.osdPosition
@@ -119,9 +122,12 @@ Item {
                 y: modelData === "bottom" ? prev.vh - prev.px(prev.barT) - g : g
                 width:  strip.horiz ? prev.width - 2 * g : prev.px(prev.barT)
                 height: strip.horiz ? prev.px(prev.barT) : prev.vh - 2 * g
+                // A capsule draws no strip at all — only the module marks below stay, standing on
+                // the wallpaper, which is exactly what the mode looks like in the real thing.
+                readonly property bool chrome: prev.barMode !== "capsule"
                 radius: strip.float_ ? Math.max(1, prev.px(prev.barR)) : 0
-                color: prev.dim(Colors.bgElement, strip.subject ? 0.97 : 0.8)
-                border.width: strip.subject ? 1 : 0
+                color: strip.chrome ? prev.dim(Colors.bgElement, strip.subject ? 0.97 : 0.8) : "transparent"
+                border.width: (strip.chrome && strip.subject) ? 1 : 0
                 border.color: Style.accent
 
                 // Module marks: a group at each end and one in the middle, in the theme's own
@@ -136,7 +142,7 @@ Item {
                             required property int index
                             anchors.verticalCenter: parent.verticalCenter
                             width: prev.px(index === 0 ? 54 : 26); height: prev.px(prev.barT * 0.5)
-                            radius: prev.pills ? height / 2 : Math.max(0, prev.px(Style.rTile))
+                            radius: prev.pills ? Math.max(0, prev.px(prev.modR)) : Math.max(0, prev.px(Style.rTile))
                             color: prev.dim(Colors.fgMuted, index === 0 ? 0.85 : 0.5)
                         }
                     }
@@ -150,7 +156,7 @@ Item {
                         delegate: Rectangle {
                             anchors.verticalCenter: parent.verticalCenter
                             width: prev.px(22); height: prev.px(prev.barT * 0.5)
-                            radius: prev.pills ? height / 2 : Math.max(0, prev.px(Style.rTile))
+                            radius: prev.pills ? Math.max(0, prev.px(prev.modR)) : Math.max(0, prev.px(Style.rTile))
                             color: prev.dim(Colors.fgMuted, 0.55)
                         }
                     }
@@ -163,7 +169,7 @@ Item {
                         model: 3
                         delegate: Rectangle {
                             width: prev.px(prev.barT * 0.5); height: prev.px(22)
-                            radius: prev.pills ? width / 2 : Math.max(0, prev.px(Style.rTile))
+                            radius: prev.pills ? Math.max(0, prev.px(prev.modR)) : Math.max(0, prev.px(Style.rTile))
                             color: prev.dim(Colors.fgMuted, 0.6)
                         }
                     }

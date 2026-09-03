@@ -13,13 +13,37 @@ Item {
     // How many columns the menu has given this page. It lays one grid across the whole
     // content area — switch, cards, preview — and every page sits on it.
     readonly property int pageCols: (parent && parent.pageCols !== undefined) ? parent.pageCols : 0
+    readonly property real pageColW: (parent && parent.pageColW !== undefined) ? parent.pageColW : 0
+    // The tab on screen answers. Modules draws no card grid at all (it is two panes), and it also
+    // asks for no preview, so nothing over there needs a row height from it.
+    readonly property int pageFirstCols: (parent && parent.pageFirstCols !== undefined) ? parent.pageFirstCols : 0
+    readonly property int pageCards: formPage.visible  ? formPage.cardCount
+                                   : stylePage.visible ? stylePage.cardCount : 0
+    readonly property real pageRowH: formPage.visible  ? formPage.firstRowH
+                                   : stylePage.visible ? stylePage.firstRowH : 0
     // How tall this page's content is, so the menu can be the size of its page rather than
     // a fixed box with half of it empty.
-    readonly property real pageContentH: Math.max(formPage.visible ? formPage.implicitHeight : 0, stylePage.visible ? stylePage.implicitHeight : 0, modPage.visible ? modPage.implicitHeight : 0, 0)
+    // The PAGE's height, header included — the same measure StyleSection reports, so the menu can
+    // take (pageContentH - pageGridY) as the height of the card grid on any page and line the
+    // preview card up with it.
+    readonly property real pageContentH: root.pageGridY
+        + Math.max(formPage.visible ? formPage.implicitHeight : 0,
+                   stylePage.visible ? stylePage.implicitHeight : 0,
+                   modPage.visible ? modPage.implicitHeight : 0, 0)
     // Where this page's card grid starts inside it. Zero for a page that is nothing but
     // its grid; the ones with a header of their own say so, and the menu lines its
     // preview card up with the grid rather than with the top of the page.
+    // Where the card grid starts. NOT "headCard.bottom": an invisible Card still has its height and
+    // its anchor line, so on a single-screen machine (no monitor scope to pick) the page used to
+    // start 50 px below the line it reported — the preview card sat that much too high and the grid
+    // came out that much too tall, which is what cut the cards off at the bottom.
     readonly property real pageGridY: headCard.visible ? headCard.height + Style.cardGap : 0
+    // The rooms this page splits into. The menu draws the strip in its head card (beside the
+    // feature switch) and writes `tab` back — a page with tabs and a page without then start on the
+    // same line, and the switch no longer sits in a card of its own above them.
+    readonly property var pageTabs: [{ icon: "󰠱", label: "Form",    key: "form"    },
+                                     { icon: "󰏘", label: "Style",   key: "style"   },
+                                     { icon: "󰕰", label: "Modules", key: "modules" }]
     readonly property real pageFillH: (parent && parent.pageFillH !== undefined) ? parent.pageFillH : 0
     readonly property real pageRowMin: (parent && parent.pageRowMin !== undefined) ? parent.pageRowMin : 0
 
@@ -52,7 +76,7 @@ Item {
     property int    iconSize:   18
     property int    fontSize:   13
     property string bgMode:     "none"
-    property int    bgRadius:   8
+    property int    bgRadius:   -1          // -1 = Auto (the theme's own module corner)
     property var    modules:    ({})            // {edge:{group:[keys]}}
     property string activeEdge: "top"
     property string addTarget:  ""              // "edge:group" while the add-picker is open
@@ -68,8 +92,9 @@ Item {
     }
     property string tab:        "form"          // form | style | modules — top-level tab
     property string customizeKey: ""            // module key whose customization overlay is open
-    property var    fonts:      []              // installed font families (lazy fc-list)
-    property var    _fontBuf:   []
+    // Installed font families come from the shared FontList singleton — the widget editor offers the
+    // same picker, and fc-list is a subprocess, not a lookup.
+    readonly property var fonts: FontList.families
 
     // Upper bound for the two gaps. NOT a round number picked by feel: a strip inset from both
     // ends by more than half its screen has no length left, so the ceiling is derived from the
@@ -105,24 +130,47 @@ Item {
         { key: "updates",     label: "Updates",       icon: "󰚰" },
         { key: "layout",      label: "Layout",        icon: "󰕴" },
         { key: "phone",       label: "Phone",         icon: "󰄜" },
+        { key: "weather",     label: "Weather",       icon: "󰖐" },
+        { key: "window",      label: "Focused window", icon: "󰖯" },
+        { key: "microphone",  label: "Microphone",    icon: "󰍬" },
+        { key: "keyboard",    label: "Keyboard layout", icon: "󰌌" },
+        { key: "theme",       label: "Theme",         icon: "󰏘" },
+        { key: "brightness",  label: "Brightness",    icon: "󰃠" },
+        { key: "powerprofile", label: "Power profile", icon: "󰌪" },
+        { key: "dnd",         label: "Do not disturb", icon: "󰂚" },
+        { key: "nightlight",  label: "Night light",   icon: "󰖔" },
+        { key: "caffeine",    label: "Caffeine",      icon: "󰅶" },
+        { key: "calendar",    label: "Calendar",      icon: "󰸗" },
+        { key: "clipboard",   label: "Clipboard",     icon: "󰅌" },
+        { key: "__new_button", label: "New button…",  icon: "󰐒" },
         { key: "__new_group", label: "New group…",    icon: "󰐱" },
     ]
     // Modules grouped by theme/task for the Add-module sub-page.
     readonly property var categories: [
-        { title: "Time & status",  keys: ["clock", "performance", "battery", "temperature", "updates"] },
+        { title: "Time & status",  keys: ["clock", "calendar", "weather", "performance", "battery",
+                                          "temperature", "updates"] },
         { title: "Connectivity",   keys: ["network", "vpn", "bluetooth", "tray", "phone"] },
-        { title: "Media & sound",  keys: ["volume", "mpris"] },
-        { title: "Workspace",      keys: ["workspaces", "submap", "tasks", "layout"] },
-        { title: "System & personal", keys: ["notiftray", "user", "wallpaper-switcher", "vuture-icon"] },
-        { title: "Custom",         keys: ["__new_group"] }
+        { title: "Media & sound",  keys: ["volume", "microphone", "mpris"] },
+        { title: "Workspace",      keys: ["workspaces", "window", "submap", "tasks", "layout", "keyboard"] },
+        { title: "Switches",       keys: ["dnd", "nightlight", "caffeine", "brightness", "powerprofile"] },
+        { title: "System & personal", keys: ["notiftray", "clipboard", "user", "wallpaper-switcher",
+                                             "theme", "vuture-icon"] },
+        { title: "Custom",         keys: ["__new_button", "__new_group"] }
     ]
     function labelFor(k) {
         if (("" + k).indexOf("group:") === 0) return VtlConfig.moduleSetting(k, "label", "Group")
+        // A button's chip is named after the button, which may carry only a glyph — then the key's
+        // own number stands in, so two unnamed buttons are still tellable apart in the zone.
+        if (("" + k).indexOf("button:") === 0) {
+            var l = VtlConfig.moduleSetting(k, "label", "")
+            return l !== "" ? l : ("Button " + ("" + k).slice(8))
+        }
         for (var i = 0; i < registry.length; i++) if (registry[i].key === k) return registry[i].label
         return k
     }
     function iconFor(k) {
         if (("" + k).indexOf("group:") === 0) return VtlConfig.moduleSetting(k, "icon", "󰐱")
+        if (("" + k).indexOf("button:") === 0) return VtlConfig.moduleSetting(k, "icon", "󰐒")
         for (var i = 0; i < registry.length; i++) if (registry[i].key === k) return registry[i].icon
         return ""
     }
@@ -152,7 +200,9 @@ Item {
         }
     }
 
-    function currentEdges() { return mode === "frame" ? edges : [position] }
+    // Frame and capsule are the two multi-edge modes — capsule IS a frame, minus the chrome.
+    readonly property bool isMultiEdge: root.mode === "frame" || root.mode === "capsule"
+    function currentEdges() { return root.isMultiEdge ? edges : [position] }
     function modList(edge, group) {
         return (modules[edge] && modules[edge][group]) ? modules[edge][group] : []
     }
@@ -350,9 +400,17 @@ Item {
         return out
     }
     function saveModuleSetting(key, name, value) {
+        var one = {}
+        one[name] = value
+        root.saveModuleSettings(key, one)
+    }
+    // Several of one module's options in a single write. Two set() calls apply to the live config
+    // one after the other, so anything reading a PAIR of them (the weather city and its
+    // coordinates) sees one new and one old value in between and acts on the mismatch.
+    function saveModuleSettings(key, values) {
         var ms = root._moduleSettingsClone()
         if (!ms[key]) ms[key] = ({})
-        ms[key][name] = value
+        for (var name in values) ms[key][name] = values[name]
         SettingsStore.set("module_settings", ms)
     }
     function resetModuleSettings(key) {
@@ -361,18 +419,8 @@ Item {
         SettingsStore.set("module_settings", ms)
     }
 
-    // Installed font families (lazy — loaded the first time the customization overlay opens).
-    function loadFonts() {
-        if (root.fonts.length > 0 || fontsProc.running) return
-        root._fontBuf = []
-        fontsProc.running = false; fontsProc.running = true
-    }
-    Process {
-        id: fontsProc
-        command: ["bash", "-c", "fc-list : family | sed 's/,.*//' | sort -u"]
-        stdout: SplitParser { onRead: line => { var t = line.trim(); if (t !== "") root._fontBuf.push(t) } }
-        onRunningChanged: { if (!running) { root.fonts = root._fontBuf.slice(); root._fontBuf = [] } }
-    }
+    // Lazy — the list is fetched the first time a customization overlay opens, never at start.
+    function loadFonts() { FontList.load() }
 
     function setPerMonitor(on) { perMonitor = on; saveKey("bar_per_monitor", on, ""); reload() }
     function setTargetMon(n)   { targetMon = n; reload() }
@@ -406,7 +454,7 @@ Item {
     function setIconSize(v)  { iconSize = Math.max(8, Math.min(48, v)); save("bar_icon_size", iconSize) }
     function setFontSize(v)  { fontSize = Math.max(6, Math.min(40, v)); save("bar_font_size", fontSize) }
     function setBgMode(m)    { bgMode = m; save("bar_module_bg", m) }
-    function setBgRadius(v)  { bgRadius = Math.max(0, Math.min(30, v)); save("bar_module_bg_radius", bgRadius) }
+    function setBgRadius(v)  { bgRadius = Math.max(-1, Math.min(30, v)); save("bar_module_bg_radius", bgRadius) }
     function setBgOpacity(v) { save("bar_module_bg_opacity", Math.max(0, Math.min(100, v)) / 100) }
 
     // Every EDGE COMBINATION keeps its own module arrangement (VtlConfig.barLayoutKeyOf). So the
@@ -424,15 +472,15 @@ Item {
         // writes go through SettingsStore, which applies locally and flushes as one batch, so the
         // reload below already sees the pin — the picker and the bar can never disagree about which
         // arrangement is live.
-        if (mode === "frame") saveModules(modules, "", VtlConfig.barLayoutKeyOf("frame", edges))
+        if (root.isMultiEdge) saveModules(modules, "", VtlConfig.barLayoutKeyOf(mode, edges))
         edges = next
         save("bar_edges", edges)
         // Carry the arrangement over the FIRST time a combination is used. Adding an edge should
         // hand you a new lane to fill, not an empty bar — and an empty bar is what you got: the new
         // key had no entry, the picker read blanks, and the next save wrote those blanks down. A
         // combination you have arranged before is untouched and comes back as you left it.
-        if (mode === "frame") {
-            var nk = VtlConfig.barLayoutKeyOf("frame", next)
+        if (root.isMultiEdge) {
+            var nk = VtlConfig.barLayoutKeyOf(mode, next)
             var store = root.editMon
                         ? ((VtlConfig.barMonitors[root.editMon] || ({})).bar_modules_m
                            || VtlConfig.barModulesMap)
@@ -441,6 +489,19 @@ Item {
         }
         reloadModules()
         reloadActiveEdge()
+    }
+    // Insert at a position rather than at the end — what a drop from the catalogue needs, since
+    // the insertion cursor has already shown the user exactly where it will land.
+    function addModuleAt(edge, group, key, idx) {
+        if (key === "__new_group")  { addGroupAt(edge, group, idx); return }
+        if (key === "__new_button") { addButtonAt(edge, group, idx); return }
+        var m = JSON.parse(JSON.stringify(modules))
+        if (!m[edge]) m[edge] = {}
+        var arr = m[edge][group] || []
+        arr.splice(Math.max(0, Math.min(idx, arr.length)), 0, key)
+        m[edge][group] = arr
+        modules = m; addTarget = ""
+        saveModules(m)
     }
     function addModule(edge, group, key) {
         var m = JSON.parse(JSON.stringify(modules))
@@ -455,8 +516,12 @@ Item {
         if (m[edge] && m[edge][group])
             m[edge][group] = m[edge][group].filter(function(x) { return x !== key })
         modules = m
-        // Removing a group chip cleans up its module_settings once no arrangement references it.
-        saveModules(m, ("" + key).indexOf("group:") === 0 ? key : "")
+        // Removing a DYNAMIC chip (a group, a button) cleans up its module_settings once no
+        // arrangement references it any more — a static module's settings are kept, since the key
+        // comes back the moment it is placed again.
+        var k = "" + key
+        var dynamic = k.indexOf("group:") === 0 || k.indexOf("button:") === 0
+        saveModules(m, dynamic ? key : "")
     }
 
     // ── Dynamic group instances ("group:g<N>") ─────────────────────────────────────
@@ -473,9 +538,30 @@ Item {
     // Create a fresh group in the given zone and jump straight into its customize page
     // (name / icon / members). No module_settings seed: members default to [] via moduleSetting,
     // and a parallel write here would race saveModules on settings.json.
-    function addGroup(edge, group) {
+    function addGroup(edge, group) { addGroupAt(edge, group, 9999) }
+    function addGroupAt(edge, group, idx) {
         var key = nextGroupKey()
-        addModule(edge, group, key)
+        addModuleAt(edge, group, key, idx)
+        customizeKey = key
+        loadFonts()
+    }
+
+    // ── Dynamic button instances ("button:b<N>") ───────────────────────────────────
+    // Same construction as a group, and for the same reason: a user-built button is a THING the
+    // user owns, so it needs a key of its own to hang its icon / text / action off. Scans exactly
+    // the same places for a free number, so a button and a group can never collide.
+    function nextButtonKey() {
+        var used = root._usedModuleKeys()
+        var ms = (VtlConfig._data || {}).module_settings || {}
+        for (var k in ms) used[k] = true
+        var n = 1
+        while (used["button:b" + n]) n++
+        return "button:b" + n
+    }
+    function addButton(edge, group) { addButtonAt(edge, group, 9999) }
+    function addButtonAt(edge, group, idx) {
+        var key = nextButtonKey()
+        addModuleAt(edge, group, key, idx)
         customizeKey = key
         loadFonts()
     }
@@ -553,9 +639,12 @@ Item {
     // Scope chips and tabs in ONE card. They used to float above the page as two loose rows of
     // buttons with nothing behind them — on a page made entirely of cards that reads as controls
     // that fell out of one.
+    // The tabs are no longer here — the menu draws them in its own head card, beside the feature's
+    // on/off switch, so the page starts with ONE bar of controls instead of two stacked cards. What
+    // is left is the monitor scope, and on a single-screen machine that is nothing at all.
     Card {
         id: headCard
-        visible: root.customizeKey === "" && root.addTarget === ""
+        visible: root.customizeKey === "" && root.addTarget === "" && header.visible
         anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 2 }
 
     Column {
@@ -588,25 +677,13 @@ Item {
         }
     }
 
-    // ── Tab bar (fixed) ───────────────────────────────────────────────────────────
-    PageTabs {
-        id: tabBar
-        width: parent.width
-        equal:   false
-        current: root.tab
-        tabs: [{ icon: "󰠱", label: "Form", key: "form" },
-               { icon: "󰏘", label: "Style", key: "style" },
-               { icon: "󰕰", label: "Modules", key: "modules" }]
-        onPicked: key => root.tab = key
-    }
-
     }
 
     // ── Page content (one tab visible at a time) ────────────────────────────────────
     Flickable {
         visible: root.customizeKey === "" && root.addTarget === ""
-        anchors { top: headCard.bottom; topMargin: Style.cardGap; left: parent.left; right: parent.right
-                  bottom: parent.bottom }
+        anchors { top: parent.top; topMargin: root.pageGridY
+                  left: parent.left; right: parent.right; bottom: parent.bottom }
         contentHeight: pages.implicitHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds
@@ -620,6 +697,8 @@ Item {
             CardColumns {
                 id: formPage
                 forced: root.pageCols
+                colW:   root.pageColW
+                firstRowCols: root.pageFirstCols
                 firstRowMin: root.pageRowMin
                 fillHeight: root.pageFillH
                 visible: root.tab === "form"
@@ -645,6 +724,10 @@ Item {
                               hint: "One edge, but detached: a rounded strip inset from the screen border by a gap." },
                             { label: "Frame", key: "frame",
                               hint: "Several edges at once — an L, a U or a full ring — with rounded inner corners." },
+                            { label: "Capsule", key: "capsule",
+                              hint: "The frame's layout with none of its chrome: the same edges and the same "
+                                  + "reserved space, but no background and no outline — only the modules, "
+                                  + "standing on the wallpaper. Give them a module background for a row of pills." },
                             { label: "None",  key: "none",
                               hint: "No bar at all. The rest of the shell stays: the launcher, the OSDs, "
                                   + "notifications and this menu all still open, they just grow from the bare "
@@ -668,12 +751,12 @@ Item {
                         }
 
                         FieldLabel {
-                            visible: root.mode === "frame"
+                            visible: root.isMultiEdge
                             text: "Edges"
                             hint: "Every edge that carries a bar. An edge with no modules on it renders at half thickness."
                         }
                         Flow {
-                            visible: root.mode === "frame"
+                            visible: root.isMultiEdge
                             width: parent.width; spacing: 6
                             Repeater {
                                 model: root.allEdges
@@ -710,7 +793,7 @@ Item {
                             onChanged: root.setSideGap(v)
                         }
                         Stepper {
-                            visible: root.mode === "frame"
+                            visible: root.isMultiEdge
                             label: "Corner zone"; unit: root.cornerInset < 0 ? "" : "px"
                             step: 1; min: -1; max: 40
                             value: root.cornerInset; display: root.cornerInset < 0 ? "Auto" : ""
@@ -726,14 +809,17 @@ Item {
                     // The bar's own body — these hold in every mode that HAS a strip.
                     Stepper { visible: root.mode !== "none"
                               label: "Thickness"; unit: "px"; step: 1; value: root.thickness
-                              hint: "How deep the strip is across its short side."
+                              hint: root.mode === "capsule"
+                                    ? "How deep the lane the modules sit in is — nothing is drawn there, "
+                                    + "but it is still the space the bar reserves."
+                                    : "How deep the strip is across its short side."
                               onChanged: root.setThickness(v) }
-                    Stepper { visible: root.mode !== "none"
+                    Stepper { visible: root.mode !== "none" && root.mode !== "capsule"
                               label: "Radius"; unit: "px"; step: 1; value: root.radius
                               hint: "Corner rounding: the inner corners of a frame, the inner side of a dock, "
                                   + "the whole strip when it floats."
                               onChanged: root.setRadius(v) }
-                    Stepper { visible: root.mode !== "none"
+                    Stepper { visible: root.mode !== "none" && root.mode !== "capsule"
                               label: "Border"; unit: root.borderW < 0 ? "" : "px"; step: 1; min: -1; max: 8
                               value: root.borderW; display: root.borderW < 0 ? "Auto" : ""
                               hint: root.borderW < 0
@@ -796,6 +882,8 @@ Item {
             CardColumns {
                 id: stylePage
                 forced: root.pageCols
+                colW:   root.pageColW
+                firstRowCols: root.pageFirstCols
                 firstRowMin: root.pageRowMin
                 fillHeight: root.pageFillH
                 visible: root.tab === "style"
@@ -806,7 +894,7 @@ Item {
                 SubLabel {
                     visible: root.mode === "none"
                     width: parent.width
-                    text: "No bar in this mode — pick Dock, Float or Frame under Form and these come back."
+                    text: "No bar in this mode — pick Dock, Float, Frame or Capsule under Form and these come back."
                 }
 
                 // Opacity is ours and moves instantly; blur belongs to the compositor and is asked
@@ -896,8 +984,12 @@ Item {
                     }
                     SubGroup {
                         visible: root.bgMode !== "none"
-                        Stepper { label: "Pill radius"; unit: "px"; step: 1; value: root.bgRadius
-                                  hint: "Corner rounding of that pill."
+                        Stepper { label: "Pill radius"; unit: root.bgRadius < 0 ? "" : "px"
+                                  step: 1; min: -1; max: 30
+                                  value: root.bgRadius; display: root.bgRadius < 0 ? "Auto" : ""
+                                  hint: root.bgRadius < 0
+                                        ? "Auto follows the theme: mirobo rounds its pills, Console squares them off. Step up to set your own."
+                                        : "Corner rounding of that pill, whatever the theme would have picked."
                                   onChanged: root.setBgRadius(v) }
                         Stepper { label: "Pill opacity"; unit: "%"; step: 1; max: 100
                                   value: Math.round(VtlConfig.barModuleBgOpacityFor(root.editMon) * 100)
@@ -907,172 +999,86 @@ Item {
                 }
             }
 
-            // ─── MODULES: which module sits where ─────────────────────────────
-            CardColumns {
+            // ─── MODULES: what is on the bar, in the order the bar has it ────────
+            // One card, three rows — start, centre, end — and every module a SLOT of one size,
+            // filled left to right. Equal places are what let the ORDER be the information; chips
+            // sized to their labels made the same three modules look like a different arrangement
+            // on every edge.
+            //
+            // The last slot in a row is its "+", and it opens a picker that names the row it adds
+            // to. That replaces the catalogue column that used to stand in the last third of the
+            // page: with a picker per row there was nothing left for it to do, and the placement
+            // gets the width back. Dragging a slot still reorders it, and still moves it to another
+            // row — that is the one interaction this page has always had.
+            Item {
                 id: modPage
-                forced: root.pageCols
-                firstRowMin: root.pageRowMin
-                fillHeight: root.pageFillH
                 visible: root.tab === "modules"
                 width: parent.width
 
-                SubLabel {
-                    visible: root.mode === "none"
-                    width: parent.width
-                    text: "No bar in this mode — your module layout is kept and comes back with it."
-                }
+                readonly property int gap: Style.cardGap
+                // The whole width. The catalogue used to stand in the last third and is gone: with
+                // a picker behind every zone's + there was nothing left for a third of the page to
+                // do, and the placement gets that width back — which is what makes a row of slots
+                // fit four across even in the docked panel.
+                implicitHeight: Math.max(root.pageFillH, placeCard.contentHeight)
 
-                // A secondary screen normally shows the stripped-down bar (Settings → Bar → Form →
-                // Visibility → "Minimal secondary bars"), and until now it did so no matter what
-                // you built here — the layout saved, the bar ignored it, and nothing said why.
-                // Placing anything now takes the screen off that default; this says so beforehand.
-                SubLabel {
-                    visible: root.mode !== "none"
-                             && root.editMon !== "" && VtlConfig.isSecondaryMinimal(root.editMon)
-                    width: parent.width
-                    text: root.editMon + " currently shows the minimal secondary bar — clock at the "
-                          + "start, submap and workspaces at the end. The moment you place a module "
-                          + "here, this screen follows what you built instead."
-                }
-
-                // The edge picker is only a choice when the frame actually spans more than one
-                // edge — a dock or a float has exactly one, and a selector with a single option is
-                // just a row that cannot be used. It bands across the zones because it scopes all
-                // three of them.
+                // ── The bar you are building ─────────────────────────────────────────────
                 Card {
-                    spans: true
-                    visible: root.mode !== "none" && root.currentEdges().length > 1
+                    id: placeCard
+                    width:     modPage.width
+                    rowHeight: modPage.implicitHeight
+
                     CardLabel {
-                        text: "EDGE"
-                        hint: "Each edge of the frame carries its own set of modules."
+                        text: "PLACEMENT"
+                        hint: "The bar, in the order it has: start, centre, end. The + at the end of "
+                            + "a row adds to that row; drag a slot to reorder it or to move it to "
+                            + "another row. The gear opens that module's own settings, ✕ takes it "
+                            + "off the bar."
+                    }
+
+                    SubLabel {
+                        visible: root.mode === "none"
+                        width: parent.width
+                        text: "No bar in this mode — your module layout is kept and comes back with it."
+                    }
+
+                    // A secondary screen normally shows the stripped-down bar (Settings → Bar → Form →
+                    // Visibility → "Minimal secondary bars"), and until now it did so no matter what
+                    // you built here — the layout saved, the bar ignored it, and nothing said why.
+                    // Placing anything now takes the screen off that default; this says so beforehand.
+                    SubLabel {
+                        visible: root.mode !== "none"
+                                 && root.editMon !== "" && VtlConfig.isSecondaryMinimal(root.editMon)
+                        width: parent.width
+                        text: root.editMon + " currently shows the minimal secondary bar — clock at the "
+                              + "start, submap and workspaces at the end. The moment you place a module "
+                              + "here, this screen follows what you built instead."
+                    }
+
+                    // The edge picker is only a choice when the frame actually spans more than one
+                    // edge — a dock or a float has exactly one, and a selector with a single option
+                    // is just a row that cannot be used.
+                    FieldLabel {
+                        visible: root.mode !== "none" && root.currentEdges().length > 1
+                        text: "Edge"; hint: "Each edge of the frame carries its own set of modules."
                     }
                     Segmented {
+                        visible:  root.mode !== "none" && root.currentEdges().length > 1
                         equal:    true
                         current:  root.activeEdge
                         segments: root.currentEdges().map(function (e) { return { label: root.cap(e), key: e } })
                         onPicked: root.activeEdge = key
                     }
-                }
 
-                // One card across the whole page, with the three zones side by side inside it — the
-                // bar itself is one strip with a start, a middle and an end, and stacking them as
-                // three blocks down a narrow column said nothing about that.
-                Card {
-                    visible: root.mode !== "none"
-                    CardLabel {
-                        text: "PLACEMENT"
-                        hint: "Drag a chip to reorder it, or into another zone to move it there. The "
-                            + "gear opens that module's own settings, ✕ takes it off the bar."
-                    }
-                    // Three across when the card is wide enough to carry them, stacked when it is
-                    // not — a zone under 260 px cannot hold a chip with a readable label.
-                    Grid {
-                        id: zoneGrid
-                        width: parent.width
-                        columns: width >= 3 * 260 + 2 * Style.cardGap ? 3 : 1
-                        columnSpacing: Style.cardGap
-                        rowSpacing: Style.cardGap
-                        readonly property real colW:
-                            Math.floor((width - (columns - 1) * Style.cardGap) / columns)
-                        Zone { width: zoneGrid.colW; title: "Start";  grp: "start"
-                               hint: "The leading end of the bar — left on a horizontal bar, top on a vertical one." }
-                        Zone { width: zoneGrid.colW; title: "Center"; grp: "center"
-                               hint: "Centred on the bar, whatever the other two zones happen to hold." }
-                        Zone { width: zoneGrid.colW; title: "End";    grp: "end"
-                               hint: "The trailing end — right on a horizontal bar, bottom on a vertical one." }
-                    }
-                }
-
-                // ── What you can add ────────────────────────────────────────────────────────
-                // The catalogue used to be a sub-page behind each zone's "+", so the tab showed
-                // only what was already placed and the other half of the job was hidden behind a
-                // button. Both halves are on the page now: what is ON the bar, and what there is
-                // to put on it. The "+" still opens the full-screen picker for anyone who prefers
-                // it; this is the same list, in place.
-                Card {
-                    visible: root.mode !== "none"
-                    CardLabel {
-                        text: "AVAILABLE"
-                        hint: "Click a module to add it to the zone picked beside this heading. "
-                            + "Anything already on this edge is dimmed — a module sits in one zone "
-                            + "at a time."
-                    }
-                    Row {
-                        width: parent.width
-                        spacing: 10
-                        FieldLabel { text: "Add to"; anchors.verticalCenter: parent.verticalCenter }
-                        Segmented {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: Math.min(300, parent.width * 0.4)
-                            equal: true
-                            current: root.addZone
-                            segments: [{ label: "Start", key: "start" },
-                                       { label: "Center", key: "center" },
-                                       { label: "End", key: "end" }]
-                            onPicked: root.addZone = key
-                        }
-                    }
-                    Repeater {
-                        model: root.categories
-                        delegate: Column {
-                            id: catRow
-                            required property var modelData
-                            width: parent.width
-                            spacing: 6
-                            FieldLabel { text: catRow.modelData.title }
-                            Flow {
-                                width: parent.width
-                                spacing: 6
-                                Repeater {
-                                    model: catRow.modelData.keys
-                                    delegate: StyledRect {
-                                        id: avail
-                                        required property string modelData
-                                        readonly property bool placed: root.isPlaced(avail.modelData)
-                                        width:  root.availChipW
-                                        height: 28
-                                        radius: Style.rControl
-                                        opacity: avail.placed ? 0.42 : 1
-                                        color: avHov.containsMouse && !avail.placed ? Style.controlHover
-                                                                                    : Style.controlFill
-                                        borderWidth: Style.controlBorderW
-                                        borderColor: Style.controlBorderColor
-                                        Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
-                                        Row {
-                                            anchors { left: parent.left; right: parent.right
-                                                      leftMargin: 8; rightMargin: 8
-                                                      verticalCenter: parent.verticalCenter }
-                                            spacing: 6
-                                            Text { anchors.verticalCenter: parent.verticalCenter
-                                                   text: root.iconFor(avail.modelData)
-                                                   color: Colors.fgPrimary
-                                                   font.pixelSize: 13; font.family: Style.iconFont }
-                                            Text { anchors.verticalCenter: parent.verticalCenter
-                                                   width: Math.max(0, parent.width - 13 - parent.spacing)
-                                                   elide: Text.ElideRight
-                                                   text: root.labelFor(avail.modelData)
-                                                   color: Colors.fgPrimary
-                                                   font.pixelSize: 12; font.family: Style.font }
-                                        }
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            id: avHov
-                                            hoverEnabled: true
-                                            cursorShape: avail.placed ? Qt.ArrowCursor : Qt.PointingHandCursor
-                                            onClicked: {
-                                                if (avail.placed) return
-                                                if (avail.modelData === "__new_group")
-                                                    root.addGroup(root.activeEdge, root.addZone)
-                                                else
-                                                    root.addModule(root.activeEdge, root.addZone,
-                                                                   avail.modelData)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    Zone { visible: root.mode !== "none"; width: parent.width
+                           title: "Start";  grp: "start"
+                           hint: "The leading end of the bar — left on a horizontal bar, top on a vertical one." }
+                    Zone { visible: root.mode !== "none"; width: parent.width
+                           title: "Center"; grp: "center"
+                           hint: "Centred on the bar, whatever the other two zones happen to hold." }
+                    Zone { visible: root.mode !== "none"; width: parent.width
+                           title: "End";    grp: "end"
+                           hint: "The trailing end — right on a horizontal bar, bottom on a vertical one." }
                 }
             }
         }
@@ -1098,16 +1104,44 @@ Item {
                        font.pixelSize: 16; font.family: Style.iconFont }
                 MouseArea { id: abHov; anchors.fill: parent; hoverEnabled: true; onClicked: root.addTarget = "" }
             }
-            Text { anchors.verticalCenter: parent.verticalCenter; text: "Add module"; color: Colors.fgBright
-                   font.pixelSize: Style.fsSection; font.bold: true; font.letterSpacing: 1.2
-                   font.family: Style.font }
+            // The picker says WHERE it is adding, in the title. It was opened by one zone's + and
+            // it adds to that zone — a picker that leaves you to pick the place afterwards is the
+            // mechanism this page threw out once already.
+            Column {
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 0
+                Text { text: "Add to " + root.cap((root.addTarget.split(":")[1] ?? "")) ; color: Colors.fgBright
+                       font.pixelSize: Style.fsSection; font.bold: true; font.letterSpacing: 1.2
+                       font.family: Style.font }
+                Text { text: root.cap(root.addTarget.split(":")[0] ?? "") + " edge · lands at the end of the row"
+                       color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font }
+            }
         }
         Flickable {
+            id: addFlick
             anchors { top: addBack.bottom; topMargin: 14; left: parent.left; right: parent.right; bottom: parent.bottom }
             contentHeight: addCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
+            // A BOARD, not a page-wide sprawl: capped at seven columns and centred in whatever the
+            // panel gives it. Seven is the longest category, so that one category fills a row
+            // exactly and every other one wraps under the same left edge — which is what makes the
+            // picker read as one grid rather than as seven rows of different lengths. Left to fill
+            // a floating panel it became twelve columns wide with three modules on most rows.
+            //
+            // The FLICKABLE's width, not `parent.width`: inside a Flickable the parent is the
+            // content item, whose width is the (unset) contentWidth.
             Column {
                 id: addCol
-                width: parent.width; spacing: 16
+                readonly property int tileSize: 96
+                readonly property int tileGap:  8
+                readonly property int maxCols:  7
+                width: Math.min(addFlick.width,
+                                addCol.maxCols * addCol.tileSize + (addCol.maxCols - 1) * addCol.tileGap)
+                x: Math.round((addFlick.width - addCol.width) / 2)
+                spacing: 16
+                readonly property int tileCols: Math.max(3, Math.min(addCol.maxCols,
+                    Math.floor((addCol.width + addCol.tileGap) / (addCol.tileSize + addCol.tileGap))))
+                readonly property int tileW: Math.max(76, Math.floor(
+                    (addCol.width - addCol.tileGap * (addCol.tileCols - 1)) / addCol.tileCols))
                 Repeater {
                     model: root.categories
                     delegate: Column {
@@ -1115,33 +1149,55 @@ Item {
                         required property var modelData
                         width: addCol.width; spacing: 8
                         FieldLabel { text: catCol.modelData.title }
-                        Flow {
-                            width: parent.width; spacing: 8
+                        Grid {
+                            width: parent.width
+                            columns: addCol.tileCols
+                            spacing: addCol.tileGap
                             Repeater {
                                 model: catCol.modelData.keys
                                 delegate: StyledRect {
                                     id: chip
                                     required property string modelData
-                                    width: chipRow.implicitWidth + 22; height: 34; radius: Style.rControl
-                                    color: chHov.containsMouse ? Style.controlHover : Style.controlFill
-                                    borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
+                                    // Already on this edge: still shown, still in its place, but
+                                    // spent. Taking it out would reflow the grid on every add, and a
+                                    // board that moves under the cursor is worse than a few dead cells.
+                                    readonly property bool placed: root.isPlaced(chip.modelData)
+                                    width:  addCol.tileW
+                                    height: 68
+                                    radius: Style.rTile
+                                    opacity: chip.placed ? 0.4 : 1
+                                    color: (chHov.containsMouse && !chip.placed) ? Style.controlHover : Style.controlFill
+                                    borderWidth: Style.controlBorderW
+                                    borderColor: (chHov.containsMouse && !chip.placed) ? Style.accent
+                                                                                       : Style.controlBorderColor
                                     Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
-                                    Row {
-                                        id: chipRow
-                                        anchors.centerIn: parent; spacing: 8
-                                        Text { anchors.verticalCenter: parent.verticalCenter; text: root.iconFor(chip.modelData)
-                                               color: chHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
-                                               font.pixelSize: 14; font.family: Style.iconFont }
-                                        Text { anchors.verticalCenter: parent.verticalCenter; text: root.labelFor(chip.modelData)
-                                               color: chHov.containsMouse ? Colors.fgBright : Colors.fgPrimary
-                                               font.pixelSize: 12; font.family: Style.font }
+                                    Column {
+                                        anchors.centerIn: parent
+                                        width: chip.width - 8
+                                        spacing: 3
+                                        Text { width: parent.width; horizontalAlignment: Text.AlignHCenter
+                                               text: root.iconFor(chip.modelData)
+                                               color: chHov.containsMouse && !chip.placed ? Colors.fgBright : Colors.fgPrimary
+                                               font.pixelSize: 18; font.family: Style.iconFont }
+                                        Text { width: parent.width; horizontalAlignment: Text.AlignHCenter
+                                               elide: Text.ElideRight
+                                               text: root.labelFor(chip.modelData)
+                                               color: chHov.containsMouse && !chip.placed ? Colors.fgBright : Colors.fgPrimary
+                                               font.pixelSize: 11; font.family: Style.font }
                                     }
-                                    MouseArea { id: chHov; anchors.fill: parent; hoverEnabled: true
+                                    MouseArea {
+                                        id: chHov
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        enabled: !chip.placed
+                                        cursorShape: chip.placed ? Qt.ArrowCursor : Qt.PointingHandCursor
                                         onClicked: {
                                             var p = root.addTarget.split(":")
-                                            if (chip.modelData === "__new_group") root.addGroup(p[0], p[1])
-                                            else                                  root.addModule(p[0], p[1], chip.modelData)
-                                        } }
+                                            if (chip.modelData === "__new_group")       root.addGroup(p[0], p[1])
+                                            else if (chip.modelData === "__new_button") root.addButton(p[0], p[1])
+                                            else                                        root.addModule(p[0], p[1], chip.modelData)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1183,7 +1239,8 @@ Item {
             title:     root.labelFor(root.customizeKey)
             icon:      root.iconFor(root.customizeKey)
             fonts:     root.fonts
-            onChanged:  (name, value) => root.saveModuleSetting(root.customizeKey, name, value)
+            onChanged:     (name, value) => root.saveModuleSetting(root.customizeKey, name, value)
+            onChangedMany: (values)      => root.saveModuleSettings(root.customizeKey, values)
             onResetAll: root.resetModuleSettings(root.customizeKey)
         }
     }
@@ -1203,37 +1260,41 @@ Item {
         property string title: ""
         property string grp:   ""
         property string hint:  ""
+        // How tall the drop area is when what is in it does not need more: one slot and its
+        // padding. The three zones used to split the card's height between them, which was right
+        // for ragged chips and wrong for slots — a row of equal tiles is one row tall, and three
+        // rows with a third of the page under each read as three empty boxes.
+        property real   minDrop: zone.slotH + 12
         readonly property var mods: root.modList(root.activeEdge, zone.grp)
         spacing: 6
-        // Two chips to a row, all the same width. Sized to their labels they came out at five
-        // different lengths and the zone read as a ragged pile; a module list is a list, and a
-        // list lines up.
-        readonly property int  chipCols: (zone.width - 12 - 6) / 2 >= 150 ? 2 : 1
-        readonly property real chipW: Math.max(90, Math.floor((zone.width - 12 - 6 * (zone.chipCols - 1))
-                                                              / zone.chipCols))
+        // Every module gets a SLOT of one size, and they fill the row in bar order. Sized to their
+        // labels the chips came out at five different lengths and a zone read as a ragged pile —
+        // the order is the information here, and equal places are what let you see it.
+        //
+        // The slot is derived, not fixed: as many whole columns as the zone's width holds at about
+        // 88 px, then the remainder is given back to the slots so a row always ends flush.
+        readonly property int  slotCols: Math.max(2, Math.floor((zone.width - 12 + 6) / (88 + 6)))
+        readonly property int  slotW: Math.max(72, Math.floor((zone.width - 12 - 6 * (zone.slotCols - 1))
+                                                              / zone.slotCols))
+        readonly property int  slotH: 62
 
         Row {
             width: parent.width; spacing: 8
             FieldLabel { text: zone.title; hint: zone.hint; anchors.verticalCenter: parent.verticalCenter }
-            StyledRect {
+            // What is in this zone, as a number: the one thing that says "this edge is overfull"
+            // before you go counting tiles.
+            Text {
                 anchors.verticalCenter: parent.verticalCenter
-                width: 22; height: 22; radius: 11
-                color: addHov.containsMouse ? Style.accent : Style.controlFill
-                borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
-                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
-                Text { anchors.centerIn: parent; text: "+"
-                       color: addHov.containsMouse ? Style.onAccent : Colors.fgPrimary
-                       font.pixelSize: 14; font.family: Style.font }
-                MouseArea { id: addHov; anchors.fill: parent; hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.addTarget = root.activeEdge + ":" + zone.grp }
+                text: zone.mods.length === 0 ? "empty"
+                    : zone.mods.length + (zone.mods.length === 1 ? " module" : " modules")
+                color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
             }
         }
 
         Rectangle {
             id: dropArea
             width:  parent.width
-            height: Math.max(40, chipFlow.implicitHeight + 12)
+            height: Math.max(zone.minDrop, chipFlow.implicitHeight + 12)
             radius: Style.rControl
             // Accent wash on purpose: it is a drop TARGET, and it brightens while a chip hovers it.
             color:  Style.tint(Style.accent, root.chipDragging && root.hoverGrp === zone.grp ? 0.14 : 0.06)
@@ -1249,7 +1310,7 @@ Item {
             Text {
                 anchors.centerIn: parent
                 visible: zone.mods.length === 0
-                text:  "empty — add with +"
+                text:  "drag a module here"
                 color: Colors.fgMuted; font.pixelSize: 11; font.family: Style.font
             }
 
@@ -1291,24 +1352,28 @@ Item {
                         width:  chipV.width
                         height: chipV.height
 
+                        // A SLOT, not a label: every module takes exactly as much room as every
+                        // other one, so a zone reads as a row of places and the order is the only
+                        // thing that varies. (A chip sized to its name made the same three modules
+                        // look like a different arrangement on every edge.)
                         Rectangle {
                             id: chipV
-                            width:  zone.chipW
-                            height: 28
-                            radius: Style.rControl
+                            width:  zone.slotW
+                            height: zone.slotH
+                            radius: Style.rTile
                             color:  dragMA.drag.active ? Style.selFill : Style.controlFill
                             border.width: dragMA.drag.active ? Math.max(1, Style.selBorderW) : Style.controlBorderW
                             border.color: dragMA.drag.active ? Style.selBorderColor : Style.controlBorderColor
                             opacity: dragMA.drag.active ? 0.85 : 1
                             z: dragMA.drag.active ? 50 : 0
 
-                            // Drag layer (below the row, so the × button still gets its clicks).
-                            // The chip can leave its zone: the hit test tracks which zone is
-                            // hovered + the insertion index there (drives the insertion cursor);
-                            // release drops within the zone OR across groups.
+                            // Drag layer, below the two corner buttons so they keep their clicks.
+                            // The tile can leave its zone: the hit test tracks which zone is hovered
+                            // and the insertion index there; release drops within or across zones.
                             MouseArea {
                                 id: dragMA
                                 anchors.fill: parent
+                                hoverEnabled: true
                                 drag.target: chipV
                                 drag.axis:   Drag.XAndYAxis
                                 cursorShape: Qt.SizeAllCursor
@@ -1335,48 +1400,69 @@ Item {
                                     chipV.x = 0; chipV.y = 0
                                 }
                             }
-                            Row {
-                                id: crow
-                                anchors { left: parent.left; right: parent.right
-                                          leftMargin: 8; rightMargin: 6
-                                          verticalCenter: parent.verticalCenter }
-                                spacing: 6
-                                Text { anchors.verticalCenter: parent.verticalCenter
+
+                            Column {
+                                anchors.centerIn: parent
+                                width: chipV.width - 8
+                                spacing: 2
+                                Text { width: parent.width; horizontalAlignment: Text.AlignHCenter
                                        text: root.iconFor(slot.modelData)
                                        color: dragMA.drag.active ? Style.selText : Colors.fgPrimary
-                                       font.pixelSize: 13; font.family: Style.iconFont }
-                                Text { anchors.verticalCenter: parent.verticalCenter
-                                       // Takes whatever the two buttons leave, and elides — a fixed
-                                       // chip width means a long module name has to give way rather
-                                       // than push the buttons out of the chip.
-                                       width: Math.max(0, crow.width - crow.spacing * 3 - 13 - 2 * 16)
+                                       font.pixelSize: 18; font.family: Style.iconFont }
+                                Text { width: parent.width; horizontalAlignment: Text.AlignHCenter
                                        elide: Text.ElideRight
                                        text: root.labelFor(slot.modelData)
                                        color: dragMA.drag.active ? Style.selText : Colors.fgPrimary
-                                       font.pixelSize: 12; font.family: Style.font }
-                                // Customize (font / colour / size / module-specific settings)
-                                Rectangle {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: 16; height: 16; radius: 8
-                                    color: grHov.containsMouse ? Style.accent : "transparent"
-                                    Text { anchors.centerIn: parent; text: "󰒓"
-                                           color: grHov.containsMouse ? Style.onAccent : Colors.fgMuted
-                                           font.pixelSize: 11; font.family: Style.iconFont }
-                                    MouseArea { id: grHov; anchors.fill: parent; hoverEnabled: true
-                                                onClicked: { root.customizeKey = slot.modelData; root.loadFonts() } }
-                                }
-                                Rectangle {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: 16; height: 16; radius: 8
-                                    color: rmHov.containsMouse ? Style.tint(Colors.fgUrgent, 0.25) : "transparent"
-                                    Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 9
-                                           color: rmHov.containsMouse ? Colors.fgBright : Colors.fgMuted }
-                                    MouseArea { id: rmHov; anchors.fill: parent; hoverEnabled: true
-                                                onClicked: root.removeModule(root.activeEdge, zone.grp, slot.modelData) }
-                                }
+                                       font.pixelSize: 11; font.family: Style.font }
+                            }
+
+                            // The two buttons live in the corners and only appear under the pointer:
+                            // at this size they would otherwise crowd the one thing the tile is for.
+                            Rectangle {
+                                anchors { left: parent.left; top: parent.top; margins: 3 }
+                                width: 17; height: 17; radius: 9
+                                visible: dragMA.containsMouse || grHov.containsMouse
+                                color: grHov.containsMouse ? Style.accent : "transparent"
+                                Text { anchors.centerIn: parent; text: "󰒓"
+                                       color: grHov.containsMouse ? Style.onAccent : Colors.fgMuted
+                                       font.pixelSize: 11; font.family: Style.iconFont }
+                                MouseArea { id: grHov; anchors.fill: parent; hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: { root.customizeKey = slot.modelData; root.loadFonts() } }
+                            }
+                            Rectangle {
+                                anchors { right: parent.right; top: parent.top; margins: 3 }
+                                width: 17; height: 17; radius: 9
+                                visible: dragMA.containsMouse || rmHov.containsMouse
+                                color: rmHov.containsMouse ? Style.tint(Colors.fgUrgent, 0.25) : "transparent"
+                                Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 9
+                                       color: rmHov.containsMouse ? Colors.fgBright : Colors.fgMuted }
+                                MouseArea { id: rmHov; anchors.fill: parent; hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.removeModule(root.activeEdge, zone.grp, slot.modelData) }
                             }
                         }
                     }
+                }
+
+                // The next free slot IS the add button — declared after the Repeater, so the Flow
+                // lays it out last, at the end of the row it adds to. It names its zone in the
+                // picker it opens; a picker that does not say where it is adding to is the
+                // mechanism this page threw out once already.
+                Rectangle {
+                    width:  zone.slotW
+                    height: zone.slotH
+                    radius: Style.rTile
+                    color:  addHov.containsMouse ? Style.tint(Style.accent, 0.18) : "transparent"
+                    border.width: Math.max(1, Style.controlBorderW)
+                    border.color: addHov.containsMouse ? Style.accent : Style.tint(Style.accent, 0.35)
+                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
+                    Text { anchors.centerIn: parent; text: "+"
+                           color: addHov.containsMouse ? Colors.fgBright : Style.accent
+                           font.pixelSize: 20; font.family: Style.font }
+                    MouseArea { id: addHov; anchors.fill: parent; hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.addTarget = root.activeEdge + ":" + zone.grp }
                 }
             }
         }

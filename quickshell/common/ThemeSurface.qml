@@ -34,6 +34,11 @@ Item {
     readonly property bool themed: Theme.hasComponent(root.surface)
     // The live component, whichever one it is. Surfaces with frame-rate state bind onto this.
     readonly property var item: root.themed ? themeLdr.item : shellLdr.item
+    // What the component says it needs, passed straight through. Most surfaces fill a box the shell
+    // has already sized and leave this at 0; a surface the shell has to SIZE to its content — the
+    // notification toast — reads it and falls back to its own figure when the component is silent.
+    implicitHeight: (root.item && root.item.implicitHeight > 0) ? root.item.implicitHeight : 0
+    implicitWidth:  (root.item && root.item.implicitWidth  > 0) ? root.item.implicitWidth  : 0
 
     Loader {
         id: themeLdr

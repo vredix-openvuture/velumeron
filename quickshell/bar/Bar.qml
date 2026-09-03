@@ -26,6 +26,26 @@ PanelWindow {
     readonly property int  sh: height
     readonly property bool floating: VtlConfig.barFloatingFor(root.mon)
     readonly property bool dockMode: VtlConfig.barModeFor(root.mon) === "dock"
+    // Capsule: the frame's geometry with none of its chrome. Everything below still computes the
+    // hole, the strips and the module lanes — only the two Shapes that PAINT are switched off, and
+    // with them the blur (there is no surface left to frost) and the outline. See VtlConfig.
+    readonly property bool chromeless: VtlConfig.barChromeless(root.mon)
+    // …except while it is PEEKING out of a fullscreen window. A capsule works because the wallpaper
+    // behind it is a known, calm ground the user chose; a fullscreen video is neither, and the same
+    // modules over it are a row of glyphs on whatever frame happens to be playing. So for the length
+    // of the peek the capsule draws itself: strip fill, outline and frost, exactly the chrome a
+    // frame would have. It goes away again with the peek.
+    //
+    // Only the PAINTING changes. `VtlConfig.barChromeless` is untouched, so everything that grows
+    // out of this bar keeps the geometry it had — a popout stays detached with its own full outline
+    // rather than deciding to merge into a strip that exists for the next 200 ms.
+    //
+    // Tied to the opacity, not to `barShown`: the reveal fades over 160 ms in both directions, and
+    // switching the chrome on the flag would make the strip appear a frame early and vanish
+    // instantly on the way out, under modules that are still fading.
+    readonly property bool peekChrome:  root.chromeless && root.peekMode
+                                        && (root.barShown || root.peekOpacity > 0.01)
+    readonly property bool paintChrome: !root.chromeless || root.peekChrome
     // Two gaps, not one. `gap` is the distance to the edge the bar FACES (float only — a dock is
     // flush there); `air` is the distance at the two ENDS, which a dock has as well. They were the
     // same number, so a floating bar could only ever be inset evenly and a dock's ends moved
@@ -191,7 +211,7 @@ PanelWindow {
     // WHOLE screen with a hole in the middle, so a rule can only blur the entire surface and then
     // lean on `ignore_alpha` to guess which parts should not count. Here the region IS the bar:
     // the screen rect minus the hole, corners and all. Nothing behind the hole is ever touched.
-    BackgroundEffect.blurRegion: VtlConfig.barBlurFor(root.mon)
+    BackgroundEffect.blurRegion: VtlConfig.barBlurFor(root.mon) && root.paintChrome
                                  && VtlConfig.barOpacityEnabledFor(root.mon) ? barBlurRegion : null
     Region {
         id: barBlurRegion
@@ -603,6 +623,7 @@ PanelWindow {
     // even-odd hole that contains an arc, which left the whole screen filled in frame mode.
     Shape {
         anchors.fill: parent
+        visible: root.paintChrome
         opacity: root.peekOpacity
         preferredRendererType: Shape.GeometryRenderer
         ShapePath {
@@ -620,7 +641,7 @@ PanelWindow {
         // one 8-bit step on this stroke, so it costs the line nothing visible.
         opacity: root.peekOpacity - root.repaintNudge
         anchors.fill: parent
-        visible: !Style.isCupertino
+        visible: !Style.isCupertino && root.paintChrome
         preferredRendererType: Shape.CurveRenderer
         ShapePath {
             fillColor:   "transparent"
@@ -628,6 +649,17 @@ PanelWindow {
             strokeWidth: root.borderW
             PathSvg { path: root.borderD }
         }
+    }
+
+    // ── Right-click on the bare strip ──────────────────────────────────────────
+    // Declared BEFORE the module groups, so a module that wants the right button (the tray's own
+    // menu, Updates, the vuture menu, a slot's double-right-click) sees it first and this only ever
+    // catches what none of them took: the strip itself. The window's input mask is already the
+    // strip, so "the bar" and "this area" are the same thing.
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.RightButton
+        onClicked: mouse => UiState.openContextMenu("bar", root.mon, mouse.x, mouse.y)
     }
 
     // The vuture-icon is a normal placeable module — no corner fallback. If it isn't placed
@@ -813,7 +845,28 @@ PanelWindow {
         Component.onCompleted:   pushSpan()
         Component.onDestruction: UiState.clearBarModuleSpan(mg.spanKey)
 
+        // ── On a chromeless bar the cell brings its own ground ──────────────────────────────────
+        // …and stands down again the moment the strip itself is painted (the fullscreen peek, see
+        // peekChrome): the cell fill and the strip fill are the same translucent colour, and two of
+        // them over one another composite to a darker band — the one thing this shell keeps
+        // relearning. Exactly one surface paints that ground at a time.
+        // The pill's opacity was never a transparency to the WALLPAPER: on a normal bar it sits on
+        // the strip, which is already opaque, and the slider only says how far the pill lifts off
+        // it. A capsule draws no strip, so the same slider suddenly let the picture through — and a
+        // muted glyph, or an accent one over a bright photo, went unreadable until hovered.
+        //
+        // So the cell paints the strip's own fill first, at the strip's own opacity, on exactly the
+        // cell's footprint. A capsule is then literally the bar shrunk onto its modules: turn the
+        // BAR's opacity down and the wallpaper comes through again, which is the control that has
+        // always meant that.
         StyledRect {
+            visible: root.chromeless && !root.peekChrome && mg.groupBg && mg.hasAny
+            anchors.fill: groupPill
+            radius: groupPill.radius
+            color:  root.cFill
+        }
+        StyledRect {
+            id: groupPill
             visible: mg.groupBg && mg.hasAny
             anchors.centerIn: parent
             // Length: span the group. Cross-axis: inset from the bar thickness so the pill keeps a
@@ -821,10 +874,14 @@ PanelWindow {
             // content (e.g. a tall text row) is high.
             width:  mg.horiz ? parent.width             : (mg.barT - 2 * mg.pad)
             height: mg.horiz ? (mg.barT - 2 * mg.pad)   : parent.height
-            radius: VtlConfig.barModuleBgRadiusFor(root.mon)
+            // Shape and colour are the THEME's (Style.module*); how much of the fill there is stays
+            // the user's own opacity slider. See the tokens in Style.qml.
+            radius: Style.moduleR(VtlConfig.barModuleBgRadiusFor(root.mon))
             // Your BG-opacity setting, scaled by the surface-contrast knob (Style.lift) so the bar
             // pills lift off the bar in step with the cards and menu rows.
-            color:  Style.tint(Colors.bgElement, Style.lift(VtlConfig.barModuleBgOpacityFor(root.mon)))
+            color:  Style.tint(Style.moduleFill, Style.lift(VtlConfig.barModuleBgOpacityFor(root.mon)))
+            borderWidth: Style.moduleBorderW
+            borderColor: Style.moduleBorderColor
         }
         Row {
             id: rowLay
@@ -855,9 +912,21 @@ PanelWindow {
         readonly property bool horiz:    ms.edge === "top" || ms.edge === "bottom"
         readonly property bool moduleBg: VtlConfig.barModuleBgFor(root.mon) === "module"
         readonly property int  pad:      ms.moduleBg ? 6 : 0    // equal padding on every side
-        // Rotate only on a vertical edge AND only when the module declares `vertical` (its way
-        // of saying "I expect to be turned 90° and handle my own upright text").
-        readonly property bool rotated: !ms.horiz && ldr.item !== null && ldr.item.hasOwnProperty("vertical")
+        // ── Rotate, or stay upright ──────────────────────────────────────────────────────────
+        // On a VERTICAL edge a module that reads as a line of text has to be turned 90°, or it runs
+        // out of the strip and into the wallpaper. A module that is one glyph must NOT be: turning
+        // a single icon on its side is just a sideways icon.
+        //
+        // The module answers that itself, through `rotateOnVertical` — a binding, not a fact about
+        // the file, because for half of them it depends on a setting (the volume module is one
+        // glyph until "Show percentage" is on, and then it is a line of text). The old probe asked
+        // whether the file declared a `vertical` property at all, which cannot see a setting and
+        // was wrong for every conditional case; it stays as the fallback for a module that only
+        // ever wants the old all-or-nothing behaviour.
+        readonly property bool rotated: !ms.horiz && ldr.item !== null
+                                        && (ldr.item.rotateOnVertical !== undefined
+                                            ? ldr.item.rotateOnVertical === true
+                                            : ldr.item.hasOwnProperty("vertical"))
         // Robust module size: read the *item's* own size, never the Loader's adopted (laid-out)
         // size — the latter is driven by this slot's size, which would form a binding loop.
         // Modules report size via `implicitWidth`/`implicitHeight` (or `width`/`height`).
@@ -894,18 +963,46 @@ PanelWindow {
         // Passive hover tracking — runs alongside each module's own MouseArea (doesn't consume
         // clicks), so the per-module background can react to hover like the icon/text already do.
         HoverHandler { id: msHover }
+        // The strip's own ground under the cell — see the note on the group pill above.
+        StyledRect {
+            visible: root.chromeless && !root.peekChrome && ms.moduleBg && ms.hasContent
+            anchors.fill: parent
+            radius: Style.moduleR(VtlConfig.barModuleBgRadiusFor(root.mon))
+            color:  root.cFill
+        }
         StyledRect {
             visible: ms.moduleBg && ms.hasContent
             anchors.fill: parent
-            radius: VtlConfig.barModuleBgRadiusFor(root.mon)
+            // Theme decides the shape and which colour the cell is made of; the user decides how
+            // much of it there is. Both live in Style.module* — a theme that sets none of them
+            // gets exactly the pill this drew before the tokens existed.
+            radius: Style.moduleR(VtlConfig.barModuleBgRadiusFor(root.mon))
             // Same as the group pill: the user's opacity, scaled by the surface-contrast knob.
             readonly property real _o: Style.lift(VtlConfig.barModuleBgOpacityFor(root.mon))
             // On hover, shift slightly toward the accent and a touch more opaque.
             color: msHover.hovered
-                 ? Style.tint(Colors.bgActive, Math.min(1.0, _o + 0.12))
-                 : Style.tint(Colors.bgElement, _o)
+                 ? Style.tint(Style.moduleHoverFill, Math.min(1.0, _o + 0.12))
+                 : Style.tint(Style.moduleFill, _o)
+            borderWidth: Style.moduleBorderW
+            borderColor: msHover.hovered ? Style.moduleHoverBorderColor : Style.moduleBorderColor
             Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
+            Behavior on borderColor { ColorAnimation { duration: Style.ctrlMs } }
         }
+        // ── The module's popout ───────────────────────────────────────────────────────────────
+        // BEHIND the module, not in front of it: a module that handles its own clicks keeps every
+        // one of them and never sees this area, while a module that handles none (Battery,
+        // Temperature, VPN …) now opens whatever popout it was given — which is what makes the
+        // Popout setting apply to the whole catalogue instead of only to the modules that already
+        // had a panel. The slot's own padding falls through here either way, so the hit target is
+        // the whole slot rather than the glyph.
+        MouseArea {
+            anchors.fill: parent
+            z: -1
+            acceptedButtons: Qt.LeftButton
+            enabled: ms.hasContent && Popouts.hasPopout(ms.mkey)
+            onClicked: Popouts.openFor(ms.mkey, ldr.item ? ldr.item : ms, ms.edge, ms.grp, root.mon)
+        }
+
         // Double RIGHT-click → this module's own settings page. Right button only, so a plain
         // left click never sees this area at all. The SINGLE right-click is explicitly handed
         // back (propagateComposedEvents + accepted = false): accepting the right button here
@@ -995,6 +1092,9 @@ PanelWindow {
         // Dynamic group instances: "group:<n>" all share one component; the concrete instance
         // (members/icon/label under module_settings[key]) is wired via the injected instanceKey.
         if (("" + key).indexOf("group:") === 0) return groupComp
+        // User-built buttons: the same dynamic-instance shape as a group, one component, with the
+        // concrete icon / label / action wired through the injected instanceKey.
+        if (("" + key).indexOf("button:") === 0) return buttonComp
         switch (key) {
             case "vuture-icon":  return vutureIconComp
             case "clock":        return clockComp
@@ -1016,6 +1116,18 @@ PanelWindow {
             case "updates":      return updatesComp
             case "layout":       return layoutComp
             case "phone":        return phoneComp
+            case "weather":      return weatherComp
+            case "theme":        return themeComp
+            case "window":       return windowComp
+            case "microphone":   return micComp
+            case "keyboard":     return keyboardComp
+            case "brightness":   return brightnessComp
+            case "powerprofile": return profileComp
+            case "dnd":          return dndComp
+            case "nightlight":   return nightComp
+            case "caffeine":     return caffeineComp
+            case "calendar":     return calendarComp
+            case "clipboard":    return clipboardComp
             default:             return null
         }
     }
@@ -1041,4 +1153,19 @@ PanelWindow {
     Component { id: layoutComp;      LayoutSwitcher {} }
     Component { id: phoneComp;       Phone       {} }
     Component { id: groupComp;       GroupModule {} }
+    Component { id: buttonComp;      ButtonModule {} }
+    Component { id: weatherComp;     Weather     {} }
+    Component { id: themeComp;       ThemeSwitcher {} }
+    Component { id: windowComp;      FocusedWindow { monitor: root.monitor } }
+    Component { id: micComp;         Microphone  {} }
+    Component { id: keyboardComp;    KeyboardLayout {} }
+    Component { id: brightnessComp;  Brightness  {} }
+    Component { id: profileComp;     PowerProfile {} }
+    // Three catalogue entries, one component — see QuickToggle.
+    Component { id: dndComp;         QuickToggle { what: "dnd" } }
+    Component { id: nightComp;       QuickToggle { what: "night" } }
+    Component { id: caffeineComp;    QuickToggle { what: "caffeine" } }
+    // …and two that are nothing but a door to a panel — see PopoutButton.
+    Component { id: calendarComp;    PopoutButton { mkey: "calendar";  defaultIcon: "󰸗"; label: "Calendar" } }
+    Component { id: clipboardComp;   PopoutButton { mkey: "clipboard"; defaultIcon: "󰅌"; label: "Clipboard" } }
 }

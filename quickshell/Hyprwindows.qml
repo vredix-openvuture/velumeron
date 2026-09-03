@@ -42,6 +42,18 @@ QtObject {
         running: VtlConfig.windowTagsAnyEnabled
         onTriggered: { root._pollCursor(); root._query() }
     }
+    // ── Desk poll: the same freshness problem, a tenth of the appetite ───────────────────────────
+    // The desk fades a widget the moment a window covers it, and an interactive move or resize fires
+    // no Hyprland event at all — so geometry has to be re-read on a timer while a desk is watching.
+    // Deliberately far slower than the tag poll above: a widget that comes back a second after you
+    // drag a window off it is fine, a subprocess every 200 ms for the whole session is not. Off
+    // while the tags are on, because that poll already covers this one.
+    readonly property Timer _deskPoll: Timer {
+        interval: 1000; repeat: true
+        running: VtlConfig.deskWatchesWindows && !VtlConfig.windowTagsAnyEnabled
+        onTriggered: root._query()
+    }
+
     readonly property Process _curProc: Process {
         command: ["hyprctl", "cursorpos"]
         stdout: SplitParser {

@@ -8,6 +8,8 @@ Item {
     id: root
     property string barMon: ""   // monitor name, for per-monitor icon/font size
     property bool vertical: false   // set by ModSlot: rotate to read along a vertical sidebar
+    // Turned 90 degrees on a vertical bar (see Bar.qml ModSlot): only with the name beside the glyph.
+    readonly property bool rotateOnVertical: root._showName
     implicitWidth:  label.implicitWidth
     implicitHeight: label.implicitHeight
 

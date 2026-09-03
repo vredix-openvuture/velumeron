@@ -13,6 +13,8 @@ Item {
     property string barEdge:  "top"
     property string barGroup: "start"
     property bool   vertical: false
+    // Turned 90 degrees on a vertical bar (see Bar.qml ModSlot): only with the battery reading beside the glyph.
+    readonly property bool rotateOnVertical: root.showBattery
 
     // The device the module speaks for: the reachable one, else whatever is paired, so the icon
     // still reflects "phone" vs "tablet" while it's away.
@@ -27,7 +29,7 @@ Item {
 
     readonly property string _font: VtlConfig.moduleFontFor("phone")
     readonly property color  _col:  Colors[VtlConfig.moduleColorName("phone")] ?? Colors.fgPrimary
-    readonly property bool   open:  UiState.flyout === "phone" && UiState.flyoutMon === root.barMon
+    readonly property bool   open:  Popouts.isOpen("phone", root.barMon)
 
     readonly property int _sz: VtlConfig.moduleIconSizeFor("phone", root.barMon)
     // The battery figure is TEXT, so it takes the bar's text size like every other module's does.
@@ -59,7 +61,7 @@ Item {
             text:  PhoneService.icon(root.dev)
             color: root.low ? Colors.fgUrgent
                  : (mouse.containsMouse || root.open) ? Colors.fgBright
-                 : root.connected ? root._col : Colors.fgMuted
+                 : root.connected ? root._col : Style.barDim(root.barMon)
             font.family:    root._font
             font.pixelSize: root._sz
             opacity: root.connected ? 1.0 : 0.75
@@ -82,8 +84,7 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         onClicked: {
-            var c = root.mapToItem(null, root.width / 2, root.height / 2)
-            UiState.toggleFlyout("phone", c.x, c.y, root.barEdge, root.barGroup, root.barMon)
+            Popouts.openFor("phone", root, root.barEdge, root.barGroup, root.barMon)
         }
     }
 }

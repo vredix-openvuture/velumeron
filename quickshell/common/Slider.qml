@@ -24,8 +24,17 @@ Item {
     property int    labelWidth: 96
     signal moved(real v)
 
+    // The narrowest track still worth dragging. Below it the row breaks in two — label and value on
+    // the first line, the full-width track on the second — instead of shrinking the track to a
+    // stub. Decided on THIS row's own width: a narrow card inside a wide panel breaks too.
+    property int    trackMin:   96
+    readonly property real _valW: 46
+    readonly property bool narrow: sl.width > 0
+                                   && sl.width - sl.labelWidth - 24 - sl._valW < sl.trackMin
+    readonly property int  _capH: 20
+
     width:   parent ? parent.width : 0
-    height:  Style.ctrlH
+    height:  sl.narrow ? sl._capH + 24 : Style.ctrlH
     activeFocusOnTab: true
 
     // While the user drags, render from this local value so the knob is buttery regardless of how
@@ -53,8 +62,14 @@ Item {
 
     Text {
         id: cap
-        anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-        width: sl.labelWidth
+        // Both lines are placed with a plain y and a full-height box, never by swapping between a
+        // top and a verticalCenter anchor: an anchor set once does not come off again by binding it
+        // to `undefined`, and an item holding both solves to a negative height.
+        anchors.left: parent.left
+        y: 0
+        width:  sl.narrow ? Math.max(40, sl.width - sl._valW - 8) : sl.labelWidth
+        height: sl.narrow ? sl._capH : sl.height
+        verticalAlignment: Text.AlignVCenter
         text: sl.label
         color: sl.activeFocus ? Colors.fgBright : Colors.fgPrimary
         font.pixelSize: Style.fsLabel
@@ -63,7 +78,7 @@ Item {
 
         Rectangle {
             visible: sl.hint !== ""
-            y:       cap.contentHeight + 1
+            y:       cap.height / 2 + cap.contentHeight / 2 + 1
             width:   Math.min(cap.contentWidth, cap.width)
             height:  1
             color:   cap.color
@@ -77,9 +92,12 @@ Item {
 
     Text {
         id: valTxt
-        anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-        width: 46
+        anchors.right: parent.right
+        y: 0
+        width:  sl._valW
+        height: sl.narrow ? sl._capH : sl.height
         horizontalAlignment: Text.AlignRight
+        verticalAlignment:   Text.AlignVCenter
         text: sl._shown.toFixed(sl.decimals)
         color: Colors.fgBright
         font.pixelSize: Style.fsValue
@@ -88,8 +106,11 @@ Item {
 
     Rectangle {
         id: track
-        anchors { left: cap.right; leftMargin: 10; right: valTxt.left; rightMargin: 14
-                  verticalCenter: parent.verticalCenter }
+        anchors.left:        sl.narrow ? parent.left  : cap.right
+        anchors.leftMargin:  sl.narrow ? 0 : 10
+        anchors.right:       sl.narrow ? parent.right : valTxt.left
+        anchors.rightMargin: sl.narrow ? 0 : 14
+        y: sl.narrow ? cap.height + 8 : Math.round((sl.height - track.height) / 2)
         height: 8; radius: 4
         // A track is a surface sitting on a card, so it follows the surface-contrast knob too.
         color: Style.liftSolid(Colors.bgElement)

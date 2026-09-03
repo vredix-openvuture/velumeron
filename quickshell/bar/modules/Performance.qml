@@ -5,6 +5,8 @@ import Quickshell.Io
 Item {
     id: root
     property bool vertical: false   // set by ModSlot: rotate to read along a vertical sidebar
+    // Turned 90 degrees on a vertical bar (see Bar.qml ModSlot): the readings are a line of text.
+    readonly property bool rotateOnVertical: true
     property string barMon:  ""     // monitor name, for per-monitor icon/font size
     property string barEdge: "top"  // set by Bar; drives the hover-glide direction
     property string barGroup: "start" // set by Bar; start/end → the click flyout merges into that corner
@@ -118,8 +120,7 @@ Item {
         onEntered: root.hovered = true
         onExited:  root.hovered = false
         onClicked: {
-            var c = root.mapToItem(null, root.width / 2, root.height / 2)
-            UiState.toggleFlyout("performance", c.x, c.y, root.barEdge, root.barGroup, root.barMon)
+            Popouts.openFor("performance", root, root.barEdge, root.barGroup, root.barMon)
         }
     }
 

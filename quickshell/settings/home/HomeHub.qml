@@ -168,6 +168,7 @@ Item {
             width: Style.dashGridW
             height: implicitHeight
             items: root.modules
+            live:  root.visible          // nothing samples for a hub nobody is looking at
             rowsPerPage: viewport.rowsPerPage
             y: 2 - grid.pageTop(root.page)
             Behavior on y { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }

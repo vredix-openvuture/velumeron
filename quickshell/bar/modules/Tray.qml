@@ -14,6 +14,8 @@ Item {
     property string barEdge:  "top"   // set by Bar; drives glide direction + which side menus open toward
     property string barMon:   ""      // monitor name, for per-monitor sizing
     property bool   vertical: false
+    // Turned 90 degrees on a vertical bar (see Bar.qml ModSlot): the icons stay upright; the strip stacks instead (see below).
+    readonly property bool rotateOnVertical: false
 
     readonly property bool   _collapse: VtlConfig.moduleSetting("tray", "collapse", false)
     readonly property string _glyph:    VtlConfig.moduleSetting("tray", "icon", "󰀻")
@@ -73,5 +75,6 @@ Item {
         iconSize: root._sz
         barEdge:  root.barEdge
         barMon:   root.barMon
+        column:   root.barEdge === "left" || root.barEdge === "right"
     }
 }

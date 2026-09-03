@@ -37,6 +37,17 @@ Item {
     // sit on it — and hands each part the number of columns it owns. Left at 0 this works it out
     // from its own width, which is what a CardColumns outside that grid does.
     property int forced: 0
+    // The width of ONE column, handed down by the menu. A page is given the whole content width and
+    // told how many of the menu's columns it owns, so a card here is exactly as wide as a card on
+    // any other page and a full-width band (`spans`) really does run wall to wall — including past
+    // the preview column, which is the only way "the strip goes all the way across" is true.
+    // Zero = work it out from our own width (a CardColumns used outside the menu).
+    property real colW: 0
+    // How many cards the FIRST row may hold. The menu's preview card stands in the last column of
+    // that row and nowhere else, so the page gets one column fewer up there and every column from
+    // the second row down — otherwise a page of six cards leaves a column-wide strip of nothing
+    // running down the whole page under the preview. 0 = the same as every other row.
+    property int firstRowCols: 0
     // A floor for the FIRST row. The menu puts its preview card beside the page rather than inside
     // it, and a preview that is taller than the row it stands next to leaves one card sticking out
     // below the others — which is the thing this grid exists to stop. The menu passes the preview's
@@ -50,7 +61,22 @@ Item {
                                   ? cols.forced
                                   : Math.max(1, Math.min(cols.maxCols,
                                     Math.floor((cols.width + cols.gap) / (cols.minColW + cols.gap))))
-    readonly property real cardWidth: Math.floor((cols.width - cols.gap * (cols.count - 1)) / cols.count)
+    readonly property real cardWidth: cols.colW > 0 ? cols.colW
+                                     : Math.floor((cols.width - cols.gap * (cols.count - 1)) / cols.count)
+    // How tall the first row came out. The menu's preview card stands in that row, in the column
+    // this page does not own, and takes its height from here — that is what puts the preview and
+    // the cards beside it on ONE bottom edge without either sizing the other.
+    property real firstRowH: 0
+    // How many cards this page actually has. The menu takes the column count from it, so a page
+    // with one card does not get laid on three columns with two of them empty.
+    readonly property int cardCount: {
+        var n = 0
+        for (var i = 0; i < cols.children.length; i++) {
+            var c = cols.children[i]
+            if (c && c.visible && (c.contentHeight !== undefined || c.height > 0)) n++
+        }
+        return n
+    }
 
     // Every visible child's height, summed — a dependency the layout can watch. Card heights change
     // as their contents appear and disappear (a sub-group unfolding, a monitor list arriving), and
@@ -76,6 +102,7 @@ Item {
     // row starts on one line, and the reading order is the one the page wrote.
     function relayout() {
         var n = cols.count
+        var n1 = cols.firstRowCols > 0 ? Math.min(cols.firstRowCols, n) : n
         var row = []          // the cards on the row being filled
         var y = 0
         // Two passes: measure the rows, then place them. The stretch cannot be worked out until
@@ -108,7 +135,7 @@ Item {
                 continue
             }
             row.push(c)
-            if (row.length === n) flush()
+            if (row.length === (rows.length === 0 ? n1 : n)) flush()
         }
         flush()
 
@@ -124,18 +151,40 @@ Item {
         var surplus = (cols.fillHeight > 0 && stretchable > 0)
                       ? Math.max(0, cols.fillHeight - natural) : 0
 
+        // PLAIN SCROLLING. Every card is as tall as its contents and the PAGE is what scrolls —
+        // one surface, one wheel, the whole way down.
+        //
+        // This used to be clever about the fold: a row that started inside the viewport but did not
+        // fit was cut to the room it had and its cards scrolled INSIDE their own frames, so the
+        // page's own scroll never sliced a card. It kept the frames intact and cost more than it
+        // was worth — a row of cards each with its own little scroll, next to a page that also
+        // scrolls, is two scrolls in one place and the wheel lands on whichever one the pointer
+        // happens to be over. A card cut by the fold is only a card you have not scrolled to yet.
         for (var q = 0; q < rows.length; q++) {
             var rw = rows[q]
             var h2 = rw.fixed ? rw.h : rw.h + surplus * (rw.h / stretchable)
+            // The LAST row shares whatever columns it did not fill, in whole columns: one card
+            // left over takes the width of all of them, two cards on three columns take two and
+            // one. Every edge stays on a grid line, and the page ends without a hole in it.
+            var k    = rw.items.length
+            var cap  = (q === 0 && n1 < n) ? n1 : n
+            var last = (q === rows.length - 1) && !rw.span && k > 0 && k < cap
+            var xr   = 0
             for (var b = 0; b < rw.items.length; b++) {
                 var it = rw.items[b]
                 if (it.rowHeight !== undefined) it.rowHeight = h2
-                it.x = rw.span ? 0 : b * (cols.cardWidth + cols.gap)
+                var span = last ? Math.floor(cap / k) + (b < (cap % k) ? 1 : 0) : 1
+                if (it.rowWidth !== undefined)
+                    it.rowWidth = last ? span * cols.cardWidth + (span - 1) * cols.gap : 0
+                it.x = rw.span ? 0 : xr
                 it.y = y
+                xr += span * (cols.cardWidth + cols.gap)
             }
+            if (q === 0) cols.firstRowH = h2
             y += h2 + cols.gap
         }
         cols._tallest = Math.max(0, y - cols.gap)
+        if (!rows.length) cols.firstRowH = 0
     }
 
     // Deferred, always: a relayout reads heights that the same frame is still settling, and running

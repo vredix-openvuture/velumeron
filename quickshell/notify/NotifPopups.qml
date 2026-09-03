@@ -99,9 +99,17 @@ PanelWindow {
     // filleted, the next one 12 px lower with a closed outline). Co-claiming the bar's border with
     // another surface is safe — Bar.qml UNIONS every claim on an edge, so two surfaces asking for
     // the same stretch simply open one longer gap.
-    readonly property bool   merged:  dock
-    readonly property int    dockOff: merged ? barThk  : (edgeBarThk + hMargin)
-    readonly property int    hInset:  merged ? hBarThk : (sideBarThk + hMargin)
+    // …with ONE exception, and it is not "some other surface": a CHROMELESS bar (capsule) draws no
+    // line, so there is nothing to leave the toast's own edge open for. It then closes its outline
+    // and hangs a margin below the module lane, exactly as it does on a bare screen edge.
+    readonly property bool   merged:  dock && !VtlConfig.barChromeless(root.mon)
+    // How far a NOT-merged toast stands off. Against a chromeless bar that is the shared detach
+    // margin, so the toast lines up with every other panel hanging off the same capsule; anywhere
+    // else it is the plain screen margin it has always used.
+    readonly property int    detachPad: (root.barOnEdge && VtlConfig.barChromeless(root.mon))
+                                        ? VtlConfig.barDetachGapFor(root.mon) : root.hMargin
+    readonly property int    dockOff: merged ? barThk  : (edgeBarThk + detachPad)
+    readonly property int    hInset:  merged ? hBarThk : (sideBarThk + detachPad)
     // A merged toast leaves its outline OPEN on the docked edge — the bar's own line (interrupted
     // for exactly this span, see the gap claim below) closes it there. A free one has no such line
     // above it, so it closes itself instead (elRectPaths); leaving it open is what put the bar's
@@ -353,16 +361,43 @@ PanelWindow {
         // toast has to be the same near-black square as everything else it draws, not a lighter
         // rounded pill sitting on a phosphor screen.
         readonly property color surface: Theme.declares("cardFill") ? Style.cardFill : card.pill
-        readonly property int   corner:  Math.min(12, Style.rCard)
+        readonly property int   corner:  Style.rToast
         readonly property int   edgeW:   Theme.declares("cardBorderW") ? Style.cardBorderW : 0
 
         width: col.width
+
+        // ── A theme may draw the toast itself ────────────────────────────────────────────────────
+        // `notifications` (plural) is the LIST in the centre; this is one card, and the two are not
+        // the same drawing — Console's centre is a scrollback log, its toast is one line of it. So
+        // it is its own surface. The shell keeps everything that is not the drawing: the service,
+        // the emerge/retract morph, the auto-dismiss, the tap that activates the sender, the dock
+        // chrome and where the card sits.
+        readonly property bool themed: Theme.hasComponent("notification")
+        readonly property var cardCtx: {
+            var c = Style.themeContext()
+            var n = card.notif
+            c.app      = n ? (n.appName || "") : ""
+            c.summary  = n ? (n.summary || "") : ""
+            c.body     = n ? (n.body    || "") : ""
+            c.critical = card.critical
+            c.icon     = n ? NotifService.iconFor(n) : ""
+            c.pinned   = n ? NotifService.isPinned(n) : false
+            // A toast is the one notification surface that knows WHEN, because it appears at that
+            // moment. The centre's log has no timestamp in the contract and says so; this does.
+            c.time     = Qt.formatTime(new Date(), "HH:mm")
+            c.actions  = { "dismiss": function () { NotifService.dismiss(card.notif) } }
+            return c
+        }
 
         // Content is laid out at FULL size (top-anchored); the card clips to its morphing height.
         readonly property real contentBottom: Math.max(
             body.visible ? body.y + body.implicitHeight : summary.y + summary.implicitHeight,
             img.y + img.height)
-        readonly property real fullH: Math.max(54, contentBottom + 14)
+        // A themed card is as tall as its component asks to be (ThemeSurface passes the implicit
+        // height through); a component that says nothing gets the shipped card's floor.
+        readonly property real fullH: card.themed
+                                    ? Math.max(34, (themeBody.implicitHeight > 0 ? themeBody.implicitHeight : 30) + 20)
+                                    : Math.max(54, contentBottom + 14)
 
         // ── Per-card emerge / retract morph — the height collapses to 0 while leaving, so the stack
         //    (and the tray wrapping it) grows/shrinks smoothly. Keeps NotifService's seen/leaving/purge
@@ -428,10 +463,23 @@ PanelWindow {
         // The theme's own veil over the toast (Console's scanlines).
         ThemeSkin { anchors.fill: parent; kind: "notification"; radius: card.corner }
 
+        // …and the theme's own CARD, when it brings one. Top-anchored like the shipped layout, so
+        // the clip that plays the morph works the same either way.
+        ThemeSurface {
+            id: themeBody
+            visible: card.themed
+            anchors { left: parent.left; right: parent.right; top: parent.top
+                      leftMargin: 10; rightMargin: 10; topMargin: 10 }
+            height: implicitHeight > 0 ? implicitHeight : (card.fullH - 20)
+            surface: card.themed ? "notification" : ""
+            ctx: card.cardCtx
+        }
+
         // App icon — the notification's own image/icon hint, else the sending app's desktop-entry icon
         // (via NotifService.iconFor), else a bell fallback.
         Item {
             id: img
+            visible: !card.themed
             anchors { left: parent.left; top: parent.top; leftMargin: 14; topMargin: 14 }
             width: 32; height: 32
             IconImage { id: appImg; anchors.fill: parent; visible: source != ""; source: NotifService.iconFor(card.notif) }
@@ -441,6 +489,7 @@ PanelWindow {
         // Source header (accent, upper-cased) + a soft rule under it.
         Text {
             id: appName
+            visible: !card.themed
             anchors { left: img.right; leftMargin: 12; right: closeBtn.left; rightMargin: 10; top: parent.top; topMargin: 14 }
             text:  card.notif ? card.notif.appName : ""
             color: Colors.bgActive
@@ -450,12 +499,13 @@ PanelWindow {
         }
         Rectangle {
             id: appRule
-            visible: appName.text !== ""
+            visible: !card.themed && appName.text !== ""
             anchors { left: appName.left; right: parent.right; rightMargin: 14; top: appName.bottom; topMargin: 5 }
             height: 1; color: Style.tint(Colors.boNormal, 0.55)
         }
         Text {
             id: summary
+            visible: !card.themed
             anchors { left: appName.left; right: closeBtn.left; rightMargin: 8
                       top: appRule.visible ? appRule.bottom : appName.bottom; topMargin: appRule.visible ? 6 : 1 }
             text:  card.notif ? card.notif.summary : ""
@@ -466,7 +516,7 @@ PanelWindow {
         Text {
             id: body
             anchors { left: appName.left; right: parent.right; rightMargin: 14; top: summary.bottom; topMargin: 3 }
-            visible: text !== ""
+            visible: !card.themed && text !== ""
             text:  card.notif ? card.notif.body : ""
             color: Colors.fgPrimary
             font.pixelSize: 12; font.family: Style.font
@@ -474,6 +524,7 @@ PanelWindow {
         }
         Rectangle {
             id: closeBtn
+            visible: !card.themed
             anchors { right: parent.right; top: parent.top; rightMargin: 8; topMargin: 8 }
             width: 20; height: 20; radius: 10
             color: clHov.containsMouse ? Style.tint(Colors.fgUrgent, 0.25) : "transparent"

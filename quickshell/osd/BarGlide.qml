@@ -42,6 +42,16 @@ PanelWindow {
     visible: root.mine && (root.open || pill.reveal > 0.01)
 
     readonly property bool barOnEdge: VtlConfig.edgeActiveFor(root.edge, root.mon)
+    // Two different questions, and a capsule bar is where they come apart. `barOnEdge` is the
+    // FOOTPRINT — a bar occupies this edge, so the pill sits past its thickness and stays inside
+    // its span. `barMerge` is the CHROME — is there a strip to flow into? A capsule draws none, so
+    // the pill falls back to its free rounded shape while still clearing the module lane.
+    readonly property bool barMerge:  root.barOnEdge && !VtlConfig.barChromeless(root.mon)
+    // A pill that cannot merge is a pill standing next to the bar, and it has to keep the same
+    // margin on every side rather than being glued to the inner face on one and to the bezel on
+    // the other. 0 whenever it DOES merge, so the docked geometry is untouched.
+    readonly property int  detachGap: (root.barOnEdge && !root.barMerge)
+                                      ? VtlConfig.barDetachGapFor(root.mon) : 0
     readonly property int  barT:   root.barOnEdge
                                    ? VtlConfig.edgeThicknessFor(root.edge, root.mon)
                                      + (VtlConfig.barFloatingFor(root.mon) ? VtlConfig.barFloatGapFor(root.mon) : 0)
@@ -67,14 +77,15 @@ PanelWindow {
     readonly property var    _span:   VtlConfig.barSpanFor(root.edge, root.mon,
                                                            root.hz ? root.scrW : root.scrH)
     readonly property real   alongLo: Math.max(root.nearThk > 0 ? root.nearThk : 8,
-                                               root.barOnEdge ? root._span[0] : 0)
+                                               root.barOnEdge ? root._span[0] : 0) + root.detachGap
     readonly property real   alongHi: Math.min((root.hz ? root.scrW : root.scrH)
                                                - (root.farThk > 0 ? root.farThk : 8),
                                                root.barOnEdge ? root._span[1]
                                                               : (root.hz ? root.scrW : root.scrH))
+                                      - root.detachGap
     // The bar's own line weight — the pill glides along that line and has to match it.
     readonly property int    borderW: Style.barBorderW(root.mon)
-    readonly property string _tctx:   root.barOnEdge ? "bar" : "edge"
+    readonly property string _tctx:   root.barMerge ? "bar" : "edge"
     readonly property bool   _fillet: VtlConfig.transitionFilletFor("glide", root._tctx)
     // "Origin edge only" in the transition style suppresses the perpendicular merge, exactly as it
     // does for the OSD and the menu.
@@ -101,13 +112,23 @@ PanelWindow {
     readonly property real   bareFar:  root.alongHi - (pill.rawA + pill.alongSize + pill.fillet)
     // Only into a strip that is real, allowed to merge, and free of modules over the stretch the
     // pill would cover.
-    readonly property bool   perpStart: root._mergeAll && root.barOnEdge && root.nearThk > 0
+    readonly property bool   perpStart: root._mergeAll && root.barMerge && root.nearThk > 0
                                         && root.nearFree && root.bareNear < root.minGap
-    readonly property bool   perpEnd:   root._mergeAll && root.barOnEdge && root.farThk > 0
+    readonly property bool   perpEnd:   root._mergeAll && root.barMerge && root.farThk > 0
                                         && root.farFree && root.bareFar < root.minGap
-    readonly property int    perpThk:   root.perpStart ? Math.round(root.nearThk)
-                                      : root.perpEnd   ? Math.round(root.farThk) : 0
-    readonly property int    perpSeam:  root.perpThk + 24
+    // The merged flank ABUTS the perpendicular strip — it does not run into it. The pill used to
+    // close its fill `perpThk + 24` px INTO that strip so the two would read as one shape, and on a
+    // translucent bar that is the one thing that cannot work: the strip is already a translucent
+    // surface over the wallpaper, and a second one on top composites to a different colour. Measured
+    // on a top+left frame at bar_opacity 0.88, the user glide over the left arm: the strip went from
+    // (25,23,49) to (14,15,30) — a dark block exactly the width of the arm, for the pill's whole
+    // height. (Why the settings menu and the flyouts get away with the same overlap today: their
+    // blur region covers it, and the compositor's xray blur hands them the WALLPAPER as backdrop
+    // instead of the bar. The part of a fill that sticks out past the blur region does show the
+    // band — the flyout's fillet flare below its box does, one row of it.) So the fill stops at the
+    // strip's inner face, which is where `openA` already puts the pill's box; the border was never
+    // drawn along that flank anyway, and the perpendicular claim below takes the strip's own line
+    // out over the pill's span. Same treatment Settings.qml already uses.
 
     // The pill is made of the SAME material as the bar it slides out of — same tint, same
     // translucency (Style.barPanelColor applies bar_opacity), and the blur below. It used to be
@@ -134,7 +155,7 @@ PanelWindow {
     // ── Dock outline (free tab, concave fillets — or straight per the transition style) ──────────
     readonly property int flareR: VtlConfig.barInnerRadiusFor(root.mon)
     readonly property int seam:   root.barT + 24
-    readonly property int pad:    root.flareR + Math.max(root.seam, root.perpSeam)
+    readonly property int pad:    root.flareR + root.seam
                                   + Math.ceil(Math.max(Style.elTopBulge, Style.elSideBulge))
     // bT / bS = live elastic bulge (px) for the content edge / free side edges; 0 at rest → straight.
     function _paths(W, H, bT, bS, off) {
@@ -167,18 +188,17 @@ PanelWindow {
             var ma = (cur[0] + a) / 2 + na * b, md = (cur[1] + d) / 2 + nd * b
             cur = [a, d]; return " Q" + XY(ma, md) + " " + XY(a, d)
         }
-        var sP = root.perpSeam
         var bd, close
         if (root.perpStart) {            // corner: perpendicular strip at the a = 0 (near) end
             bd = M(A + f, 0) + A_(f, A, f, 0)
                + LB(A, D - e,  1, 0, bS) + A_(e, A - e, D, 1)
                + LB(f, D,      0, 1, bT) + A_(f, 0, D + f, 0)
-            close = L(-sP, D + f) + L(-sP, -s) + L(A + f, -s) + " Z"
+            close = L(0, D + f) + L(0, -s) + L(A + f, -s) + " Z"
         } else if (root.perpEnd) {       // corner: perpendicular strip at the a = A (far) end
             bd = M(A, D + f) + A_(f, A - f, D, 0)
                + LB(e, D,  0, 1, bT) + A_(e, 0, D - e, 1)
                + LB(0, f, -1, 0, bS) + A_(f, -f, 0, 0)
-            close = L(-f, -s) + L(A + sP, -s) + L(A + sP, D + f) + " Z"
+            close = L(-f, -s) + L(A, -s) + L(A, D + f) + " Z"
         } else {                         // free tab — fillets into the one bar it grows from
             bd = M(A + f, 0) + A_(f, A, f, 0)
                + LB(A, D - e,  1, 0, bS) + A_(e, A - e, D, 1)
@@ -218,7 +238,7 @@ PanelWindow {
         y:      root.edge === "top"  ? (root.barT - ov) : 0
         width:  (root.edge === "left" || root.edge === "right") ? (root.scrW - root.barT + ov) : root.scrW
         height: (root.edge === "top"  || root.edge === "bottom") ? (root.scrH - root.barT + ov) : root.scrH
-        clip:   root.barOnEdge
+        clip:   root.barMerge
 
         Item {
             id: pill
@@ -267,36 +287,36 @@ PanelWindow {
                                         : root.perpEnd   ? (root.alongHi - alongSize)
                                         : Math.max(root.alongLo + guardLo,
                                                    Math.min(rawA, root.alongHi - guardHi - alongSize))
-            readonly property real openX: root.edge === "left"  ? root.barT
-                                        : root.edge === "right" ? (root.scrW - width - root.barT)
+            readonly property real openX: root.edge === "left"  ? (root.barT + root.detachGap)
+                                        : root.edge === "right" ? (root.scrW - width - root.barT - root.detachGap)
                                         : openA
-            readonly property real openY: root.edge === "top"    ? root.barT
-                                        : root.edge === "bottom" ? (root.scrH - height - root.barT)
+            readonly property real openY: root.edge === "top"    ? (root.barT + root.detachGap)
+                                        : root.edge === "bottom" ? (root.scrH - height - root.barT - root.detachGap)
                                         : openA
             x: openX - drawer.x
             y: openY - drawer.y
 
             // The slide, named once: the Translate below and the blur region both need it.
-            readonly property real offX: root.barOnEdge
+            readonly property real offX: root.barMerge
                 ? (root.edge === "left"  ? -(1 - grow01) * width : root.edge === "right" ? (1 - grow01) * width : 0)
                 : (root.edge === "left"  ? -(1 - grow01) * 20    : root.edge === "right" ? (1 - grow01) * 20    : 0)
-            readonly property real offY: root.barOnEdge
+            readonly property real offY: root.barMerge
                 ? (root.edge === "top"   ? -(1 - grow01) * height : root.edge === "bottom" ? (1 - grow01) * height : 0)
                 : (root.edge === "top"   ? -(1 - grow01) * 20     : root.edge === "bottom" ? (1 - grow01) * 20     : 0)
 
-            opacity: root.barOnEdge ? 1.0 : grow01
+            opacity: root.barMerge ? 1.0 : grow01
             transform: Translate { x: pill.offX; y: pill.offY }
 
             // Dock background — concave fillets (or straight) flowing into the bar.
             Shape {
-                visible: root.barOnEdge
+                visible: root.barMerge
                 anchors.fill: parent; anchors.margins: -root.pad
                 preferredRendererType: Shape.GeometryRenderer
                 ShapePath { fillColor: root.cardColor; strokeWidth: -1; fillRule: ShapePath.WindingFill
                             PathSvg { path: root._paths(pill.width, pill.height, pill.bulgeT, pill.bulgeS)[1] } }
             }
             Shape {
-                visible: root.barOnEdge
+                visible: root.barMerge
                 anchors.fill: parent; anchors.margins: -root.pad
                 preferredRendererType: Shape.CurveRenderer
                 ShapePath { fillColor: "transparent"; strokeColor: Style.chromeBorder; strokeWidth: root.borderW
@@ -304,7 +324,7 @@ PanelWindow {
             }
             // Plain rounded pill when there's no bar on this edge.
             Rectangle {
-                visible: !root.barOnEdge
+                visible: !root.barMerge
                 anchors.fill: parent
                 radius: Math.min(16, height / 2)
                 color:  root.cardColor
@@ -314,7 +334,9 @@ PanelWindow {
             // Take the bar's border over the pill's mouth, fillet skirt included, so the bar's line
             // stops where the pill's concave arc picks it up. Without this the bar drew its line
             // straight across the mouth and the pill sat ON the strip instead of growing out of it.
-            readonly property real fillet: root._fillet
+            // No skirt on a pill that does not merge — the arcs are not drawn there (see the two
+            // Shapes above), so letting the guard reserve room for them only shifts the pill.
+            readonly property real fillet: (root._fillet && root.barMerge)
                 ? Math.max(0, Math.min(root.flareR, (root.hz ? width : height) / 3, (root.hz ? height : width) / 3))
                 : 0
             // A merged end has no fillet skirt sticking out along this edge — the outline turns the
@@ -322,7 +344,7 @@ PanelWindow {
             readonly property real gapFrom: (root.hz ? openX : openY) - (root.perpStart ? 0 : fillet)
             readonly property real gapTo:   (root.hz ? openX + width : openY + height)
                                             + (root.perpEnd ? 0 : fillet)
-            readonly property bool gapLive: root.mine && root.barOnEdge && root.glideId !== "" && reveal > 0.02
+            readonly property bool gapLive: root.mine && root.barMerge && root.glideId !== "" && reveal > 0.02
             // …and the merged side needs its OWN claim, on the perpendicular edge: that strip's
             // border would otherwise run straight down the pill's flank and cut the L in half. The
             // span is the pill's depth plus the fillet the outline turns through, measured from the

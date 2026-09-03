@@ -9,6 +9,8 @@ import QtQuick
 Item {
     id: root
     property bool   vertical:    false
+    // Turned 90 degrees on a vertical bar (see Bar.qml ModSlot): one glyph, and a glyph on its side is just wrong.
+    readonly property bool rotateOnVertical: false
     property string barMon:      ""
     property string barEdge:     "top"
     property string barGroup:    "start"
@@ -25,8 +27,8 @@ Item {
 
     readonly property string _icon: instanceKey !== "" ? VtlConfig.moduleSetting(instanceKey, "icon", "󰐱") : "󰐱"
     readonly property string _font: instanceKey !== "" ? VtlConfig.moduleFontFor(instanceKey) : Style.font
-    readonly property color  _col:  instanceKey !== "" ? (Colors[VtlConfig.moduleColorName(instanceKey)] ?? Colors.fgMuted)
-                                                       : Colors.fgMuted
+    readonly property color  _col:  instanceKey !== "" ? (Colors[VtlConfig.moduleColorName(instanceKey)] ?? Style.barDim(root.barMon))
+                                                       : Style.barDim(root.barMon)
 
     Text {
         id: label
@@ -44,8 +46,7 @@ Item {
         hoverEnabled: true
         onClicked: {
             if (root.instanceKey === "") return
-            var c = root.mapToItem(null, root.width / 2, root.height / 2)
-            UiState.toggleFlyout(root.instanceKey, c.x, c.y, root.barEdge, root.barGroup, root.barMon)
+            Popouts.openFor(root.instanceKey, root, root.barEdge, root.barGroup, root.barMon)
         }
     }
 }

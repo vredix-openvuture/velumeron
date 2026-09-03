@@ -86,6 +86,7 @@ Item {
     // ── Per-monitor picker overlay data ───────────────────────────────────────
     function openPicker(mon) {
         pickMon = mon; pickItems = []
+        pickProc.acc = []
         pickProc.command = ["python3", "-c", root._listPy, mon]
         pickProc.running = false; pickProc.running = true
     }
@@ -110,14 +111,19 @@ Item {
         "   if os.path.splitext(f)[1].lower() in exts: rows.append(os.path.join(r,f))\n" +
         "rows.sort(key=lambda x:os.path.basename(x).lower())\n" +
         "for full in rows: print(full)"
+    // Accumulated in a plain JS array and published ONCE, like every other listing in the shell:
+    // rebuilding the property per line is quadratic on a QVariantList and resets the grid's model
+    // on every file, which is what made a folder of a hundred pictures freeze the panel.
     Process {
         id: pickProc
+        property var acc: []
         stdout: SplitParser {
             onRead: line => {
                 var f = ("" + line).trim(); if (f === "") return
-                var a = root.pickItems.slice(); a.push(f); root.pickItems = a
+                pickProc.acc.push(f)
             }
         }
+        onRunningChanged: if (!running) root.pickItems = pickProc.acc
     }
 
     // ── Layout ────────────────────────────────────────────────────────────────

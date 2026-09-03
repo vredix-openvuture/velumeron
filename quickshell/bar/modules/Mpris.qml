@@ -8,6 +8,8 @@ import Quickshell.Services.Mpris
 Item {
     id: root
     property bool vertical: false   // set by ModSlot (rotated to read along a vertical sidebar)
+    // Turned 90 degrees on a vertical bar (see Bar.qml ModSlot): the track title is a line of text.
+    readonly property bool rotateOnVertical: true
     property string barMon:   ""    // monitor name, for per-monitor icon/font size
     property string barEdge:  "top" // set by Bar; drives the flyout grow direction
     property string barGroup: "start" // set by Bar; start/end → menu merges into the corner
@@ -26,7 +28,7 @@ Item {
 
     // Per-module customization (Settings → Bar → Module → gear).
     readonly property string _font:    VtlConfig.moduleFontFor("mpris")
-    readonly property color  _col:     Colors[VtlConfig.moduleColorName("mpris")] ?? Colors.fgMuted
+    readonly property color  _col:     Colors[VtlConfig.moduleColorName("mpris")] ?? Style.barDim(root.barMon)
     readonly property bool   _showCtl: VtlConfig.moduleSetting("mpris", "show_controls", true)
     readonly property int    fontSize: VtlConfig.moduleFontSizeFor("mpris", root.barMon)
     readonly property int    iconSize: VtlConfig.moduleIconSizeFor("mpris", root.barMon)
@@ -45,7 +47,7 @@ Item {
         z: -1                              // behind the controls and the title
         // The quietest of the three: in the bar the wave sits DIRECTLY behind the title, with
         // no card between them, so anything more than a hint competes with the text.
-        radius: VtlConfig.barModuleBgRadiusFor(root.barMon)
+        radius: Style.moduleR(VtlConfig.barModuleBgRadiusFor(root.barMon))
         bars: 14
         intensity: 0.4
         barGap: 2
@@ -63,8 +65,7 @@ Item {
 
     // Click on the title opens the player flyout (docked out of the bar); IPC can also open it.
     function _toggleMenu() {
-        var c = root.mapToItem(null, root.width / 2, root.height / 2)
-        UiState.toggleFlyout("mpris", c.x, c.y, root.barEdge, root.barGroup, root.barMon)
+        Popouts.openFor("mpris", root, root.barEdge, root.barGroup, root.barMon)
     }
 
     Row {

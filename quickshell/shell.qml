@@ -145,25 +145,34 @@ ShellRoot {
         }
     }
 
-    // Hand the active ui_style to Hyprland whenever it changes — from the Style picker, a theme
-    // activation, or any settings edit — so window decoration (border / glow / shadow / rounding)
-    // follows the shell look. hyprland.lua reads <USER_DIR>/active-theme and loads themes/<style>.lua.
-    // `cur` is a live binding on VtlConfig.uiStyle; `_last` snapshots the value at startup so a
-    // normal start (decoration already set from the persisted active-theme) doesn't fire a reload.
-    Process { id: styleHyprProc }
-    QtObject {
-        id: styleHypr
-        property string cur:   VtlConfig.uiStyle
-        property string _last: ""
-        Component.onCompleted: styleHypr._last = styleHypr.cur
-        onCurChanged: {
-            if (styleHypr._last === styleHypr.cur) return
-            styleHypr._last = styleHypr.cur
-            styleHyprProc.command = ["bash", "-c",
-                "\"$VELUMERON_DIR/assets/scripts/apply-ui-style.sh\" " + JSON.stringify(styleHypr.cur)]
-            styleHyprProc.running = false
-            styleHyprProc.running = true
+    // Hand the active THEME to Hyprland — window decoration (border colour, glow, shadow, gaps)
+    // follows the theme, not the ui_style: hyprland.lua reads <USER_DIR>/active-theme and dofiles
+    // hypr.lua/themes/<id>.lua. This is the ONLY hand-off, so every writer of the `theme` key
+    // reaches the compositor the same way — the picker, the keybind, `ipc call theme wear`, a
+    // settings restore — and none of them has to remember to call the script itself.
+    //
+    // The settle timer exists because `theme` arrives twice at startup: the property default first,
+    // then the parsed settings.json a few ms later. Debouncing collapses that into one call, and
+    // running it at startup at all is what corrects a stale file — one written by an older release
+    // that handed over the ui_style, or a theme switched while the shell was down.
+    // apply-window-look.sh reloads Hyprland only when the value actually changed, so a matching file
+    // costs nothing.
+    Process { id: themeHyprProc }
+    Timer {
+        id: themeSettle
+        interval: 400
+        onTriggered: {
+            themeHyprProc.command = ["bash", "-c",
+                "\"$VELUMERON_DIR/assets/scripts/apply-window-look.sh\" " + JSON.stringify(VtlConfig.theme)]
+            themeHyprProc.running = false
+            themeHyprProc.running = true
         }
+    }
+    QtObject {
+        id: themeHypr
+        property string cur: VtlConfig.theme
+        Component.onCompleted: themeSettle.restart()
+        onCurChanged: themeSettle.restart()
     }
 
     // IPC: force the onboarding window — `velumeron --onboarding [update]`:
@@ -219,6 +228,23 @@ ShellRoot {
                                     loaded: Theme.loaded, contract: Theme.contract,
                                     tokens: Theme.tokens, lock: Theme.lock }, null, 1)
         }
+        // The picker, bound to Super+Ctrl+Space. Which shape opens is a setting, so this is one
+        // call and not two: `theme_picker_style` decides between the full screen and the bar panel,
+        // and either shape toggles on the monitor that has focus.
+        function toggle(): void {
+            if (UiState.themePickerOpen) { UiState.themePickerOpen = false; return }
+            if (UiState.flyout === "theme") { UiState.flyout = ""; return }
+            var m = Hyprland.focusedMonitor
+            if (!m) return
+            UiState.openThemePicker(m.name, m.width, m.height)
+        }
+        function picker(): void { if (UiState.flyout !== "theme" && !UiState.themePickerOpen) toggle() }
+        // Only OUR flyout: clearing UiState.flyout unconditionally would shut whatever else the
+        // user has open (volume, mpris) because a script asked the theme picker to go away.
+        function close():  void {
+            if (UiState.flyout === "theme") UiState.flyout = ""
+            UiState.themePickerOpen = false
+        }
     }
 
     // IPC: toggle / open / close the corner menu from outside (e.g. a Hyprland keybind):
@@ -234,6 +260,31 @@ ShellRoot {
             UiState.settingsRequestSection = name
             UiState.openDropdown = "vuture-icon"
         }
+    }
+
+    // IPC: arrange the desk — `qs -p <dir> ipc call desk edit`.
+    // The dashboard's editor is reachable from the settings pencil and nowhere else, which is right
+    // for a page inside a menu. The desk is the desktop: rearranging it should not require finding
+    // the menu that owns it, so it gets a door of its own for a keybind to knock on.
+    IpcHandler {
+        target: "desk"
+        function edit():  void { UiState.openDashEdit(Compositor.focusedMonitorName, "desk") }
+        function close(): void { UiState.closeDashEdit() }
+    }
+
+    // IPC: the shell's context menu, the one a right-click opens — `ipc call context desk 600 300`
+    // / `context bar <x> <y>` / `context close`. A point on the focused monitor, in its own
+    // coordinates: the pointer is deliberately not read here, because the caller knows where it
+    // meant and a real right-click already carries its own position.
+    IpcHandler {
+        target: "context"
+        function desk(x: real, y: real): void {
+            UiState.openContextMenu("desk", Compositor.focusedMonitorName, x, y)
+        }
+        function bar(x: real, y: real): void {
+            UiState.openContextMenu("bar", Compositor.focusedMonitorName, x, y)
+        }
+        function close(): void { UiState.ctxMenuOpen = false }
     }
 
     // IPC: show the volume / brightness OSD (poked by osd-show.sh):
@@ -267,6 +318,11 @@ ShellRoot {
         function volume():   void { _open("volume") }
         function mpris():    void { _open("mpris") }
         function calendar(): void { _open("calendar") }
+        function weather():  void { _open("weather") }
+        function mic():      void { _open("mic") }
+        function keyboard(): void { _open("keyboard") }
+        function network():  void { _open("network") }
+        function bluetooth():void { _open("bluetooth") }
         function close():    void { UiState.flyout = "" }
     }
 
@@ -420,40 +476,13 @@ ShellRoot {
         }
     }
 
-    // Lockscreen weather — fetch wttr.in for the configured city (Settings → Lockscreen). Runs only
-    // when the weather widget is enabled AND a city is set; refreshes every 30 min, once at startup,
-    // and immediately when the city/unit changes. weather-fetch.sh writes weather.json (watched by
-    // lock/LockContent.qml). No fetch happens with no city → nothing leaves the machine.
-    Process { id: weatherProc }
-    function _fetchWeather() {
-        if (!(Theme.lockWidgetEnabled("weather") && VtlConfig.lockWeatherCity !== "")) return
-        // 3rd argument = how many forecast days to include (0 = current conditions only).
-        var days = Theme.lock.weatherForecast
-                   ? Math.max(1, Math.min(3, Theme.lock.weatherForecastDays)) : 0
-        weatherProc.command = ["bash",
-            Quickshell.env("VELUMERON_DIR") + "/assets/scripts/weather-fetch.sh",
-            VtlConfig.lockWeatherCity, VtlConfig.lockWeatherUnit, "" + days]
-        weatherProc.running = false
-        weatherProc.running = true
-    }
-    Timer {
-        interval: 30 * 60000
-        repeat:   true
-        triggeredOnStart: true
-        running:  Theme.lockWidgetEnabled("weather") && VtlConfig.lockWeatherCity !== ""
-        onTriggered: _fetchWeather()
-    }
-    Connections {
-        target: VtlConfig
-        function onLockWeatherCityChanged() { _fetchWeather() }
-        function onLockWeatherUnitChanged() { _fetchWeather() }
-    }
-    // Turning the outlook on (or asking for more days) needs a refetch — weather.json only carries
-    // the days that were requested when it was written. Those two are the THEME's now, so the
-    // trigger moved with them: one `lock` block changes, one refetch.
+    // The weather fetch lives in WeatherService now — two surfaces want it (the lockscreen widget
+    // and the bar module) and they share one weather.json, so it needs one owner rather than a
+    // fetcher per reader. Only the theme trigger stays here: `Theme.lock` changes as one block, and
+    // a service cannot bind to "any of these three fields moved".
     Connections {
         target: Theme
-        function onLockChanged() { _fetchWeather() }
+        function onLockChanged() { WeatherService.refresh() }
     }
 
     // Native wallpaper engine: one background-layer surface per monitor (static images + live video
@@ -461,6 +490,21 @@ ShellRoot {
     Variants {
         model: VtlConfig.componentEnabled("wallpaper") ? root.bootScreens : []
         delegate: WallpaperWindow { required property var modelData; screen: modelData }
+    }
+
+    // The desk: widgets on the wallpaper. Bottom layer, so it stacks above the wallpaper (and above
+    // a theme's backdrop, which is Background too) and below every window. `late` because a widget
+    // is the least urgent thing on the screen — the bar and the wallpaper come first.
+    Variants {
+        model: VtlConfig.componentEnabled("desk") ? root.late(6) : []
+        delegate: DeskWindow { required property var modelData; screen: modelData }
+    }
+    // The shell's context menu — one surface for the desktop's right-click and the bar's. On the
+    // Overlay layer, because neither the desk (under the windows) nor the bar (a strip) could hold
+    // a menu of its own. NOT gated on the desk: the bar's right-click has to work without it.
+    Variants {
+        model: root.late(6)
+        delegate: ContextMenu { required property var modelData; screen: modelData }
     }
 
     // The theme's window veil, if it brings one: over your windows, UNDER everything the shell
@@ -729,6 +773,16 @@ ShellRoot {
         model: root.late(16)
         delegate: WallpaperGallery { required property var modelData; screen: modelData }
     }
+    // The THEME picker, in the same two shapes and by the same rule: both surfaces exist on every
+    // screen, UiState.openThemePicker() opens exactly one of them (Settings → Style → Picker).
+    Variants {
+        model: root.late(16)
+        delegate: ThemeQuick { required property var modelData; screen: modelData }
+    }
+    Variants {
+        model: root.late(16)
+        delegate: ThemeGallery { required property var modelData; screen: modelData }
+    }
     Variants {
         model: VtlConfig.componentEnabled("calendar") ? root.late(13) : []
         delegate: CalendarMenu { required property var modelData; screen: modelData }
@@ -737,6 +791,25 @@ ShellRoot {
     Variants {
         model: root.late(13)
         delegate: LayoutMenu { required property var modelData; screen: modelData }
+    }
+
+    // The round-two module popouts. Each is created only while its module is actually placed
+    // somewhere — a per-screen surface for a panel nobody can open is a window for nothing.
+    Variants {
+        model: Popouts.inUse("weather") ? root.late(13) : []
+        delegate: WeatherMenu { required property var modelData; screen: modelData }
+    }
+    Variants {
+        model: Popouts.inUse("mic") ? root.late(13) : []
+        delegate: MicMenu { required property var modelData; screen: modelData }
+    }
+    Variants {
+        model: VtlConfig.barModulePlacedAnywhere("microphone") ? root.late(13) : []
+        delegate: MicGlide { required property var modelData; screen: modelData }
+    }
+    Variants {
+        model: Popouts.inUse("keyboard") ? root.late(13) : []
+        delegate: KeyboardMenu { required property var modelData; screen: modelData }
     }
 
     // FancyZones: input-transparent zone fields per screen, shown while a float is dragged.

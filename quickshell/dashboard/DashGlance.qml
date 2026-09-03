@@ -11,18 +11,30 @@ import QtQuick
 // whole job of a module called "glance".
 DashTile {
     id: root
-    readonly property bool roomy: root.height >= 2 * VtlConfig.dashboardCellH
+    // Roomy from the tile's OWN pixels, not from the hub's cell height: on the desk a cell is ~40 px
+    // and the hub's row height has nothing to do with it, so a 3x3 desk widget was still drawing the
+    // one-line chip face it uses at 1x1.
+    readonly property bool roomy: root.height >= Math.max(96, 2 * VtlConfig.dashboardCellH)
+                                  || (root.ch >= 3 && root.height >= 96)
+
+    // Which readings this instance carries. All four by default; a widget parked in a corner as a
+    // CPU gauge should not have to be a whole system report.
+    function _want(key) { return !(root.opts && root.opts[key] === false) }
+    readonly property bool showBars: (root.opts?.bars ?? true) !== false
 
     readonly property var stats: {
-        var out = [{ key: "cpu",  icon: "", label: "CPU", text: Math.round(DashState.cpu) + "%",
-                     frac: Math.max(0, Math.min(1, DashState.cpu / 100)) },
-                   { key: "mem",  icon: "", label: "RAM", text: Math.round(DashState.mem) + "%",
-                     frac: Math.max(0, Math.min(1, DashState.mem / 100)) }]
-        if (DashState.temp > 0)
+        var out = []
+        if (root._want("cpu"))
+            out.push({ key: "cpu",  icon: "", label: "CPU", text: Math.round(DashState.cpu) + "%",
+                       frac: Math.max(0, Math.min(1, DashState.cpu / 100)) })
+        if (root._want("mem"))
+            out.push({ key: "mem",  icon: "", label: "RAM", text: Math.round(DashState.mem) + "%",
+                       frac: Math.max(0, Math.min(1, DashState.mem / 100)) })
+        if (root._want("temp") && DashState.temp > 0)
             out.push({ key: "temp", icon: "", label: "TEMP", text: DashState.temp + "°",
                        // 40–95 °C mapped to the bar: below 40 nothing interesting, above 95 it's full.
                        frac: Math.max(0, Math.min(1, (DashState.temp - 40) / 55)) })
-        if (DashState.uptime !== "")
+        if (root._want("uptime") && DashState.uptime !== "")
             out.push({ key: "up", icon: "󰅐", label: "UPTIME", text: DashState.uptime, frac: -1 })
         return out
     }
@@ -39,9 +51,9 @@ DashTile {
                 required property var modelData
                 spacing: 6
                 Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.icon
-                       color: Style.accent; font.pixelSize: 13; font.family: Style.font }
+                       color: root.fgTint; font.pixelSize: 13; font.family: root.uiFont }
                 Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.text
-                       color: Colors.fgBright; font.pixelSize: 13; font.bold: true; font.family: Style.font }
+                       color: root.fgMain; font.pixelSize: 13; font.bold: true; font.family: root.uiFont }
             }
         }
     }
@@ -68,24 +80,24 @@ DashTile {
                         width: parent.width
                         spacing: 6
                         Text { anchors.verticalCenter: parent.verticalCenter
-                               text: statCell.modelData.icon; color: Style.accent
-                               font.pixelSize: 11; font.family: Style.font }
+                               text: statCell.modelData.icon; color: root.fgTint
+                               font.pixelSize: 11; font.family: root.uiFont }
                         Text { anchors.verticalCenter: parent.verticalCenter
                                text: statCell.modelData.label; color: Colors.fgMuted
-                               font.pixelSize: 9; font.family: Style.font; font.letterSpacing: 1 }
+                               font.pixelSize: 9; font.family: root.uiFont; font.letterSpacing: 1 }
                     }
                     Text {
-                        text: statCell.modelData.text; color: Colors.fgBright
-                        font.pixelSize: 17; font.bold: true; font.family: Style.font
+                        text: statCell.modelData.text; color: root.fgMain
+                        font.pixelSize: 17; font.bold: true; font.family: root.uiFont
                     }
                     Rectangle {
-                        visible: statCell.modelData.frac >= 0
+                        visible: root.showBars && statCell.modelData.frac >= 0
                         width: parent.width; height: 3; radius: 1.5
                         color: Style.tint(Colors.bgElement, Style.lift(0.7))
                         Rectangle {
                             width: Math.round(parent.width * statCell.modelData.frac)
                             height: parent.height; radius: parent.radius
-                            color: Style.accent
+                            color: root.fgTint
                             Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
                         }
                     }

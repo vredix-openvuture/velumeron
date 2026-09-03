@@ -10,6 +10,8 @@ Item {
     property string barEdge:  "top"
     property string barGroup: "start"
     property bool   vertical: false
+    // Turned 90 degrees on a vertical bar (see Bar.qml ModSlot): one glyph, and a glyph on its side is just wrong.
+    readonly property bool rotateOnVertical: false
 
     readonly property string _icon: VtlConfig.moduleSetting("wallpaper-switcher", "icon", "󰸉")
     readonly property string _font: VtlConfig.moduleFontFor("wallpaper-switcher")
@@ -41,7 +43,7 @@ Item {
         // Unconditionally, not _publish(): clicking a module on a monitor that doesn't hold focus
         // must still grow the menu out of THIS module, not out of the fallback position.
         root._publishNow()
-        UiState.openWallpaperQuick(root.barMon, Screen.width, Screen.height)
+        Popouts.openFor("wallpaper-switcher", root, root.barEdge, root.barGroup, root.barMon)
     }
 
     Text {

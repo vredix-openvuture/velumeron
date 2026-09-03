@@ -21,6 +21,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Io
 
 Item {
     id: comp
@@ -97,6 +98,44 @@ Item {
     function refreshMonitors()   { Hyprland.refreshMonitors() }
     function refreshWorkspaces() { Hyprland.refreshWorkspaces() }
 
+    // ── The gap a tiled window keeps from the reserved area ───────────────────
+    // Hyprland's `general:gaps_out`. The shell normally has no business knowing it — a window's
+    // outer gap is the compositor's layout, not the shell's — with exactly one exception: a
+    // CAPSULE bar draws no strip, so the only thing on that edge is the modules, and then the two
+    // sides of a module are visibly different amounts of nothing. The screen side is the module's
+    // own inset; the window side is that inset PLUS this gap. Reserving one gap less is what makes
+    // the two equal, and it needs the number (see bar/EdgeExclusiveZone.qml).
+    //
+    // Asked for only while something wants it (`gapWanted`), and re-asked when the compositor
+    // reloads its config — the Lua themes each set their own gaps_out, so a theme switch moves it.
+    // Nothing else in the shell pays for this.
+    property int  windowGap: 0
+    property bool _gapAsked: false
+    // "14 14 14 14" — top right bottom left, in that order. One number is enough for the bar: an
+    // edge only ever asks about its own side, and no theme sets them apart. The first is taken.
+    Process {
+        id: gapProc
+        command: ["hyprctl", "getoption", "general:gaps_out", "-j"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    var j = JSON.parse("" + text)
+                    var n = parseInt(("" + (j.css ?? "")).trim().split(/\s+/)[0])
+                    if (!isNaN(n) && n >= 0) comp.windowGap = n
+                } catch (e) { /* leave the last known value; 0 is the safe default */ }
+            }
+        }
+    }
+    // Asked for by whoever needs it — pull, not push, so nothing has to own a "does anyone want
+    // this" flag that two surfaces could then fight over.
+    function requestWindowGap() {
+        comp._gapAsked = true
+        gapProc.running = false
+        gapProc.running = true
+    }
+    // …and re-asked on a config reload, but only once somebody has asked at all.
+    function refreshWindowGap() { if (comp._gapAsked) comp.requestWindowGap() }
+
     // ── Events ────────────────────────────────────────────────────────────────
     // Re-emit the compositor's raw event stream so features connect to Compositor
     // instead of importing Quickshell.Hyprland. CAVEAT: the payload is Hyprland's
@@ -108,7 +147,12 @@ Item {
     signal rawEvent(var event)
     Connections {
         target: Hyprland
-        function onRawEvent(event) { comp.rawEvent(event) }
+        function onRawEvent(event) {
+            // A config reload can move gaps_out (each Lua theme sets its own), so the one number
+            // the bar reads has to be re-asked. Every other event is passed straight through.
+            if (event.name === "configreloaded") comp.refreshWindowGap()
+            comp.rawEvent(event)
+        }
     }
 
     // ── Actions ───────────────────────────────────────────────────────────────

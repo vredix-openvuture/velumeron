@@ -44,6 +44,34 @@ QtObject {
         var v = Theme.tokens.corner
         return (typeof v === "string" && v !== "") ? v : root.cornerDefault
     }
+    // How the settings NAVIGATION is drawn. A second token that names a treatment rather than a
+    // value, and it exists because the nav is the one list in the shell that is nothing but names:
+    //
+    //   "icon"    a pictogram per entry on a filled row      (the shipped look)
+    //   "prompt"  a directory listing — group as `appearance/`, entries lowercase, a caret on the
+    //             row you are standing on, no chrome behind them
+    //
+    // Console asked for it: a Nerd-Font pictogram is the one thing on a terminal desktop that
+    // cannot be typed, so a theme made of type needs a way to say "draw the menu as a listing".
+    // The icon-only rail keeps its glyphs whatever this says — a strip with the names switched off
+    // has nothing else to show.
+    readonly property string navStyle: {
+        var v = Theme.tokens.navStyle
+        return (typeof v === "string" && v !== "") ? v : "icon"
+    }
+    readonly property bool navPrompt: root.navStyle === "prompt"
+
+    // The same argument one step further: whether a surface that CAN say the thing both ways draws
+    // a pictogram or types it. "icon" is the Nerd Font glyph every surface uses; "text" is for a
+    // theme made of characters — Console marks a row with `▸` and a state with `[x]`, and a
+    // pictogram in that grammar reads like a sticker someone stuck on the terminal. Surfaces that
+    // have nothing to type instead (the icon rail, an app's own icon) ignore it.
+    readonly property string glyphStyle: {
+        var v = Theme.tokens.glyphStyle
+        return (v === "text") ? "text" : "icon"
+    }
+    readonly property bool typedGlyphs: root.glyphStyle === "text"
+
     readonly property bool chamfer:   root.corner === "chamfer"
     readonly property bool scallop:   root.corner === "scallop"
     readonly property bool wobbly:    root.corner === "wobble"
@@ -311,6 +339,20 @@ QtObject {
     readonly property color accent: Colors.bgActive
     function tint(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
 
+    // ── Alignment guides (edit mode) ──────────────────────────────────────────────
+    // The one colour in the shell that is NOT taken from the palette, and deliberately so. A guide
+    // is not decoration, it is an answer: "this edge is on that edge, let go now". The accent it
+    // used to be drawn in is the wallpaper's own colour, so on the desk it fell into the picture it
+    // was drawn over — and on a palette-matched wallpaper (the normal case, wallust derives one
+    // from the other) it was the least visible line on screen at the moment it mattered most.
+    //
+    // A fixed cyan instead, with a near-black casing behind it: cyan sits opposite the purples and
+    // reds most wallpapers land on, and where it does not, the casing separates the line from
+    // whatever is behind it. Together they survive a white photo and a black one. A theme that
+    // wants its own can name a palette entry under `snapGuide` / `snapGuideCase`.
+    readonly property color snapGuide:     root._tokColor("snapGuide", "#00E5FF")
+    readonly property color snapGuideCase: root._tokColor("snapGuideCase", Qt.rgba(0, 0, 0, 0.72))
+
     // ── Surface contrast ──────────────────────────────────────────────────────────
     // How far a card / row lifts off the panel behind it (Settings → Style → Build a theme →
     // Menus). The alphas written into the fills below are the "normal" values; this scales them
@@ -432,7 +474,12 @@ QtObject {
             "controlFill":     root._tokColorIn(table, "controlFill", root.tint(root.accent, root.lift(0.12))),
             "selFill":         root._tokColorIn(table, "selFill", root.accent),
             "selBorderW":      root._tokNumIn(table, "selBorderW", 0),
-            "selBorderColor":  root._tokColorIn(table, "selBorderColor", Colors.boActive)
+            "selBorderColor":  root._tokColorIn(table, "selBorderColor", Colors.boActive),
+            // The bar module cell, so a theme's card can draw the bar the way that theme draws it.
+            "rModule":           root._tokNumIn(table, "rModule", 8),
+            "moduleFill":        root._tokColorIn(table, "moduleFill", Colors.bgElement),
+            "moduleBorderW":     root._tokNumIn(table, "moduleBorderW", 0),
+            "moduleBorderColor": root._tokColorIn(table, "moduleBorderColor", "transparent")
         }
     }
 
@@ -442,6 +489,11 @@ QtObject {
     readonly property int rCard:    root._tokNum("rCard",    14)
     readonly property int rControl: root._tokNum("rControl", 10)
     readonly property int rTile:    root._tokNum("rTile",     8)
+    // A notification toast's corner, which is deliberately NOT rCard: a toast is a small card and
+    // every shipped look wanted it squarer than a settings page, which is what the old hardcoded
+    // `min(12, rCard)` in NotifPopups said. That expression is now the FALLBACK, so nothing moves
+    // for a theme that does not ask — and a theme built on one radius can finally have one.
+    readonly property int rToast:   root._tokNum("rToast", Math.min(12, root.rCard))
 
     // ── Spacing / density ─────────────────────────────────────────────────────────
     readonly property int cardGap: root._tokNum("cardGap", 16)   // between groups
@@ -452,6 +504,30 @@ QtObject {
     // different heights and the page read as ragged however well the cards themselves lined up.
     // A theme may set it; what it must not do is let each control decide separately.
     readonly property int ctrlH:   root._tokNum("ctrlH",   36)
+
+    // ── Layout tiers ──────────────────────────────────────────────────────────────
+    // ONE axis for the settings menu: how much CONTENT width a page actually has. Docked and
+    // floating only choose a SIZE; which of the three layouts you get falls out of that size, so a
+    // docked panel dragged wide behaves like the window and a small window like the dock. No page
+    // asks whether it is floating.
+    //   compact  one column, no preview at all
+    //   regular  one column, the preview as a band above the page
+    //   wide     two or three columns, the preview in a column of its own
+    // The CONTROLS do not read this. Each row breaks on its OWN width (see Slider, Stepper,
+    // Segmented), which is what keeps a narrow card inside a wide panel readable too — and it means
+    // a row can still be a one-liner in the compact tier if it fits there.
+    //
+    // `tierRegularMax` is the one derived number: 2 * 360 (CardColumns.minColW) + cardGap + the
+    // content's own 36 px of margins = 772, rounded to 780 — the width at which a SECOND card
+    // column starts to fit, which is the point where side by side beats stacking.
+    // `tierCompactMax` is a judgement: below it there is no room for a preview beside or above the
+    // page without the page becoming a scroll strip.
+    readonly property int tierCompactMax: 560
+    readonly property int tierRegularMax: 780
+    function tierFor(w) {
+        return w < root.tierCompactMax ? "compact"
+             : (w < root.tierRegularMax ? "regular" : "wide")
+    }
 
     // ── Card / group surface ──────────────────────────────────────────────────────
     // The accent tints (and the two solid fills) run through the surface-contrast knob: that is what
@@ -473,6 +549,42 @@ QtObject {
     readonly property int   controlBorderW:     root._tokNum("controlBorderW", 0)
     readonly property color controlBorderColor: root._tokColor("controlBorderColor",
                                                     root.tint(Colors.boNormal, 0.40))
+
+    // ── The bar's module cell ─────────────────────────────────────────────────────
+    // The little ground a bar module sits on (Settings → Bar → Style → Module background). It used
+    // to be hard-coded to `Colors.bgElement` with the user's radius, which meant a theme could say
+    // nothing at all about it: Console's square, bracketed chrome came out as mirobo's soft pill in
+    // a different colour. These four tokens are the seam, and their defaults ARE what mirobo drew
+    // before them, so nothing moves for a theme that sets none of them.
+    //
+    // The two FILL tokens are base colours, not finished ones: the alpha is the user's own
+    // "Background opacity" slider (scaled by the surface-contrast knob), so a theme picks WHICH
+    // colour the cell is made of and the user still decides how much of it there is. The border is
+    // the theme's outright — a border has no user slider to share.
+    readonly property color moduleFill:      root._tokColor("moduleFill",      Colors.bgElement)
+    readonly property color moduleHoverFill: root._tokColor("moduleHoverFill", Colors.bgActive)
+    readonly property int   moduleBorderW:   root._tokNum("moduleBorderW", 0)
+    readonly property color moduleBorderColor:      root._tokColor("moduleBorderColor", "transparent")
+    readonly property color moduleHoverBorderColor: root._tokColor("moduleHoverBorderColor",
+                                                        root.moduleBorderColor)
+    // The cell's corner. The user's setting wins whenever it carries a number; -1 ("Auto") hands
+    // the decision to the theme, which is the only way a theme can ship a square cell without
+    // overwriting a radius the user chose on purpose.
+    // The dimmest ink a bar module may rest at. `fgMuted` is a second rank against a KNOWN ground:
+    // on a normal bar the strip is behind every module, so a muted glyph reads as "nothing to report
+    // here" and stays legible. A CHROMELESS bar (capsule) has no such ground — the module stands on
+    // the wallpaper — and the same grey disappears into whatever happens to be behind it. Measured
+    // on a bright brick wallpaper with the module pill at 0.6: the muted toggles were unreadable
+    // until hovered, while their fgPrimary neighbours in the same row were fine.
+    //
+    // So the second rank stops one step higher there. It is the RANK that moves, not the meaning:
+    // "off" is still darker than "on", because "on" is the accent.
+    function barDim(mon) { return VtlConfig.barChromeless(mon) ? Colors.fgPrimary : Colors.fgMuted }
+
+    function moduleR(userValue) {
+        return (userValue === null || userValue === undefined || userValue < 0)
+               ? root._tokNum("rModule", 8) : userValue
+    }
 
     // ── Selected / active ─────────────────────────────────────────────────────────
     readonly property color selFill:        root._tokColor("selFill", root.accent)

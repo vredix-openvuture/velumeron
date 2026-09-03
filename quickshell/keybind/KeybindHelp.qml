@@ -112,6 +112,7 @@ PanelWindow {
                 { k: "1 / 2 / 3…",    d: "Aim the number row at monitor n, then 1 – 0" }
             ] },
             { title: "SUPER + CTRL", binds: [
+                { k: "SPACE", d: "Theme picker" },
                 { k: "L",   d: "Lockscreen" },
                 { k: "Q",   d: "Session menu" },
                 { k: "C",   d: "Force kill" },

@@ -74,15 +74,28 @@ PanelWindow {
         : root.dockHome ? Math.min(Math.round(screen.width * 0.94), Style.menuContentW + root.railSpace)
                         : root._pctOr(VtlConfig.menuDockWidthPctFor(root.mon),  Style.menuContentW + root.railSpace,
                                       screen.width,  root.railSpace + root.minContentW)
+    // Same cut for the docked pages; Home is exempt because its height IS its raster.
+    readonly property int dockPageH: Math.round((Style.dashGridH + Style.dashChromeH)
+                                                * (root.navMode === "sidebar" ? 0.81 : 0.77))
     readonly property int dockH:  !screen ? 540
         : root.dockHome ? Math.min(Math.round(screen.height * 0.94), Style.dashGridH + Style.dashChromeH)
-                        : root._pctOr(VtlConfig.menuDockHeightPctFor(root.mon), Style.dashGridH + Style.dashChromeH,
+                        : root._pctOr(VtlConfig.menuDockHeightPctFor(root.mon), root.dockPageH,
                                       screen.height, root.minContentH)
+    // Narrower and shorter than it was, for the same reason: a settings page is a column of cards
+    // and a panel that fills three quarters of a wide screen gives it room it never uses. 60 % of
+    // the width, 56 % of the height (60 % with the rail, which is a list and needs the room), and
+    // the floor is still `minContentW`/`minContentH` so a small screen keeps a usable page.
     readonly property int floatW: !screen ? 300
-        : root._pctOr(VtlConfig.menuFloatWidthPctFor(root.mon),  Math.round(screen.width  * 0.74),
+        : root._pctOr(VtlConfig.menuFloatWidthPctFor(root.mon),  Math.round(screen.width  * 0.60),
                       screen.width,  root.railSpace + root.minContentW)
+    // A tenth shorter than it was: the panel filled three quarters of the screen and most pages
+    // ended well before that, so the bottom of the card was empty on nearly every one of them.
+    // The RAIL is the exception — it is a list of every section, and cutting it short is the one
+    // place the height is doing work — so sidebar navigation keeps the old size.
+    readonly property real floatHPct: root.navMode === "sidebar" ? 0.60 : 0.56
     readonly property int floatH: !screen ? 540
-        : root._pctOr(VtlConfig.menuFloatHeightPctFor(root.mon), Math.round(screen.height * 0.74),
+        : root._pctOr(VtlConfig.menuFloatHeightPctFor(root.mon),
+                      Math.round(screen.height * root.floatHPct),
                       screen.height, root.minContentH)
 
     // The dashboard keeps its OWN size settings (rows, columns, cell size — in its editor) and is
@@ -114,6 +127,20 @@ PanelWindow {
     Behavior on dockHAnim { NumberAnimation { duration: Math.round(220 * Style.motionSlow); easing.type: Easing.OutCubic } }
     readonly property int menuW:  Math.round(dockWAnim + (floatW - dockWAnim) * root.floatT)
     readonly property int menuH:  Math.round(dockHAnim + (floatH - dockHAnim) * root.floatT)
+
+    // ── Layout tier — the ONE axis the menu lays itself out on ───────────────────
+    // Not the float flag. Docked and floating only choose a SIZE; the LAYOUT falls out of the
+    // content width that size leaves over, so a docked panel set wide gets the wide layout and a
+    // small floating window the compact one — the way a resized window behaves anywhere else. No
+    // page asks whether it is floating, and there is no second set of pages to keep in step.
+    //
+    // Taken from the size the panel is HEADING for, never from the animating `menuW`: a tier that
+    // flipped halfway through the dock <-> float move would relayout the page mid-flight.
+    // The rail's width is subtracted as it stands: it is a user setting, not a tier consequence —
+    // deriving it from the tier instead would close a loop (rail -> panel width -> tier -> rail).
+    readonly property int tierContentW: (root.floatOff ? root.floatW : root.dockW)
+                                        - root.railSpace - 36        // 36 = the content's margins
+    readonly property string tier: Style.tierFor(root.tierContentW)
 
     // ── How the menu merges into the bar ─────────────────────────────────────────
     // The menu butts against its anchored edge (mEdge) and, on an L-bar, also blends into the
@@ -147,14 +174,15 @@ PanelWindow {
     // A floating bar no longer detaches its menu: the panel meets the strip's inner face (which
     // includes the float gap since Bar._publishInner) and reads as attached, the same as on a dock.
     // Cupertino still detaches always — that is the style, not the bar's doing.
-    readonly property bool dockDetached: root.edgeBar && Style.isCupertino
-    readonly property int  dockGap:   root.dockDetached ? 8 : 0
+    // Chromeless (capsule) bars detach as well — see the note in bar/Flyout.qml.
+    readonly property bool dockDetached: root.edgeBar && (Style.isCupertino || VtlConfig.barChromeless(root.mon))
+    readonly property int  dockGap:   root.dockDetached ? VtlConfig.barDetachGapFor(root.mon) : 0
     // The perpendicular (corner) merge is suppressed by the "origin edge only" transition style.
     readonly property bool _mergeAll:  VtlConfig.transitionMergeAllFor("menu", root._tctx)
     // See Flyout.endsFree: no corner in the screen corner, no corner merge. A float never reaches
     // one, a dock only while its ends are not pulled in; otherwise the menu tracks the icon that
     // opened it and the span clamp keeps it on the strip.
-    readonly property bool endsFree:   VtlConfig.barModeFor(root.mon) !== "frame"
+    readonly property bool endsFree:   (VtlConfig.barModeFor(root.mon) !== "frame" && VtlConfig.barModeFor(root.mon) !== "capsule")
                                        && (VtlConfig.barModeFor(root.mon) === "float"
                                            || VtlConfig.barSideGapFor(root.mon) > 0)
     readonly property var  barSpan:    VtlConfig.barSpanFor(root.mEdge, root.mon,
@@ -223,12 +251,17 @@ PanelWindow {
     // for a word — and it can no longer pretend to be a continuation of the left bar, whose width
     // is the bar's, not ours.
     readonly property bool railLabels: VtlConfig.settingsSidebarLabels && root.navMode === "sidebar"
-    readonly property int  railW:    root.railLabels ? 168
+    readonly property int  railW:    root.railLabels ? 186
                                    : (_leftBar ? VtlConfig.edgeThicknessFor("left", root.mon) : 52)
+    // THE RAIL DOES NOT COME TO THE DASHBOARD. Home is the popout that grows out of the bar —
+    // widgets you keep at hand — and a navigation rail down its side turns it into the settings
+    // menu it is not. It carries the same gear page navigation has always had, and the rail appears
+    // with the first settings page, which is the thing it navigates.
+    readonly property bool railShown: root.navMode === "sidebar" && !root.dockHome
     // What the rail COSTS the panel. Page mode draws no rail, so reserving its width there left a
     // rail-shaped strip of nothing down the right of the dashboard — the menu was 52 px wider than
     // anything in it. One number, used by the width and by the content's own offset below.
-    readonly property int  railSpace: root.navMode === "sidebar" ? root.railW + 1 : 0
+    readonly property int  railSpace: root.railShown ? root.railW + 1 : 0
 
     // ── Outline builder ──────────────────────────────────────────────────────────
     // Returns [borderD, fillD, seamD] in Shape-local coords (menu-local + pad). Geometry is built once in
@@ -390,6 +423,8 @@ PanelWindow {
           hint: "Where the bar sits, what it carries, and how it looks." },
         { key: "taskbar",       icon: "󱂩", title: "Taskbar",       comp: taskbarComp,
           hint: "The window list: its place, its size, and what it shows." },
+        { key: "desk",          icon: "󱂬", title: "Widgets",       comp: deskComp,
+          hint: "The widgets on the wallpaper: where they appear and when they step aside." },
         { key: "style",         icon: "󰏘", title: "Style",         comp: styleComp,
           hint: "Theme, accent, corners, fonts, and how things move." },
         { key: "wallpaper",     icon: "󰸉", title: "Wallpaper",     comp: wallpaperComp,
@@ -475,7 +510,7 @@ PanelWindow {
         { name: "System",     keys: ["home", "monitors", "workspaces", "peripherals", "boot",
                                      "openrgb"] },
         { name: "Appearance", keys: ["style", "wallpaper", "lockscreen", "screensaver", "sounds"] },
-        { name: "Shell",      keys: ["bar", "taskbar", "launcher", "osd", "notifications",
+        { name: "Shell",      keys: ["bar", "taskbar", "desk", "launcher", "osd", "notifications",
                                      "calendar", "corners"] },
         { name: "Windows",    keys: ["layouts", "zones", "windowrules", "windowtags", "keybinds"] },
         { name: "Apps",       keys: ["defaults", "autostart", "quickaccess", "integrations"] },
@@ -510,6 +545,9 @@ PanelWindow {
     // Style. `navPage` is the page-mode state: true = the nav list is showing.
     readonly property string navMode: VtlConfig.settingsNavMode
     property bool navPage: false
+    // The last real page you stood on. In sidebar mode the dashboard's gear returns you there
+    // rather than to a list that does not exist in this mode.
+    property string lastSection: "monitors"
     // "float" navigates like "page" — the dashboard is Home, a gear on it opens the page list — and
     // additionally detaches: Home keeps growing out of the bar exactly as it does today, and every
     // actual settings page opens as a centred window instead. So the dashboard stays a bar surface
@@ -517,18 +555,18 @@ PanelWindow {
     readonly property bool pageNav:  root.navMode === "page"
     // Floating is now its own switch and applies to BOTH navigation modes (VtlConfig.settingsFloat).
     //
-    // In page mode it keeps the behaviour it always had: Home stays glued to the bar and only the
-    // pages themselves detach, because Home is the dashboard — a bar surface by nature — and having
-    // it fly to the middle of the screen to show you your own widgets was never the point.
-    // `navPage` counts as off-Home: the page list IS the menu opening, and leaving it stuck to the
-    // bar while the page it leads to floats made the gear feel like it opened two different things.
+    // HOME NEVER FLOATS, in either navigation mode. The dashboard is a bar surface by nature — it is
+    // the widgets you keep at hand — and having it fly to the middle of the screen to show them to
+    // you was never the point. Only the settings PAGES detach. `navPage` counts as off-Home: the
+    // page list IS the menu opening, and leaving it stuck to the bar while the page it leads to
+    // floats made the gear feel like it opened two different things.
     //
-    // In sidebar mode there is no Home/page split to speak of — the rail is always there — so the
-    // whole menu detaches as soon as it opens.
+    // Sidebar mode used to be exempt — the rail is always there, so the whole menu detached as soon
+    // as it opened — and that put the dashboard in the middle of the screen. The rail is no reason
+    // to move the dashboard; the docked size already carries it (`dockW` adds `railSpace`).
     readonly property bool floatMode: VtlConfig.settingsFloat
     readonly property bool floatOff: root.floatMode
-                                     && (root.navMode === "sidebar"
-                                         || root.activeSection !== "home" || root.navPage)
+                                     && (root.activeSection !== "home" || root.navPage)
 
     // ── Leaving Home: ONE driver for the whole move ──────────────────────────────
     // 0 = docked at the bar (the dashboard), 1 = the centred floating page. Position, size,
@@ -596,19 +634,37 @@ PanelWindow {
     // On open: reset to the home section — unless another surface requested a specific page
     // (e.g. the calendar flyout's gear → "calendar") — and latch the menu to the focused monitor
     // so it stays there (doesn't follow the focus). Only the focused instance claims the latch.
-    onIsOpenChanged: {
-        if (isOpen) {
-            activeSection = UiState.settingsRequestSection !== "" ? UiState.settingsRequestSection : "home"
-            root.navPage = false   // always reopen on the Home ("Velumeron") page, never the nav list
-            // A cross-fade left mid-flight by a close (or an Escape) would reopen the menu on a
-            // page faded to nothing. Opening is the clean slate, so reset the whole handover here.
+    // "nav" is not a page, it is the page LIST — what the desktop's context menu asks for when you
+    // pick Settings there: you asked for the settings, not for the dashboard that happens to be this
+    // menu's Home. In sidebar mode the rail is already the navigation, so it lands on Home instead.
+    //
+    // `fresh` = the menu is opening. Then a missing request means Home, and the page handover is
+    // reset because a cross-fade left mid-flight by a close would reopen the menu on a page faded to
+    // nothing. A request that arrives while the menu is ALREADY open just changes the page — it used
+    // to do nothing at all, and worse, sat there until the next open and hijacked it.
+    function applySectionRequest(fresh) {
+        var req = UiState.settingsRequestSection
+        if (!fresh && req === "") return
+        var wantNav = (req === "nav")
+        root.activeSection = (req !== "" && !wantNav) ? req : "home"
+        root.navPage = wantNav && root.pageNav
+        if (fresh) {
             swapAnim.stop()
             root.contentFade = 1
             root.showPage()
-            // One instance per screen and all of them read the request — clear it only after
-            // every handler has run.
-            Qt.callLater(function () { UiState.settingsRequestSection = "" })
         }
+        // One instance per screen and all of them read the request — clear it only after every
+        // handler has run.
+        Qt.callLater(function () { UiState.settingsRequestSection = "" })
+    }
+    Connections {
+        target: UiState
+        function onSettingsRequestSectionChanged() {
+            if (root.isOpen) root.applySectionRequest(false)
+        }
+    }
+    onIsOpenChanged: {
+        if (isOpen) root.applySectionRequest(true)
         if (isOpen && monitor !== null && monitor === Hyprland.focusedMonitor) UiState.menuMon = root.mon
     }
 
@@ -626,11 +682,16 @@ PanelWindow {
 
     // Would the shown state be floating? Comparing it against the live one is what tells a MOVE
     // (dashboard ⇄ page — fade) from ordinary navigation inside the floating window (instant).
+    // Home never floats in either mode (see floatOff), so the shown state is judged the same way.
     readonly property bool _shownFloat: root.floatMode
-                                        && (root.navMode === "sidebar"
-                                            || root.shownSection !== "home" || root.shownNavPage)
+                                        && (root.shownSection !== "home" || root.shownNavPage)
     property bool _swapQueued: false
-    onActiveSectionChanged: root._queueSwap()
+    onActiveSectionChanged: {
+        // Remembered for the dashboard's gear in sidebar mode — there is no page list to send you
+        // to there, so it sends you back where you were.
+        if (root.activeSection !== "home") root.lastSection = root.activeSection
+        root._queueSwap()
+    }
     onNavPageChanged:       root._queueSwap()
     // A nav-list entry sets BOTH section and page in one click; coalesce so the second write
     // doesn't restart a fade the first one just began.
@@ -727,9 +788,12 @@ PanelWindow {
         // Bounded by the STRIP, not the screen: a bar inset from its ends is shorter than the
         // monitor, and a menu clamped to the monitor slid off the end of it (see Flyout).
         readonly property real alongSize: root.vert ? height : width
-        readonly property real alongLo:   root.edgeBar ? root.barSpan[0] : 0
+        // The same margin at the two ends that dockGap keeps in the depth — see bar/Flyout.qml.
+        // 0 while the menu merges into the bar, so docked geometry is untouched.
+        readonly property real alongLo:   (root.edgeBar ? root.barSpan[0] : 0) + root.dockGap
         readonly property real alongHi:   (root.edgeBar ? root.barSpan[1]
-                                                        : (root.vert ? root.sh : root.sw)) - alongSize
+                                                        : (root.vert ? root.sh : root.sw))
+                                          - alongSize - root.dockGap
         readonly property real alongMax:  Math.max(alongLo, alongHi)
         // Along the bar: an icon in the start/end group snaps the menu to that end (the screen
         // corner — merging into a perpendicular bar there, or into the bare screen edge if none);
@@ -873,7 +937,7 @@ PanelWindow {
         Item {
             id: rail
             width:   root.railW
-            visible: root.navMode === "sidebar"
+            visible: root.railShown
             opacity: menu.contentReveal
             z:       5    // above the content pane, so the hover tooltips aren't painted under it
             anchors { top: parent.top; bottom: parent.bottom; left: parent.left }
@@ -989,6 +1053,30 @@ PanelWindow {
                 }
             }
 
+            // "There is more" at the ends of a scrolling rail, so a half-drawn entry at the edge
+            // reads as the list continuing rather than as a row that got sliced. Same idea as the
+            // one inside a card that scrolls, in the panel's own fill.
+            Rectangle {
+                visible: rail.endless && railScroll.contentHeight > railScroll.height + 1
+                         && railScroll.contentY > 1
+                anchors { left: railScroll.left; right: railScroll.right; top: railScroll.top }
+                height: 16
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: root.cFill }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+            Rectangle {
+                visible: rail.endless
+                         && railScroll.contentY < railScroll.contentHeight - railScroll.height - 1
+                anchors { left: railScroll.left; right: railScroll.right; bottom: railScroll.bottom }
+                height: 16
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 1.0; color: root.cFill }
+                }
+            }
+
             // Section dots (which section of N) — click a dot to jump straight to it. Segmented
             // only: with every icon already on one strip there is nothing to page between.
             Column {
@@ -1025,7 +1113,7 @@ PanelWindow {
         Rectangle {
             x:       root.railW
             width:   1
-            visible: root.navMode === "sidebar"
+            visible: root.railShown
             opacity: menu.contentReveal
             anchors { top: parent.top; bottom: parent.bottom
                       topMargin: 12; bottomMargin: 12 }
@@ -1054,7 +1142,9 @@ PanelWindow {
                            : menu.width - content.railGap
             height: frozen ? (root.floatOff ? root.floatH : root.dockH) : menu.height
 
-            readonly property bool pageMode: root.pageNav
+            // Home is in "page mode" whatever the navigation is: the rail never joins it, so the
+            // gear is the only way off the dashboard in either mode.
+            readonly property bool pageMode: root.pageNav || root.navMode === "sidebar"
             // The SHOWN section's page (see the page handover): across the float move this lags
             // the selection, so nothing is torn down or built while the panel is travelling.
             readonly property var activeMeta: root.sectionMeta(root.shownSection)
@@ -1063,6 +1153,7 @@ PanelWindow {
                 "bar": "bar", "osd": "osd", "notifications": "notifications", "launcher": "launcher",
                 "sounds": "sounds",
                 "taskbar": "taskbar", "windowtags": "windowtags", "wallpaper": "wallpaper",
+                "desk": "desk",
                 "lockscreen": "lock", "calendar": "calendar", "corners": "hotcorners", "zones": "zones"
             })
             readonly property string featureKey: content.featureOf[root.shownSection] ?? ""
@@ -1093,42 +1184,158 @@ PanelWindow {
                 }
             }
 
-            // À-la-carte on/off for the active feature — off removes its surfaces entirely
-            // (component register); the settings below still configure how it looks when on.
-            // One column wide, not the whole panel: it is a single switch, and a switch whose label
-            // sits at one end of 1870 px and whose knob sits at the other is exactly the stretch
-            // this page was full of. CardColumns hands it the width the cards below it get.
+            // ── The page's head: ONE card ────────────────────────────────────────────
+            // The feature's à-la-carte on/off on the left, the page's own rooms on the right. They
+            // were two cards stacked on top of each other — a switch alone in one, a strip of tabs
+            // alone in the next — which is two card edges saying the same thing before the page even
+            // starts. One card, one line, and it runs the full width like every card under it.
+            //
+            // Off removes the feature's surfaces entirely (component register); the settings below
+            // still configure how it looks when it is on. The tabs are the page's: it publishes them
+            // as `pageTabs` and this writes the pick back into its `tab`, so a page keeps owning its
+            // rooms without also having to draw a card for them.
+            readonly property var pageTabs: (pageLdr.item && pageLdr.item.pageTabs !== undefined)
+                                            ? pageLdr.item.pageTabs : []
+            // A page's own actions — Apply, Save, Apply & reload. They used to sit on a card at the
+            // BOTTOM of the page, which on a page long enough to scroll is the one place you cannot
+            // see them from. They belong in the head bar with everything else that is about the page
+            // rather than about one group on it. [{ key, label, primary }]
+            readonly property var pageActions: (pageLdr.item && pageLdr.item.pageActions !== undefined)
+                                               ? pageLdr.item.pageActions : []
+            readonly property string pageStatus: (pageLdr.item && pageLdr.item.pageStatus !== undefined)
+                                                 ? pageLdr.item.pageStatus : ""
+            readonly property bool pageStatusUrgent: (pageLdr.item && pageLdr.item.pageStatusUrgent === true)
             CardColumns {
                 id: featureHeader
-                visible: content.featureKey !== "" && !root.shownNavPage
+                visible: !root.shownNavPage
+                         && (content.featureKey !== "" || content.pageTabs.length > 0
+                             || content.pageActions.length > 0)
                 height: implicitHeight
                 forced: 1
-                width:  content.gridColW
+                width:  Math.max(0, content.width - 36)
                 anchors { top: backBar.visible ? backBar.bottom : parent.top; left: parent.left
                           topMargin: backBar.visible ? 8 : 18; leftMargin: 18 }
                 Card {
-                    Toggle {
-                        label: root.sectionTitle(root.shownSection)
-                        sub:   VtlConfig.componentEnabled(content.featureKey)
-                               ? "On — showing on your desktop"
-                               : "Off — its surfaces aren't loaded (turn on to use it)"
-                        on:    VtlConfig.componentEnabled(content.featureKey)
-                        onToggled: SettingsStore.setComponentEnabled(content.featureKey,
-                                                                     !VtlConfig.componentEnabled(content.featureKey))
+                    Item {
+                        id: headRow
+                        width:  parent.width
+                        // One line while everything fits; the rooms drop to a second line when they
+                        // do not. What NEVER moves is the action: far right, on the first line,
+                        // whatever else the page brings. A button that sits beside the tabs on one
+                        // page and alone in an empty strip on the next looks dropped there.
+                        readonly property int lineH: Math.max(featureToggle.visible ? featureToggle.height : 0,
+                                                              headActions.visible ? headActions.height : 0,
+                                                              headTabs.visible && headRow.oneLine ? headTabs.height : 0,
+                                                              Style.ctrlH - 6)
+                        readonly property bool oneLine: !headTabs.visible
+                            || (featureToggle.width + headStatus.width + headActions.width
+                                + headTabs.width + 54) <= headRow.width
+                        height: headRow.oneLine ? headRow.lineH
+                                                : headRow.lineH + 8 + headTabs.height
+
+                        Row {
+                            id: featureToggle
+                            visible: content.featureKey !== ""
+                            spacing: 10
+                            x: 0
+                            y: Math.round((headRow.lineH - height) / 2)
+                            Switch {
+                                id: featureSwitch
+                                anchors.verticalCenter: parent.verticalCenter
+                                on: VtlConfig.componentEnabled(content.featureKey)
+                                onToggled: SettingsStore.setComponentEnabled(content.featureKey,
+                                                                             !VtlConfig.componentEnabled(content.featureKey))
+                            }
+                            Text {
+                                id: featureWord
+                                anchors.verticalCenter: parent.verticalCenter
+                                // Read from the config, like the switch beside it — not from the
+                                // switch, so the word can never be a frame behind the knob.
+                                readonly property bool live: VtlConfig.componentEnabled(content.featureKey)
+                                text:  featureWord.live ? "Active" : "Off"
+                                color: featureWord.live ? Colors.fgPrimary : Colors.fgMuted
+                                font.pixelSize: Style.fsLabel; font.family: Style.font
+                                MouseArea { id: featureHov; anchors.fill: parent
+                                            hoverEnabled: true; acceptedButtons: Qt.NoButton }
+                                HintTip {
+                                    target: featureWord; hovered: featureHov.containsMouse
+                                    text: featureWord.live
+                                          ? "On — showing on your desktop."
+                                          : "Off — its surfaces aren't loaded at all. Everything below still "
+                                          + "configures how it looks when you turn it back on."
+                                }
+                            }
+                        }
+
+                        // Whether there is anything to apply — at the LEFT of the bar, so a page
+                        // whose head holds nothing else is not an empty strip with one button
+                        // floating at the far end of it.
+                        Text {
+                            id: headStatus
+                            visible: content.pageStatus !== ""
+                            x: featureToggle.visible ? featureToggle.width + 18 : 0
+                            y: Math.round((headRow.lineH - height) / 2)
+                            text:  content.pageStatus
+                            color: content.pageStatusUrgent ? Colors.fgUrgent : Colors.fgMuted
+                            font.pixelSize: Style.fsSub; font.family: Style.font
+                        }
+
+                        // The page's actions. Always here: last on the first line, hard against the
+                        // right edge of the card.
+                        Row {
+                            id: headActions
+                            visible: content.pageActions.length > 0
+                            spacing: 8
+                            x: headRow.width - width
+                            y: Math.round((headRow.lineH - height) / 2)
+                            Repeater {
+                                model: content.pageActions
+                                delegate: TextButton {
+                                    required property var modelData
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    label:   "" + (modelData.label || "")
+                                    primary: modelData.primary === true
+                                    onClicked: if (pageLdr.item && pageLdr.item.pageAct)
+                                                   pageLdr.item.pageAct("" + modelData.key)
+                                }
+                            }
+                        }
+
+                        PageTabs {
+                            id: headTabs
+                            visible: content.pageTabs.length > 0
+                            equal:   false               // as wide as their labels, not a toolbar
+                            tabs:    content.pageTabs
+                            current: (pageLdr.item && pageLdr.item.tab !== undefined) ? pageLdr.item.tab : ""
+                            onPicked: key => { if (pageLdr.item) pageLdr.item.tab = key }
+                            x: headRow.oneLine
+                               ? headRow.width - width - (headActions.visible ? headActions.width + 18 : 0)
+                               : 0
+                            y: headRow.oneLine ? Math.round((headRow.lineH - height) / 2)
+                                               : headRow.lineH + 8
+                        }
                     }
                 }
             }
+
             // ── The page, and the desktop it is about ───────────────────────────────────
             // A panel wide enough for three columns of cards is wide enough that most pages run out
             // of content before they run out of panel, and a half-filled page reads as badly as a
             // stretched one. So the leftover goes to a drawn miniature of the surface the page
             // owns, fed by the same settings the controls write. It appears only where there IS
             // something to show and only where there is room for it — docked there is neither.
+            // NOT bar and NOT style. Those two pages own the things the miniature is drawn FROM —
+            // the bar's own shape, the palette, the corner radius — so the picture beside them was
+            // a second, cruder answer to a question the page itself already answers, and a drawn
+            // approximation next to the real controls reads as a mistake rather than as a preview.
+            // Both pages take the whole width instead. The surfaces you cannot see from inside the
+            // menu (a lock screen, a notification toast, the launcher) keep theirs, because there
+            // the picture is the only answer there is.
             readonly property string previewKind: {
-                var k = { "bar": "bar", "taskbar": "taskbar", "osd": "osd",
+                var k = { "taskbar": "taskbar", "osd": "osd",
                           "notifications": "notifications", "launcher": "launcher",
                           "lockscreen": "lock", "screensaver": "screensaver",
-                          "wallpaper": "wallpaper", "style": "style" }[root.shownSection]
+                          "wallpaper": "wallpaper" }[root.shownSection]
                 return k || ""
             }
             // ── ONE grid for the whole page ─────────────────────────────────────────────
@@ -1136,26 +1343,71 @@ PanelWindow {
             // the same columns, so every edge in the menu lines up with every other. Before this
             // they each worked their width out for themselves and the page came out as three
             // different measures stacked on one screen.
+            readonly property string tier: root.tier
             readonly property int  gridGap:  Style.cardGap
             readonly property int  gridMin:  360                        // the narrowest usable card
-            readonly property int  gridCols: Math.max(1, Math.min(3,
+            // Columns are a WIDE-tier thing. Below it the page is a single column and the rows
+            // inside the cards break instead — Slider, Stepper and Segmented each decide that on
+            // their own width, so a narrow card breaks even inside a wide panel.
+            // …and never more columns than there is something to put in them: a page with one card
+            // laid on three columns is two column-shaped holes, which is the emptiness this whole
+            // pass is about. The preview, when it is beside the page, is one of the columns.
+            readonly property int  pageCards: (pageLdr.item && pageLdr.item.pageCards !== undefined)
+                                              ? pageLdr.item.pageCards : 0
+            readonly property int  gridFits: Math.max(1, Math.min(3,
                 Math.floor((content.width - 36 + content.gridGap) / (content.gridMin + content.gridGap))))
+            readonly property int  gridCols: content.tier !== "wide" ? 1
+                : Math.max(1, Math.min(content.gridFits,
+                                       Math.max(1, content.pageCards) + (content.previewHas ? 1 : 0)))
             readonly property int  gridColW: Math.floor((content.width - 36
                                              - content.gridGap * (content.gridCols - 1)) / content.gridCols)
 
             readonly property int previewW: content.gridColW
-            readonly property bool previewOn: content.previewKind !== ""
-                                              && !(content.pageMode && root.shownNavPage)
-                                              && content.gridCols >= 2
+            // WHERE the miniature goes is the tier's call: a column of its own beside the page
+            // where there are columns to spare, a band across the top where there is only one
+            // column, and nothing at all where the panel cannot carry both.
+            // …unless the page says it needs the width itself (Bar → Modules is two panes wide).
+            readonly property bool previewHas:  content.previewKind !== ""
+                                                && !(content.pageMode && root.shownNavPage)
+                                                && ((pageLdr.item && pageLdr.item.pageWantsPreview !== undefined)
+                                                    ? pageLdr.item.pageWantsPreview : true)
+            readonly property bool previewSide: content.previewHas && content.tier === "wide"
+                                                && content.gridCols >= 2
+            readonly property bool previewBand: content.previewHas && content.tier === "regular"
+            readonly property bool previewOn:   content.previewSide || content.previewBand
+
+            // The line the page body starts on — one anchor for the page AND for the preview band
+            // above it, so the two can swap places without either anchoring to the other.
+            Item {
+                id: bodyTop
+                anchors { left: parent.left; right: parent.right; top: parent.top }
+                height: featureHeader.visible ? featureHeader.y + featureHeader.height + 12
+                      : (backBar.visible      ? backBar.y + backBar.height + 12 : 18)
+            }
 
             Loader {
                 id: pageLdr
                 // The columns this page owns: all of them, less the one the preview sits in.
-                property int pageCols: content.previewOn ? Math.max(1, content.gridCols - 1)
-                                                         : content.gridCols
-                // The preview stands beside the page, so the page's first row matches its height
-                // and the row reads as one row rather than as two cards and a taller neighbour.
-                property real pageRowMin: (content.previewOn && deskSide.visible) ? deskSide.height : 0
+                //
+                // ALL of them, not just the first row's. The preview used to stand in row one and
+                // every row below it took the full grid back — which is right until the page
+                // SCROLLS: the preview is pinned (it is not inside the page's Flickable), so the
+                // second row slid straight up underneath it and the two drew over each other. That
+                // is the overlap on a long page. A pinned card can only own a column for the whole
+                // page or for none of it, so it owns one, and the page is laid on what is left.
+                //
+                // Nothing is lost to a hole below it: the page's rows grow into `pageFillH` when
+                // there is more room than content, and the preview takes that same height (see
+                // deskSide.rowHeight), so both sides of the grid end on the panel's bottom line.
+                property int pageCols: content.previewSide ? Math.max(1, content.gridCols - 1)
+                                                           : content.gridCols
+                // The page is handed the WHOLE content width plus the width of one column, and lays
+                // its cards into the columns it owns. It used to be given a narrower box that
+                // stopped at the preview — which is why a full-width band on a page (the Style
+                // page's colour strip) stopped two thirds of the way across while the head card
+                // above it ran wall to wall.
+                property real pageColW: content.gridColW
+
                 // …and reports back how tall its page turned out, so the menu can be the size of
                 // what is in it.
                 // The height the page has to work with, so its rows can grow into it instead of
@@ -1168,13 +1420,15 @@ PanelWindow {
                                               ? pageLdr.item.pageGridY : 0
                 property real pageFillH: Math.max(120, pageLdr.height - 8 - pageLdr.gridY)
                 anchors.left:   parent.left
-                anchors.right:  content.previewOn ? deskSide.left : parent.right
+                anchors.right:  parent.right
                 anchors.bottom: parent.bottom
-                anchors.top:    featureHeader.visible ? featureHeader.bottom
-                                : (backBar.visible ? backBar.bottom : parent.top)
-                anchors.topMargin:    (featureHeader.visible || backBar.visible) ? 12 : 18
+                // The band sits between the body line and the page; a side preview hangs off the
+                // page instead, so the page keeps that same line either way.
+                anchors.top:    (content.previewBand && deskSide.visible) ? deskSide.bottom
+                                                                          : bodyTop.bottom
+                anchors.topMargin:    (content.previewBand && deskSide.visible) ? Style.cardGap : 0
                 anchors.leftMargin:   18
-                anchors.rightMargin:  content.previewOn ? 14 : 18
+                anchors.rightMargin:  18
                 anchors.bottomMargin: 12
                 active:  (content.activeMeta?.comp ?? null) !== null && !(content.pageMode && root.shownNavPage)
                 visible: active
@@ -1187,45 +1441,74 @@ PanelWindow {
             Card {
                 id: deskSide
                 visible: content.previewOn && pageLdr.visible
-                width: content.previewW
-                rowHeight: pageLdr.pageFillH       // exactly the rows beside it, top and bottom
-                anchors { right: parent.right; rightMargin: 18
-                          top: pageLdr.top; topMargin: pageLdr.gridY }
+                width: content.previewSide ? content.previewW : Math.max(0, content.width - 36)
+                // Beside the page it is a COLUMN, not a card in the first row: it owns its column
+                // for the whole page, so it is exactly as tall as the page's grid area and the two
+                // sides end on one bottom line. As a band it is simply as tall as what is in it.
+                //
+                // The same number the page's rows grow into (`pageFillH`), so neither side can be
+                // the taller one.
+                rowHeight: content.previewSide ? pageLdr.pageFillH : 0
+                // …and in the last of the menu's columns, on the same grid line as everything else.
+                x: content.previewSide
+                   ? 18 + (content.gridCols - 1) * (content.gridColW + content.gridGap)
+                   : 18
+                y: content.previewSide ? pageLdr.y + pageLdr.gridY : bodyTop.height
 
                 CardLabel {
                     text: root.sectionTitle(root.shownSection).toUpperCase()
                     hint: "Drawn from your settings as you change them — shape and placement, not a "
                         + "screenshot. The menu is over the real thing while you are in here."
                 }
-                DeskPreview {
-                    id: deskMini
-                    width: parent.width
-                    kind:  content.previewKind
-                    mon:   root.mon
-                }
-                // The numbers the miniature cannot show at this size, read back where you are
-                // looking rather than hunted for among the controls that hold them.
-                Repeater {
-                    model: deskMini.facts
-                    delegate: Item {
-                            required property var modelData
-                            width: parent.width
-                            height: 22
-                            Text {
-                                anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                                text: modelData.k
-                                color: Colors.fgMuted
-                                font.pixelSize: Style.fsSub; font.family: Style.font
+                // The miniature and the numbers it is too small to show, read back where the eye
+                // already is rather than hunted for among the controls that hold them.
+                //
+                // Stacked in the column beside the page; SIDE BY SIDE in the band above it. A band
+                // is as wide as the whole panel, and a full-width picture with six rows of numbers
+                // under it is half a screen of preview before the page starts.
+                Item {
+                    id: deskBody
+                    width:  parent.width
+                    height: content.previewSide ? deskMini.height + Style.rowGap + facts.height
+                                                : Math.max(deskMini.height, facts.height)
+
+                    DeskPreview {
+                        id: deskMini
+                        width: content.previewSide ? parent.width
+                                                   : Math.min(Math.round(parent.width * 0.58), 420)
+                        kind:  content.previewKind
+                        mon:   root.mon
+                    }
+                    Column {
+                        id: facts
+                        x:       content.previewSide ? 0 : deskMini.width + 14
+                        y:       content.previewSide ? deskMini.height + Style.rowGap : 0
+                        width:   content.previewSide ? parent.width
+                                                     : Math.max(0, parent.width - deskMini.width - 14)
+                        spacing: content.previewSide ? Style.rowGap : 2
+                        Repeater {
+                            model: deskMini.facts
+                            delegate: Item {
+                                required property var modelData
+                                width:  facts.width
+                                height: 22
+                                Text {
+                                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                                    text: modelData.k
+                                    color: Colors.fgMuted
+                                    font.pixelSize: Style.fsSub; font.family: Style.font
+                                }
+                                Text {
+                                    anchors { right: parent.right; verticalCenter: parent.verticalCenter
+                                              left: parent.horizontalCenter; leftMargin: 8 }
+                                    text: "" + modelData.v
+                                    color: Colors.fgBright
+                                    horizontalAlignment: Text.AlignRight
+                                    elide: Text.ElideRight
+                                    font.pixelSize: Style.fsLabel; font.family: Style.font
+                                }
                             }
-                            Text {
-                                anchors { right: parent.right; verticalCenter: parent.verticalCenter
-                                          left: parent.horizontalCenter; leftMargin: 8 }
-                                text: "" + modelData.v
-                                color: Colors.fgBright
-                                horizontalAlignment: Text.AlignRight
-                                elide: Text.ElideRight
-                                font.pixelSize: Style.fsLabel; font.family: Style.font
-                            }
+                        }
                     }
                 }
             }
@@ -1242,9 +1525,15 @@ PanelWindow {
                     id: navCol
                     width: parent.width
                     spacing: 6
+                    // The nav is drawn one of two ways (Style.navStyle, a theme token): rows with a
+                    // pictogram on a filled card, or a directory listing. A theme made of type has
+                    // no pictograms to offer, so Console asks for the listing — same model, same
+                    // grouping, same hover explanation, only the paint differs.
                     Text {
-                        text: "Settings"; color: Colors.fgBright
-                        font.pixelSize: 22; font.family: Style.font; font.weight: Font.DemiBold
+                        text: Style.navPrompt ? "~/settings" : "Settings"
+                        color: Colors.fgBright
+                        font.pixelSize: Style.navPrompt ? 18 : 22
+                        font.family: Style.font; font.weight: Font.DemiBold
                         bottomPadding: 6
                     }
                     Repeater {
@@ -1254,35 +1543,58 @@ PanelWindow {
                             width: navCol.width
                             spacing: 4
                             Text {
-                                text: modelData.name; color: Colors.fgMuted
+                                text: Style.navPrompt ? ("" + modelData.name).toLowerCase() + "/" : modelData.name
+                                color: Style.navPrompt ? Style.accent : Colors.fgMuted
                                 font.pixelSize: Style.fsSub; font.family: Style.font
-                                font.capitalization: Font.AllUppercase; font.letterSpacing: 1
+                                font.capitalization: Style.navPrompt ? Font.MixedCase : Font.AllUppercase
+                                font.letterSpacing: Style.navPrompt ? 0 : 1
                                 topPadding: 10; bottomPadding: 2
                             }
                             Repeater {
                                 model: modelData.metas
                                 delegate: StyledRect {
+                                    id: navEntry
                                     required property var modelData
-                                    width: navCol.width; height: 46
-                                    radius: Style.rCard
-                                    color: entryHov.containsMouse ? Style.tint(Style.accent, 0.14) : Style.cardFill
+                                    readonly property bool here: root.activeSection === navEntry.modelData.key
+                                    readonly property bool lit:  navEntry.here || entryHov.containsMouse
+                                    width: navCol.width
+                                    height: Style.navPrompt ? 28 : 46
+                                    radius: Style.navPrompt ? 0 : Style.rCard
+                                    color: Style.navPrompt
+                                           ? (entryHov.containsMouse ? Style.tint(Style.accent, 0.10) : "transparent")
+                                           : (entryHov.containsMouse ? Style.tint(Style.accent, 0.14) : Style.cardFill)
                                     Row {
                                         anchors.verticalCenter: parent.verticalCenter
-                                        anchors.left: parent.left; anchors.leftMargin: 14
-                                        spacing: 14
-                                        Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.icon
-                                               color: Colors.fgBright; font.pixelSize: 18; font.family: Style.font }
-                                        Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.title
-                                               color: Colors.fgBright; font.pixelSize: 14; font.family: Style.font }
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: Style.navPrompt ? 4 : 14
+                                        spacing: Style.navPrompt ? 6 : 14
+                                        // The caret keeps its column whether or not it is showing,
+                                        // so the names stay on one left edge instead of stepping
+                                        // sideways as the cursor passes them.
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: Style.navPrompt ? 12 : implicitWidth
+                                            text:  Style.navPrompt ? (navEntry.lit ? ">" : "") : navEntry.modelData.icon
+                                            color: Style.navPrompt ? Style.accent : Colors.fgBright
+                                            font.pixelSize: Style.navPrompt ? 14 : 18
+                                            font.family: Style.font
+                                        }
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: Style.navPrompt ? ("" + navEntry.modelData.title).toLowerCase()
+                                                                  : navEntry.modelData.title
+                                            color: (!Style.navPrompt || navEntry.lit) ? Colors.fgBright : Colors.fgPrimary
+                                            font.pixelSize: 14; font.family: Style.font
+                                        }
                                     }
                                     MouseArea {
                                         id: entryHov
                                         anchors.fill: parent; hoverEnabled: true
-                                        onClicked: { root.activeSection = modelData.key; root.navPage = false }
+                                        onClicked: { root.activeSection = navEntry.modelData.key; root.navPage = false }
                                     }
                                     // Same explanation the rail hands over on hover — the two ways
                                     // into a page say the same thing about it.
-                                    HintTip { text: modelData.hint ?? ""; hovered: entryHov.containsMouse }
+                                    HintTip { text: navEntry.modelData.hint ?? ""; hovered: entryHov.containsMouse }
                                 }
                             }
                         }
@@ -1293,7 +1605,14 @@ PanelWindow {
             // A theme's settings page. Same boundary as a theme's components: it cannot see the
             // shell's singletons, so the palette, the tokens and the two calls it needs to read and
             // write its OWN namespaced settings are handed in.
-            Component { id: homeComp;      HomeHub          { pageMode: content.pageMode; onNavigate: s => root.activeSection = s; onOpenNav: root.navPage = true } }
+            // The gear: in page mode it opens the page LIST; in sidebar mode there is no list — the
+            // rail is it — so it opens the last section you were on, and the rail comes with it.
+            Component { id: homeComp;      HomeHub          { pageMode: content.pageMode
+                                                              onNavigate: s => root.activeSection = s
+                                                              onOpenNav: {
+                                                                  if (root.pageNav) root.navPage = true
+                                                                  else              root.activeSection = root.lastSection
+                                                              } } }
             Component { id: networkComp;   NetworkManager   { onBack: root.activeSection = "home" } }
             Component { id: bluetoothComp; BluetoothManager { onBack: root.activeSection = "home" } }
             Component { id: barComp;       BarSection       {} }
@@ -1308,6 +1627,7 @@ PanelWindow {
             Component { id: screensaverComp; ScreensaverSection {} }
             Component { id: cornersComp;   CornerActionsSection {} }
             Component { id: taskbarComp;   TaskbarSection {} }
+            Component { id: deskComp;      DeskSection {} }
             Component { id: windowTagsComp; WindowTagsSection {} }
             Component { id: calendarComp;  CalendarSection {} }
             Component { id: zonesComp;     ZonesSection {} }
@@ -1374,27 +1694,34 @@ PanelWindow {
         StyledRect {
             anchors.fill: parent
             radius: Style.rTile
+            // Under prompt nav the caret already says which row you are on, so the chip stays a
+            // faint ground rather than a solid block of accent with a caret sitting on it.
             color:  ri.active
-                    ? Style.accent
+                    ? (ri.prompt ? Style.tint(Style.accent, 0.14) : Style.accent)
                     : (riHov.containsMouse ? Style.tint(Style.accent, 0.18) : "transparent")
             Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
         }
 
+        // A prompt-nav theme (Style.navStyle) has no pictograms — the labelled rail is a list of
+        // names like the page-mode nav, so it gets the same caret. The icon-only rail keeps the
+        // glyph whatever the theme says: with the names switched off it is all there is to show.
+        readonly property bool prompt: Style.navPrompt && ri.labelled
         Text {
             id: riIcon
             anchors.verticalCenter: parent.verticalCenter
             x: ri.labelled ? 10 : Math.round((ri.width - implicitWidth) / 2)
-            text:           ri.icon
-            color:          ri.active ? Colors.fgBright
-                            : (riHov.containsMouse ? Colors.fgBright : Colors.fgMuted)
-            font.pixelSize: 18
+            width:          ri.prompt ? 12 : implicitWidth
+            text:           ri.prompt ? ((ri.active || riHov.containsMouse) ? ">" : "") : ri.icon
+            color:          ri.prompt ? Style.accent
+                            : (ri.active || riHov.containsMouse) ? Colors.fgBright : Colors.fgMuted
+            font.pixelSize: ri.prompt ? 14 : 18
             font.family:    Style.font
         }
         Text {
             visible: ri.labelled
-            anchors { left: riIcon.right; leftMargin: 10; right: parent.right; rightMargin: 8
+            anchors { left: riIcon.right; leftMargin: ri.prompt ? 6 : 10; right: parent.right; rightMargin: 8
                       verticalCenter: parent.verticalCenter }
-            text:  ri.tipText
+            text:  ri.prompt ? ("" + ri.tipText).toLowerCase() : ri.tipText
             elide: Text.ElideRight
             color: ri.active ? Colors.fgBright
                              : (riHov.containsMouse ? Colors.fgBright : Colors.fgMuted)

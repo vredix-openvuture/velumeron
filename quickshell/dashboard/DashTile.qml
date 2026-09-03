@@ -19,6 +19,10 @@ StyledRect {
     property int cw: 1
     property int ch: 1
     readonly property bool tiny: tile.cw <= 1 && tile.ch <= 1
+    // Is this tile being looked at? The host answers: the hub while its menu is open, the desk while
+    // the widget is not covered by a window. A module that samples anything gates its timer on it —
+    // the whole point of the dashboard's poll discipline is that nothing runs for an unseen tile.
+    property bool live: true
     // Own surface. Off when the module sits in a group that draws ONE card behind all its members —
     // then a per-module card would be a box inside a box.
     property bool showBg: true
@@ -31,6 +35,29 @@ StyledRect {
     // squashed version of the other one.
     readonly property bool tall: tile.height > tile.width * 1.25
     readonly property bool wide: tile.width  > tile.height * 1.6
+
+    // ── Appearance every widget carries ─────────────────────────────────────────
+    // Type and colour are per INSTANCE, not per type: two clocks on one desk are a big pale one
+    // over the wallpaper and a small accent one in the corner, and that is a property of where each
+    // was put rather than of what a clock is. The same three fields the bar's modules already have
+    // (Settings → Bar → module → gear), under the same names, so one mental model covers both.
+    //
+    // A colour is a palette ROLE, never a value: the palette follows the wallpaper, and a widget
+    // pinned to a hex would be the one thing on screen that stops following it. An unknown or empty
+    // role falls back, so a layout written by a future version cannot blank a widget's text.
+    function roleColor(name, fallback) {
+        var n = "" + (name ?? "")
+        if (n === "") return fallback
+        var c = Colors[n]
+        return (c !== undefined && c !== null) ? c : fallback
+    }
+    readonly property string uiFont: {
+        var f = "" + (tile.opts?.font ?? "")
+        return f !== "" ? f : Style.font
+    }
+    readonly property color fgMain: tile.roleColor(tile.opts?.color,     Colors.fgBright)
+    readonly property color fgSub:  tile.roleColor(tile.opts?.color_sub, Colors.fgPrimary)
+    readonly property color fgTint: tile.roleColor(tile.opts?.color,     Style.accent)
 
     radius:      Style.rCard
     color:       tile.showBg ? Style.cardFill : "transparent"

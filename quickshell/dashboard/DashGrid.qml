@@ -28,6 +28,11 @@ Item {
     property int  cols:  VtlConfig.dashboardCols
     property int  cellH: VtlConfig.dashboardCellH
     property bool editing: false
+    // Handed to every module as `live` — see the Loader below.
+    property bool live: true
+    // { id: true } for the tiles a host wants faded out. Only the desk fills it; the hub and the
+    // editor never hide a tile.
+    property var dimmedIds: ({})
     // Selection is a SET: ctrl-click adds to it, so several modules can be grouped in one
     // go. `selectedId` stays as the single-selection view the inspector reads.
     // Set by the editor right after a group is made: that group's outline pulses once,
@@ -81,7 +86,10 @@ Item {
 
     signal navigate(string section)
     signal movedTo(string id, int x, int y)
-    signal resized(string id, int w, int h)
+    // The whole rectangle, not just the size: a resize from any corner but the bottom-right moves
+    // the origin too, and sending that as a second signal would mean two writes — the second built
+    // from a settings read that has not caught up with the first.
+    signal resizedAt(string id, int x, int y, int w, int h)
     signal removed(string id)
     // A whole group shifts by the same cell delta — dragging one member drags all of them,
     // because a group is meant to behave like one widget, not like tiles that happen to
@@ -119,7 +127,12 @@ Item {
     // instead of replacing it.
     signal selected(string id, bool additive)
 
-    readonly property int  gap:   Style.cardGap
+    // The raster gap. Settable because the desk has none: its cells are ~40 px, and a card gap
+    // between every one of them would eat a third of the screen. There the air between widgets is
+    // `tileInset` instead — taken off the drawn module, never off the cell, so dropping and
+    // resizing still aim at whole cells.
+    property int gap: Style.cardGap
+    property int tileInset: 0
     // Padding inside a group — used BOTH between members that carry their own card and
     // between a member and the shared card's edge, so the two read as the same distance.
     // Only the leftover after it is split between neighbours, which is what keeps them
@@ -132,6 +145,10 @@ Item {
     property string previewId: ""
     property int    previewW:  0
     property int    previewH:  0
+    // …and where it starts. Three of the four corners move the origin as well as the size, and a
+    // preview that only knew the size showed the tile growing out of the wrong corner.
+    property int    previewX:  -1
+    property int    previewY:  -1
 
     // Pixel geometry of a cell span — the one place cells become pixels.
     function spanW(w) { return w * root.cellW + (w - 1) * root.gap }
@@ -148,11 +165,14 @@ Item {
         var rpp = root.rowsPerPage
         for (var i = 0; i < root.items.length; i++) {
             var it = root.items[i]
-            var w = Math.max(1, Math.min(cs, (it.id === root.previewId) ? root.previewW : it.w))
-            var h = Math.max(1, (it.id === root.previewId) ? root.previewH : it.h)
+            var prev = it.id === root.previewId
+            var w = Math.max(1, Math.min(cs, prev ? root.previewW : it.w))
+            var h = Math.max(1, prev ? root.previewH : it.h)
             if (rpp > 0) h = Math.min(h, rpp)
-            var x = Math.max(0, Math.min(cs - w, it.x))
-            var y = Math.max(0, it.y)
+            var ix = (prev && root.previewX >= 0) ? root.previewX : it.x
+            var iy = (prev && root.previewY >= 0) ? root.previewY : it.y
+            var x = Math.max(0, Math.min(cs - w, ix))
+            var y = Math.max(0, iy)
             // Self-heal a straddler: the row height or the panel size can change under a saved
             // layout, and half a module either side of a page break is never what anyone wanted.
             if (rpp > 0 && (y % rpp) + h > rpp) y = (Math.floor(y / rpp) + 1) * rpp
@@ -200,6 +220,114 @@ Item {
         return out
     }
 
+    // ── The raster, while arranging ─────────────────────────────────────────────
+    // Drawn FIRST, so it is behind every tile. Without it you are aiming a drop at cells you cannot
+    // see: the tiles show where things ARE, and the empty half of the board — the half you are
+    // dragging into — was a flat surface with no grain at all. Edit mode only; the live board must
+    // never show its own scaffolding.
+    readonly property int guideRows: root.rowsPerPage > 0 ? root.rowsPerPage * root.pages
+                                                          : Math.max(root.layout.rows + 2, 4)
+    // Drawn as LINES over one scrim, not as a rectangle per cell: the desk's raster runs to a
+    // thousand cells and that many bordered rectangles is a mesh the scene graph has to carry for
+    // as long as you are arranging.
+    //
+    // Light enough to arrange over: the raster is a reference, not the subject. The scrim carries
+    // most of the legibility so the lines themselves can stay thin — they only have to stand off the
+    // ground they are drawn on, and the widgets have a plate of their own now.
+    //
+    // `guidePx` is the line's thickness in the grid's OWN units, and it exists because the editor
+    // draws this whole thing at about three quarters scale: a 1 px line then lands on 0.74 device
+    // pixels, which the renderer turns into a line that fades out — irregularly, so the raster
+    // looked as if it had gaps in it. The host passes 1/scale and every line comes out solid.
+    property real guidePx: 1
+    Item {
+        visible: root.editing
+        x: 0; y: 0
+        width:  root.cols > 0 ? root.spanW(root.cols) : 0
+        height: root.guideRows > 0 ? root.spanH(root.guideRows) : 0
+
+        Rectangle { anchors.fill: parent; color: Qt.rgba(0, 0, 0, 0.16) }
+        Repeater {
+            model: root.cols + 1
+            delegate: Rectangle {
+                required property int index
+                x: Math.min(root.cellX(index) - (index > 0 ? root.gap / 2 : 0),
+                            parent.width - root.guidePx)
+                y: 0; width: root.guidePx; height: parent.height
+                color: Qt.rgba(Colors.fgBright.r, Colors.fgBright.g, Colors.fgBright.b, 0.19)
+            }
+        }
+        Repeater {
+            model: root.guideRows + 1
+            delegate: Rectangle {
+                required property int index
+                y: Math.min(root.cellY(index) - (index > 0 ? root.gap / 2 : 0),
+                            parent.height - root.guidePx)
+                x: 0; height: root.guidePx; width: parent.width
+                color: Qt.rgba(Colors.fgBright.r, Colors.fgBright.g, Colors.fgBright.b, 0.19)
+            }
+        }
+    }
+
+    // ── Soft alignment snapping (edit mode) ──────────────────────────────────────
+    // While a tile is dragged it looks for a line it could sit on — another tile's edge or centre,
+    // or the board's own — and if one is within reach it goes there and a guide appears.
+    //
+    // Worked out in CELLS, not in pixels, and that is the whole trick. Snapping the tile to an exact
+    // pixel line looked right and then jumped on release: the drop rounds to the raster, and a line
+    // that is not on a cell boundary rounds somewhere else. Every candidate here is a whole cell
+    // BEFORE it is offered, so what you see under the pointer is the cell the tile lands in.
+    //
+    // A magnet, not a lock: keep moving and it lets go.
+    readonly property real snapReach: 0.45          // cells
+    property real snapGuideX: -1                    // grid-local px, -1 = nothing to draw
+    property real snapGuideY: -1
+
+    // The best whole-cell position for this tile on one axis, or null. `f` on a line is which
+    // fraction of MY size meets it: 0 my leading edge, 1 my trailing edge, 0.5 my centre.
+    function snapCell(axis, startPx, sizeCells, skipId, skipGroup) {
+        var pitch = axis === "x" ? (root.cellW + root.gap) : (root.cellH + root.gap)
+        if (pitch <= 0) return null
+        var span  = axis === "x" ? root.cols : root.guideRows
+        var cur   = startPx / pitch
+        var lines = [{ at: 0, f: 0 }, { at: span, f: 1 }, { at: span / 2, f: 0.5 }]
+        for (var i = 0; i < root.items.length; i++) {
+            var it = root.items[i]
+            if (it.id === skipId) continue
+            if (skipGroup !== "" && (it.g ?? "") === skipGroup) continue
+            var sl = root.layout.byId[it.id]
+            if (!sl) continue
+            var a = axis === "x" ? sl.c : sl.r
+            var b = a + (axis === "x" ? sl.w : sl.h)
+            lines.push({ at: a, f: 0 }); lines.push({ at: a, f: 1 })
+            lines.push({ at: b, f: 0 }); lines.push({ at: b, f: 1 })
+            lines.push({ at: (a + b) / 2, f: 0.5 })
+        }
+        var best = null, bestD = root.snapReach
+        for (var j = 0; j < lines.length; j++) {
+            var want = Math.round(lines[j].at - lines[j].f * sizeCells)
+            if (want < 0 || want + sizeCells > span) continue
+            var d = Math.abs(want - cur)
+            if (d < bestD) {
+                bestD = d
+                best = { pos: want, guide: (want + lines[j].f * sizeCells) * pitch }
+            }
+        }
+        return best
+    }
+    function clearSnap() { root.snapGuideX = -1; root.snapGuideY = -1 }
+
+    // Every member of `gid` is faded out (see `dimmedIds`). An empty group counts as not dimmed.
+    function groupDimmed(gid) {
+        var any = false
+        for (var i = 0; i < root.items.length; i++) {
+            if ((root.items[i].g ?? "") !== gid) continue
+            any = true
+            if (root.dimmedIds[root.items[i].id] !== true) return false
+        }
+        return any
+    }
+
     // Drawn BEFORE the tile Repeater, so every group card sits behind its members.
     Repeater {
         model: root.groupRects
@@ -216,6 +344,13 @@ Item {
             readonly property bool _towed: root.dragGroup === gcard.modelData.gid
             x: gcard.homeX + (gcard._towed ? root.dragDX : 0)
             y: gcard.homeY + (gcard._towed ? root.dragDY : 0)
+            // A group's shared card goes with its members: every one of them faded means the group
+            // is covered, and a card left behind on its own would be a rectangle of nothing.
+            readonly property bool dimmed: root.groupDimmed(gcard.modelData.gid)
+            opacity: gcard.dimmed ? 0 : 1
+            Behavior on opacity {
+                NumberAnimation { duration: gcard.dimmed ? Style.ctrlMs : 260; easing.type: Easing.OutCubic }
+            }
 
             StyledRect {
                 anchors.fill: parent
@@ -227,6 +362,43 @@ Item {
             }
 
         }
+    }
+
+    // The alignment guides, drawn over everything: one line per axis, only while a drag is holding
+    // onto one. It is the one thing on this surface that is feedback rather than content, so it is
+    // built to be seen and not to fit in — see Style.snapGuide for why it is the shell's only
+    // palette-independent colour. A dark casing runs under the bright core so the line reads on a
+    // pale wallpaper as well as on a dark one; both are measured in `guidePx`, the raster's own
+    // unit, so the whole thing survives the editor's preview scale.
+    component Guide: Item {
+        id: gd
+        property bool horizontal: false
+        readonly property real core: root.guidePx * 2
+        readonly property real casing: root.guidePx
+        z: 60
+        Rectangle {                                   // casing
+            anchors.centerIn: parent
+            width:  gd.horizontal ? parent.width  : gd.core + 2 * gd.casing
+            height: gd.horizontal ? gd.core + 2 * gd.casing : parent.height
+            color: Style.snapGuideCase
+        }
+        Rectangle {                                   // core
+            anchors.centerIn: parent
+            width:  gd.horizontal ? parent.width : gd.core
+            height: gd.horizontal ? gd.core : parent.height
+            color: Style.snapGuide
+        }
+    }
+    Guide {
+        visible: root.editing && root.snapGuideX >= 0
+        x: root.snapGuideX - root.guidePx * 2; y: 0
+        width: root.guidePx * 4; height: root.spanH(root.guideRows)
+    }
+    Guide {
+        horizontal: true
+        visible: root.editing && root.snapGuideY >= 0
+        x: 0; y: root.snapGuideY - root.guidePx * 2
+        height: root.guidePx * 4; width: root.spanW(root.cols)
     }
 
     // Where a dropped tile lands: the cell its top-left corner is nearest to, clamped into the grid
@@ -344,7 +516,16 @@ Item {
             readonly property real posX: cell._rawX - cell.gL + (cell._towed ? root.dragDX : 0)
             readonly property real posY: cell._rawY - cell.gT + (cell._towed ? root.dragDY : 0)
 
-            visible: cell.slot !== null
+            visible: cell.slot !== null && cell.opacity > 0
+            // Covered by a window (the desk's own test, handed in as `dimmedIds`). A widget under a
+            // window is a distraction with a window on it, so it steps out — and stops sampling,
+            // which is the half of it that costs anything. Instant on the way out, unhurried on the
+            // way back: a widget that snaps in the moment you close something reads as a flicker.
+            readonly property bool dimmed: root.dimmedIds[cell.modelData.id] === true
+            opacity: cell.dimmed ? 0 : 1
+            Behavior on opacity {
+                NumberAnimation { duration: cell.dimmed ? Style.ctrlMs : 260; easing.type: Easing.OutCubic }
+            }
             x:      cell.posX
             y:      cell.posY
             width:  cell._rawW + cell.gL + cell.gR
@@ -373,6 +554,7 @@ Item {
 
             Loader {
                 anchors.fill: parent
+                anchors.margins: root.tileInset
                 sourceComponent: root.componentFor(cell.modelData.key)
                 onLoaded: {
                     item.opts = Qt.binding(function () { return cell.modelData.opts ?? ({}) })
@@ -382,6 +564,10 @@ Item {
                     // every column count and every screen.
                     item.cw = Qt.binding(function () { return cell.modelData.w ?? 1 })
                     item.ch = Qt.binding(function () { return cell.modelData.h ?? 1 })
+                    // Is anyone looking? A module samples on its own timer and this is the only
+                    // gate it has: the hub is only alive while the menu is open, the desk while it
+                    // is not covered. Without it a desk clock would tick behind a fullscreen game.
+                    item.live = Qt.binding(function () { return cell.grid.live && !cell.dimmed })
                     if (item.navigate !== undefined) item.navigate.connect(cell.grid.navigate)
                 }
             }
@@ -419,6 +605,18 @@ Item {
                 }
                 onPositionChanged: if (drag.active) {
                     didDrag = true
+                    var g = cell.grid
+                    var s = cell.slot
+                    if (s) {
+                        var grp = cell.inGroup ? cell.modelData.g : ""
+                        var sx = g.snapCell("x", cell.x + cell.gL, s.w, cell.modelData.id, grp)
+                        var sy = g.snapCell("y", cell.y + cell.gT, s.h, cell.modelData.id, grp)
+                        // Park it ON the cell, so the drop has nothing left to round.
+                        if (sx) cell.x = sx.pos * (g.cellW + g.gap) - cell.gL
+                        if (sy) cell.y = sy.pos * (g.cellH + g.gap) - cell.gT
+                        g.snapGuideX = sx ? sx.guide : -1
+                        g.snapGuideY = sy ? sy.guide : -1
+                    }
                     if (cell.inGroup) {
                         cell.grid.dragDX = cell.x - startX
                         cell.grid.dragDY = cell.y - startY
@@ -427,6 +625,7 @@ Item {
                 onReleased: {
                     cell.dragging = false
                     var g = cell.grid
+                    g.clearSnap()
                     if (!didDrag) {                      // a click, not a drag: select for editing
                         cell.rebind()
                         g.selected(cell.modelData.id, addMod)
@@ -464,28 +663,35 @@ Item {
                 readonly property int inset: chrome.grouped ? 4 : 0
                 anchors.fill: parent
                 anchors.margins: chrome.inset
+                // A PLATE, not just an outline: over a wallpaper a one-pixel frame around a
+                // transparent widget tells you where the edge is only if you go looking for it, and
+                // the whole job of edit mode is to make the boxes obvious.
                 color: cell.dragging ? Style.tint(Style.accent, 0.18)
-                     : sel           ? Style.tint(Style.accent, 0.10) : "transparent"
+                     : sel           ? Style.tint(Style.accent, 0.10)
+                     : chrome.grouped ? "transparent" : Qt.rgba(0, 0, 0, 0.34)
                 border.width: (sel || cell.dragging) ? 2 : (grouped ? 0 : 1)
                 border.color: Style.tint(Style.accent, (cell.dragging || sel) ? 0.9 : 0.45)
                 radius: Math.max(4, Style.rCard - chrome.inset)
             }
 
             // Size readout while arranging — the raster is only obvious once you can read it.
+            // On the BOTTOM EDGE, centred: all four corners belong to the resize grips now, and a
+            // label sitting under one of them is a label you cannot grab past.
             Text {
                 visible: root.editing && cell.slot
-                anchors { top: parent.top; left: parent.left; margins: 5 }
+                anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter
+                          bottomMargin: 5 }
                 z: 3
                 text: cell.slot ? (cell.slot.w + "×" + cell.slot.h) : ""
                 color: Style.tint(Style.accent, 0.9)
                 font.pixelSize: 10; font.family: Style.font; font.bold: true
             }
 
-            // Remove (top-right).
+            // Remove — top edge, centred, for the same reason.
             StyledRect {
                 visible: root.editing
                 width: 22; height: 22; radius: Style.rTile
-                anchors { top: parent.top; right: parent.right; margins: 4 }
+                anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 4 }
                 z: 3
                 color: rmHov.containsMouse ? Style.accent : Style.controlFill
                 borderWidth: Style.controlBorderW; borderColor: Style.controlBorderColor
@@ -501,74 +707,121 @@ Item {
             // A group is meant to read as ONE widget, so its members do not each advertise a
             // handle: inside a group the grip appears only on the member you have selected.
             // cells. Live preview goes through the grid's preview*, the commit happens on release.
-            StyledRect {
-                id: grip
-                visible: root.editing
-                         && (!chrome.grouped || root.isSelected(cell.modelData.id))
-                width: 26; height: 26
-                radius: Style.rTile
-                anchors { bottom: parent.bottom; right: parent.right; margins: 2 }
-                z: 3
-                color: gripMa.pressed ? Style.accent
-                     : gripMa.containsMouse ? Style.tint(Style.accent, 0.35)
-                     : Style.tint(Style.accent, 0.14)
-                Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
-                Repeater {
-                    model: 3
-                    delegate: Rectangle {
-                        required property int index
-                        width: 4 + index * 5; height: 2; radius: 1
+            //
+            // FOUR grips, one per corner. Which corner you take decides which one stays put: the
+            // opposite one is the anchor and everything else follows from where the pointer is, so
+            // growing a widget upwards or to the left is the same gesture as growing it down-right
+            // rather than a move followed by a resize.
+            Repeater {
+                model: [{ k: "tl", l: true,  t: true  }, { k: "tr", l: false, t: true },
+                        { k: "bl", l: true,  t: false }, { k: "br", l: false, t: false }]
+                delegate: StyledRect {
+                    id: grip
+                    required property var modelData
+                    readonly property bool atLeft: grip.modelData.l
+                    readonly property bool atTop:  grip.modelData.t
+                    visible: root.editing
+                             && (!chrome.grouped || root.isSelected(cell.modelData.id))
+                    width: 22; height: 22
+                    radius: Style.rTile
+                    x: grip.atLeft ? 2 : cell.width  - grip.width  - 2
+                    y: grip.atTop  ? 2 : cell.height - grip.height - 2
+                    z: 3
+                    color: gripMa.pressed ? Style.accent
+                         : gripMa.containsMouse ? Style.tint(Style.accent, 0.35)
+                         : Style.tint(Style.accent, 0.14)
+                    Behavior on color { ColorAnimation { duration: Style.ctrlMs } }
+                    // An L pointing out of the corner it sits in — the same mark four ways round.
+                    Rectangle {
+                        width: 11; height: 2; radius: 1
                         color: gripMa.pressed ? Colors.fgBright : Style.tint(Style.accent, 0.95)
-                        x: grip.width - 5 - width
-                        y: grip.height - 6 - index * 5
+                        x: grip.atLeft ? 5 : grip.width - 5 - width
+                        y: grip.atTop  ? 5 : grip.height - 7
                     }
-                }
-                MouseArea {
-                    id: gripMa
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.SizeFDiagCursor
-                    preventStealing: true
-                    property real ox: 0
-                    property real oy: 0
-                    onPressed: e => {
-                        // Anchor on the tile's top-left at press time: the tile can be pushed to a
-                        // new row mid-resize, and chasing that would feed the pointer maths back
-                        // into itself.
-                        ox = cell.x; oy = cell.y
-                        cell.grid.previewId = cell.modelData.id
-                        cell.grid.previewW  = cell.slot ? cell.slot.w : 1
-                        cell.grid.previewH  = cell.slot ? cell.slot.h : 1
+                    Rectangle {
+                        width: 2; height: 11; radius: 1
+                        color: gripMa.pressed ? Colors.fgBright : Style.tint(Style.accent, 0.95)
+                        x: grip.atLeft ? 5 : grip.width - 7
+                        y: grip.atTop  ? 5 : grip.height - 5 - height
                     }
-                    onPositionChanged: e => {
-                        if (!pressed) return
-                        var g = cell.grid
-                        var p = mapToItem(g, e.x, e.y)
-                        var m = cell.meta
-                        var w = Math.round((p.x - gripMa.ox + g.gap) / (g.cellW + g.gap))
-                        var h = Math.round((p.y - gripMa.oy + g.gap) / (g.cellH + g.gap))
-                        var s = cell.slot
-                        if (!s) return
-                        var cw = Math.max(m ? m.minW : 1, Math.min(g.cols - s.c, w))
-                        var ch = Math.max(m ? m.minH : 1, h)
-                        if (g.rowsPerPage > 0)
-                            ch = Math.min(ch, g.rowsPerPage - (s.r % g.rowsPerPage))
-                        // Grow only into free cells — a module that swallowed its neighbour on the
-                        // way past would leave two tiles stacked on the same square.
-                        while (cw > (m ? m.minW : 1)
-                               && DashModules.collides(g.items, { x: s.c, y: s.r, w: cw, h: ch },
-                                                       cell.modelData.id)) cw--
-                        while (ch > (m ? m.minH : 1)
-                               && DashModules.collides(g.items, { x: s.c, y: s.r, w: cw, h: ch },
-                                                       cell.modelData.id)) ch--
-                        g.previewW = cw
-                        g.previewH = ch
-                    }
-                    onReleased: {
-                        var g = cell.grid
-                        var pid = g.previewId, w = g.previewW, h = g.previewH
-                        g.previewId = ""
-                        if (pid !== "") g.resized(pid, w, h)
+
+                    MouseArea {
+                        id: gripMa
+                        anchors.fill: parent
+                        anchors.margins: -3          // a 22 px corner is a small target; widen it
+                        hoverEnabled: true
+                        cursorShape: (grip.atLeft === grip.atTop) ? Qt.SizeFDiagCursor
+                                                                  : Qt.SizeBDiagCursor
+                        preventStealing: true
+                        // The cell edges that do NOT move, latched at press: the tile can be pushed
+                        // around mid-resize and chasing that would feed the maths back into itself.
+                        property int fixC: 0
+                        property int fixR: 0
+                        property int pageTop: 0
+                        property int pageBot: 0
+                        onPressed: {
+                            var g = cell.grid
+                            var s = cell.slot
+                            if (!s) return
+                            gripMa.fixC = grip.atLeft ? (s.c + s.w) : s.c
+                            gripMa.fixR = grip.atTop  ? (s.r + s.h) : s.r
+                            var rpp = g.rowsPerPage
+                            gripMa.pageTop = rpp > 0 ? Math.floor(s.r / rpp) * rpp : 0
+                            gripMa.pageBot = rpp > 0 ? gripMa.pageTop + rpp : 100000
+                            g.previewId = cell.modelData.id
+                            g.previewX  = s.c; g.previewY = s.r
+                            g.previewW  = s.w; g.previewH = s.h
+                        }
+                        onPositionChanged: e => {
+                            if (!pressed) return
+                            var g = cell.grid
+                            var s = cell.slot
+                            var m = cell.meta
+                            if (!s) return
+                            var p = mapToItem(g, e.x, e.y)
+                            // The cell BOUNDARY nearest the pointer, on both axes.
+                            var movC = Math.max(0, Math.min(g.cols,
+                                Math.round(p.x / (g.cellW + g.gap))))
+                            var movR = Math.max(gripMa.pageTop, Math.min(gripMa.pageBot,
+                                Math.round(p.y / (g.cellH + g.gap))))
+                            var minW = m ? m.minW : 1, minH = m ? m.minH : 1
+                            var cw = Math.max(minW, Math.abs(gripMa.fixC - movC))
+                            var ch = Math.max(minH, Math.abs(gripMa.fixR - movR))
+                            // The moving edge is the one the pointer is on; the anchor stays.
+                            var cx = grip.atLeft ? Math.min(gripMa.fixC - cw, gripMa.fixC - minW)
+                                                 : gripMa.fixC
+                            var cy = grip.atTop  ? Math.min(gripMa.fixR - ch, gripMa.fixR - minH)
+                                                 : gripMa.fixR
+                            cx = Math.max(0, Math.min(g.cols - cw, cx))
+                            cy = Math.max(gripMa.pageTop, Math.min(gripMa.pageBot - ch, cy))
+                            if (grip.atLeft) cw = gripMa.fixC - cx
+                            if (grip.atTop)  ch = gripMa.fixR - cy
+                            cw = Math.max(minW, cw); ch = Math.max(minH, ch)
+                            // Grow only into free cells — a widget that swallowed its neighbour on
+                            // the way past would leave two of them on the same square.
+                            while (cw > minW && DashModules.collides(g.items,
+                                       { x: grip.atLeft ? gripMa.fixC - cw : cx, y: cy, w: cw, h: ch },
+                                       cell.modelData.id)) cw--
+                            while (ch > minH && DashModules.collides(g.items,
+                                       { x: grip.atLeft ? gripMa.fixC - cw : cx,
+                                         y: grip.atTop ? gripMa.fixR - ch : cy, w: cw, h: ch },
+                                       cell.modelData.id)) ch--
+                            g.previewX = grip.atLeft ? gripMa.fixC - cw : cx
+                            g.previewY = grip.atTop  ? gripMa.fixR - ch : cy
+                            g.previewW = cw
+                            g.previewH = ch
+                        }
+                        onReleased: {
+                            var g = cell.grid
+                            var pid = g.previewId
+                            var x = g.previewX, y = g.previewY, w = g.previewW, h = g.previewH
+                            g.previewId = ""; g.previewX = -1; g.previewY = -1
+                            if (pid !== "") g.resizedAt(pid, x, y, w, h)
+                        }
+                        onCanceled: {
+                            var g = cell.grid
+                            g.previewId = ""; g.previewX = -1; g.previewY = -1
+                        }
                     }
                 }
             }
@@ -675,6 +928,7 @@ Item {
 
     function componentFor(key) {
         switch (key) {
+        case "clock":    return clockComp
         case "greeting": return greetingComp
         case "slider":   return sliderComp
         case "profile":  return profileComp
@@ -682,12 +936,14 @@ Item {
         case "action":   return actionComp
         case "glance":   return glanceComp
         case "mpris":    return mprisComp
+        case "weather":  return weatherComp
         case "network":   return networkComp
         case "bluetooth": return bluetoothComp
         case "spacer":   return spacerComp
         }
         return null
     }
+    Component { id: clockComp;    DashClock    {} }
     Component { id: greetingComp; DashGreeting {} }
     Component { id: sliderComp;   DashSlider   {} }
     Component { id: profileComp;  DashProfile  {} }
@@ -695,6 +951,7 @@ Item {
     Component { id: actionComp;   DashAction   {} }
     Component { id: glanceComp;   DashGlance   {} }
     Component { id: mprisComp;    DashMpris    {} }
+    Component { id: weatherComp;  DashWeather  {} }
     Component { id: networkComp;   DashNetwork   {} }
     Component { id: bluetoothComp; DashBluetooth {} }
     Component { id: spacerComp;   DashSpacer   {} }
