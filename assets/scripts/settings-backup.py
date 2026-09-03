@@ -80,7 +80,7 @@ DEVICE_KEYS = ("wallpaper_dirs", "bt_aliases", "bt_groups", "bar_per_monitor", "
                "wallpaper_sets", "taskbar_pinned",
                # The two lock settings that are about YOU rather than about a look. `theme` is NOT
                # in this list: which theme you wear is exactly what a backup should restore.
-               "lock_weather_city", "lock_weather_unit")
+               "lock_weather_city", "lock_weather_coords", "lock_weather_unit")
 # A theme's own knobs (`theme_<id>_<key>`) are NOT in that list even though they look device-ish.
 # They are settings you made, and a backup that hands you back the desktop without them is not a
 # backup of the desktop.

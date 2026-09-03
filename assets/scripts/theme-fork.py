@@ -46,6 +46,20 @@ def package_dir(theme_id):
     return ""
 
 
+def hypr_look(theme_id):
+    """The Hyprland look for <theme_id>, yours first — the same order hyprland.lua dofiles in."""
+    for base in (os.path.join(user_dir(), "hypr.lua", "themes"),
+                 os.path.join(os.environ.get("VELUMERON_DIR", ""), "hypr.lua", "themes")):
+        path = os.path.join(base, theme_id + ".lua")
+        if os.path.isfile(path):
+            return path
+    return ""
+
+
+def user_hypr_look(theme_id):
+    return os.path.join(user_dir(), "hypr.lua", "themes", theme_id + ".lua")
+
+
 def read_json(path, default):
     try:
         with open(path, encoding="utf-8") as f:
@@ -78,7 +92,7 @@ def free_id(base):
 # aliases, which theme is worn. Kept in step with Theme.qml's `deviceKeys` and settings-backup.py.
 DEVICE_KEYS = ("theme", "wallpaper_dirs", "wallpaper_sets", "bt_aliases", "bt_groups",
                "bar_per_monitor", "bar_monitors", "taskbar_pinned",
-               "lock_weather_city", "lock_weather_unit")
+               "lock_weather_city", "lock_weather_coords", "lock_weather_unit")
 
 
 def fail(verb, reason):
@@ -115,6 +129,14 @@ def verb_fork(source_id, name=""):
     theme["arrangement"] = arrangement
     theme.pop("wip", None)                   # a fork is something you use, never a parked preview
     write_theme(os.path.join(dst, "theme.json"), theme)
+
+    # The window frames follow the theme too, and hyprland.lua looks that look up BY ID — a fork
+    # without one of its own would quietly fall back to the base frame while everything else about
+    # it stayed the parent's.
+    look = hypr_look(source_id)
+    if look:
+        os.makedirs(os.path.dirname(user_hypr_look(new_id)), exist_ok=True)
+        shutil.copyfile(look, user_hypr_look(new_id))
     print("fork:%s" % new_id)
 
 
@@ -135,6 +157,9 @@ def verb_delete(theme_id):
     if not os.path.isfile(os.path.join(path, "theme.json")):
         fail("delete", "notyours")
     shutil.rmtree(path)
+    look = user_hypr_look(theme_id)          # the fork's window frames go with it
+    if os.path.isfile(look):
+        os.remove(look)
     print("delete:ok")
 
 

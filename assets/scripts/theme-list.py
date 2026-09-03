@@ -82,7 +82,15 @@ def scan(base, source, out):
             "tokens": t.get("tokens") or {},
             "bar_thickness": arr.get("bar_thickness", 36),
             "bar_inner_radius": arr.get("bar_inner_radius", 16),
+            # The module treatment. The card SHOWS a module background whether or not the running
+            # desk has one ("module" is the default here, not VtlConfig's "none"): the shape of a
+            # module is half of what tells two themes apart from across the room, and a card that
+            # hides it draws mirobo and Console as the same strip. The radius is not here at all —
+            # it comes from the theme's own token table on the QML side, which is the only place
+            # that knows whether this theme is round or square.
             "bar_module_bg": arr.get("bar_module_bg", "module"),
+            "bar_module_bg_opacity": arr.get("bar_module_bg_opacity", 0.22),
+            "bar_module_spacing": arr.get("bar_module_spacing", 10),
         }
 
 
