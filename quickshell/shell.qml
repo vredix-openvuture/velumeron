@@ -500,10 +500,16 @@ ShellRoot {
     }
 
     // The desk: widgets on the wallpaper. Bottom layer, so it stacks above the wallpaper (and above
-    // a theme's backdrop, which is Background too) and below every window. `late` because a widget
-    // is the least urgent thing on the screen — the bar and the wallpaper come first.
+    // a theme's backdrop, which is Background too) and below every window.
+    //
+    // On the BOOT GATE, not a late wave. It rode wave 6 on the argument that a widget is the least
+    // urgent thing on the screen — but the gate is not about urgency, it is about whether a surface
+    // is one you SEE when the curtain tears. The desk is; it sits on the empty desktop, which is
+    // exactly what the first screen after the splash consists of. Measured on one screen: the bar
+    // came back 4.09 s into a restart and the widgets 4.68 s, so the desktop assembled itself in
+    // front of you for six tenths of a second. On the gate both land in the same frame (4.06 s).
     Variants {
-        model: VtlConfig.componentEnabled("desk") ? root.late(6) : []
+        model: VtlConfig.componentEnabled("desk") ? root.bootScreens : []
         delegate: DeskWindow { required property var modelData; screen: modelData }
     }
     // The shell's context menu — one surface for the desktop's right-click and the bar's. On the
